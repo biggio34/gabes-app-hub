@@ -1,16 +1,14 @@
-# Luna Haus Purchasing
+# Gabe's Apps
 
-Monday restock book for **Luna Haus Salon** in St. Michael. This takes over the purchasing app Grok Build started on the salon computer: backbar counts, 6-pack orders for Paul at Beauty Bell / EBW, SalonCentric leftovers, and the 9am Central ping.
+Private hub for three areas:
 
-## What it does
+- **Financial** — advisory calculators
+- **Softball** — MN Elks 16U practice, lineup, team formation, tryouts
+- **Luna Haus Salon** — salon desk, social sync, booking
 
-- Tracks on-hand vs par for Avyna color, Tailor's grooming, and the Redken SKUs from the May SalonCentric order
-- Builds a weekly cart and drafts the email to Paul Sunberg (`paul@beautybellcollective.com`)
-- Uses 6-pack pricing when a SKU has it — that is still the best price on Paul's lists
-- Counts down to the next Monday 9:00 America/Chicago reminder
-- Includes the purchasing bot that replaced the Grok Bot chat
+One login. Each person only sees the areas Gabe turns on. Apps stay as they were on [gabes-app-hub.netlify.app](https://gabes-app-hub.netlify.app/); this version sits in front of them with a password.
 
-Counts live in the browser (`localStorage`). Starter prices are placeholders so you can type in the current Avyna and Tailor's sheets. Avyna was flagged for a 5–15% increase after the June 23 list.
+The old Netlify site is still public until you take it down or point the domain here.
 
 ## Run locally
 
@@ -21,10 +19,18 @@ npm run dev
 
 Open [http://127.0.0.1:43147](http://127.0.0.1:43147).
 
-## Typical Monday
+First login (change this after you add other people):
 
-1. Open the app around 9 Central (or tap the reminder email)
-2. Check **Inventory** against the backbar
-3. **Order → Fill below-par** for Beauty Bell
-4. Open the draft in email, send it to Paul, then **Save as sent**
-5. When the box arrives, **Mark received** so counts come back up
+- Username: `gabe`
+- Password: `FransenHub2026`
+
+Optional env:
+
+- `HUB_ADMIN_PASSWORD` — owner password on first launch
+- `HUB_SESSION_SECRET` — cookie signing secret
+
+People and passwords are stored in `data/users.json` (not committed). **People** in the hub is where you add logins and tick Financial / Softball / Luna Haus.
+
+## Split
+
+Keep one website, three **areas**. Do not make three products yet. Later, Softball can become the thing you sell; Financial and Luna Haus stay your private doors.

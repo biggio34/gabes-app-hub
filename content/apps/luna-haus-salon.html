@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luna Haus Salon</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        .title-font {
+            font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+
+        .tab-button {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .tab-button.active {
+            background-color: #1e2937;
+            color: white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .money {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .chip {
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+
+        .chip.active {
+            background-color: #9f1239;
+            border-color: #e11d48;
+            color: #ffe4e6;
+        }
+
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200">
+    <div class="max-w-5xl mx-auto px-5 py-8">
+        <div class="flex items-center justify-between mb-8">
+            <div class="flex items-center gap-x-3">
+                <a class='flex items-center gap-x-1.5 text-sm font-medium text-slate-400 hover:text-rose-400 transition-colors mr-1' href='/' id='back-to-hub'>
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span class="hidden sm:inline">Hub</span>
+                </a>
+                <div class="w-10 h-10 bg-rose-700 rounded-2xl flex items-center justify-center">
+                    <i class="fa-solid fa-moon text-white text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="title-font text-3xl sm:text-4xl font-semibold tracking-tighter">Luna Haus Salon</h1>
+                    <p class="text-rose-300/80 text-sm mt-0.5">St. Michael • Services • Tips • Daily desk</p>
+                </div>
+            </div>
+            <div class="hidden sm:inline-flex items-center gap-x-2 px-3 py-1.5 bg-slate-900 rounded-full border border-slate-800">
+                <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                <span class="text-emerald-400 text-xs font-medium tracking-wider">100% LOCAL</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
+            <a href="https://lunahaussalon.glossgenius.com/" target="_blank" rel="noopener"
+               class="flex items-center justify-center gap-2 px-3 py-2.5 bg-rose-700 hover:bg-rose-600 rounded-xl text-xs font-semibold">
+                <i class="fa-solid fa-calendar-check"></i> Book Online
+            </a>
+            <a href="tel:7634975003"
+               class="flex items-center justify-center gap-2 px-3 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold">
+                <i class="fa-solid fa-phone text-rose-400"></i> 763-497-5003
+            </a>
+            <a href="mailto:info@lunahaussalon.com"
+               class="flex items-center justify-center gap-2 px-3 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold">
+                <i class="fa-solid fa-envelope text-rose-400"></i> Email
+            </a>
+            <a href="https://maps.apple.com/?q=921+Central+Ave+E,+St.+Michael,+MN+55376" target="_blank" rel="noopener"
+               class="flex items-center justify-center gap-2 px-3 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold">
+                <i class="fa-solid fa-location-dot text-rose-400"></i> Directions
+            </a>
+        </div>
+
+        <div class="flex bg-slate-900 rounded-3xl p-1 mb-6 border border-slate-800 w-full sm:w-fit overflow-x-auto">
+            <button onclick="switchTab(0)" id="tab-0" class="tab-button active px-5 py-2.5 rounded-[20px] text-sm font-semibold whitespace-nowrap">Services</button>
+            <button onclick="switchTab(1)" id="tab-1" class="tab-button px-5 py-2.5 rounded-[20px] text-sm font-semibold whitespace-nowrap">Tip Calculator</button>
+            <button onclick="switchTab(2)" id="tab-2" class="tab-button px-5 py-2.5 rounded-[20px] text-sm font-semibold whitespace-nowrap">Daily Desk</button>
+            <button onclick="switchTab(3)" id="tab-3" class="tab-button px-5 py-2.5 rounded-[20px] text-sm font-semibold whitespace-nowrap">Salon Info</button>
+        </div>
+
+        <!-- Services -->
+        <section id="panel-0">
+            <div class="flex flex-col sm:flex-row gap-3 mb-4">
+                <div class="relative flex-1">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
+                    <input id="service-search" type="search" placeholder="Search cuts, color, perms, waxing…"
+                           oninput="renderServices()"
+                           class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-rose-500">
+                </div>
+                <div class="text-xs text-slate-500 self-center" id="service-count"></div>
+            </div>
+            <div id="category-chips" class="flex flex-wrap gap-2 mb-5"></div>
+            <div id="services-list" class="space-y-2"></div>
+        </section>
+
+        <!-- Tip Calculator -->
+        <section id="panel-1" class="hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 space-y-4">
+                    <div>
+                        <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Service total ($)</label>
+                        <input id="tip-total" type="number" min="0" step="0.01" value="70" oninput="calcTip()"
+                               class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-lg money focus:outline-none focus:border-rose-500">
+                    </div>
+                    <div>
+                        <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Tip percent</label>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <button type="button" class="tip-pct chip px-3 py-1.5 rounded-lg border border-slate-600 text-sm" data-pct="15" onclick="setTipPct(15)">15%</button>
+                            <button type="button" class="tip-pct chip px-3 py-1.5 rounded-lg border border-slate-600 text-sm" data-pct="18" onclick="setTipPct(18)">18%</button>
+                            <button type="button" class="tip-pct chip px-3 py-1.5 rounded-lg border border-slate-600 text-sm active" data-pct="20" onclick="setTipPct(20)">20%</button>
+                            <button type="button" class="tip-pct chip px-3 py-1.5 rounded-lg border border-slate-600 text-sm" data-pct="25" onclick="setTipPct(25)">25%</button>
+                        </div>
+                        <input id="tip-pct" type="number" min="0" max="100" step="0.5" value="20" oninput="syncTipPctFromInput()"
+                               class="mt-2 w-28 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm money focus:outline-none focus:border-rose-500">
+                    </div>
+                    <div>
+                        <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Split among stylists</label>
+                        <input id="tip-split" type="number" min="1" max="8" step="1" value="1" oninput="calcTip()"
+                               class="mt-1 w-28 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm money focus:outline-none focus:border-rose-500">
+                    </div>
+                </div>
+                <div class="bg-slate-900 border border-rose-900/50 rounded-3xl p-5">
+                    <div class="text-xs uppercase tracking-wider text-rose-300 font-semibold mb-4">Result</div>
+                    <div class="space-y-3">
+                        <div class="flex justify-between"><span class="text-slate-400">Service</span><span id="out-service" class="money font-semibold">$70.00</span></div>
+                        <div class="flex justify-between"><span class="text-slate-400">Tip</span><span id="out-tip" class="money font-semibold text-rose-300">$14.00</span></div>
+                        <div class="flex justify-between border-t border-slate-700 pt-3 text-lg"><span>Grand total</span><span id="out-grand" class="money font-semibold">$84.00</span></div>
+                        <div id="out-split-wrap" class="hidden flex justify-between text-sm"><span class="text-slate-400">Per stylist</span><span id="out-split" class="money">$14.00</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Daily Desk -->
+        <section id="panel-2" class="hidden">
+            <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 mb-5">
+                <h3 class="font-semibold mb-3">Add walk-in or note</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input id="log-name" type="text" placeholder="Client name"
+                           class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-rose-500">
+                    <input id="log-service" type="text" placeholder="Service"
+                           class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-rose-500">
+                    <input id="log-stylist" type="text" placeholder="Stylist"
+                           class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-rose-500">
+                    <input id="log-note" type="text" placeholder="Note (optional)"
+                           class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-rose-500">
+                </div>
+                <button onclick="addLogEntry()" class="mt-3 px-4 py-2 bg-rose-700 hover:bg-rose-600 rounded-xl text-sm font-semibold">
+                    <i class="fa-solid fa-plus mr-1"></i> Add to today
+                </button>
+            </div>
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="font-semibold">Today’s list</h3>
+                <button onclick="clearToday()" class="text-xs text-slate-500 hover:text-rose-400">Clear today</button>
+            </div>
+            <div id="log-list" class="space-y-2"></div>
+        </section>
+
+        <!-- Salon Info -->
+        <section id="panel-3" class="hidden">
+            <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 space-y-4">
+                <div>
+                    <div class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Salon</div>
+                    <div class="text-lg font-semibold">Luna Haus Salon</div>
+                    <p class="text-slate-400 text-sm mt-1">Haircuts, color, perms, extensions, styling, and waxing in Saint Michael, MN. $2 off every Thursday.</p>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <div class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Address</div>
+                        <div>921 Central Ave E<br>St. Michael, MN 55376</div>
+                    </div>
+                    <div>
+                        <div class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Contact</div>
+                        <div>763-497-5003<br>info@lunahaussalon.com</div>
+                    </div>
+                    <div>
+                        <div class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Booking</div>
+                        <a class="text-rose-300 hover:text-rose-200 underline" href="https://lunahaussalon.glossgenius.com/" target="_blank" rel="noopener">lunahaussalon.glossgenius.com</a>
+                    </div>
+                    <div>
+                        <div class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Promo</div>
+                        <div>$2 off every Thursday</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const SERVICES = [
+            { cat: 'Cuts', name: "Women's Haircut", price: '$45+', mins: 45 },
+            { cat: 'Cuts', name: "Women's Haircut — Thick/Long", price: '$50+', mins: 60 },
+            { cat: 'Cuts', name: "Women's VIP Haircut", price: '$70+', mins: 60, note: 'Shampoo, deep condition, cut, style' },
+            { cat: 'Cuts', name: 'Senior Women’s Haircut (60+)', price: '$39+', mins: 30 },
+            { cat: 'Cuts', name: 'Senior Women’s VIP Haircut (60+)', price: '$64+', mins: 60, note: 'Shampoo, deep condition, cut, style' },
+            { cat: 'Cuts', name: "Men's Haircut", price: '$35+', mins: 30 },
+            { cat: 'Cuts', name: "Men's Cut and Wax", price: '$55', mins: 45 },
+            { cat: 'Cuts', name: "Men's VIP Haircut", price: '$50+', mins: 45, note: 'Shampoo, deep condition, cut, style' },
+            { cat: 'Cuts', name: "Senior Men's Haircut (60+)", price: '$33', mins: 30 },
+            { cat: 'Cuts', name: "Senior Men's VIP Haircut (60+)", price: '$48', mins: 45, note: 'Shampoo, deep condition, cut, style' },
+            { cat: 'Cuts', name: 'Buzz Cut', price: '$25', mins: 30 },
+            { cat: 'Cuts', name: 'Bang / Beard / Neck Trim / Undercut', price: '$18', mins: 15 },
+            { cat: 'Cuts', name: "Girl's Haircut (10 and under)", price: '$39+', mins: 45 },
+            { cat: 'Cuts', name: "Boy's Haircut (10 and under)", price: '$33', mins: 30 },
+            { cat: 'Color', name: 'Color Consultation', price: '$0', mins: 30 },
+            { cat: 'Color', name: 'Root Retouch', price: '$85+', mins: 120 },
+            { cat: 'Color', name: '10/15 Packs Foil', price: '$95+', mins: 120 },
+            { cat: 'Color', name: 'All over SOLID Color to Chin', price: '$100+', mins: 120 },
+            { cat: 'Color', name: 'All over SOLID Color to Shoulders', price: '$120+', mins: 135 },
+            { cat: 'Color', name: 'All over SOLID Color 1–5"', price: '$140+', mins: 150 },
+            { cat: 'Color', name: 'All over SOLID Color 5–8"', price: '$160+', mins: 180 },
+            { cat: 'Color', name: 'All over SOLID Color 8+"', price: '$180+', mins: 210 },
+            { cat: 'Color', name: 'Partial Foil to Chin', price: '$105+', mins: 90 },
+            { cat: 'Color', name: 'Partial Foil to Shoulder', price: '$125+', mins: 120 },
+            { cat: 'Color', name: 'Partial Foil 1–5" Past Shoulder', price: '$145+', mins: 150 },
+            { cat: 'Color', name: 'Partial Foil 5–8" Past Shoulder', price: '$165+', mins: 180 },
+            { cat: 'Color', name: 'Partial Foil 8+" Past Shoulder', price: '$185+', mins: 150 },
+            { cat: 'Color', name: 'Full Foil to Chin', price: '$130+', mins: 120 },
+            { cat: 'Color', name: 'Full Foil to Shoulder', price: '$150+', mins: 150 },
+            { cat: 'Color', name: 'Full Foil 1–5" Past Shoulder', price: '$170+', mins: 180 },
+            { cat: 'Color', name: 'Full Foil 5–8" Past Shoulder', price: '$190+', mins: 210 },
+            { cat: 'Color', name: 'Full Foil 8+" Past Shoulder', price: '$210+', mins: 210 },
+            { cat: 'Color', name: 'Balayage / Ombre', price: '$180+', mins: 150 },
+            { cat: 'Color', name: 'Toner with Color', price: '$30+', mins: 10 },
+            { cat: 'Color', name: 'Toner Alone', price: '$65+', mins: 60 },
+            { cat: 'Color', name: 'Root Melt & Toner', price: '$45', mins: 10 },
+            { cat: 'Color', name: 'Platinum Card', price: '$240+', mins: 180 },
+            { cat: 'Color', name: 'Bleach Retouch', price: '$100+', mins: 120 },
+            { cat: 'Color', name: 'Bleach Tips', price: '$130+', mins: 60 },
+            { cat: 'Color', name: 'Halo Color', price: '$100+', mins: 60 },
+            { cat: 'Color', name: 'Peek-a-boo', price: '$90+', mins: 60 },
+            { cat: 'Color', name: 'Fashion / Vivid All Over Color', price: '$150+', mins: 90 },
+            { cat: 'Color', name: "Men’s Bleach Tips", price: '$85+', mins: 90 },
+            { cat: 'Color', name: "Men's Color", price: '$75', mins: 60 },
+            { cat: 'Texture', name: 'Brazilian Blowout', price: '$275+', mins: 210 },
+            { cat: 'Texture', name: "Men's Partial Perm", price: '$95+', mins: 100 },
+            { cat: 'Texture', name: "Men's Perm to Chin", price: '$115+', mins: 120 },
+            { cat: 'Texture', name: 'Partial Perm', price: '$95+', mins: 180 },
+            { cat: 'Texture', name: 'Perm to Chin', price: '$115+', mins: 120 },
+            { cat: 'Texture', name: 'Perm to Shoulder', price: '$135+', mins: 150 },
+            { cat: 'Texture', name: 'Perm 1–5" Past Shoulder', price: '$155+', mins: 160 },
+            { cat: 'Texture', name: 'Perm 5–8" Past Shoulder', price: '$180+', mins: 180 },
+            { cat: 'Texture', name: 'Spiral / Specialty Perm', price: '$200+', mins: 180 },
+            { cat: 'Style', name: 'Hair Tinsel', price: '$1+', mins: 30 },
+            { cat: 'Style', name: 'Hair Feathers', price: '$10+', mins: 30 },
+            { cat: 'Style', name: 'I-Tip Colorful Extensions', price: '$10+', mins: 30 },
+            { cat: 'Style', name: 'Shampoo & Blow Dry', price: '$25+', mins: 30 },
+            { cat: 'Style', name: 'Shampoo & Style', price: '$40+', mins: 30 },
+            { cat: 'Style', name: 'Senior (60+) Shampoo & Style', price: '$35+', mins: 30 },
+            { cat: 'Style', name: 'Hot Tool Styling', price: '$30+', mins: 30 },
+            { cat: 'Style', name: 'Updo', price: '$75+', mins: 60 },
+            { cat: 'Style', name: 'Half Updo', price: '$55+', mins: 45 },
+            { cat: 'Treatments', name: 'Redken Moisture Treatment', price: '$25+', mins: 30 },
+            { cat: 'Treatments', name: 'Redken Protein Treatment', price: '$30', mins: 30 },
+            { cat: 'Treatments', name: 'Deep Conditioner Add-On', price: '$25+', mins: 10 },
+            { cat: 'Treatments', name: 'Deep Conditioner Treatment Alone', price: '$55', mins: 45 },
+            { cat: 'Treatments', name: 'Malibu Treatment', price: '$30+', mins: 45 },
+            { cat: 'Treatments', name: 'Color Remover CPR/DDL', price: '$65', mins: 90 },
+            { cat: 'Waxing', name: 'Brow Wax & Tint', price: '$43', mins: 30 },
+            { cat: 'Waxing', name: 'Eyebrows Tinted', price: '$25', mins: 30 },
+            { cat: 'Waxing', name: 'Facial Wax — 1 Area', price: '$20', mins: 15 },
+            { cat: 'Waxing', name: 'Facial Wax — 2 Areas', price: '$32', mins: 20 },
+            { cat: 'Waxing', name: 'Facial Wax — 3 Areas', price: '$42', mins: 30 },
+            { cat: 'Waxing', name: 'Full Face Wax', price: '$54', mins: 30 }
+        ];
+
+        const CATS = ['All', 'Cuts', 'Color', 'Texture', 'Style', 'Treatments', 'Waxing'];
+        let activeCat = 'All';
+        const LOG_KEY = 'lunaHausDailyLog';
+
+        function switchTab(i) {
+            for (let n = 0; n < 4; n++) {
+                document.getElementById('tab-' + n).classList.toggle('active', n === i);
+                document.getElementById('panel-' + n).classList.toggle('hidden', n !== i);
+            }
+        }
+
+        function renderChips() {
+            const wrap = document.getElementById('category-chips');
+            wrap.innerHTML = CATS.map(function (cat) {
+                const on = cat === activeCat ? ' active' : '';
+                return '<button type="button" class="chip px-3 py-1 rounded-full border border-slate-600 text-xs' + on + '" onclick="setCat(\'' + cat + '\')">' + cat + '</button>';
+            }).join('');
+        }
+
+        function setCat(cat) {
+            activeCat = cat;
+            renderChips();
+            renderServices();
+        }
+
+        function renderServices() {
+            const q = (document.getElementById('service-search').value || '').toLowerCase().trim();
+            const list = SERVICES.filter(function (s) {
+                if (activeCat !== 'All' && s.cat !== activeCat) return false;
+                if (!q) return true;
+                return (s.name + ' ' + s.cat + ' ' + (s.note || '')).toLowerCase().indexOf(q) !== -1;
+            });
+            document.getElementById('service-count').textContent = list.length + ' service' + (list.length === 1 ? '' : 's');
+            document.getElementById('services-list').innerHTML = list.map(function (s) {
+                return (
+                    '<div class="bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3 flex items-start justify-between gap-3">' +
+                        '<div>' +
+                            '<div class="font-semibold text-sm">' + s.name + '</div>' +
+                            '<div class="text-[11px] text-slate-500 mt-0.5">' + s.cat + ' · ' + s.mins + ' min' + (s.note ? ' · ' + s.note : '') + '</div>' +
+                        '</div>' +
+                        '<div class="money text-rose-300 font-semibold text-sm whitespace-nowrap">' + s.price + '</div>' +
+                    '</div>'
+                );
+            }).join('') || '<div class="text-sm text-slate-500 py-8 text-center">No matching services.</div>';
+        }
+
+        function setTipPct(pct) {
+            document.getElementById('tip-pct').value = pct;
+            document.querySelectorAll('.tip-pct').forEach(function (btn) {
+                btn.classList.toggle('active', Number(btn.getAttribute('data-pct')) === pct);
+            });
+            calcTip();
+        }
+
+        function syncTipPctFromInput() {
+            const pct = Number(document.getElementById('tip-pct').value);
+            document.querySelectorAll('.tip-pct').forEach(function (btn) {
+                btn.classList.toggle('active', Number(btn.getAttribute('data-pct')) === pct);
+            });
+            calcTip();
+        }
+
+        function money(n) {
+            return '$' + (isFinite(n) ? n : 0).toFixed(2);
+        }
+
+        function calcTip() {
+            const total = Math.max(0, Number(document.getElementById('tip-total').value) || 0);
+            const pct = Math.max(0, Number(document.getElementById('tip-pct').value) || 0);
+            const split = Math.max(1, Number(document.getElementById('tip-split').value) || 1);
+            const tip = total * (pct / 100);
+            document.getElementById('out-service').textContent = money(total);
+            document.getElementById('out-tip').textContent = money(tip);
+            document.getElementById('out-grand').textContent = money(total + tip);
+            const wrap = document.getElementById('out-split-wrap');
+            if (split > 1) {
+                wrap.classList.remove('hidden');
+                wrap.classList.add('flex');
+                document.getElementById('out-split').textContent = money(tip / split);
+            } else {
+                wrap.classList.add('hidden');
+                wrap.classList.remove('flex');
+            }
+        }
+
+        function todayKey() {
+            const d = new Date();
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        }
+
+        function loadLog() {
+            try {
+                return JSON.parse(localStorage.getItem(LOG_KEY) || '{}');
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function saveLog(data) {
+            localStorage.setItem(LOG_KEY, JSON.stringify(data));
+        }
+
+        function addLogEntry() {
+            const name = document.getElementById('log-name').value.trim();
+            const service = document.getElementById('log-service').value.trim();
+            const stylist = document.getElementById('log-stylist').value.trim();
+            const note = document.getElementById('log-note').value.trim();
+            if (!name && !service && !note) {
+                alert('Add a client name, service, or note first.');
+                return;
+            }
+            const data = loadLog();
+            const key = todayKey();
+            if (!data[key]) data[key] = [];
+            data[key].unshift({
+                id: crypto.randomUUID(),
+                time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+                name: name,
+                service: service,
+                stylist: stylist,
+                note: note
+            });
+            saveLog(data);
+            document.getElementById('log-name').value = '';
+            document.getElementById('log-service').value = '';
+            document.getElementById('log-stylist').value = '';
+            document.getElementById('log-note').value = '';
+            renderLog();
+        }
+
+        function removeLogEntry(id) {
+            const data = loadLog();
+            const key = todayKey();
+            if (!data[key]) return;
+            data[key] = data[key].filter(function (row) { return row.id !== id; });
+            saveLog(data);
+            renderLog();
+        }
+
+        function clearToday() {
+            if (!confirm('Clear today’s desk list?')) return;
+            const data = loadLog();
+            delete data[todayKey()];
+            saveLog(data);
+            renderLog();
+        }
+
+        function renderLog() {
+            const rows = (loadLog()[todayKey()] || []);
+            document.getElementById('log-list').innerHTML = rows.length ? rows.map(function (row) {
+                return (
+                    '<div class="bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3 flex items-start justify-between gap-3">' +
+                        '<div>' +
+                            '<div class="text-sm font-semibold">' + (row.name || 'Walk-in') + ' <span class="text-slate-500 font-normal">' + row.time + '</span></div>' +
+                            '<div class="text-xs text-slate-400 mt-0.5">' +
+                                [row.service, row.stylist, row.note].filter(Boolean).join(' · ') +
+                            '</div>' +
+                        '</div>' +
+                        '<button onclick="removeLogEntry(\'' + row.id + '\')" class="text-slate-500 hover:text-rose-400 text-xs">Remove</button>' +
+                    '</div>'
+                );
+            }).join('') : '<div class="text-sm text-slate-500 py-6 text-center">Nothing on today’s list yet.</div>';
+        }
+
+        (function () {
+            const params = new URLSearchParams(location.search);
+            const team = params.get('team');
+            if (team) {
+                const back = document.getElementById('back-to-hub');
+                if (back) back.href = '../index.html?team=' + team;
+            }
+            renderChips();
+            renderServices();
+            calcTip();
+            renderLog();
+        })();
+    </script>
+</body>
+</html>

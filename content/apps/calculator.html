@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        body {
+            font-family: 'Inter', system_ui, sans-serif;
+        }
+        
+        .title-font {
+            font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+
+        .calc-display {
+            font-variant-numeric: tabular-nums;
+            background: #0f172a;
+            border: 1px solid #334155;
+        }
+
+        .calc-btn {
+            transition: all 0.08s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 600;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        
+        .calc-btn:active {
+            transform: scale(0.94);
+            filter: brightness(0.85);
+        }
+
+        .calc-btn.number {
+            background-color: #1e2937;
+            color: #f1f5f9;
+        }
+        .calc-btn.number:hover {
+            background-color: #334155;
+        }
+
+        .calc-btn.operator {
+            background-color: #475569;
+            color: #e0f2fe;
+        }
+        .calc-btn.operator:hover {
+            background-color: #64748b;
+        }
+
+        .calc-btn.scientific {
+            background-color: #1e2937;
+            color: #bae6fd;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding-top: 0.35rem;
+            padding-bottom: 0.35rem;
+        }
+        .calc-btn.scientific:hover {
+            background-color: #334155;
+            color: #7dd3fc;
+        }
+
+        .calc-btn.equals {
+            background-color: #c2410f;
+            color: white;
+            font-size: 1.5rem;
+        }
+        .calc-btn.equals:hover {
+            background-color: #9a3412;
+        }
+
+        .calc-btn.memory {
+            background-color: #334155;
+            color: #e0f2fe;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .calc-btn.memory:hover {
+            background-color: #475569;
+        }
+
+        .calc-btn.clear {
+            background-color: #7f1d1d;
+            color: #fecaca;
+        }
+        .calc-btn.clear:hover {
+            background-color: #991b1b;
+        }
+
+        .history-item {
+            transition: all 0.1s ease;
+        }
+        .history-item:hover {
+            background-color: #1e2937;
+            transform: translateX(2px);
+        }
+
+        .display-value {
+            font-feature-settings: "tnum";
+            line-height: 1.05;
+        }
+
+        .section-header {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+
+
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200">
+    <div class="max-w-5xl mx-auto px-5 py-8">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <div class="flex items-center gap-x-3">
+                    <a class='flex items-center gap-x-1.5 text-sm font-medium text-slate-400 hover:text-indigo-400 transition-colors mr-1' href='/' id='back-to-hub'>
+                        <i class="fa-solid fa-arrow-left"></i>
+                        <span class="hidden sm:inline">Hub</span>
+                    </a>
+                    <div class="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
+                        <i class="fa-solid fa-calculator text-white text-2xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="title-font text-4xl font-semibold tracking-tighter">Calculator</h1>
+                        <p class="text-slate-400 text-sm mt-0.5">Big buttons • History • Scientific • Memory • 100% local</p>
+                    </div>
+                </div>
+            </div>
+            <div class="text-right">
+                <div class="inline-flex items-center gap-x-2 px-3 py-1.5 bg-slate-900 rounded-full border border-slate-800">
+                    <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                    <span class="text-emerald-400 text-xs font-medium tracking-wider">100% LOCAL</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main App -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            
+            <!-- Calculator -->
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-xl">
+                
+                <!-- Display -->
+                <div class="calc-display rounded-3xl p-5 mb-4 min-h-[118px] flex flex-col justify-end border border-slate-700">
+                    <div id="expression" 
+                         class="mono text-sm text-slate-400 h-6 text-right tracking-[0.5px] pr-1 select-none overflow-hidden text-ellipsis">
+                        &nbsp;
+                    </div>
+                    <div id="display" 
+                         class="display-value text-6xl sm:text-7xl font-semibold tracking-[-2.5px] text-right text-white leading-none mt-0.5 select-none tabular-nums"
+                         style="font-feature-settings: 'tnum';">
+                        0
+                    </div>
+                    <div id="memory-indicator" class="text-[10px] text-indigo-400 font-mono mt-1 text-right hidden">
+                        <i class="fa-solid fa-memory mr-1"></i>MEM
+                    </div>
+                </div>
+
+                <!-- Memory row -->
+                <div class="grid grid-cols-4 gap-2 mb-3">
+                    <button onclick="memoryAction('clear')" class="calc-btn memory py-2 rounded-2xl active:scale-[0.96]">MC</button>
+                    <button onclick="memoryAction('recall')" class="calc-btn memory py-2 rounded-2xl active:scale-[0.96]">MR</button>
+                    <button onclick="memoryAction('add')" class="calc-btn memory py-2 rounded-2xl active:scale-[0.96]">M+</button>
+                    <button onclick="memoryAction('subtract')" class="calc-btn memory py-2 rounded-2xl active:scale-[0.96]">M−</button>
+                </div>
+
+                <!-- Scientific strip -->
+                <div class="mb-3">
+                    <div class="flex items-center justify-between mb-1.5 px-0.5">
+                        <div class="section-header">Scientific</div>
+                        <div class="flex items-center gap-x-1 text-xs">
+                            <button onclick="setAngleUnit('deg')" id="deg-btn"
+                                    class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-900 text-indigo-300">DEG</button>
+                            <button onclick="setAngleUnit('rad')" id="rad-btn"
+                                    class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 hover:bg-slate-700">RAD</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-6 sm:grid-cols-8 gap-1.5">
+                        <button onclick="applyScientific('sin')" class="calc-btn scientific py-1.5 rounded-xl">sin</button>
+                        <button onclick="applyScientific('cos')" class="calc-btn scientific py-1.5 rounded-xl">cos</button>
+                        <button onclick="applyScientific('tan')" class="calc-btn scientific py-1.5 rounded-xl">tan</button>
+                        <button onclick="applyScientific('sqrt')" class="calc-btn scientific py-1.5 rounded-xl">√</button>
+                        <button onclick="applyScientific('square')" class="calc-btn scientific py-1.5 rounded-xl">x²</button>
+                        <button onclick="applyScientific('recip')" class="calc-btn scientific py-1.5 rounded-xl">1/x</button>
+                        <button onclick="applyScientific('ln')" class="calc-btn scientific py-1.5 rounded-xl">ln</button>
+                        <button onclick="applyScientific('log10')" class="calc-btn scientific py-1.5 rounded-xl">log</button>
+                        <button onclick="applyScientific('pow')" class="calc-btn scientific py-1.5 rounded-xl">xʸ</button>
+                        <button onclick="applyScientific('pi')" class="calc-btn scientific py-1.5 rounded-xl">π</button>
+                        <button onclick="applyScientific('e')" class="calc-btn scientific py-1.5 rounded-xl">e</button>
+                        <button onclick="applyScientific('negate')" class="calc-btn scientific py-1.5 rounded-xl">±</button>
+                    </div>
+                </div>
+
+                <!-- Main Keypad -->
+                <div class="grid grid-cols-4 gap-2">
+                    <!-- Row 1 -->
+                    <button onclick="clearAll()" class="calc-btn clear py-3.5 rounded-2xl text-sm font-bold tracking-wider">AC</button>
+                    <button onclick="backspace()" class="calc-btn number py-3.5 rounded-2xl text-xl"><i class="fa-solid fa-delete-left"></i></button>
+                    <button onclick="handlePercent()" class="calc-btn operator py-3.5 rounded-2xl text-xl font-semibold">%</button>
+                    <button onclick="handleOperator('/')" class="calc-btn operator py-3.5 rounded-2xl text-2xl font-light">÷</button>
+
+                    <!-- Row 2 -->
+                    <button onclick="inputDigit('7')" class="calc-btn number py-3.5 rounded-2xl text-2xl">7</button>
+                    <button onclick="inputDigit('8')" class="calc-btn number py-3.5 rounded-2xl text-2xl">8</button>
+                    <button onclick="inputDigit('9')" class="calc-btn number py-3.5 rounded-2xl text-2xl">9</button>
+                    <button onclick="handleOperator('*')" class="calc-btn operator py-3.5 rounded-2xl text-2xl font-light">×</button>
+
+                    <!-- Row 3 -->
+                    <button onclick="inputDigit('4')" class="calc-btn number py-3.5 rounded-2xl text-2xl">4</button>
+                    <button onclick="inputDigit('5')" class="calc-btn number py-3.5 rounded-2xl text-2xl">5</button>
+                    <button onclick="inputDigit('6')" class="calc-btn number py-3.5 rounded-2xl text-2xl">6</button>
+                    <button onclick="handleOperator('-')" class="calc-btn operator py-3.5 rounded-2xl text-3xl font-light leading-none pt-1">−</button>
+
+                    <!-- Row 4 -->
+                    <button onclick="inputDigit('1')" class="calc-btn number py-3.5 rounded-2xl text-2xl">1</button>
+                    <button onclick="inputDigit('2')" class="calc-btn number py-3.5 rounded-2xl text-2xl">2</button>
+                    <button onclick="inputDigit('3')" class="calc-btn number py-3.5 rounded-2xl text-2xl">3</button>
+                    <button onclick="handleOperator('+')" class="calc-btn operator py-3.5 rounded-2xl text-3xl font-light">+</button>
+
+                    <!-- Row 5 -->
+                    <button onclick="inputDigit('0')" class="calc-btn number py-3.5 rounded-2xl text-2xl col-span-2 text-left pl-6">0</button>
+                    <button onclick="inputDecimal()" class="calc-btn number py-3.5 rounded-2xl text-2xl">.</button>
+                    <button onclick="handleEquals()" class="calc-btn equals py-3.5 rounded-2xl font-bold">=</button>
+                </div>
+
+                <div class="mt-3 flex items-center justify-between text-[10px] text-slate-500 px-1">
+                    <div>Keyboard supported • Tap history to recall result</div>
+                    <button onclick="copyResult()" 
+                            class="flex items-center gap-x-1 text-indigo-400 hover:text-indigo-300 active:text-white transition-colors">
+                        <i class="fa-solid fa-copy text-xs"></i>
+                        <span class="font-medium">Copy</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- History / Tape -->
+            <div class="lg:col-span-5 bg-slate-900 border border-slate-700 rounded-3xl p-5 flex flex-col shadow-xl">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <div class="section-header">History / Tape</div>
+                        <div id="history-count" class="text-[10px] text-slate-500">No calculations yet</div>
+                    </div>
+                    <div class="flex gap-x-1.5">
+                        <button onclick="copyHistory()" 
+                                class="text-xs px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-xl flex items-center gap-x-1 text-slate-300">
+                            <i class="fa-solid fa-copy"></i>
+                            <span class="hidden sm:inline">Copy</span>
+                        </button>
+                        <button onclick="clearHistory()" 
+                                class="text-xs px-2.5 py-1 bg-slate-800 hover:bg-red-900/60 rounded-xl flex items-center gap-x-1 text-slate-300">
+                            <i class="fa-solid fa-trash"></i>
+                            <span class="hidden sm:inline">Clear</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="history-list" 
+                     class="flex-1 overflow-auto space-y-1 pr-1 text-sm min-h-[220px] lg:min-h-[340px] bg-slate-950 rounded-2xl p-2 border border-slate-800">
+                    <!-- Populated by JS -->
+                    <div class="text-center text-slate-500 text-xs pt-8">Your calculations will appear here.<br>Click any result to continue from it.</div>
+                </div>
+
+                <div class="mt-3 text-[10px] text-slate-500 px-1">
+                    Results are saved locally. Click a row to load the value.
+                </div>
+            </div>
+        </div>
+
+        <!-- Tips -->
+        <div class="mt-5 text-xs text-slate-500 flex flex-wrap gap-x-4 gap-y-1 px-1">
+            <div><span class="font-medium text-slate-400">Pro tip:</span> Use your keyboard — numbers, operators, Enter, Backspace, Esc, % all work.</div>
+            <div>Scientific functions apply to the current value (or set xʸ then enter exponent).</div>
+            <div>The local calculator and scientific functions are fully offline.</div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== STATE ====================
+        let currentInput = '0';
+        let previousInput = null;
+        let operator = null;
+        let waitingForOperand = false;
+        let memoryValue = 0;
+        let history = [];
+        let angleUnit = 'deg'; // 'deg' or 'rad'
+
+        const MAX_HISTORY = 80;
+
+        // ==================== DOM REFS ====================
+        let displayEl, exprEl, historyListEl, historyCountEl, memIndicatorEl;
+        let degBtn, radBtn;
+
+        function initDOM() {
+            displayEl = document.getElementById('display');
+            exprEl = document.getElementById('expression');
+            historyListEl = document.getElementById('history-list');
+            historyCountEl = document.getElementById('history-count');
+            memIndicatorEl = document.getElementById('memory-indicator');
+            degBtn = document.getElementById('deg-btn');
+            radBtn = document.getElementById('rad-btn');
+        }
+
+        // ==================== DISPLAY ====================
+        function formatNumber(num) {
+            if (num === null || num === undefined || isNaN(num)) return 'Error';
+            const n = Number(num);
+            if (!isFinite(n)) return 'Error';
+
+            // Avoid ugly floats
+            const abs = Math.abs(n);
+            if (abs > 1e12 || (abs < 1e-6 && abs !== 0)) {
+                return n.toExponential(6);
+            }
+
+            // Nice integer or limited decimals
+            if (Number.isInteger(n)) {
+                return n.toLocaleString('en-US');
+            }
+            // Limit to 8 significant decimal places
+            const fixed = n.toFixed(8);
+            // Trim trailing zeros
+            return parseFloat(fixed).toLocaleString('en-US', { maximumFractionDigits: 8 });
+        }
+
+        function updateDisplay() {
+            if (!displayEl) return;
+            displayEl.textContent = formatNumber(currentInput);
+            
+            // Expression line
+            if (exprEl) {
+                if (operator && previousInput !== null && !waitingForOperand) {
+                    const opSym = getOperatorSymbol(operator);
+                    exprEl.textContent = `${formatNumber(previousInput)} ${opSym}`;
+                } else if (operator && previousInput !== null) {
+                    const opSym = getOperatorSymbol(operator);
+                    exprEl.textContent = `${formatNumber(previousInput)} ${opSym}`;
+                } else {
+                    exprEl.textContent = '\u00A0'; // non-breaking space to keep height
+                }
+            }
+
+            // Memory indicator
+            if (memIndicatorEl) {
+                if (memoryValue !== 0) {
+                    memIndicatorEl.classList.remove('hidden');
+                } else {
+                    memIndicatorEl.classList.add('hidden');
+                }
+            }
+        }
+
+        function getOperatorSymbol(op) {
+            if (op === '+') return '+';
+            if (op === '-') return '−';
+            if (op === '*') return '×';
+            if (op === '/') return '÷';
+            if (op === 'pow') return '^';
+            return op;
+        }
+
+        function setDisplayError(msg = 'Error') {
+            if (displayEl) {
+                displayEl.textContent = msg;
+                displayEl.style.color = '#f87171';
+                setTimeout(() => {
+                    if (displayEl) displayEl.style.color = '';
+                    // After error, next input will clear
+                    currentInput = '0';
+                    waitingForOperand = true;
+                }, 1400);
+            }
+        }
+
+        // ==================== INPUT HANDLERS ====================
+        function inputDigit(digit) {
+            if (waitingForOperand) {
+                currentInput = digit;
+                waitingForOperand = false;
+            } else {
+                currentInput = currentInput === '0' ? digit : currentInput + digit;
+            }
+            updateDisplay();
+        }
+
+        function inputDecimal() {
+            if (waitingForOperand) {
+                currentInput = '0.';
+                waitingForOperand = false;
+            } else if (currentInput.indexOf('.') === -1) {
+                currentInput = currentInput + '.';
+            }
+            updateDisplay();
+        }
+
+        function handleOperator(nextOperator) {
+            const inputValue = parseFloat(currentInput);
+
+            if (operator && waitingForOperand) {
+                // User changed operator before entering second number
+                operator = nextOperator;
+                updateDisplay();
+                return;
+            }
+
+            if (previousInput === null) {
+                previousInput = inputValue;
+            } else if (operator) {
+                const result = performCalculation(previousInput, inputValue, operator);
+                if (result === 'Error') {
+                    setDisplayError();
+                    previousInput = null;
+                    operator = null;
+                    return;
+                }
+                previousInput = result;
+                currentInput = String(result);
+            }
+
+            waitingForOperand = true;
+            operator = nextOperator;
+            updateDisplay();
+        }
+
+        function performCalculation(first, second, op) {
+            if (op === '+') return first + second;
+            if (op === '-') return first - second;
+            if (op === '*') return first * second;
+            if (op === '/') {
+                if (second === 0) return 'Error';
+                return first / second;
+            }
+            if (op === 'pow') {
+                return Math.pow(first, second);
+            }
+            return second;
+        }
+
+        function handleEquals() {
+            if (operator === null || previousInput === null) {
+                // Nothing to do — maybe just push current to history as a note?
+                if (currentInput !== '0') {
+                    addToHistory(currentInput, currentInput);
+                }
+                return;
+            }
+
+            const inputValue = parseFloat(currentInput);
+            const result = performCalculation(previousInput, inputValue, operator);
+
+            if (result === 'Error') {
+                setDisplayError();
+                previousInput = null;
+                operator = null;
+                waitingForOperand = true;
+                return;
+            }
+
+            const exprStr = `${formatNumber(previousInput)} ${getOperatorSymbol(operator)} ${formatNumber(inputValue)}`;
+            addToHistory(exprStr, formatNumber(result));
+
+            currentInput = String(result);
+            previousInput = null;
+            operator = null;
+            waitingForOperand = true;
+
+            updateDisplay();
+        }
+
+        function handlePercent() {
+            let value = parseFloat(currentInput);
+            if (isNaN(value)) return;
+
+            // Classic calculator % behavior:
+            // If there's a pending operation, treat current as percent of previous
+            if (operator && previousInput !== null) {
+                value = (previousInput * value) / 100;
+            } else {
+                value = value / 100;
+            }
+
+            currentInput = String(value);
+            waitingForOperand = true;
+            updateDisplay();
+        }
+
+        function backspace() {
+            if (waitingForOperand) return;
+
+            if (currentInput.length <= 1 || (currentInput.length === 2 && currentInput.startsWith('-'))) {
+                currentInput = '0';
+            } else {
+                currentInput = currentInput.slice(0, -1);
+            }
+            updateDisplay();
+        }
+
+        function clearAll() {
+            currentInput = '0';
+            previousInput = null;
+            operator = null;
+            waitingForOperand = false;
+            exprEl.textContent = '\u00A0';
+            updateDisplay();
+        }
+
+        // ==================== SCIENTIFIC ====================
+        function applyScientific(fn) {
+            let value = parseFloat(currentInput);
+            if (isNaN(value)) value = 0;
+
+            let result;
+            let exprLabel = '';
+
+            try {
+                switch (fn) {
+                    case 'sin':
+                        const radSin = angleUnit === 'deg' ? value * Math.PI / 180 : value;
+                        result = Math.sin(radSin);
+                        exprLabel = `sin(${formatNumber(value)})`;
+                        break;
+                    case 'cos':
+                        const radCos = angleUnit === 'deg' ? value * Math.PI / 180 : value;
+                        result = Math.cos(radCos);
+                        exprLabel = `cos(${formatNumber(value)})`;
+                        break;
+                    case 'tan':
+                        const radTan = angleUnit === 'deg' ? value * Math.PI / 180 : value;
+                        result = Math.tan(radTan);
+                        exprLabel = `tan(${formatNumber(value)})`;
+                        break;
+                    case 'sqrt':
+                        if (value < 0) throw new Error('Invalid');
+                        result = Math.sqrt(value);
+                        exprLabel = `√(${formatNumber(value)})`;
+                        break;
+                    case 'square':
+                        result = value * value;
+                        exprLabel = `(${formatNumber(value)})²`;
+                        break;
+                    case 'recip':
+                        if (value === 0) throw new Error('Invalid');
+                        result = 1 / value;
+                        exprLabel = `1/(${formatNumber(value)})`;
+                        break;
+                    case 'ln':
+                        if (value <= 0) throw new Error('Invalid');
+                        result = Math.log(value);
+                        exprLabel = `ln(${formatNumber(value)})`;
+                        break;
+                    case 'log10':
+                        if (value <= 0) throw new Error('Invalid');
+                        result = Math.log10(value);
+                        exprLabel = `log(${formatNumber(value)})`;
+                        break;
+                    case 'pow':
+                        // Binary: set up power operation
+                        previousInput = value;
+                        operator = 'pow';
+                        waitingForOperand = true;
+                        updateDisplay();
+                        return;
+                    case 'pi':
+                        result = Math.PI;
+                        exprLabel = 'π';
+                        break;
+                    case 'e':
+                        result = Math.E;
+                        exprLabel = 'e';
+                        break;
+                    case 'negate':
+                        result = -value;
+                        exprLabel = `−(${formatNumber(value)})`;
+                        break;
+                    default:
+                        return;
+                }
+            } catch (e) {
+                setDisplayError('Error');
+                return;
+            }
+
+            const formattedResult = String(result);
+            currentInput = formattedResult;
+            waitingForOperand = true;
+
+            // Log unary operations to history
+            if (exprLabel) {
+                addToHistory(exprLabel, formatNumber(result));
+            }
+
+            updateDisplay();
+        }
+
+        function setAngleUnit(unit) {
+            angleUnit = unit;
+            if (degBtn && radBtn) {
+                if (unit === 'deg') {
+                    degBtn.classList.add('bg-indigo-900', 'text-indigo-300');
+                    degBtn.classList.remove('bg-slate-800', 'text-slate-400');
+                    radBtn.classList.remove('bg-indigo-900', 'text-indigo-300');
+                    radBtn.classList.add('bg-slate-800', 'text-slate-400');
+                } else {
+                    radBtn.classList.add('bg-indigo-900', 'text-indigo-300');
+                    radBtn.classList.remove('bg-slate-800', 'text-slate-400');
+                    degBtn.classList.remove('bg-indigo-900', 'text-indigo-300');
+                    degBtn.classList.add('bg-slate-800', 'text-slate-400');
+                }
+            }
+        }
+
+        // ==================== MEMORY ====================
+        function memoryAction(action) {
+            const current = parseFloat(currentInput) || 0;
+
+            switch (action) {
+                case 'clear':
+                    memoryValue = 0;
+                    break;
+                case 'recall':
+                    currentInput = String(memoryValue);
+                    waitingForOperand = true;
+                    break;
+                case 'add':
+                    memoryValue += current;
+                    break;
+                case 'subtract':
+                    memoryValue -= current;
+                    break;
+            }
+
+            updateDisplay();
+            // subtle flash of indicator
+            if (memIndicatorEl) {
+                memIndicatorEl.style.transition = 'none';
+                memIndicatorEl.style.opacity = '0.3';
+                setTimeout(() => {
+                    if (memIndicatorEl) {
+                        memIndicatorEl.style.transition = '';
+                        memIndicatorEl.style.opacity = '';
+                    }
+                }, 120);
+            }
+        }
+
+        // ==================== HISTORY ====================
+        function addToHistory(expressionText, resultText) {
+            const entry = {
+                id: Date.now(),
+                expr: expressionText,
+                result: resultText,
+                timestamp: new Date().toISOString()
+            };
+            history.unshift(entry); // newest first
+            if (history.length > MAX_HISTORY) history.pop();
+
+            saveToStorage();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            if (!historyListEl || !historyCountEl) return;
+
+            historyListEl.innerHTML = '';
+
+            if (history.length === 0) {
+                historyCountEl.textContent = 'No calculations yet';
+                const empty = document.createElement('div');
+                empty.className = 'text-center text-slate-500 text-xs pt-8';
+                empty.innerHTML = 'Your calculations will appear here.<br>Click any result to continue from it.';
+                historyListEl.appendChild(empty);
+                return;
+            }
+
+            historyCountEl.textContent = `${history.length} calculation${history.length === 1 ? '' : 's'}`;
+
+            history.forEach((entry, idx) => {
+                const div = document.createElement('div');
+                div.className = `history-item flex items-center justify-between gap-3 px-3 py-2 rounded-2xl cursor-pointer border border-transparent hover:border-slate-700`;
+                div.innerHTML = `
+                    <div class="flex-1 min-w-0">
+                        <div class="text-[11px] text-slate-400 mono truncate">${entry.expr}</div>
+                        <div class="text-base font-semibold text-white tabular-nums tracking-tight">${entry.result}</div>
+                    </div>
+                    <div class="text-indigo-400">
+                        <i class="fa-solid fa-arrow-right text-xs"></i>
+                    </div>
+                `;
+                div.onclick = () => {
+                    // Load the result into the calculator so user can continue operating on it
+                    currentInput = String(parseFloat(entry.result) || entry.result);
+                    previousInput = null;
+                    operator = null;
+                    waitingForOperand = true;
+                    updateDisplay();
+                    // Optional: give a little visual cue
+                    div.style.backgroundColor = '#312e81';
+                    setTimeout(() => { if (div && div.parentNode) div.style.backgroundColor = ''; }, 220);
+                };
+                historyListEl.appendChild(div);
+            });
+        }
+
+        function clearHistory() {
+            if (!confirm('Clear all calculation history?')) return;
+            history = [];
+            saveToStorage();
+            renderHistory();
+        }
+
+        function copyHistory() {
+            if (history.length === 0) {
+                alert('Nothing in history yet.');
+                return;
+            }
+            const text = history.map(h => `${h.expr} = ${h.result}`).join('\n');
+            navigator.clipboard.writeText(text).then(() => {
+                // simple toast
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 bg-slate-800 text-xs px-4 py-2 rounded-2xl border border-slate-600 shadow';
+                toast.textContent = 'History copied to clipboard';
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 1600);
+            }).catch(() => {
+                // fallback
+                prompt('Copy this history:', text);
+            });
+        }
+
+        function copyResult() {
+            const val = displayEl ? displayEl.textContent : currentInput;
+            if (!val || val === 'Error') return;
+            navigator.clipboard.writeText(val.replace(/,/g, '')).then(() => {
+                const orig = displayEl.style.boxShadow;
+                displayEl.style.boxShadow = '0 0 0 3px rgba(129, 140, 248, 0.35)';
+                setTimeout(() => { if (displayEl) displayEl.style.boxShadow = orig || ''; }, 380);
+            }).catch(() => {
+                // fallback select
+                const range = document.createRange();
+                range.selectNode(displayEl);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+            });
+        }
+
+        // ==================== STORAGE ====================
+        const STORAGE_KEY = 'gabes-calculator-v1';
+
+        function saveToStorage() {
+            try {
+                const data = {
+                    history: history.slice(0, 60),
+                    memory: memoryValue,
+                    angleUnit: angleUnit,
+                    lastResult: currentInput
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            } catch (e) {}
+        }
+
+        function loadFromStorage() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return;
+                const data = JSON.parse(raw);
+                if (Array.isArray(data.history)) history = data.history;
+                if (typeof data.memory === 'number') memoryValue = data.memory;
+                if (data.angleUnit === 'deg' || data.angleUnit === 'rad') angleUnit = data.angleUnit;
+                if (data.lastResult && !isNaN(parseFloat(data.lastResult))) {
+                    // Start with last result visible but don't treat as "previous"
+                    currentInput = String(data.lastResult);
+                }
+            } catch (e) {}
+        }
+
+        // ==================== KEYBOARD SUPPORT ====================
+        function handleKeyboard(e) {
+            // Ignore keyboard shortcuts when focus is inside a text input or textarea.
+            // (Prevents calculator keys from interfering with any future text fields.)
+            const active = document.activeElement;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
+                return;
+            }
+
+            const key = e.key;
+
+            if (key >= '0' && key <= '9') {
+                e.preventDefault();
+                inputDigit(key);
+                return;
+            }
+            if (key === '.') {
+                e.preventDefault();
+                inputDecimal();
+                return;
+            }
+            if (key === '+') {
+                e.preventDefault();
+                handleOperator('+');
+                return;
+            }
+            if (key === '-') {
+                e.preventDefault();
+                handleOperator('-');
+                return;
+            }
+            if (key === '*') {
+                e.preventDefault();
+                handleOperator('*');
+                return;
+            }
+            if (key === '/') {
+                e.preventDefault();
+                handleOperator('/');
+                return;
+            }
+            if (key === 'Enter' || key === '=') {
+                e.preventDefault();
+                handleEquals();
+                return;
+            }
+            if (key === '%') {
+                e.preventDefault();
+                handlePercent();
+                return;
+            }
+            if (key === 'Backspace' || key === 'Delete') {
+                e.preventDefault();
+                backspace();
+                return;
+            }
+            if (key.toLowerCase() === 'c' && (e.metaKey || e.ctrlKey)) {
+                // allow normal copy, don't hijack
+                return;
+            }
+            if (key.toLowerCase() === 'c' || key === 'Escape') {
+                e.preventDefault();
+                clearAll();
+                return;
+            }
+
+            // Quick scientific via keyboard (optional power users)
+            if (e.altKey) {
+                const map = {
+                    's': 'sin', 'c': 'cos', 't': 'tan',
+                    'r': 'sqrt', 'q': 'square', 'i': 'recip',
+                    'l': 'ln', 'g': 'log10', 'p': 'pi'
+                };
+                const fn = map[key.toLowerCase()];
+                if (fn) {
+                    e.preventDefault();
+                    applyScientific(fn);
+                }
+            }
+        }
+
+        function attachKeyboard() {
+            document.addEventListener('keydown', handleKeyboard);
+
+            // Also allow clicking the display area to focus for paste hints (simple)
+            if (displayEl) {
+                displayEl.style.cursor = 'default';
+            }
+        }
+
+        // ==================== PASTE SUPPORT ====================
+        function attachPaste() {
+            document.addEventListener('paste', (e) => {
+                const text = (e.clipboardData || window.clipboardData).getData('text');
+                if (!text) return;
+                const num = parseFloat(text.replace(/,/g, '').trim());
+                if (!isNaN(num)) {
+                    e.preventDefault();
+                    currentInput = String(num);
+                    waitingForOperand = true;
+                    updateDisplay();
+                }
+            });
+        }
+
+        // ==================== INIT ====================
+        function initAngleButtons() {
+            if (degBtn && radBtn) {
+                // initial state set in setAngleUnit
+            }
+            setAngleUnit(angleUnit); // apply loaded or default
+        }
+
+        function init() {
+            initDOM();
+            loadFromStorage();
+
+            // initial UI
+            updateDisplay();
+            renderHistory();
+            initAngleButtons();
+            attachKeyboard();
+            attachPaste();
+
+            // Seed a friendly starting point if no prior data
+            if (history.length === 0 && currentInput === '0') {
+                // do nothing — clean start at 0 is perfect
+            } else {
+                // if we restored a lastResult, make sure display is correct
+                updateDisplay();
+            }
+
+            // Bonus: allow tapping the display to copy (mobile friendly)
+            if (displayEl) {
+                displayEl.addEventListener('click', () => {
+                    copyResult();
+                });
+            }
+
+            // Expose a couple things for debugging in console if needed
+            window.GabesCalc = { clearAll, getState: () => ({ currentInput, memoryValue, history }) };
+        }
+
+        // Boot
+        window.addEventListener('DOMContentLoaded', init);
+
+        // Preserve ?team= param on the Hub back link (runs after DOM ready)
+        (function preserveTeamParam() {
+            const params = new URLSearchParams(location.search);
+            const team = params.get('team');
+            if (team) {
+                // Wait a tick so the header is definitely parsed
+                setTimeout(() => {
+                    const back = document.getElementById('back-to-hub');
+                    if (back) {
+                        back.href = '../index.html?team=' + encodeURIComponent(team);
+                    }
+                }, 0);
+            }
+        })();
+    </script>
+</body>
+</html>

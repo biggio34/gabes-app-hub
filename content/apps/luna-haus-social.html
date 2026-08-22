@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luna Haus Social Sync</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .title-font { font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif; font-weight: 600; letter-spacing: -0.025em; }
+        .tab-button { transition: all 0.2s ease; }
+        .tab-button.active { background: #1e2937; color: #fff; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200">
+    <div id="offline" class="hidden max-w-xl mx-auto px-5 py-16 text-center">
+        <div class="w-14 h-14 bg-rose-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <i class="fa-solid fa-share-nodes text-white text-2xl"></i>
+        </div>
+        <h1 class="title-font text-3xl mb-2">Start Social Sync first</h1>
+        <p class="text-slate-400 mb-6">Double-click <strong>start.command</strong> in <code class="text-rose-300">Gabes App Hub/luna-haus-social/</code> and leave that window open.</p>
+        <button onclick="boot()" class="mt-6 px-4 py-2 bg-rose-700 hover:bg-rose-600 rounded-xl text-sm font-semibold">Try again</button>
+    </div>
+
+    <div id="app" class="hidden max-w-5xl mx-auto px-5 py-8">
+        <div class="flex items-center justify-between mb-8">
+            <div class="flex items-center gap-x-3">
+                <a class='flex items-center gap-x-1.5 text-sm font-medium text-slate-400 hover:text-rose-400' href='/'>
+                    <i class="fa-solid fa-arrow-left"></i><span class="hidden sm:inline">Hub</span>
+                </a>
+                <div class="w-10 h-10 bg-rose-700 rounded-2xl flex items-center justify-center">
+                    <i class="fa-solid fa-share-nodes text-white"></i>
+                </div>
+                <div>
+                    <h1 class="title-font text-3xl sm:text-4xl tracking-tighter">Social Sync</h1>
+                    <p class="text-rose-300/80 text-sm">Uses your logged-in Chrome — Book button on every Google post</p>
+                </div>
+            </div>
+            <div id="ready-pill" class="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 bg-slate-900 rounded-full border border-slate-800 text-xs"></div>
+        </div>
+
+        <div class="flex bg-slate-900 rounded-3xl p-1 mb-6 border border-slate-800 w-full sm:w-fit">
+            <button class="tab-button active px-5 py-2.5 rounded-[20px] text-sm font-semibold" data-tab="sync" onclick="showTab('sync')">Sync</button>
+            <button class="tab-button px-5 py-2.5 rounded-[20px] text-sm font-semibold" data-tab="setup" onclick="showTab('setup')">Chrome</button>
+            <button class="tab-button px-5 py-2.5 rounded-[20px] text-sm font-semibold" data-tab="history" onclick="showTab('history')">History</button>
+        </div>
+
+        <section id="tab-sync">
+            <button id="sync-now-btn" onclick="syncNow()"
+                    class="w-full sm:w-auto mb-5 px-8 py-4 bg-rose-700 hover:bg-rose-600 rounded-2xl text-base font-semibold">
+                <i class="fa-solid fa-bolt mr-2"></i>Sync now
+            </button>
+            <p class="text-xs text-slate-500 mb-4">One click: latest Facebook post → Google Business, with photo and Book button. Leave Chrome in front.</p>
+            <div class="flex flex-wrap gap-2 mb-5">
+                <button onclick="connectChrome()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-semibold">
+                    <i class="fa-brands fa-chrome mr-1"></i> Use my Chrome
+                </button>
+                <button onclick="previewLatest()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-semibold">
+                    <i class="fa-brands fa-facebook mr-1"></i> Read only
+                </button>
+                <button onclick="publishDraft()" id="publish-btn" disabled
+                        class="px-4 py-2 bg-slate-800 rounded-xl text-sm font-semibold disabled:opacity-40">
+                    <i class="fa-solid fa-paper-plane mr-1"></i> Post draft
+                </button>
+            </div>
+            <p id="sync-status" class="text-sm text-slate-400 mb-4">Click <strong>Sync now</strong> to copy the latest Luna Haus Facebook post to Google Business.</p>
+            <div id="dup-panel" class="hidden mb-5 bg-amber-950/50 border border-amber-700 rounded-3xl p-5">
+                <div class="font-semibold text-amber-200 mb-1">Possible duplicate</div>
+                <p id="dup-reason" class="text-sm text-amber-100/90 mb-3"></p>
+                <p id="dup-preview" class="text-sm text-slate-300 whitespace-pre-wrap mb-4"></p>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="syncNow(true)" class="px-4 py-2 bg-rose-700 hover:bg-rose-600 rounded-xl text-sm font-semibold">Post anyway</button>
+                    <button onclick="hideDup()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-semibold">Don't post</button>
+                </div>
+            </div>
+            <div id="sync-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </section>
+
+        <section id="tab-setup" class="hidden space-y-5">
+            <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 space-y-3 text-sm">
+                <h3 class="font-semibold text-base">How this works</h3>
+                <p class="text-slate-400">The bot adds tabs to <em>your</em> Chrome — the one where you are already signed into Facebook and Google. It does not open a second browser and it does not ask you to log in again.</p>
+                <ol class="list-decimal ml-5 text-slate-300 space-y-1">
+                    <li>Keep Social Sync running (double-click <strong>start.command</strong> if this page can’t load).</li>
+                    <li>Click <strong>Use my Chrome</strong> — Facebook opens in a new tab in your current Chrome.</li>
+                    <li>Read the latest post, edit the draft if you want, then publish. Google Business also opens as a new tab.</li>
+                    <li>One Chrome setting is required: <strong>View → Developer → Allow JavaScript from Apple Events</strong>.</li>
+                </ol>
+                <p class="text-xs text-slate-500">The bot only talks to Chrome on this Mac. Leave the Social Sync terminal window open while you use it.</p>
+            </div>
+            <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 space-y-3">
+                <label class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Facebook Page</label>
+                <input id="facebook_page_url" type="url" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm">
+                <label class="flex items-center gap-2 text-sm text-slate-300">
+                    <input id="auto_publish" type="checkbox" class="rounded" onchange="saveSettings()">
+                    Auto-publish when a new Facebook post appears (every 10 minutes, while Chrome is attached)
+                </label>
+                <button onclick="saveSettings()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-semibold">Save</button>
+                <p id="setup-status" class="text-sm text-slate-400"></p>
+            </div>
+        </section>
+
+        <section id="tab-history" class="hidden">
+            <div id="history-list" class="space-y-2"></div>
+        </section>
+    </div>
+
+    <script>
+        let API = '';
+        let settings = null;
+        let prepared = null;
+        let syncing = false;
+
+        async function boot() {
+            const candidates = [];
+            if (location.port === '8787') candidates.push('');
+            candidates.push('http://127.0.0.1:8787');
+            for (const base of candidates) {
+                try {
+                    const res = await fetch(base + '/api/status');
+                    if (!res.ok) continue;
+                    const data = await res.json();
+                    if (data.server) {
+                        API = base;
+                        document.getElementById('offline').classList.add('hidden');
+                        document.getElementById('app').classList.remove('hidden');
+                        applyStatus(data);
+                        if (new URLSearchParams(location.search).get('sync') === '1' && !sessionStorage.getItem('lunaSyncOnce')) {
+                            sessionStorage.setItem('lunaSyncOnce', '1');
+                            setTimeout(function () { syncNow(); }, 300);
+                        }
+                        return;
+                    }
+                } catch (e) {}
+            }
+            document.getElementById('app').classList.add('hidden');
+            document.getElementById('offline').classList.remove('hidden');
+        }
+
+        function applyStatus(data) {
+            settings = data;
+            document.getElementById('facebook_page_url').value = data.facebook_page_url || '';
+            document.getElementById('auto_publish').checked = !!data.auto_publish;
+            const pill = document.getElementById('ready-pill');
+            pill.classList.remove('hidden');
+            if (data.bot_attached) {
+                pill.innerHTML = '<span class="w-2 h-2 bg-emerald-400 rounded-full"></span>Chrome attached';
+            } else {
+                pill.innerHTML = '<span class="w-2 h-2 bg-amber-400 rounded-full"></span>Click Use my Chrome';
+            }
+        }
+
+        function showTab(name) {
+            ['sync', 'setup', 'history'].forEach(function (tab) {
+                document.getElementById('tab-' + tab).classList.toggle('hidden', tab !== name);
+                document.querySelector('[data-tab="' + tab + '"]').classList.toggle('active', tab === name);
+            });
+            if (name === 'history') loadHistory();
+        }
+
+        function setStatus(id, msg, ok) {
+            const el = document.getElementById(id);
+            el.textContent = msg || '';
+            el.className = 'text-sm mb-4 ' + (ok === false ? 'text-rose-400' : ok ? 'text-emerald-400' : 'text-slate-400');
+        }
+
+        async function api(path, opts) {
+            let res;
+            try {
+                res = await fetch(API + path, opts);
+            } catch (e) {
+                throw new Error('Social Sync is not running. Double-click start.command in Gabes App Hub/luna-haus-social and leave that window open.');
+            }
+            const data = await res.json().catch(function () { return {}; });
+            if (!res.ok || data.ok === false) throw new Error(data.error || 'Request failed');
+            return data;
+        }
+
+        async function connectChrome() {
+            setStatus('sync-status', 'Opening Facebook in a new tab in your Chrome…');
+            try {
+                const data = await api('/api/chrome/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ restart: false })
+                });
+                applyStatus(data);
+                setStatus('sync-status', 'Facebook is open in your Chrome. You should still be logged in. Next: read the latest post.', true);
+            } catch (e) {
+                setStatus('sync-status', e.message, false);
+            }
+        }
+
+        async function saveSettings() {
+            try {
+                const data = await api('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        facebook_page_url: document.getElementById('facebook_page_url').value.trim(),
+                        auto_publish: document.getElementById('auto_publish').checked
+                    })
+                });
+                applyStatus(data);
+                setStatus('setup-status', 'Saved.', true);
+            } catch (e) {
+                setStatus('setup-status', e.message, false);
+            }
+        }
+
+        async function previewLatest() {
+            document.getElementById('publish-btn').disabled = true;
+            setStatus('sync-status', 'Opening Facebook in your Chrome and reading the latest post…');
+            try {
+                prepared = await api('/api/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                renderPrepared();
+                document.getElementById('publish-btn').disabled = false;
+                setStatus('sync-status', prepared.already_synced
+                    ? 'Already posted this one to Google. You can post it again if you want.'
+                    : 'Draft ready. Edit the Google text if you want, then publish.', true);
+            } catch (e) {
+                setStatus('sync-status', e.message + (String(e.message).includes('attach') ? ' Click Use my Chrome first.' : ''), false);
+            }
+        }
+
+        function renderPrepared() {
+            const fb = prepared.facebook || {};
+            const draft = prepared.draft || {};
+            const img = fb.image_url ? '<img src="' + fb.image_url + '" class="rounded-xl mb-3 max-h-48 object-cover w-full" alt="">' : '';
+            document.getElementById('sync-grid').innerHTML =
+                '<div class="bg-slate-900 border border-slate-700 rounded-3xl p-4">' +
+                    '<div class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">Facebook</div>' +
+                    img +
+                    '<p class="text-sm whitespace-pre-wrap">' + escapeHtml(fb.message || '') + '</p>' +
+                    (fb.permalink_url ? '<a class="text-xs text-rose-300 underline" href="' + fb.permalink_url + '" target="_blank" rel="noopener">Open post</a>' : '') +
+                '</div>' +
+                '<div class="bg-slate-900 border border-rose-900/50 rounded-3xl p-4">' +
+                    '<div class="text-xs uppercase tracking-wider text-rose-300 font-semibold mb-2">Google Business draft</div>' +
+                    img +
+                    '<textarea id="draft-summary" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm min-h-[8rem]">' + escapeHtml(draft.summary || '') + '</textarea>' +
+                '</div>';
+        }
+
+        function hideDup() {
+            document.getElementById('dup-panel').classList.add('hidden');
+            setStatus('sync-status', 'Okay — nothing was posted.', true);
+        }
+
+        function showDup(result) {
+            const panel = document.getElementById('dup-panel');
+            const fb = (result.prepared && result.prepared.facebook) || {};
+            const draft = (result.prepared && result.prepared.draft) || {};
+            document.getElementById('dup-reason').textContent = result.reason || 'This post may already be on Google Business.';
+            document.getElementById('dup-preview').textContent = draft.summary || fb.message || '';
+            panel.classList.remove('hidden');
+        }
+
+        async function syncNow(force) {
+            if (syncing) return;
+            syncing = true;
+            const btn = document.getElementById('sync-now-btn');
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+            document.getElementById('dup-panel').classList.add('hidden');
+            setStatus('sync-status', force
+                ? 'Posting anyway. Leave Chrome in front…'
+                : 'Checking Facebook, then Google. Leave Chrome in front…');
+            try {
+                const result = await api('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: !!force })
+                });
+                prepared = result.prepared || prepared;
+                if (prepared) renderPrepared();
+                if (result.duplicate && !force) {
+                    showDup(result);
+                    setStatus('sync-status', 'Possible duplicate — choose whether to post.', false);
+                } else if (result.skipped) {
+                    setStatus('sync-status', result.reason || 'Already on Google Business.', true);
+                } else {
+                    document.getElementById('dup-panel').classList.add('hidden');
+                    setStatus('sync-status', 'Posted to Google Business with the Book button.', true);
+                }
+            } catch (e) {
+                setStatus('sync-status', e.message, false);
+            } finally {
+                syncing = false;
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+            }
+        }
+
+        async function publishDraft() {
+            if (!prepared) {
+                setStatus('sync-status', 'Read the Facebook post first.', false);
+                return;
+            }
+            const summary = (document.getElementById('draft-summary') || {}).value || prepared.draft.summary;
+            setStatus('sync-status', 'Opening Google Business in Chrome and publishing…');
+            try {
+                const result = await api('/api/publish', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        force: prepared.already_synced,
+                        draft: { summary: summary }
+                    })
+                });
+                if (result.duplicate) {
+                    showDup(result);
+                    setStatus('sync-status', 'Possible duplicate — choose whether to post.', false);
+                    return;
+                }
+                if (result.skipped) {
+                    setStatus('sync-status', result.reason, true);
+                    return;
+                }
+                setStatus('sync-status', 'Posted to Google Business in your Chrome.', true);
+                prepared.already_synced = true;
+            } catch (e) {
+                setStatus('sync-status', e.message, false);
+            }
+        }
+
+        async function loadHistory() {
+            const data = await api('/api/history');
+            const rows = data.history || [];
+            document.getElementById('history-list').innerHTML = rows.length ? rows.map(function (row) {
+                return '<div class="bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3">' +
+                    '<div class="text-sm">' + escapeHtml(row.summary || '') + '</div>' +
+                    '<div class="text-[11px] text-slate-500 mt-1">' + escapeHtml(row.at || '') + '</div></div>';
+            }).join('') : '<p class="text-sm text-slate-500">Nothing published yet.</p>';
+        }
+
+        function escapeHtml(s) {
+            return String(s || '').replace(/[&<>"']/g, function (c) {
+                return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+            });
+        }
+
+        boot();
+        setInterval(function () { if (!API) boot(); }, 4000);
+    </script>
+</body>
+</html>

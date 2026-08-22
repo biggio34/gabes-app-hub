@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fraunces, Geist } from "next/font/google";
+import { Geist } from "next/font/google";
 import "./globals.css";
 
 const geist = Geist({
@@ -7,24 +7,17 @@ const geist = Geist({
   subsets: ["latin"],
 });
 
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "Luna Haus Purchasing",
-  description:
-    "Monday restock book for Luna Haus Salon — Avyna, Tailor's, and SalonCentric.",
+  title: "Gabe's Apps",
+  description: "Private hub for Financial, Softball, and Luna Haus Salon.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${geist.variable} ${fraunces.variable} h-full antialiased`}
-    >
-      <body className="flex min-h-full flex-col">{children}</body>
+    <html lang="en" className={`${geist.variable} h-full dark`}>
+      <body className="min-h-full bg-slate-950 font-sans antialiased">
+        {children}
+      </body>
     </html>
   );
 }

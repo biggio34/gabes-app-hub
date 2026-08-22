@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Calcs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        :root {
+            --font-sans: 'Inter', system_ui, sans-serif;
+        }
+        
+        body {
+            font-family: 'Inter', system_ui, sans-serif;
+        }
+        
+        .title-font {
+            font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+
+        .tab-button {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .tab-button.active {
+            background-color: #1e2937;
+            color: white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .result-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .money {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .section-header {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        .input-field {
+            transition: all 0.2s ease;
+        }
+
+        .input-field:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+
+        .email-box {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+
+        .metric-value {
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+        }
+
+        /* Hide number input spinner arrows everywhere */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200">
+    <div class="max-w-4xl mx-auto px-6 py-10">
+        <script>
+          // Preserve team param on back link for consistency with hub
+          (function() {
+            const params = new URLSearchParams(location.search);
+            const team = params.get('team');
+            if (team) {
+              const back = document.getElementById('back-to-hub');
+              if (back) back.href = '../index.html?team=' + team;
+            }
+          })();
+        </script>
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <div>
+                <div class="flex items-center gap-x-3">
+                    <a class='flex items-center gap-x-1.5 text-sm font-medium text-slate-400 hover:text-blue-400 transition-colors mr-1' href='/' id='back-to-hub'>
+                        <i class="fa-solid fa-arrow-left"></i>
+                        <span class="hidden sm:inline">Hub</span>
+                    </a>
+                    <div class="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center">
+                        <i class="fa-solid fa-calculator text-white text-2xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="title-font text-4xl font-semibold tracking-tighter">Financial Calcs</h1>
+                        <p class="text-slate-400 text-sm mt-0.5">Local • Private • Runs entirely on your Mac</p>
+                    </div>
+                </div>
+            </div>
+            <div class="text-right">
+                <div class="inline-flex items-center gap-x-2 px-3 py-1.5 bg-slate-900 rounded-full border border-slate-800">
+                    <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                    <span class="text-emerald-400 text-xs font-medium tracking-wider">100% LOCAL</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex bg-slate-900 rounded-3xl p-1 mb-8 border border-slate-800 w-fit">
+            <button onclick="switchTab(0)" id="tab-0"
+                    class="tab-button active px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2">
+                <i class="fa-solid fa-hand-holding-dollar"></i>
+                <span>Give Me Net</span>
+            </button>
+            <button onclick="switchTab(1)" id="tab-1"
+                    class="tab-button px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2 text-slate-300 hover:text-slate-200">
+                <i class="fa-solid fa-undo"></i>
+                <span>Give Me Gross</span>
+            </button>
+            <button onclick="switchTab(2)" id="tab-2"
+                    class="tab-button px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2 text-slate-300 hover:text-slate-200">
+                <i class="fa-solid fa-calendar-alt"></i>
+                <span>Paycheck → Monthly</span>
+            </button>
+            <button onclick="switchTab(3)" id="tab-3"
+                    class="tab-button px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2 text-slate-300 hover:text-slate-200">
+                <i class="fa-solid fa-piggy-bank"></i>
+                <span>Retirement Limits</span>
+            </button>
+        </div>
+
+        <!-- Tab Contents -->
+
+        <!-- TAB 0: Give Me Net -->
+        <div id="content-0" class="tab-content">
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-semibold tracking-tight">Give Me Net</h2>
+                    <p class="text-slate-400 mt-1">Calculate take-home pay after federal and state withholding.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                    <div>
+                        <label class="section-header block mb-1.5">Gross Amount</label>
+                        <div class="relative">
+                            <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</div>
+                            <input type="number" id="net-gross" value="128500" step="0.01"
+                                   class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl pl-8 pr-4 py-3 text-lg font-medium"
+                                   oninput="calculateNet()">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5">Federal Withholding</label>
+                        <div class="relative">
+                            <input type="number" id="net-fed" value="24" step="0.01"
+                                   class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl pr-10 py-3 text-lg font-medium"
+                                   oninput="calculateNet()">
+                            <div class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">%</div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5">State Withholding</label>
+                        <div class="relative">
+                            <input type="number" id="net-state" value="5.5" step="0.01"
+                                   class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl pr-10 py-3 text-lg font-medium"
+                                   oninput="calculateNet()">
+                            <div class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                        <div class="text-xs text-slate-400">GROSS</div>
+                        <div id="net-result-gross" class="money text-2xl font-semibold tracking-tight mt-1">$128,500.00</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                        <div class="text-xs text-slate-400">FEDERAL TAX</div>
+                        <div id="net-result-fed" class="money text-2xl font-semibold tracking-tight mt-1 text-rose-400">$30,840.00</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                        <div class="text-xs text-slate-400">STATE TAX</div>
+                        <div id="net-result-state" class="money text-2xl font-semibold tracking-tight mt-1 text-amber-400">$7,067.50</div>
+                    </div>
+                    <div class="bg-slate-950 border border-emerald-900/50 rounded-2xl p-4 ring-1 ring-emerald-900/30">
+                        <div class="text-xs text-emerald-400 font-medium">NET (TAKE HOME)</div>
+                        <div id="net-result-net" class="money text-2xl font-semibold tracking-tight mt-1 text-emerald-400">$90,592.50</div>
+                    </div>
+                </div>
+
+                <!-- Generate Email Button -->
+                <div class="mt-6 pt-6 border-t border-slate-800">
+                    <button onclick="generateEmailFromNet()"
+                            class="w-full md:w-auto flex items-center justify-center gap-x-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 transition-colors rounded-2xl text-sm font-semibold">
+                        <i class="fa-solid fa-envelope"></i>
+                        <span>Generate Distribution Email from these numbers</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 1: Give Me Gross -->
+        <div id="content-1" class="tab-content hidden">
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-semibold tracking-tight">Give Me Gross</h2>
+                    <p class="text-slate-400 mt-1">Reverse calculation. Enter desired net amount to find required gross.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                    <div>
+                        <label class="section-header block mb-1.5">Desired Net Amount</label>
+                        <div class="relative">
+                            <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</div>
+                            <input type="number" id="gross-net" value="92500" step="0.01"
+                                   class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl pl-8 pr-4 py-3 text-lg font-medium"
+                                   oninput="calculateGross()">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5">Federal Withholding</label>
+                        <div class="relative">
+                            <input type="number" id="gross-fed" value="24" step="0.01"
+                                   class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl pr-10 py-3 text-lg font-medium"
+                                   oninput="calculateGross()">
+                            <div class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">%</div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5">State Withholding</label>
+                        <div class="relative">
+                            <input type="number" id="gross-state" value="5.5" step="0.01"
+                                   class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl pr-10 py-3 text-lg font-medium"
+                                   oninput="calculateGross()">
+                            <div class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 ring-1 ring-blue-900/30">
+                        <div class="text-xs text-blue-400 font-medium">REQUIRED GROSS</div>
+                        <div id="gross-result-gross" class="money text-2xl font-semibold tracking-tight mt-1 text-blue-400">$127,586.21</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                        <div class="text-xs text-slate-400">FEDERAL TAX</div>
+                        <div id="gross-result-fed" class="money text-2xl font-semibold tracking-tight mt-1 text-rose-400">$30,620.69</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                        <div class="text-xs text-slate-400">STATE TAX</div>
+                        <div id="gross-result-state" class="money text-2xl font-semibold tracking-tight mt-1 text-amber-400">$7,017.24</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                        <div class="text-xs text-slate-400">NET</div>
+                        <div id="gross-result-net" class="money text-2xl font-semibold tracking-tight mt-1">$92,500.00</div>
+                    </div>
+                </div>
+
+                <!-- Generate Email Button -->
+                <div class="mt-6 pt-6 border-t border-slate-800">
+                    <button onclick="generateEmailFromGross()"
+                            class="w-full md:w-auto flex items-center justify-center gap-x-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 transition-colors rounded-2xl text-sm font-semibold">
+                        <i class="fa-solid fa-envelope"></i>
+                        <span>Generate Distribution Email from these numbers</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: Paycheck → Monthly -->
+        <div id="content-2" class="tab-content hidden">
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-semibold tracking-tight">Paycheck → Monthly</h2>
+                    <p class="text-slate-400 mt-1">Convert bi-weekly paycheck numbers into monthly cash flow amounts.</p>
+                    <div class="mt-2 text-xs text-slate-500">
+                        Uses the standard method: <span class="font-medium text-slate-400">Bi-weekly × 26 ÷ 12 = ×2.1667</span>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-700 text-slate-400">
+                                <th class="text-left pb-3 font-medium">Item</th>
+                                <th class="text-right pb-3 font-medium w-40">Bi-Weekly</th>
+                                <th class="text-right pb-3 font-medium w-40">Monthly</th>
+                            </tr>
+                        </thead>
+                        <tbody id="paycheck-rows" class="divide-y divide-slate-800">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                        <tfoot class="border-t-2 border-slate-700 font-semibold">
+                            <tr class="text-slate-400">
+                                <td class="pt-4 text-right pr-4">Gross (Monthly)</td>
+                                <td></td>
+                                <td class="pt-4 text-right">
+                                    <span id="paycheck-gross-monthly" class="money text-base">$0.00</span>
+                                </td>
+                            </tr>
+                            <tr class="text-slate-400">
+                                <td class="pt-1 text-right pr-4">Total Deductions (Monthly)</td>
+                                <td></td>
+                                <td class="pt-1 text-right">
+                                    <span id="paycheck-deductions-monthly" class="money text-base">$0.00</span>
+                                </td>
+                            </tr>
+                            <tr class="bg-emerald-950/40 border-t border-slate-700">
+                                <td class="pt-3 pb-1 text-right pr-4 text-emerald-400 font-semibold">Est. Monthly Take-Home</td>
+                                <td></td>
+                                <td class="pt-3 pb-1 text-right">
+                                    <span id="paycheck-monthly-net" class="money text-xl font-bold text-emerald-400">$0.00</span>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div class="mt-6 flex flex-wrap gap-3">
+                    <button onclick="resetPaycheckCalculator()"
+                            class="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-2xl transition-colors flex items-center gap-x-2">
+                        <i class="fa-solid fa-undo text-xs"></i>
+                        <span>Reset to Defaults</span>
+                    </button>
+                    <button onclick="addCustomPaycheckRow()"
+                            class="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-2xl transition-colors flex items-center gap-x-2">
+                        <i class="fa-solid fa-plus text-xs"></i>
+                        <span>Add Custom Line</span>
+                    </button>
+                </div>
+
+                <div class="mt-4 text-[11px] text-slate-500 leading-snug">
+                    Tip: Enter your actual bi-weekly paycheck numbers from your paystub. The monthly column updates live using the 26-pay-period method.
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: Retirement Limits 2026 -->
+        <div id="content-3" class="tab-content hidden">
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8">
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <h2 class="text-2xl font-semibold tracking-tight">2026 Retirement Contribution Limits</h2>
+                        <p class="text-slate-400 text-sm mt-1">Official IRS limits for the 2026 tax year</p>
+                    </div>
+                    <div class="text-right text-xs text-slate-500">
+                        Source: IRS Notice<br>
+                        Updated for 2026
+                    </div>
+                </div>
+
+                <!-- 401(k) / Workplace Plans -->
+                <div class="mb-8">
+                    <div class="flex items-center gap-x-2 mb-3">
+                        <i class="fa-solid fa-building text-blue-400"></i>
+                        <h3 class="font-semibold text-lg">401(k), 403(b) &amp; 457(b) Plans</h3>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- Under 50 -->
+                        <div class="bg-slate-950 border border-slate-700 rounded-2xl p-4">
+                            <div class="text-xs text-slate-400">Under Age 50</div>
+                            <div class="text-3xl font-semibold tracking-tight mt-1">$24,500</div>
+                            <div class="text-xs text-emerald-400 mt-1">Employee deferral limit</div>
+                        </div>
+
+                        <!-- Age 50-59 / 64+ -->
+                        <div class="bg-slate-950 border border-slate-700 rounded-2xl p-4">
+                            <div class="text-xs text-slate-400">Ages 50–59 or 64+</div>
+                            <div class="text-3xl font-semibold tracking-tight mt-1">$32,500</div>
+                            <div class="text-xs text-emerald-400 mt-1">$24,500 + $8,000 catch-up</div>
+                        </div>
+
+                        <!-- Ages 60-63 -->
+                        <div class="bg-slate-950 border border-amber-900/50 rounded-2xl p-4 ring-1 ring-amber-900/30">
+                            <div class="text-xs text-amber-400 font-medium">Ages 60–63 (Super Catch-up)</div>
+                            <div class="text-3xl font-semibold tracking-tight mt-1">$35,750</div>
+                            <div class="text-xs text-emerald-400 mt-1">$24,500 + $11,250 catch-up</div>
+                            <div class="text-[10px] text-amber-300 mt-2">Only if your plan allows the higher limit</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 text-xs text-slate-400">
+                        Total plan limit (employee + employer contributions): <span class="font-medium text-slate-300">$72,000</span> 
+                        (up to $83,250 for ages 60-63 with catch-up)
+                    </div>
+                </div>
+
+                <!-- IRA Section -->
+                <div class="mb-8">
+                    <div class="flex items-center gap-x-2 mb-3">
+                        <i class="fa-solid fa-user text-blue-400"></i>
+                        <h3 class="font-semibold text-lg">Traditional &amp; Roth IRA</h3>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-slate-950 border border-slate-700 rounded-2xl p-4">
+                            <div class="text-xs text-slate-400">Under Age 50</div>
+                            <div class="text-3xl font-semibold tracking-tight mt-1">$7,500</div>
+                        </div>
+                        <div class="bg-slate-950 border border-slate-700 rounded-2xl p-4">
+                            <div class="text-xs text-slate-400">Age 50 and older</div>
+                            <div class="text-3xl font-semibold tracking-tight mt-1">$8,600</div>
+                            <div class="text-xs text-emerald-400 mt-1">$7,500 + $1,100 catch-up</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Other Accounts -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    <!-- SEP IRA -->
+                    <div class="bg-slate-950 border border-slate-700 rounded-2xl p-4">
+                        <div class="flex items-center gap-x-2 mb-2">
+                            <i class="fa-solid fa-briefcase text-purple-400"></i>
+                            <span class="font-medium">SEP IRA</span>
+                        </div>
+                        <div class="text-2xl font-semibold">$72,000</div>
+                        <div class="text-xs text-slate-400 mt-1">Up to 25% of compensation (max compensation $360,000)</div>
+                    </div>
+
+                    <!-- HSA -->
+                    <div class="bg-slate-950 border border-slate-700 rounded-2xl p-4">
+                        <div class="flex items-center gap-x-2 mb-2">
+                            <i class="fa-solid fa-heartbeat text-emerald-400"></i>
+                            <span class="font-medium">Health Savings Account (HSA)</span>
+                        </div>
+                        <div class="flex gap-4">
+                            <div>
+                                <div class="text-xs text-slate-400">Self-only</div>
+                                <div class="text-xl font-semibold">$4,400</div>
+                                <div class="text-[10px] text-emerald-300">+$1,000 if 55+</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400">Family</div>
+                                <div class="text-xl font-semibold">$8,750</div>
+                                <div class="text-[10px] text-emerald-300">+$1,000 if 55+</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Roth IRA Phase-outs -->
+                <div class="mb-6">
+                    <h3 class="font-medium mb-2">Roth IRA Direct Contribution Income Limits (2026)</h3>
+                    <div class="text-sm grid grid-cols-1 md:grid-cols-2 gap-x-8 text-slate-300">
+                        <div>• Single / Head of Household: <span class="font-medium">$153,000 – $168,000</span> MAGI</div>
+                        <div>• Married Filing Jointly: <span class="font-medium">$242,000 – $252,000</span> MAGI</div>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-1">Above these ranges, direct Roth IRA contributions are not allowed (backdoor Roth still available for most).</div>
+                </div>
+
+                <!-- Important Notes -->
+                <div class="bg-slate-950 border border-slate-700 rounded-2xl p-4 text-sm">
+                    <div class="font-medium mb-2 text-amber-400">Important 2026 Notes</div>
+                    <ul class="space-y-1 text-xs text-slate-300 list-disc pl-4">
+                        <li>Higher catch-up contributions for ages 60-63 remain available ($11,250) if your plan permits.</li>
+                        <li>Starting in 2026, catch-up contributions for employees earning over $150,000 (indexed) in the prior year must generally be made as Roth (after-tax) contributions.</li>
+                        <li>Backdoor Roth IRA strategy remains available for high earners (no income limit on conversions).</li>
+                    </ul>
+                </div>
+
+                <!-- Quick Lookup -->
+                <div class="mt-8 pt-6 border-t border-slate-700">
+                    <h3 class="font-medium mb-3">Quick Lookup: Your 2026 Max Employee Contribution</h3>
+                    
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        <button onclick="showRetirementMax(49)" class="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-2xl transition-colors">Under 50</button>
+                        <button onclick="showRetirementMax(55)" class="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-2xl transition-colors">50–59 or 64+</button>
+                        <button onclick="showRetirementMax(61)" class="px-4 py-2 text-sm bg-amber-900/70 hover:bg-amber-800 rounded-2xl transition-colors">60–63 (Super Catch-up)</button>
+                    </div>
+
+                    <div id="retirement-max-result" class="hidden bg-slate-950 border border-slate-700 rounded-2xl p-4 text-sm">
+                        <div class="grid grid-cols-2 gap-x-8">
+                            <div>
+                                <div class="text-xs text-slate-400">401(k) / 403(b) Max</div>
+                                <div id="retirement-401k-max" class="text-2xl font-semibold tracking-tight"></div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-slate-400">IRA Max (Traditional or Roth)</div>
+                                <div id="retirement-ira-max" class="text-2xl font-semibold tracking-tight"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 text-[11px] text-slate-500">
+                    These limits are set by the IRS and are subject to annual cost-of-living adjustments. 
+                    Always verify with your plan administrator or tax advisor for your specific situation.
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-8 text-center">
+            <p class="text-xs text-slate-500">
+                All calculations happen locally in your browser. Nothing is sent anywhere.
+            </p>
+        </div>
+    </div>
+
+    <!-- Email Modal -->
+    <div id="email-modal" onclick="if (event.target.id === 'email-modal') closeEmailModal()" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+                <div class="font-semibold text-lg flex items-center gap-x-2">
+                    <i class="fa-solid fa-envelope text-blue-400"></i>
+                    <span>Distribution Email</span>
+                </div>
+                <button onclick="closeEmailModal()" class="text-slate-400 hover:text-white transition-colors p-1">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Email Preview -->
+            <div class="p-6 bg-slate-950 text-[15px] leading-relaxed" id="modal-email-preview">
+                <!-- Populated by JS -->
+            </div>
+
+            <!-- Modal Actions -->
+            <div class="px-6 py-4 bg-slate-900 border-t border-slate-700 flex flex-col sm:flex-row gap-3">
+                <button onclick="copyEmailFromModal()"
+                        class="flex-1 flex items-center justify-center gap-x-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 transition-colors rounded-2xl text-sm font-semibold">
+                    <i class="fa-solid fa-copy"></i>
+                    <span>Copy to Clipboard</span>
+                </button>
+                <button onclick="closeEmailModal()"
+                        class="flex-1 sm:flex-none px-5 py-3 bg-slate-800 hover:bg-slate-700 transition-colors rounded-2xl text-sm font-semibold">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tailwind script
+        function initializeTailwind() {
+            document.documentElement.style.setProperty('--accent', '#3b82f6');
+        }
+
+        // Utility functions
+        function roundToCents(amount) {
+            return Math.round(amount * 100) / 100;
+        }
+
+        function formatCurrency(amount) {
+            return amount.toLocaleString('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function formatPercent(rate) {
+            return rate + '%';
+        }
+
+        function getInputValue(id) {
+            const el = document.getElementById(id);
+            return parseFloat(el.value) || 0;
+        }
+
+        // ===== TAB 0: Give Me Net =====
+        function calculateNet() {
+            const gross = getInputValue('net-gross');
+            const fedRate = getInputValue('net-fed') / 100;
+            const stateRate = getInputValue('net-state') / 100;
+
+            const fedTax = roundToCents(gross * fedRate);
+            const stateTax = roundToCents(gross * stateRate);
+            const net = roundToCents(gross - fedTax - stateTax);
+
+            document.getElementById('net-result-gross').textContent = formatCurrency(gross);
+            document.getElementById('net-result-fed').textContent = formatCurrency(fedTax);
+            document.getElementById('net-result-state').textContent = formatCurrency(stateTax);
+            document.getElementById('net-result-net').textContent = formatCurrency(net);
+        }
+
+        // ===== TAB 1: Give Me Gross =====
+        function calculateGross() {
+            const desiredNet = getInputValue('gross-net');
+            const fedRate = getInputValue('gross-fed') / 100;
+            const stateRate = getInputValue('gross-state') / 100;
+
+            const totalRate = fedRate + stateRate;
+            
+            let gross = 0;
+            if (totalRate < 1) {
+                gross = roundToCents(desiredNet / (1 - totalRate));
+            } else {
+                gross = 0;
+            }
+
+            const fedTax = roundToCents(gross * fedRate);
+            const stateTax = roundToCents(gross * stateRate);
+            const net = roundToCents(gross - fedTax - stateTax);
+
+            document.getElementById('gross-result-gross').textContent = formatCurrency(gross);
+            document.getElementById('gross-result-fed').textContent = formatCurrency(fedTax);
+            document.getElementById('gross-result-state').textContent = formatCurrency(stateTax);
+            document.getElementById('gross-result-net').textContent = formatCurrency(net);
+        }
+
+        // ===== Distribution Email (shared) =====
+        let currentEmailText = '';
+
+        function buildEmailText(gross, fedPercent, statePercent, fedTax, stateTax, net) {
+            return `I'm writing to let you know that funds have been scheduled for release, and you should see them hit your bank account in the next two to three business days. Here's the breakdown:
+
+- Gross Amount: ${formatCurrency(gross)}
+- Net Cash Amount: ${formatCurrency(net)}
+- Federal Tax: ${fedPercent}% (${formatCurrency(fedTax)})
+- State Tax: ${statePercent}% (${formatCurrency(stateTax)})
+
+Let us know if there's anything else that we can do for you.
+
+Thanks!
+Gabe`;
+        }
+
+        function showEmailModal(gross, fedPercent, statePercent, fedTax, stateTax, net) {
+            currentEmailText = buildEmailText(gross, fedPercent, statePercent, fedTax, stateTax, net);
+
+            const preview = document.getElementById('modal-email-preview');
+            preview.innerHTML = `
+                <div class="text-slate-300">
+                    I'm writing to let you know that funds have been scheduled for release, and you should see them hit your bank account in the next two to three business days. Here's the breakdown:
+                    <br><br>
+                    <div class="pl-1 space-y-1">
+                        <div>• <span class="font-medium">Gross Amount:</span> <span class="font-semibold">${formatCurrency(gross)}</span></div>
+                        <div>• <span class="font-medium">Net Cash Amount:</span> <span class="font-semibold">${formatCurrency(net)}</span></div>
+                        <div>• <span class="font-medium">Federal Tax:</span> ${fedPercent}% <span class="font-semibold">(${formatCurrency(fedTax)})</span></div>
+                        <div>• <span class="font-medium">State Tax:</span> ${statePercent}% <span class="font-semibold">(${formatCurrency(stateTax)})</span></div>
+                    </div>
+                    <br>
+                    Let us know if there's anything else that we can do for you.
+                    <br><br>
+                    Thanks!<br>
+                    <span class="font-medium">Gabe</span>
+                </div>
+            `;
+
+            document.getElementById('email-modal').classList.remove('hidden');
+            document.getElementById('email-modal').classList.add('flex');
+        }
+
+        function closeEmailModal() {
+            const modal = document.getElementById('email-modal');
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+        }
+
+        function copyEmailFromModal() {
+            if (!currentEmailText) return;
+
+            navigator.clipboard.writeText(currentEmailText).then(() => {
+                const copyBtn = document.querySelector('#email-modal .bg-blue-600');
+                if (!copyBtn) return;
+
+                const originalHTML = copyBtn.innerHTML;
+                copyBtn.innerHTML = `<i class="fa-solid fa-check"></i> <span>Copied!</span>`;
+                copyBtn.classList.add('!bg-emerald-600');
+
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalHTML;
+                    copyBtn.classList.remove('!bg-emerald-600');
+                }, 1800);
+            }).catch(() => {
+                // Fallback
+                const textarea = document.createElement('textarea');
+                textarea.value = currentEmailText;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                alert('Email copied to clipboard!');
+            });
+        }
+
+        // Called from Give Me Net tab
+        function generateEmailFromNet() {
+            const gross = getInputValue('net-gross');
+            const fedPercent = getInputValue('net-fed');
+            const statePercent = getInputValue('net-state');
+
+            const fedRate = fedPercent / 100;
+            const stateRate = statePercent / 100;
+
+            const fedTax = roundToCents(gross * fedRate);
+            const stateTax = roundToCents(gross * stateRate);
+            const net = roundToCents(gross - fedTax - stateTax);
+
+            showEmailModal(gross, fedPercent, statePercent, fedTax, stateTax, net);
+        }
+
+        // Called from Give Me Gross tab
+        function generateEmailFromGross() {
+            const desiredNet = getInputValue('gross-net');
+            const fedPercent = getInputValue('gross-fed');
+            const statePercent = getInputValue('gross-state');
+
+            const fedRate = fedPercent / 100;
+            const stateRate = statePercent / 100;
+
+            const totalRate = fedRate + stateRate;
+            let gross = 0;
+            if (totalRate < 1) {
+                gross = roundToCents(desiredNet / (1 - totalRate));
+            }
+
+            const fedTax = roundToCents(gross * fedRate);
+            const stateTax = roundToCents(gross * stateRate);
+            const net = roundToCents(gross - fedTax - stateTax);
+
+            showEmailModal(gross, fedPercent, statePercent, fedTax, stateTax, net);
+        }
+
+        // Tab switching
+        let currentTab = 0;
+
+        function switchTab(tabIndex) {
+            // Hide all content
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            
+            // Deactivate all tabs
+            document.querySelectorAll('.tab-button').forEach(el => {
+                el.classList.remove('active');
+                el.classList.add('text-slate-300', 'hover:text-slate-200');
+            });
+
+            // Show selected content
+            document.getElementById(`content-${tabIndex}`).classList.remove('hidden');
+            
+            // Activate selected tab
+            const activeTab = document.getElementById(`tab-${tabIndex}`);
+            activeTab.classList.add('active');
+            activeTab.classList.remove('text-slate-300', 'hover:text-slate-200');
+
+            currentTab = tabIndex;
+
+            // Run calculation for the newly visible tab
+            if (tabIndex === 0) {
+                calculateNet();
+                // Focus the first input (Gross Amount) when switching to this tab
+                setTimeout(() => {
+                    const input = document.getElementById('net-gross');
+                    input.focus();
+                    input.select();
+                }, 10);
+            } else if (tabIndex === 1) {
+                calculateGross();
+                // Focus the first input (Desired Net Amount) when switching to this tab
+                setTimeout(() => {
+                    const input = document.getElementById('gross-net');
+                    input.focus();
+                    input.select();
+                }, 10);
+            } else if (tabIndex === 2) {
+                renderPaycheckTable();
+                // Focus the first bi-weekly input in the new tab
+                setTimeout(() => {
+                    const firstInput = document.querySelector('#paycheck-rows input');
+                    if (firstInput) {
+                        firstInput.focus();
+                        firstInput.select();
+                    }
+                }, 10);
+            } else if (tabIndex === 3) {
+                // Retirement Limits tab - no specific focus needed
+            }
+        }
+
+        // Initialize everything
+        function init() {
+            initializeTailwind();
+
+            // Set initial calculations
+            calculateNet();
+            calculateGross();
+
+            // Prepare paycheck calculator data (but don't render until tab is opened)
+            initPaycheckCalculator();
+
+            // Make sure first tab is active
+            document.getElementById('tab-0').classList.add('active');
+            document.getElementById('tab-0').classList.remove('text-slate-300', 'hover:text-slate-200');
+
+            // Optional: Show a subtle welcome toast on first load (can be removed)
+            console.log('%c[Financial Calcs] Local web app initialized successfully.', 'color:#475569');
+        }
+
+        // Retirement Limits quick lookup
+        function showRetirementMax(ageGroup) {
+            const resultBox = document.getElementById('retirement-max-result');
+            const k401 = document.getElementById('retirement-401k-max');
+            const ira = document.getElementById('retirement-ira-max');
+
+            let k401max = 24500;
+            let iramax = 7500;
+
+            if (ageGroup === 49) {
+                // Under 50
+                k401max = 24500;
+                iramax = 7500;
+            } else if (ageGroup === 55) {
+                // 50-59 or 64+
+                k401max = 32500;
+                iramax = 8600;
+            } else if (ageGroup === 61) {
+                // 60-63 super catch-up
+                k401max = 35750;
+                iramax = 8600;
+            }
+
+            k401.textContent = '$' + k401max.toLocaleString();
+            ira.textContent = '$' + iramax.toLocaleString();
+
+            resultBox.classList.remove('hidden');
+        }
+
+        // ============================================
+        // PAYCHECK → MONTHLY CALCULATOR
+        // ============================================
+        let paycheckItems = [];
+
+        const PAYCHECK_MULTIPLIER = 26 / 12; // 2.1666...
+
+        function getDefaultPaycheckItems() {
+            const items = [
+                { id: 'gross', label: 'Gross Pay', biweekly: 0, isGross: true },
+            ];
+
+            // Add 10 blank items by default
+            for (let i = 1; i <= 10; i++) {
+                items.push({
+                    id: `line-${i}`,
+                    label: `Line ${i}`,
+                    biweekly: 0
+                });
+            }
+
+            return items;
+        }
+
+        function formatMoneyShort(amount) {
+            return amount.toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function renderPaycheckTable() {
+            const tbody = document.getElementById('paycheck-rows');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+
+            paycheckItems.forEach((item, index) => {
+                const row = document.createElement('tr');
+                row.className = item.isGross ? 'bg-slate-950' : '';
+                row.dataset.index = index;
+
+                const monthlyValue = item.biweekly * PAYCHECK_MULTIPLIER;
+
+                row.innerHTML = `
+                    <td class="py-3 pr-4">
+                        <input type="text" 
+                               value="${item.label}" 
+                               class="bg-transparent border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-1.5 text-sm w-full"
+                               onchange="updatePaycheckLabel(${index}, this.value)">
+                    </td>
+                    <td class="py-3 px-2">
+                        <div class="relative">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                            <input type="text" 
+                                   inputmode="decimal"
+                                   value="${item.biweekly}" 
+                                   class="bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl pl-6 pr-3 py-2 text-right font-medium w-full"
+                                   oninput="updatePaycheckAmount(${index}, this.value)">
+                        </div>
+                    </td>
+                    <td class="py-3 pl-2 text-right font-medium text-emerald-300 money monthly-value" data-index="${index}">
+                        $${formatMoneyShort(monthlyValue)}
+                    </td>
+                `;
+
+                tbody.appendChild(row);
+            });
+
+            calculatePaycheckTotals();
+        }
+
+        function updatePaycheckAmount(index, value) {
+            // Update the data model
+            paycheckItems[index].biweekly = parseFloat(value) || 0;
+
+            // Only update the specific monthly cell (don't destroy the input the user is typing in)
+            const monthlyCell = document.querySelector(`.monthly-value[data-index="${index}"]`);
+            if (monthlyCell) {
+                const monthlyValue = paycheckItems[index].biweekly * PAYCHECK_MULTIPLIER;
+                monthlyCell.textContent = '$' + formatMoneyShort(monthlyValue);
+            }
+
+            // Update the totals at the bottom
+            calculatePaycheckTotals();
+        }
+
+        function updatePaycheckLabel(index, value) {
+            paycheckItems[index].label = value || 'Untitled';
+            // No need to fully re-render, but we can if we want live label updates
+        }
+
+        function calculatePaycheckTotals() {
+            let grossBiweekly = 0;
+            let totalDeductionsBiweekly = 0;
+
+            paycheckItems.forEach(item => {
+                const val = item.biweekly || 0;
+
+                if (item.isGross) {
+                    grossBiweekly = val;
+                } else {
+                    totalDeductionsBiweekly += val;
+                }
+            });
+
+            const grossMonthly = grossBiweekly * PAYCHECK_MULTIPLIER;
+            const deductionsMonthly = totalDeductionsBiweekly * PAYCHECK_MULTIPLIER;
+            const monthlyNet = grossMonthly - deductionsMonthly;
+
+            document.getElementById('paycheck-gross-monthly').textContent = '$' + formatMoneyShort(grossMonthly);
+            document.getElementById('paycheck-deductions-monthly').textContent = '$' + formatMoneyShort(deductionsMonthly);
+            document.getElementById('paycheck-monthly-net').textContent = '$' + formatMoneyShort(monthlyNet);
+        }
+
+        function resetPaycheckCalculator() {
+            paycheckItems = getDefaultPaycheckItems();
+            renderPaycheckTable();
+        }
+
+        function addCustomPaycheckRow() {
+            const newItem = {
+                id: 'custom_' + Date.now(),
+                label: 'Custom Item',
+                biweekly: 0
+            };
+            paycheckItems.push(newItem);
+            renderPaycheckTable();
+
+            // Focus the new row's input after render
+            setTimeout(() => {
+                const inputs = document.querySelectorAll('#paycheck-rows input[type="text"]');
+                const lastInput = inputs[inputs.length - 1];
+                if (lastInput) {
+                    lastInput.focus();
+                    lastInput.select();
+                }
+            }, 50);
+        }
+
+        // Initialize paycheck data when first needed
+        function initPaycheckCalculator() {
+            if (paycheckItems.length === 0) {
+                paycheckItems = getDefaultPaycheckItems();
+            }
+        }
+
+        // Boot the app
+        window.onload = init;
+    </script>
+</body>
+</html>

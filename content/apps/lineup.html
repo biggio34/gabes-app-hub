@@ -1,0 +1,3054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MN Elks 16U • Lineup Builder</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <!-- Supabase for backend (configure in script at bottom) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+    
+    :root {
+      --field-green: #166534;
+      --dirt: #854d0e;
+      --gold: #ca8a04;
+    }
+    
+    body {
+      font-family: 'Inter', system_ui, sans-serif;
+    }
+    
+    .title-font {
+      font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+      font-weight: 600;
+    }
+
+    .softball-green { color: #166534; }
+    .softball-gold { color: #ca8a04; }
+
+    .player-card {
+      transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+      user-select: none;
+      touch-action: none;
+    }
+    
+    .player-card:active, .player-card.dragging {
+      transform: scale(1.02) rotate(1deg);
+      box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+      z-index: 50;
+    }
+
+    .position-slot {
+      transition: all 0.1s cubic-bezier(0.4, 0.0, 0.2, 1);
+      touch-action: none;
+    }
+    
+    .position-slot.drag-over {
+      background-color: #fefce8;
+      border-color: #ca8a04;
+      transform: scale(1.02);
+    }
+
+    .batting-slot {
+      touch-action: none;
+    }
+
+    .batting-slot.drag-over {
+      background-color: #fefce8;
+      border-color: #ca8a04;
+    }
+
+    .diamond {
+      filter: drop-shadow(0 4px 6px rgb(0 0 0 / 0.1));
+    }
+
+    /* Selection highlight for the new tap-to-assign defense model */
+    .position-group.selected-for-move rect {
+      stroke: #f59e0b !important;
+      stroke-width: 7 !important;
+      filter: brightness(1.1);
+    }
+    .position-group.selected-for-move {
+      cursor: pointer;
+    }
+
+    .bench-target {
+      background-color: #fef3c7 !important;
+      border-color: #f59e0b !important;
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+    }
+
+    .subs-target {
+      background-color: #fef3c7 !important;
+      border-color: #f59e0b !important;
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+    }
+
+    .position-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: -.5px;
+    }
+
+    .section-header {
+      font-size: 13px;
+      letter-spacing: -.3px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .lineup-number {
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      font-size: 15px;
+      color: #854d0e;
+    }
+
+    .softball-field {
+      background: linear-gradient(180deg, #166534 0%, #14532d 100%);
+      border: 8px solid #854d0e;
+      border-radius: 9999px;
+    }
+
+    .drag-ghost {
+      opacity: 0.9;
+      transform: scale(0.95);
+    }
+
+    .stat-pill {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 9999px;
+      background: #fefce8;
+      color: #854d0e;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body class="bg-stone-100 text-stone-900">
+  <div class="max-w-[1280px] mx-auto">
+    <!-- Header -->
+    <div class="bg-white border-b border-stone-200 px-4 py-2 sticky top-0 z-40">
+      <div class="flex items-center justify-between max-w-screen-xl mx-auto">
+        <div class="flex items-center gap-x-3">
+          <a class='flex items-center gap-x-1.5 text-sm font-medium text-stone-500 hover:text-red-600 transition-colors mr-1' href='/' id='back-to-hub'>
+            <i class="fa-solid fa-arrow-left"></i>
+            <span class="hidden sm:inline text-xs font-semibold tracking-widest">HUB</span>
+          </a>
+          <div class="w-10 h-10 bg-red-700 rounded-2xl flex items-center justify-center shadow-inner">
+            <i class="fa-solid fa-baseball-ball text-white text-3xl"></i>
+          </div>
+          <div>
+            <div class="flex items-baseline gap-x-2">
+              <span class="title-font text-3xl font-semibold tracking-tighter text-red-800">MN Elks</span>
+              <span class="text-red-700 text-xl font-semibold tracking-tight">16U</span>
+            </div>
+            <div class="text-[10px] text-red-700 -mt-1 font-medium tracking-[1px]">LINEUP BUILDER</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-x-2">
+          <!-- Game Info -->
+          <div class="hidden md:flex items-center bg-white border border-stone-200 rounded-2xl px-3 py-1.5 text-sm">
+            <input id="team-name" 
+                   class="font-semibold bg-transparent w-28 focus:outline-none text-red-900" 
+                   value="MN Elks 16U" 
+                   onchange="updateGameInfo()">
+            <span class="text-stone-400 mx-1.5">•</span>
+            <input id="game-info" 
+                   class="bg-transparent w-44 text-stone-600 focus:outline-none text-sm" 
+                   placeholder="vs. Opponent - Date"
+                   onchange="updateGameInfo()">
+          </div>
+
+          <!-- Batting Mode moved into header (next to game info) to give Subs + Batting Order more vertical room -->
+          <select id="batting-mode-select" onchange="setBattingMode(this.value)"
+                  class="hidden md:block w-[128px] bg-white border border-stone-300 rounded-2xl px-2 py-1 text-xs font-semibold focus:outline-none focus:border-red-500">
+            <option value="nine">9 Batters</option>
+            <option value="dp-flex">DP / Flex</option>
+            <option value="one-ap">+1 AP</option>
+            <option value="two-ap">+2 APs</option>
+            <option value="roster">Full Roster</option>
+          </select>
+
+          <button onclick="showGamesModal()" 
+                  class="flex items-center gap-x-1.5 px-3 py-1.5 rounded-2xl border border-stone-300 hover:bg-stone-50 text-sm font-medium"
+                  title="Switch between games / lineups">
+            <i class="fa-solid fa-folder-open"></i>
+            <span class="hidden sm:inline">Games</span>
+          </button>
+
+          <button id="sync-status-btn" onclick="handleCloudSyncClick()" 
+                  class="flex items-center gap-x-1.5 px-3 py-1.5 rounded-2xl border border-stone-300 hover:bg-stone-50 text-sm font-medium"
+                  title="Cloud sync status - click to sign in or manage">
+            <i class="fa-solid fa-cloud"></i>
+            <span id="sync-status-text" class="hidden sm:inline">Sync</span>
+          </button>
+
+          <button onclick="exportPNG()" 
+                  class="flex items-center gap-x-2 px-4 py-2 rounded-2xl bg-red-700 hover:bg-red-800 active:bg-black transition-colors text-white text-sm font-semibold shadow">
+            <i class="fa-solid fa-camera mr-1.5"></i>
+            <span>PNG for Group Chat</span>
+          </button>
+
+          <div class="relative group">
+            <button onclick="showExportMenu()" 
+                    class="px-3 py-2 rounded-2xl border border-stone-300 hover:bg-stone-50 text-sm font-medium flex items-center gap-x-1.5">
+              <i class="fa-solid fa-download"></i>
+              <span class="hidden sm:inline">Export</span>
+            </button>
+          </div>
+
+          <button onclick="copyShareLink()" 
+                  class="flex items-center gap-x-2 px-4 py-2 rounded-2xl bg-red-700 hover:bg-red-800 active:bg-black transition-colors text-white text-sm font-semibold shadow">
+            <i class="fa-solid fa-link mr-1.5"></i>
+            <span>Share Lineup</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="p-1 max-w-screen-xl mx-auto">
+      <!-- Quick Actions (Batting Mode moved to top header) -->
+      <div class="flex items-center justify-end gap-2 mb-3">
+        <button onclick="loadSampleRoster()" 
+                class="px-3 py-1.5 text-xs font-semibold rounded-2xl border border-red-700 text-red-800 hover:bg-red-50 flex items-center gap-x-1.5 active:bg-red-100">
+          <i class="fa-solid fa-users"></i>
+          <span>Load Roster</span>
+        </button>
+        
+        <button onclick="clearAll()" 
+                class="px-3 py-1.5 text-xs font-semibold rounded-2xl border border-stone-300 hover:bg-stone-50 flex items-center gap-x-1.5 text-stone-600">
+          <i class="fa-solid fa-trash"></i>
+          <span>Clear All</span>
+        </button>
+      </div>
+
+      <!-- Main 3-Column Layout -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- SUBS POOL (available players not in batting order) -->
+        <div class="lg:col-span-3 bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden flex flex-col h-[680px]">
+          <div class="px-3 py-1.5 border-b bg-stone-50 flex items-center justify-between">
+            <div class="flex items-center gap-x-1.5">
+              <i class="fa-solid fa-list text-red-700"></i>
+              <span class="font-semibold text-red-900 text-sm">Subs</span>
+              <span id="roster-count" class="stat-pill bg-red-100 text-red-800">0/14</span>
+            </div>
+            <button onclick="showAddPlayerModal()" 
+                    class="text-[10px] px-2 py-0 rounded-2xl bg-red-700 text-white font-semibold flex items-center gap-x-1 hover:bg-red-800 active:bg-red-900 leading-none">
+              <i class="fa-solid fa-plus text-xs"></i>
+              <span class="hidden sm:inline">Add</span>
+            </button>
+          </div>
+
+          <!-- Subs List -->
+          <div id="roster-list" 
+               class="flex-1 overflow-auto p-2 space-y-1.5 bg-stone-50">
+            <!-- Populated by JS -->
+          </div>
+
+          <div class="p-2 border-t bg-white text-[10px] text-stone-500 flex items-center gap-1">
+            <i class="fa-solid fa-info-circle"></i>
+            <span>Drag to batting order • Drag from batting order here to bench them</span>
+          </div>
+        </div>
+
+        <!-- BATTING ORDER -->
+        <div class="lg:col-span-3 bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden flex flex-col h-[680px]">
+          <div class="px-3 py-1.5 border-b bg-red-50 flex items-center justify-between">
+            <div class="flex items-center gap-x-1.5">
+              <i class="fa-solid fa-sort-amount-down text-red-700"></i>
+              <span class="font-semibold text-red-900 text-sm">Batting Order</span>
+              <span id="batting-count" class="stat-pill bg-red-100 text-red-800">0</span>
+            </div>
+            <div class="flex items-center gap-x-1">
+              <div id="batting-mode-label" class="hidden"></div>
+              <button onclick="sortBattingByNumber()" 
+                      class="text-[10px] px-1.5 py-0 rounded bg-red-100 text-red-800 hover:bg-red-200 font-medium leading-none">
+                Sort #
+              </button>
+              <button onclick="clearBattingOrder()" 
+                      class="text-[10px] px-2 py-0 rounded bg-red-600 text-white hover:bg-red-700 active:bg-red-800 font-medium leading-none">
+                Bench All
+              </button>
+            </div>
+          </div>
+
+          <div id="batting-order" 
+               class="flex-1 overflow-auto p-2 space-y-1 bg-red-50/40">
+            <!-- Populated by JS -->
+          </div>
+
+          <div class="p-2 border-t text-[10px] bg-white text-stone-500">
+            <span id="batting-help">Drag to reorder • Drop players from roster here</span>
+          </div>
+        </div>
+
+        <!-- DEFENSE + DIAMOND -->
+        <div class="lg:col-span-6 bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden flex flex-col h-[680px]">
+          <div class="px-3 py-1.5 border-b flex items-center justify-between bg-zinc-950 text-white text-sm">
+            <div class="flex items-center gap-x-2">
+              <i class="fa-solid fa-map text-red-400"></i>
+              <span class="font-semibold">Defense (incl. DP)</span>
+            </div>
+            <div class="flex items-center gap-x-2">
+              <div class="text-xs px-2 py-0.5 bg-white/20 rounded-xl font-medium" id="bench-count">Bench: 0</div>
+              <button onclick="clearDefense()" 
+                      class="text-xs px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 active:bg-red-500/20 font-medium">
+                Clear
+              </button>
+              <button onclick="suggestDefense()" 
+                      class="text-xs px-2.5 py-1 rounded-xl bg-red-600 text-white hover:bg-red-700 active:bg-red-800 font-semibold">
+                Suggest
+              </button>
+            </div>
+          </div>
+
+          <!-- The Diamond -->
+          <div class="p-0 bg-stone-900 flex-1 relative" style="min-height: 0;">
+            <svg id="diamond" width="100%" height="100%" viewBox="0 0 2400 620" class="diamond" preserveAspectRatio="none" style="display:block; width:100%; height:100%;">
+              <defs>
+                <linearGradient id="infieldDirt" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#b45309"/>
+                  <stop offset="100%" stop-color="#92400e"/>
+                </linearGradient>
+              </defs>
+
+              <!-- Full-bleed grass to fill the entire defense area -->
+              <rect x="0" y="0" width="2400" height="620" fill="#15803d"/>
+
+              <!-- Infield dirt diamond (scaled for wide viewBox) -->
+              <polygon points="780,385 1200,255 1620,385 1200,510" fill="url(#infieldDirt)" stroke="#78350f" stroke-width="4"/>
+
+              <!-- First baseline (home to 1B) and Third baseline (home to 3B), extended to the edges of the SVG -->
+              <line x1="1200" y1="510" x2="2400" y2="153" stroke="#f5f5f4" stroke-width="4"/>
+              <line x1="1200" y1="510" x2="0" y2="153" stroke="#f5f5f4" stroke-width="4"/>
+
+              <!-- Pitcher's mound -->
+              <ellipse cx="1200" cy="395" rx="95" ry="20" fill="#854d0e" stroke="#451a03" stroke-width="2"/>
+
+              <!-- Pitcher's rubber -->
+              <rect x="1135" y="387" width="130" height="11" fill="#e7e5e4" rx="2"/>
+
+              <!-- Position slots: large rounded rectangles in realistic softball locations (wide spread) -->
+              <!-- P (on the mound) -->
+              <g id="pos-P" class="position-group" data-pos="P">
+                <rect x="1085" y="360" width="230" height="68" rx="12" fill="#166534" stroke="#f1f5f9" stroke-width="4"/>
+              </g>
+              <!-- C (behind home) -->
+              <g id="pos-C" class="position-group" data-pos="C">
+                <rect x="1080" y="475" width="240" height="72" rx="12" fill="#166534" stroke="#f1f5f9" stroke-width="4"/>
+              </g>
+              <!-- 1B -->
+              <g id="pos-1B" class="position-group" data-pos="1B">
+                <rect x="1405" y="358" width="185" height="62" rx="10" fill="#166534" stroke="#f1f5f9" stroke-width="4"/>
+              </g>
+              <!-- 2B -->
+              <g id="pos-2B" class="position-group" data-pos="2B">
+                <rect x="1300" y="238" width="175" height="78" rx="10" fill="#166534" stroke="#f1f5f9" stroke-width="4"/>
+              </g>
+              <!-- 3B -->
+              <g id="pos-3B" class="position-group" data-pos="3B">
+                <rect x="810" y="358" width="185" height="62" rx="10" fill="#166534" stroke="#f1f5f9" stroke-width="4"/>
+              </g>
+              <!-- SS -->
+              <g id="pos-SS" class="position-group" data-pos="SS">
+                <rect x="895" y="238" width="175" height="78" rx="10" fill="#166534" stroke="#f1f5f9" stroke-width="4"/>
+              </g>
+              <!-- LF (deep left) -->
+              <g id="pos-LF" class="position-group" data-pos="LF">
+                <rect x="340" y="140" width="195" height="62" rx="10" fill="#166534" stroke="#f1f5f9" stroke-width="4"/>
+              </g>
+              <!-- CF (deep center) -->
+              <g id="pos-CF" class="position-group" data-pos="CF">
+                <rect x="1085" y="92" width="230" height="62" rx="10" fill="#166534" stroke="#f1f5f9" stroke-width="4"/>
+              </g>
+              <!-- RF (deep right) -->
+              <g id="pos-RF" class="position-group" data-pos="RF">
+                <rect x="1865" y="140" width="195" height="62" rx="10" fill="#166534" stroke="#f1f5f9" stroke-width="4"/>
+              </g>
+
+              <!-- DP (special role - lower left corner) -->
+              <g id="pos-DP" class="position-group" data-pos="DP" style="display: none;">
+                <rect x="50" y="520" width="240" height="80" rx="10" fill="#9f1239" stroke="#f1f5f9" stroke-width="2"/>
+              </g>
+            </svg>
+          </div>
+
+          <!-- Selection status bar for click-to-move defense model -->
+          <div id="defense-selection-bar" class="hidden border-t border-amber-300 bg-amber-100 px-3 py-2 text-sm flex items-center gap-x-3">
+            <!-- Populated dynamically by JS when a position is tapped -->
+          </div>
+
+          <!-- Bench -->
+          <div class="border-t bg-stone-50 p-0.5" id="defense-bench-strip">
+            <div class="flex items-center justify-between mb-0 px-1">
+              <div class="text-[9px] font-semibold text-stone-500 flex items-center gap-1">
+                <i class="fa-solid fa-chair"></i>
+                <span>BENCH</span>
+              </div>
+            </div>
+            <div id="bench-list" class="flex flex-wrap gap-0.5 min-h-[20px]">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer / Tips -->
+      <div class="mt-4 text-center text-xs text-stone-400">
+        Tap a player on the defense diagram to select them → click another field position to swap, or click any player in the Subs list to sub them in (fewer clicks).
+        Works great on iPad &amp; iPhone. Data saved automatically in this browser.
+      </div>
+
+      <div class="mt-2 text-center text-[10px] text-stone-400">
+        Share current lineup with coaches using the red "Share Lineup" button above.
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Player Modal -->
+  <div id="player-modal" class="hidden fixed inset-0 bg-black/60 flex items-end md:items-center justify-center z-50">
+    <div onclick="event.target.id === 'player-modal' && hidePlayerModal()" class="absolute inset-0"></div>
+    <div class="bg-white w-full md:w-[380px] md:rounded-3xl md:m-4 rounded-t-3xl p-6 relative">
+      <div class="flex justify-between items-center mb-4">
+        <h3 id="modal-title" class="font-semibold text-xl">Add Player</h3>
+        <button onclick="hidePlayerModal()" class="text-2xl leading-none text-stone-400 hover:text-stone-600">×</button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs font-medium text-stone-500">PLAYER NAME</label>
+          <input id="player-name" type="text" class="mt-1 w-full border border-stone-300 rounded-2xl px-4 py-2.5 text-lg focus:outline-none focus:border-red-700" placeholder="First Last">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs font-medium text-stone-500">JERSEY #</label>
+            <input id="player-number" type="number" class="mt-1 w-full border border-stone-300 rounded-2xl px-4 py-2.5 text-lg focus:outline-none focus:border-red-700" placeholder="22">
+          </div>
+          <div>
+            <label class="text-xs font-medium text-stone-500">NOTES (optional)</label>
+            <input id="player-notes" type="text" class="mt-1 w-full border border-stone-300 rounded-2xl px-4 py-2.5 text-lg focus:outline-none focus:border-red-700" placeholder="P / C">
+            <!-- Quick tags -->
+            <div class="flex flex-wrap gap-1.5 mt-2">
+              <button type="button" onclick="quickAddNote('P')" class="text-xs px-2.5 py-0.5 bg-red-100 text-red-800 rounded-full hover:bg-red-200">P</button>
+              <button type="button" onclick="quickAddNote('C')" class="text-xs px-2.5 py-0.5 bg-red-100 text-red-800 rounded-full hover:bg-red-200">C</button>
+              <button type="button" onclick="quickAddNote('IF')" class="text-xs px-2.5 py-0.5 bg-red-100 text-red-800 rounded-full hover:bg-red-200">IF</button>
+              <button type="button" onclick="quickAddNote('OF')" class="text-xs px-2.5 py-0.5 bg-red-100 text-red-800 rounded-full hover:bg-red-200">OF</button>
+              <button type="button" onclick="quickAddNote('P/C')" class="text-xs px-2.5 py-0.5 bg-red-100 text-red-800 rounded-full hover:bg-red-200">P/C</button>
+              <button type="button" onclick="quickAddNote('Utility')" class="text-xs px-2.5 py-0.5 bg-red-100 text-red-800 rounded-full hover:bg-red-200">Utility</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-6 flex gap-3">
+        <button onclick="hidePlayerModal()" 
+                class="flex-1 py-3 rounded-2xl border font-semibold text-stone-700">Cancel</button>
+        <button onclick="savePlayerFromModal()" id="modal-save-btn"
+                class="flex-1 py-3 rounded-2xl bg-red-800 text-white font-semibold">Add Player</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Defense Action Modal (for subbing out from field) -->
+  <div id="defense-action-modal" class="hidden fixed inset-0 bg-black/60 flex items-end md:items-center justify-center z-[60]">
+    <div onclick="event.target.id === 'defense-action-modal' && hideDefenseActionModal()" class="absolute inset-0"></div>
+    <div class="bg-white w-full md:w-[420px] md:rounded-3xl md:m-4 rounded-t-3xl p-5 relative max-h-[75vh] overflow-auto">
+      <div class="flex justify-between items-center mb-3">
+        <h3 id="defense-action-title" class="font-semibold text-lg"></h3>
+        <button onclick="hideDefenseActionModal()" class="text-2xl leading-none text-stone-400 hover:text-stone-600">×</button>
+      </div>
+      <div id="defense-action-content">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Games / Multi-Lineup Manager Modal -->
+  <div id="games-modal" class="hidden fixed inset-0 bg-black/60 flex items-end md:items-center justify-center z-50">
+    <div onclick="event.target.id === 'games-modal' && hideGamesModal()" class="absolute inset-0"></div>
+    <div class="bg-white w-full md:w-[440px] md:rounded-3xl md:m-4 rounded-t-3xl p-4 relative max-h-[80vh] overflow-auto" onclick="event.stopImmediatePropagation()">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-lg">My Games &amp; Lineups</h3>
+        <button onclick="hideGamesModal()" class="text-2xl leading-none text-stone-400 hover:text-stone-600">×</button>
+      </div>
+
+      <button onclick="createNewGame()" 
+              class="w-full mb-3 flex items-center justify-center gap-x-2 px-4 py-2.5 bg-red-700 hover:bg-red-800 active:bg-red-900 text-white rounded-2xl text-sm font-semibold">
+        <i class="fa-solid fa-plus"></i>
+        <span>New Game / Lineup</span>
+      </button>
+
+      <div id="games-list" class="space-y-1 text-sm">
+        <!-- JS populated game rows -->
+      </div>
+
+      <div class="mt-3 text-[10px] text-stone-500 px-1">
+        Switch between games for different matchups. The app remembers the batting order, defense, and mode for each.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== STATE ====================
+    let state = {
+      teamName: "MN Elks 16U",
+      gameInfo: "",
+      players: [
+        { id: "p16", name: "Annabelle Ackerman", number: 16, notes: "" },
+        { id: "p4",  name: "Emily Artmann",     number: 4,  notes: "" },
+        { id: "p7",  name: "Macie Backman",     number: 7,  notes: "" },
+        { id: "p11", name: "Madison Burggraff", number: 11, notes: "" },
+        { id: "p13", name: "Hailee Clinton",    number: 13, notes: "" },
+        { id: "p45", name: "Savanah Emmans",    number: 45, notes: "" },
+        { id: "p10", name: "Tenley Fransen",    number: 10, notes: "" },
+        { id: "p27", name: "Molly Johnson",     number: 27, notes: "" },
+        { id: "p17", name: "Kiana Pegues",      number: 17, notes: "" },
+        { id: "p9",  name: "Avaiyah Sandford",  number: 9,  notes: "" },
+        { id: "p14", name: "Sidney Tischner",   number: 14, notes: "" },
+        { id: "p12", name: "MaKayla Uttke",     number: 12, notes: "" },
+        { id: "p8",  name: "Paisyn Wiley",      number: 8,  notes: "" }
+      ],
+      battingOrder: ["p16","p4","p7","p11","p13","p45","p10","p27","p17","p9","p14","p12","p8"],
+      defensivePositions: {
+        P: null, C: null, "1B": null, "2B": null, "3B": null,
+        SS: null, LF: null, CF: null, RF: null
+      },
+      battingMode: "roster",
+      lastUpdated: Date.now()
+    };
+
+    // ==================== MULTI-GAME SUPPORT ====================
+    let games = [];           // array of {id, name, battingMode, battingOrder, defensivePositions, lastUpdated}
+    let currentGameId = null;
+
+    const POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"];
+
+    // === Transient click-to-select defense model (replaces unreliable drag on the field) ===
+    let selectedDefensePlayerId = null;   // player currently "in hand" for move/swap
+    let vacatedDefensePosition = null;    // when we bench someone from the field, remember the spot so user can quickly fill it from bench
+
+    function getBattingLimit() {
+      const mode = state.battingMode;
+      if (mode === "nine") return 9;
+      if (mode === "dp-flex") return 10;
+      if (mode === "one-ap") return 10;
+      if (mode === "two-ap") return 11;
+      return state.players.length; // roster mode — everyone bats
+    }
+
+    function getPositionOptions() {
+      const base = [...POSITIONS]; // the 9 defensive positions
+
+      if (state.battingMode === "dp-flex") {
+        return [...base, "DP"];   // Flex is the last batter; they get one of the 9 normal positions + "(Flex)" label
+      } else if (state.battingMode === "one-ap" || state.battingMode === "two-ap" || state.battingMode === "roster") {
+        return [...base, "AP"];
+      }
+      return base;
+    }
+
+    function getAPSlotCount() {
+      const mode = state.battingMode;
+      if (mode === "one-ap") return 1;
+      if (mode === "two-ap") return 2;
+      if (mode === "roster") {
+        // In full roster mode, show as many AP slots as there are extra batters beyond 9
+        return Math.max(0, (state.battingOrder?.length || 0) - 9);
+      }
+      return 0;
+    }
+
+    function getPlayerPosition(playerId) {
+      for (const [pos, id] of Object.entries(state.defensivePositions || {})) {
+        if (id === playerId) return pos;
+      }
+      return '';
+    }
+
+    // ==================== PERSISTENCE ====================
+    // ==================== MULTI-GAME HELPERS ====================
+    function getCurrentGame() {
+      return games.find(g => g.id === currentGameId) || null;
+    }
+
+    function saveCurrentGameToList() {
+      if (!currentGameId) return;
+      const game = getCurrentGame();
+      if (!game) return;
+      game.name = state.gameInfo || "Untitled Game";
+      game.battingMode = state.battingMode;
+      game.battingOrder = Array.isArray(state.battingOrder) ? [...state.battingOrder] : [];
+      game.defensivePositions = state.defensivePositions ? {...state.defensivePositions} : {};
+      game.lastUpdated = Date.now();
+    }
+
+    function loadGameIntoState(gameId) {
+      const game = games.find(g => g.id === gameId);
+      if (!game) return false;
+      currentGameId = gameId;
+      state.battingMode = game.battingMode || "roster";
+      state.battingOrder = Array.isArray(game.battingOrder) ? [...game.battingOrder] : [];
+      state.defensivePositions = game.defensivePositions ? {...game.defensivePositions} : {};
+      state.gameInfo = game.name || "";
+      // ensure all positions
+      POSITIONS.forEach(pos => {
+        if (!(pos in state.defensivePositions)) state.defensivePositions[pos] = null;
+      });
+      return true;
+    }
+
+    function createInitialGameFromCurrentState() {
+      const id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('g' + Date.now());
+      const initialGame = {
+        id: id,
+        name: state.gameInfo || "First Game",
+        battingMode: state.battingMode || "roster",
+        battingOrder: Array.isArray(state.battingOrder) ? [...state.battingOrder] : [],
+        defensivePositions: state.defensivePositions ? {...state.defensivePositions} : {},
+        lastUpdated: Date.now()
+      };
+      POSITIONS.forEach(pos => {
+        if (!(pos in initialGame.defensivePositions)) initialGame.defensivePositions[pos] = null;
+      });
+      games = [initialGame];
+      currentGameId = id;
+      state.gameInfo = initialGame.name;
+    }
+
+    function saveState() {
+      saveCurrentGameToList();
+      const data = {
+        version: 2,
+        roster: state.players,
+        games: games,
+        currentGameId: currentGameId,
+        teamName: state.teamName,
+        lastUpdated: Date.now()
+      };
+      localStorage.setItem("mn-elks-lineup-v1", JSON.stringify(data));
+
+      // Fire and forget cloud sync if configured
+      syncToCloudIfEnabled(data);
+    }
+
+    function loadState() {
+      const saved = localStorage.getItem("mn-elks-lineup-v1");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.version === 2 && Array.isArray(parsed.games)) {
+            // Multi-game format
+            state.players = Array.isArray(parsed.roster) ? parsed.roster : state.players;
+            games = parsed.games || [];
+            currentGameId = parsed.currentGameId || null;
+            state.teamName = parsed.teamName || state.teamName;
+
+            if (currentGameId && games.some(g => g.id === currentGameId)) {
+              loadGameIntoState(currentGameId);
+            } else if (games.length > 0) {
+              loadGameIntoState(games[0].id);
+            } else {
+              createInitialGameFromCurrentState();
+            }
+          } else {
+            // Legacy single-state v1 — migrate to a game
+            const old = parsed;
+            state.players = Array.isArray(old.players) ? old.players : state.players;
+            state.teamName = old.teamName || state.teamName;
+
+            const migId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('g' + Date.now());
+            const migratedGame = {
+              id: migId,
+              name: old.gameInfo || "Migrated Lineup",
+              battingMode: old.battingMode || "roster",
+              battingOrder: Array.isArray(old.battingOrder) ? [...old.battingOrder] : [],
+              defensivePositions: old.defensivePositions || {},
+              lastUpdated: old.lastUpdated || Date.now()
+            };
+            POSITIONS.forEach(pos => {
+              if (!(pos in migratedGame.defensivePositions)) migratedGame.defensivePositions[pos] = null;
+            });
+            games = [migratedGame];
+            currentGameId = migId;
+            loadGameIntoState(migId);
+          }
+        } catch (e) {
+          console.warn("Failed to load saved state, starting fresh", e);
+          createInitialGameFromCurrentState();
+        }
+      } else {
+        // Brand new
+        createInitialGameFromCurrentState();
+      }
+    }
+
+    function createNewGame() {
+      saveCurrentGameToList();
+      const id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('g' + Date.now());
+      const newGame = {
+        id: id,
+        name: "New Game - " + new Date().toLocaleDateString(undefined, {month:'short', day:'numeric'}),
+        battingMode: state.battingMode || "roster",
+        battingOrder: [],
+        defensivePositions: {},
+        lastUpdated: Date.now()
+      };
+      POSITIONS.forEach(pos => { newGame.defensivePositions[pos] = null; });
+      games.push(newGame);
+      currentGameId = id;
+      loadGameIntoState(id);
+      renderAll();
+      saveState();
+      // close modal if open and focus name for quick rename
+      hideGamesModal();
+      setTimeout(() => {
+        const gi = document.getElementById("game-info");
+        if (gi) {
+          gi.focus();
+          gi.select();
+        }
+      }, 50);
+    }
+
+    function switchToGame(gameId) {
+      if (!gameId || gameId === currentGameId) return;
+      saveCurrentGameToList();
+      if (loadGameIntoState(gameId)) {
+        renderAll();
+        saveState();
+      }
+    }
+
+    function deleteGame(gameId) {
+      if (!confirm("Delete this game and its lineup? This can't be undone.")) return;
+      const wasCurrent = gameId === currentGameId;
+      games = games.filter(g => g.id !== gameId);
+      if (wasCurrent) {
+        if (games.length > 0) {
+          currentGameId = games[0].id;
+          loadGameIntoState(currentGameId);
+        } else {
+          createInitialGameFromCurrentState();
+        }
+        renderAll();
+      }
+      saveState();
+      // refresh modal list if visible
+      const modal = document.getElementById("games-modal");
+      if (modal && !modal.classList.contains("hidden")) {
+        renderGamesList();
+      }
+    }
+
+    function renderGamesList() {
+      const container = document.getElementById("games-list");
+      if (!container) return;
+      container.innerHTML = "";
+      if (games.length === 0) {
+        container.innerHTML = `<div class="text-xs text-stone-500 p-2">No games yet. Create one above.</div>`;
+        return;
+      }
+      games.forEach(game => {
+        const isCurrent = game.id === currentGameId;
+        const row = document.createElement("div");
+        row.className = `group flex items-center gap-2 px-3 py-2 rounded-2xl border cursor-pointer ${isCurrent ? "bg-red-50 border-red-200" : "border-transparent hover:bg-stone-100"}`;
+        const count = (game.battingOrder && game.battingOrder.length) || 0;
+        row.innerHTML = `
+          <div class="flex-1 min-w-0">
+            <div class="font-medium truncate">${game.name || "Untitled"}</div>
+            <div class="text-[10px] text-stone-500">${count} batters • ${game.battingMode || ""}</div>
+          </div>
+          <div class="flex items-center gap-x-1 opacity-60 group-hover:opacity-100">
+            ${isCurrent ? `<span class="text-[10px] px-1.5 py-px bg-red-200 text-red-700 rounded font-semibold">current</span>` : ""}
+            <button class="px-1.5 py-0.5 text-red-400 hover:text-red-600" title="Delete game">
+              <i class="fa-solid fa-trash text-xs"></i>
+            </button>
+          </div>
+        `;
+        row.onclick = (e) => {
+          if (e.target.closest("button")) return;
+          switchToGame(game.id);
+          hideGamesModal();
+        };
+        const delBtn = row.querySelector("button");
+        if (delBtn) {
+          delBtn.onclick = (e) => {
+            e.stopImmediatePropagation();
+            deleteGame(game.id);
+          };
+        }
+        container.appendChild(row);
+      });
+    }
+
+    function showGamesModal() {
+      const modal = document.getElementById("games-modal");
+      if (!modal) return;
+      renderGamesList();
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function hideGamesModal() {
+      const modal = document.getElementById("games-modal");
+      if (modal) {
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+      }
+    }
+
+    // ==================== RENDERING ====================
+    function renderAll() {
+      // Ensure no player outside the current batting order holds a defensive position
+      clearDefenseForPlayersNotInBatting();
+      renderRoster();
+      renderBattingOrder();
+      renderDefense();
+      updateCounts();
+      updateModeButtons();
+      updateGameInfoInputs();
+
+      // Keep the games list in sync if the modal is open (e.g. after cloud load overwrites the games array while modal was visible)
+      const gmodal = document.getElementById("games-modal");
+      if (gmodal && !gmodal.classList.contains("hidden")) {
+        renderGamesList();
+      }
+    }
+
+    function updateCounts() {
+      document.getElementById("roster-count").textContent = `${state.players.length}/14`;
+      
+      const battingLimit = getBattingLimit();
+      document.getElementById("batting-count").textContent = `${state.battingOrder.length}/${battingLimit}`;
+      
+      const onField = Object.values(state.defensivePositions).filter(Boolean).length;
+      document.getElementById("bench-count").textContent = `Bench: ${state.battingOrder.length - onField}`;
+    }
+
+    function updateModeButtons() {
+      // Update the dropdown to reflect current mode
+      const select = document.getElementById("batting-mode-select");
+      if (select) {
+        select.value = state.battingMode;
+      }
+
+      const label = document.getElementById("batting-mode-label");
+      const limit = getBattingLimit();
+      label.textContent = state.battingMode === "roster" ? "ALL BAT" : `${limit} BATTERS`;
+    }
+
+    function updateGameInfoInputs() {
+      const teamInput = document.getElementById("team-name");
+      const gameInput = document.getElementById("game-info");
+      if (teamInput) teamInput.value = state.teamName || "";
+      if (gameInput) gameInput.value = state.gameInfo || "";
+    }
+
+    function updateGameInfo() {
+      const teamInput = document.getElementById("team-name");
+      const gameInput = document.getElementById("game-info");
+      
+      state.teamName = teamInput ? teamInput.value : state.teamName;
+      state.gameInfo = gameInput ? gameInput.value : state.gameInfo;
+      // immediately reflect name change in the current game record
+      const g = getCurrentGame();
+      if (g) g.name = state.gameInfo;
+      saveState();
+    }
+
+    // Render roster pool
+    function renderRoster() {
+      const container = document.getElementById("roster-list");
+      container.innerHTML = "";
+
+      const inBatting = new Set(state.battingOrder);
+      const available = state.players.filter(p => !inBatting.has(p.id));
+
+      if (available.length === 0 && state.players.length > 0) {
+        const div = document.createElement("div");
+        div.className = "px-3 py-8 text-center text-xs text-stone-400";
+        div.innerHTML = `All players are in the batting order.<br>Drag from batting order to move them here.`;
+        container.appendChild(div);
+        return;
+      }
+
+      if (state.players.length === 0) {
+        const div = document.createElement("div");
+        div.className = "px-3 py-8 text-center";
+        div.innerHTML = `
+          <div class="text-red-700 mb-2"><i class="fa-solid fa-users text-2xl"></i></div>
+          <div class="text-sm font-medium text-stone-600">No players yet</div>
+          <div class="text-xs text-stone-400 mt-1">Click "Add" or load the sample roster</div>
+        `;
+        container.appendChild(div);
+        return;
+      }
+
+      available.forEach(player => {
+        container.appendChild(createPlayerCard(player, "roster"));
+      });
+    }
+
+    // Render batting order
+    function renderBattingOrder() {
+      const container = document.getElementById("batting-order");
+      container.innerHTML = "";
+
+      const limit = getBattingLimit();
+      const maxSlots = Math.max(limit, state.battingOrder.length);
+
+      for (let i = 0; i < maxSlots; i++) {
+        const playerId = state.battingOrder[i];
+        const player = playerId ? state.players.find(p => p.id === playerId) : null;
+
+        const slot = document.createElement("div");
+        slot.className = `batting-slot flex items-center gap-2 px-2 py-1.5 bg-white border border-red-200 rounded-2xl min-h-[42px] ${player ? '' : 'border-dashed'}`;
+        slot.dataset.index = i;
+
+        if (player) {
+          // Find current defensive position for this player (includes DP, AP, etc.)
+          const currentPos = getPlayerPosition(playerId);
+
+          // In DP/Flex mode the last batter in the order is the Flex (they play a normal defensive position + "(Flex)" label)
+          const isFlex = state.battingMode === 'dp-flex' && i === state.battingOrder.length - 1 && state.battingOrder.length >= 10;
+
+          const row = document.createElement("div");
+          row.className = "flex items-center gap-2 w-full";
+
+          // Batting number
+          const num = document.createElement("div");
+          num.className = "lineup-number w-5 text-right text-red-700 font-bold text-sm flex-shrink-0";
+          num.textContent = i + 1;
+          row.appendChild(num);
+
+          // Player info (draggable area)
+          const info = document.createElement("div");
+          info.className = "player-card flex items-center gap-2 flex-1 min-w-0 px-2 py-0.5 rounded-xl cursor-grab active:cursor-grabbing";
+          info.innerHTML = `
+            <div class="flex items-center gap-1.5 min-w-0">
+              ${player.number ? `<div class="w-5 h-5 flex-shrink-0 rounded-md bg-red-100 text-red-700 text-[10px] font-bold flex items-center justify-center">${player.number}</div>` : ''}
+              <div class="font-semibold text-xs text-stone-900 leading-tight truncate">${player.name}${isFlex ? ' <span class="text-amber-700 font-bold">(Flex)</span>' : ''}</div>
+            </div>
+          `;
+
+          // Attach drag behavior to the info area
+          makeCardDraggable(info, player, "batting", i);
+
+          row.appendChild(info);
+
+          // Defensive position selector (dynamic based on batting mode)
+          const select = document.createElement("select");
+          select.className = "text-xs bg-stone-100 border border-stone-300 rounded-lg px-1.5 py-0.5 focus:outline-none focus:border-red-400 flex-shrink-0";
+          select.style.minWidth = "62px";
+
+          const options = getPositionOptions();
+
+          // Empty option
+          const emptyOpt = document.createElement("option");
+          emptyOpt.value = "";
+          emptyOpt.textContent = "—";
+          select.appendChild(emptyOpt);
+
+          options.forEach(pos => {
+            const opt = document.createElement("option");
+            opt.value = pos;
+            opt.textContent = pos;
+
+            let isSelected = (pos === currentPos);
+            // For multi-AP, match any APn to the "AP" option
+            if (pos === "AP" && currentPos && currentPos.startsWith("AP")) {
+              isSelected = true;
+            }
+            if (isSelected) opt.selected = true;
+
+            select.appendChild(opt);
+          });
+
+          select.onchange = (e) => {
+            e.stopImmediatePropagation();
+            const newPos = e.target.value || null;
+            assignToPosition(playerId, newPos);
+          };
+
+          // Prevent drag from starting when interacting with select
+          select.onmousedown = (e) => e.stopImmediatePropagation();
+
+          row.appendChild(select);
+
+          slot.appendChild(row);
+        } else {
+          slot.innerHTML = `
+            <div class="flex items-center gap-3 w-full text-stone-300">
+              <div class="lineup-number w-6 text-right">${i + 1}</div>
+              <div class="flex-1 text-xs italic">Empty — drag player here</div>
+            </div>
+          `;
+        }
+
+        container.appendChild(slot);
+      }
+
+      // Trim batting order if it exceeds current mode limit
+      if (state.battingOrder.length > limit) {
+        state.battingOrder = state.battingOrder.slice(0, limit);
+        clearDefenseForPlayersNotInBatting();
+        saveState();
+      }
+    }
+
+    // Create a draggable player card
+    function createPlayerCard(player, source, battingIndex = null) {
+      const card = document.createElement("div");
+      card.className = `player-card group flex items-center gap-2 px-3 py-1 bg-white border border-stone-200 rounded-2xl cursor-grab active:cursor-grabbing shadow-sm`;
+      // Disable native HTML5 drag to avoid conflict with our custom pointer-based drag system
+      // (the custom system works reliably on both mouse and touch)
+      card.draggable = false;
+      card.dataset.playerId = player.id;
+
+      const numberBadge = player.number 
+        ? `<div class="w-5 h-5 flex-shrink-0 rounded-lg bg-red-100 text-red-800 text-[10px] font-bold flex items-center justify-center">${player.number}</div>` 
+        : `<div class="w-5 h-5 flex-shrink-0"></div>`;
+
+      const notes = player.notes 
+        ? `<div class="text-[10px] text-red-700 font-medium truncate max-w-[110px]">${player.notes}</div>` 
+        : '';
+
+      card.innerHTML = `
+        <div class="flex items-center gap-3 flex-1 min-w-0">
+          ${numberBadge}
+          <div class="min-w-0 flex-1">
+            <div class="font-semibold text-xs text-stone-900 leading-tight truncate">${player.name}</div>
+            ${notes}
+          </div>
+        </div>
+        
+        <div class="flex items-center gap-1 opacity-60 group-hover:opacity-100">
+          ${source === 'batting' ? `
+            <button onclick="event.stopImmediatePropagation(); removeFromBatting('${player.id}');" 
+                    class="px-2 py-1 text-red-500 hover:bg-red-50 rounded-xl text-xs"><i class="fa-solid fa-times"></i></button>
+          ` : ''}
+          
+          ${source !== 'roster' ? `
+            <button onclick="event.stopImmediatePropagation(); editPlayer('${player.id}');" 
+                    class="px-2 py-1 text-stone-400 hover:text-red-700 hover:bg-red-50 rounded-xl text-xs"><i class="fa-solid fa-edit"></i></button>
+          ` : ''}
+        </div>
+      `;
+
+      // Custom pointer-based drag system (works on both mouse/desktop and touch/iPad)
+      // Native HTML5 drag is disabled above to prevent conflicts.
+      makeCardDraggable(card, player, source, battingIndex);
+
+      // Tap to assign (nice extra for touch)
+      card.onclick = (e) => {
+        if (e.target.closest("button")) return;
+        
+        // Smart default action on tap
+        if (source === "roster") {
+          if (selectedDefensePlayerId) {
+            // Defense substitution mode: bring this sub in for the selected field player
+            substituteFromSubs(player.id);
+          } else {
+            addToBattingEnd(player.id);
+          }
+        } else if (source === "batting") {
+          // Find first empty defensive spot
+          const emptyPos = POSITIONS.find(p => !state.defensivePositions[p]);
+          if (emptyPos) {
+            assignToPosition(player.id, emptyPos);
+          } else {
+            alert("All 9 positions are filled. Clear a position first.");
+          }
+        }
+      };
+
+      return card;
+    }
+
+    // Excellent pointer-based drag for touch devices (critical for iPad/iPhone)
+    let dragState = null;
+
+    function makeCardDraggable(cardEl, player, source, battingIndex) {
+      let startX, startY, clone;
+
+      const onPointerDown = (e) => {
+        if (e.button && e.button !== 0) return; // only primary button / touch
+        
+        dragState = { player, source, battingIndex, startX: e.clientX, startY: e.clientY };
+        
+        // Hide original card while dragging (much clearer UX)
+        cardEl.classList.add("opacity-30", "pointer-events-none");
+
+        // Create visual clone that follows finger/mouse
+        clone = cardEl.cloneNode(true);
+        clone.style.position = "fixed";
+        clone.style.zIndex = "9999";
+        clone.style.pointerEvents = "none";
+        clone.style.opacity = "0.95";
+        clone.style.boxShadow = "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)";
+        clone.style.width = cardEl.offsetWidth + "px";
+        document.body.appendChild(clone);
+
+        updateClonePosition(e);
+
+        document.addEventListener("pointermove", onPointerMove, { passive: false });
+        document.addEventListener("pointerup", onPointerUp, { once: true });
+        document.addEventListener("pointercancel", cleanup, { once: true });
+
+        e.preventDefault();
+      };
+
+      const onPointerMove = (e) => {
+        if (!dragState || !clone) return;
+        updateClonePosition(e);
+
+        // Highlight valid drop zones
+        highlightDropZones(e.clientX, e.clientY, dragState.source);
+      };
+
+      const onPointerUp = (e) => {
+        if (!dragState || !clone) return;
+
+        const currentDragState = dragState; // capture BEFORE cleanup nulls it
+        const dropInfo = findDropTarget(e.clientX, e.clientY, currentDragState.source);
+        
+        console.log('[DragDrop] Drop detected. dropInfo:', dropInfo, 'source:', currentDragState.source);
+        
+        cleanup();
+
+        if (dropInfo && currentDragState) {
+          handleDropAction(currentDragState, dropInfo);
+        } else {
+          console.log('[DragDrop] No valid drop target found or dragState was null');
+        }
+      };
+
+      function updateClonePosition(e) {
+        if (!clone) return;
+        clone.style.left = (e.clientX - 60) + "px";
+        clone.style.top = (e.clientY - 28) + "px";
+      }
+
+      function cleanup() {
+        document.removeEventListener("pointermove", onPointerMove);
+        if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
+        
+        // Restore original card
+        if (cardEl) {
+          cardEl.classList.remove("opacity-30", "pointer-events-none");
+        }
+
+        clone = null;
+        dragState = null;
+        clearHighlights();
+      }
+
+      cardEl.addEventListener("pointerdown", onPointerDown);
+    }
+
+    function highlightDropZones(x, y, source) {
+      clearHighlights();
+
+      // Subs area
+      const subs = document.getElementById("roster-list");
+      if (subs && isOverElement(subs, x, y) && source !== "roster") {
+        subs.classList.add("!bg-red-100", "!border-red-300");
+      }
+
+      // Batting order - highlight the target insertion slot (using elementFromPoint for accuracy)
+      const battingContainer = document.getElementById("batting-order");
+      if (battingContainer) {
+        const elUnderPointer = document.elementFromPoint(x, y);
+        const isOverBatting = elUnderPointer && battingContainer.contains(elUnderPointer);
+
+        if (isOverBatting || isOverElement(battingContainer, x, y)) {
+          const slots = Array.from(battingContainer.querySelectorAll(".batting-slot"));
+          if (slots.length > 0) {
+            let targetSlot = null;
+
+            for (let i = 0; i < slots.length; i++) {
+              const rect = slots[i].getBoundingClientRect();
+              const midY = rect.top + rect.height / 2;
+
+              if (y < midY) {
+                targetSlot = slots[i];
+                break;
+              }
+            }
+
+            if (!targetSlot) {
+              targetSlot = slots[slots.length - 1];
+            }
+
+            if (targetSlot) {
+              targetSlot.classList.add("!border-red-600", "!bg-red-100", "!ring-2", "!ring-red-500");
+            }
+          }
+        }
+      }
+
+      // Position slots on diamond (rects or any shape inside .position-group)
+      document.querySelectorAll("#diamond .position-group").forEach(group => {
+        const shape = group.querySelector("rect, circle, path");
+        if (shape && isOverRect(shape, x, y)) {
+          group.style.opacity = "0.7";
+          group.style.transform = "scale(1.08)";
+        }
+      });
+    }
+
+    function clearHighlights() {
+      document.querySelectorAll("#roster-list, #batting-order .batting-slot").forEach(el => {
+        el.classList.remove(
+          "!bg-red-100", "!border-red-300", 
+          "!border-red-500", "!bg-red-100", 
+          "!border-red-500", "!ring-2", "!ring-red-500"
+        );
+      });
+      document.querySelectorAll("#diamond .position-group").forEach(g => {
+        g.style.opacity = "";
+        g.style.transform = "";
+      });
+    }
+
+    function isOverElement(el, x, y) {
+      const r = el.getBoundingClientRect();
+      return x > r.left && x < r.right && y > r.top && y < r.bottom;
+    }
+
+    function isOverRect(shape, x, y) {
+      const r = shape.getBoundingClientRect();
+      // Generous finger-friendly hit area (expand by ~18px all around)
+      return x > r.left - 18 && x < r.right + 18 && y > r.top - 18 && y < r.bottom + 18;
+    }
+
+    // Legacy alias for any remaining circle checks (safe no-op now)
+    function isOverCircle(circle, x, y) {
+      return isOverRect(circle, x, y);
+    }
+
+    function findDropTarget(x, y, source) {
+      // Subs box?
+      const subs = document.getElementById("roster-list");
+      if (subs && isOverElement(subs, x, y) && source !== "roster") {
+        return { type: "roster" };  // still using "roster" internally for drop type
+      }
+
+      // === Batting Order detection - now more robust using elementFromPoint + rect fallback ===
+      const battingContainer = document.getElementById("batting-order");
+      if (battingContainer) {
+        // Use elementFromPoint as primary signal (very reliable on desktop + touch)
+        const elUnderPointer = document.elementFromPoint(x, y);
+        const isOverBatting = elUnderPointer && battingContainer.contains(elUnderPointer);
+
+        console.log('[DragDrop] Checking batting. isOverBatting:', isOverBatting, 'rectCheck:', isOverElement(battingContainer, x, y));
+
+        if (isOverBatting || isOverElement(battingContainer, x, y)) {
+          const slots = Array.from(battingContainer.querySelectorAll(".batting-slot"));
+          
+          if (slots.length === 0) return null;
+
+          // Standard "insert before" logic using midpoint
+          for (let i = 0; i < slots.length; i++) {
+            const rect = slots[i].getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+
+            if (y < midY) {
+              return { type: "batting", index: i };
+            }
+          }
+
+          // Below everything → append
+          return { type: "batting", index: slots.length };
+        }
+      }
+
+      // Position on diamond? (use elementFromPoint for reliability with large rects)
+      const elUnder = document.elementFromPoint(x, y);
+      const posGroup = elUnder && elUnder.closest("#diamond .position-group");
+      if (posGroup && posGroup.dataset.pos) {
+        return { type: "position", position: posGroup.dataset.pos };
+      }
+
+      return null;
+    }
+
+    function handleDropAction(dragInfo, dropInfo) {
+      const { player, source, battingIndex } = dragInfo;
+
+      if (dropInfo.type === "roster") {
+        // Move player back to Subs (remove from batting order + defense, but keep in master roster)
+        removeFromBatting(player.id);
+        return;
+      }
+
+      if (dropInfo.type === "batting") {
+        addOrMoveToBatting(player.id, dropInfo.index);
+        return;
+      }
+
+      if (dropInfo.type === "position") {
+        // If coming from batting, keep them in batting order
+        if (source !== "batting" && !state.battingOrder.includes(player.id)) {
+          addToBattingEnd(player.id); // auto-add to order if not already
+        }
+        assignToPosition(player.id, dropInfo.position);
+      }
+    }
+
+    // ==================== CORE ACTIONS ====================
+    function setBattingMode(mode) {
+      const prevMode = state.battingMode;
+      state.battingMode = mode;
+
+      const limit = getBattingLimit();
+      if (state.battingOrder.length > limit) {
+        state.battingOrder = state.battingOrder.slice(0, limit);
+        clearDefenseForPlayersNotInBatting();
+      }
+
+      // Clean up defensive positions that are no longer valid for the new mode
+      const isDpFlex = mode === "dp-flex";
+      const allowedAPCount = getAPSlotCount();
+
+      Object.keys(state.defensivePositions).forEach(key => {
+        if (key === "FLEX") {
+          // FLEX box removed — Flex is now just the last batter with a normal field position
+          delete state.defensivePositions[key];
+        }
+        if (key === "DP" && !isDpFlex) {
+          delete state.defensivePositions[key];
+        }
+        if (key.startsWith("AP")) {
+          const n = parseInt(key.slice(2), 10) || 1;
+          if (n > allowedAPCount) {
+            delete state.defensivePositions[key];
+          }
+        }
+      });
+
+      selectedDefensePlayerId = null;
+      vacatedDefensePosition = null;
+
+      saveState();
+      renderAll();
+    }
+
+    function addToBattingEnd(playerId) {
+      const limit = getBattingLimit();
+      if (state.battingOrder.length >= limit) {
+        alert(`Batting order is full for ${state.battingMode} mode (${limit} batters).`);
+        return;
+      }
+      if (state.battingOrder.includes(playerId)) return;
+
+      state.battingOrder.push(playerId);
+      saveState();
+      renderAll();
+    }
+
+    function addOrMoveToBatting(playerId, targetIndex) {
+      const limit = getBattingLimit();
+      
+      // Get current position before any changes
+      let currentIndex = state.battingOrder.indexOf(playerId);
+      
+      // Remove from current position
+      if (currentIndex !== -1) {
+        state.battingOrder.splice(currentIndex, 1);
+      }
+
+      // IMPORTANT: Adjust targetIndex if we removed an item earlier in the list.
+      // This is the key fix for correct shifting when reordering.
+      let insertAt = targetIndex;
+      
+      if (currentIndex !== -1 && currentIndex < targetIndex) {
+        // We removed an item before the target position, so all later indices shifted left by 1.
+        insertAt = targetIndex - 1;
+      }
+
+      // If dropping at/after the end, append
+      if (insertAt >= state.battingOrder.length) {
+        insertAt = state.battingOrder.length;
+      }
+
+      // Clamp to allowed size for current batting mode
+      insertAt = Math.min(insertAt, limit - 1);
+      insertAt = Math.max(insertAt, 0);
+
+      state.battingOrder.splice(insertAt, 0, playerId);
+
+      // Enforce mode limit
+      if (state.battingOrder.length > limit) {
+        state.battingOrder = state.battingOrder.slice(0, limit);
+      }
+
+      saveState();
+      renderAll();
+    }
+
+    function clearDefenseForPlayersNotInBatting() {
+      const inBatting = new Set(state.battingOrder);
+      Object.keys(state.defensivePositions).forEach(pos => {
+        const pid = state.defensivePositions[pos];
+        if (pid && !inBatting.has(pid)) {
+          delete state.defensivePositions[pos];
+        }
+      });
+    }
+
+    function removeFromBatting(playerId) {
+      state.battingOrder = state.battingOrder.filter(id => id !== playerId);
+      clearDefenseForPlayersNotInBatting();
+      saveState();
+      renderAll();
+    }
+
+    function removePlayerFromAll(playerId) {
+      state.players = state.players.filter(p => p.id !== playerId);
+      state.battingOrder = state.battingOrder.filter(id => id !== playerId);
+      clearDefenseForPlayersNotInBatting();
+      saveState();
+      renderAll();
+    }
+
+    function assignToPosition(playerId, requested) {
+      if (!playerId) return;
+
+      // === Clear this player entirely from defense ===
+      if (!requested) {
+        Object.keys(state.defensivePositions).forEach(k => {
+          if (state.defensivePositions[k] === playerId) {
+            delete state.defensivePositions[k];
+          }
+        });
+        saveState();
+        renderAll();
+        return;
+      }
+
+      // === Resolve target key (AP placeholder becomes next free AP1/AP2/etc) ===
+      let targetKey = requested;
+      if (requested === "AP") {
+        // If this player is already on an AP slot, keep them there (no change)
+        const alreadyOnAP = Object.keys(state.defensivePositions).find(
+          k => k.startsWith("AP") && state.defensivePositions[k] === playerId
+        );
+        if (alreadyOnAP) {
+          targetKey = alreadyOnAP;
+        } else {
+          let n = 1;
+          while (state.defensivePositions[`AP${n}`]) n++;
+          targetKey = `AP${n}`;
+        }
+      }
+
+      // === Where is this player currently assigned? (if anywhere) ===
+      let prevKey = null;
+      for (const [k, id] of Object.entries(state.defensivePositions)) {
+        if (id === playerId) {
+          prevKey = k;
+          break;
+        }
+      }
+
+      // Selecting the exact same position they already have → no-op
+      if (prevKey === targetKey) {
+        return;
+      }
+
+      const currentOccupant = state.defensivePositions[targetKey];
+
+      // Track whether we are performing a true swap (mover already had a spot)
+      let performingSwap = false;
+
+      if (currentOccupant && currentOccupant !== playerId) {
+        if (prevKey) {
+          // SWAP: the moving player (A) already had a defensive position.
+          // Give the occupying player (B) the position A is leaving.
+          state.defensivePositions[prevKey] = currentOccupant;
+          performingSwap = true;
+        } else {
+          // Mover had no prior defensive spot (coming from bench) → just displace the occupant
+          delete state.defensivePositions[targetKey];
+        }
+      }
+
+      // Only clear the mover's old spot if they had one AND we did NOT just swap someone into it.
+      // In the swap case we already placed the occupant into prevKey above, so we must leave it.
+      if (prevKey && prevKey !== targetKey && !performingSwap) {
+        delete state.defensivePositions[prevKey];
+      }
+
+      // Place the moving player into the target position
+      state.defensivePositions[targetKey] = playerId;
+
+      // Ensure the player is in the batting order (being on defense implies they are batting)
+      if (!state.battingOrder.includes(playerId)) {
+        const limit = getBattingLimit();
+        if (state.battingOrder.length < limit) {
+          state.battingOrder.push(playerId);
+        }
+      }
+
+      saveState();
+      renderAll();
+    }
+
+    function clearPosition(position) {
+      // Legacy / header clear — still used by the top "Clear" button via clearDefense
+      delete state.defensivePositions[position];
+      saveState();
+      renderAll();
+    }
+
+    // ==================== NEW CLICK-TO-SELECT DEFENSE MODEL ====================
+
+    function clearDefenseSelection() {
+      selectedDefensePlayerId = null;
+      vacatedDefensePosition = null;
+
+      // Remove any subs target highlight
+      const subsList = document.getElementById("roster-list");
+      if (subsList) subsList.classList.remove("subs-target");
+
+      hideDefenseActionModal();
+      renderDefense(); // refresh highlights and status bar
+    }
+
+    function showDefenseActionModal(playerId) {
+      const modal = document.getElementById('defense-action-modal');
+      const titleEl = document.getElementById('defense-action-title');
+      const content = document.getElementById('defense-action-content');
+
+      const player = state.players.find(p => p.id === playerId);
+      if (!player) return;
+
+      const currentPos = getPlayerPosition(playerId) || '?';
+
+      titleEl.textContent = `Action for #${player.number || ''} ${player.name} (${currentPos})`;
+
+      content.innerHTML = `
+        <div class="space-y-3">
+          <div class="text-sm text-stone-600 mb-2">Choose an action:</div>
+
+          <button onclick="hideDefenseActionModal()" 
+                  class="w-full text-left px-4 py-3 bg-stone-100 hover:bg-stone-200 rounded-2xl flex items-center gap-3">
+            <i class="fa-solid fa-arrows-rotate"></i>
+            <div>
+              <div class="font-semibold">Swap with another position</div>
+              <div class="text-xs text-stone-500">Click any other position on the field</div>
+            </div>
+          </button>
+
+          <button onclick="benchSelectedFromModal()" 
+                  class="w-full text-left px-4 py-3 bg-stone-100 hover:bg-stone-200 rounded-2xl flex items-center gap-3">
+            <i class="fa-solid fa-chair"></i>
+            <span class="font-semibold">Bench Them (remove from defense)</span>
+          </button>
+
+          <button onclick="showSubsListForSubstitution('${playerId}', '${currentPos}')" 
+                  class="w-full text-left px-4 py-3 bg-red-100 hover:bg-red-200 text-red-800 rounded-2xl flex items-center gap-3">
+            <i class="fa-solid fa-user-plus"></i>
+            <span class="font-semibold">Sub Out with a Sub</span>
+          </button>
+        </div>
+      `;
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function hideDefenseActionModal() {
+      const modal = document.getElementById('defense-action-modal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    function benchSelectedFromModal() {
+      hideDefenseActionModal();
+      moveSelectedPlayerToBench();
+    }
+
+    function showSubsListForSubstitutionFromBar() {
+      if (!selectedDefensePlayerId) return;
+
+      const currentPos = getPlayerPosition(selectedDefensePlayerId) || "?";
+      hideDefenseActionModal(); // close if somehow open
+
+      // Directly show the subs list in the modal
+      const modal = document.getElementById('defense-action-modal');
+      const titleEl = document.getElementById('defense-action-title');
+      const content = document.getElementById('defense-action-content');
+
+      const player = state.players.find(p => p.id === selectedDefensePlayerId);
+      titleEl.textContent = `Sub out #${player?.number || ''} ${player?.name || ''} (${currentPos})`;
+
+      const available = state.players.filter(p => !state.battingOrder.includes(p.id));
+
+      if (available.length === 0) {
+        content.innerHTML = `<div class="py-4 text-center text-stone-500">No subs available.</div>
+          <button onclick="clearDefenseSelection(); hideDefenseActionModal();" class="mt-3 text-xs text-stone-500">Close</button>`;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        return;
+      }
+
+      let html = `<div class="text-sm font-medium mb-2">Select a player from Subs to bring in:</div><div class="space-y-2 max-h-[280px] overflow-auto">`;
+
+      available.forEach(sub => {
+        html += `
+          <div onclick="performFieldSubstitution('${selectedDefensePlayerId}', '${sub.id}', '${currentPos}'); event.stopImmediatePropagation();"
+               class="flex items-center gap-3 px-3 py-2.5 bg-white border border-stone-200 rounded-2xl cursor-pointer hover:bg-red-50">
+            ${sub.number ? `<div class="w-7 h-7 flex-shrink-0 rounded bg-red-100 text-red-700 text-xs font-bold flex items-center justify-center">${sub.number}</div>` : ''}
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold truncate">${sub.name}</div>
+              ${sub.notes ? `<div class="text-xs text-stone-500 truncate">${sub.notes}</div>` : ''}
+            </div>
+          </div>
+        `;
+      });
+
+      html += `</div>
+        <button onclick="clearDefenseSelection(); hideDefenseActionModal();" class="mt-3 text-xs text-stone-500 hover:text-stone-700">Cancel</button>`;
+
+      content.innerHTML = html;
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function showSubsListForSubstitution(playerId, currentPos) {
+      const content = document.getElementById('defense-action-content');
+      const available = state.players.filter(p => !state.battingOrder.includes(p.id));
+
+      if (available.length === 0) {
+        content.innerHTML = `<div class="py-4 text-center text-stone-500">No subs available in the Subs list.</div>`;
+        return;
+      }
+
+      let html = `<div class="text-sm font-medium mb-2">Select a sub to bring in for this position:</div><div class="space-y-2">`;
+
+      available.forEach(sub => {
+        html += `
+          <div onclick="performFieldSubstitution('${playerId}', '${sub.id}', '${currentPos}'); event.stopImmediatePropagation();"
+               class="flex items-center gap-3 px-3 py-2.5 bg-white border border-stone-200 rounded-2xl cursor-pointer hover:bg-red-50 active:bg-red-100">
+            ${sub.number ? `<div class="w-7 h-7 flex-shrink-0 rounded bg-red-100 text-red-700 text-xs font-bold flex items-center justify-center">${sub.number}</div>` : ''}
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold truncate">${sub.name}</div>
+              ${sub.notes ? `<div class="text-xs text-stone-500 truncate">${sub.notes}</div>` : ''}
+            </div>
+          </div>
+        `;
+      });
+
+      html += `</div><button onclick="showDefenseActionModal('${playerId}')" class="mt-3 text-xs text-stone-500 hover:text-stone-700">← Back</button>`;
+
+      content.innerHTML = html;
+    }
+
+    function performFieldSubstitution(currentPlayerId, subPlayerId, position) {
+      if (!position || !currentPlayerId) {
+        hideDefenseActionModal();
+        return;
+      }
+
+      // Remove the current player from the defensive position
+      delete state.defensivePositions[position];
+
+      // Update the batting order: replace the current player with the sub at the same spot
+      const battingIndex = state.battingOrder.indexOf(currentPlayerId);
+      if (battingIndex !== -1) {
+        state.battingOrder[battingIndex] = subPlayerId;
+      } else {
+        // Fallback: if somehow not in batting order, add the sub (shouldn't normally happen)
+        if (!state.battingOrder.includes(subPlayerId)) {
+          const limit = getBattingLimit();
+          if (state.battingOrder.length < limit) {
+            state.battingOrder.push(subPlayerId);
+          }
+        }
+      }
+
+      // Assign the sub directly to the defensive position
+      state.defensivePositions[position] = subPlayerId;
+
+      // Clear selection and close modal
+      selectedDefensePlayerId = null;
+      hideDefenseActionModal();
+
+      saveState();
+      renderAll();
+    }
+
+    function handleDefensePositionTap(posKey) {
+      const occupantId = state.defensivePositions[posKey];
+
+      if (!selectedDefensePlayerId) {
+        // Nothing selected yet → select this player (only if someone is there)
+        if (!occupantId) {
+          // Tapped an empty spot with nothing selected — do nothing (or could offer to bring someone from bench later)
+          return;
+        }
+        selectedDefensePlayerId = occupantId;
+        vacatedDefensePosition = null;
+        renderDefense();
+        showDefenseActionModal(occupantId);
+        return;
+      }
+
+      // We have a player selected
+      if (selectedDefensePlayerId === occupantId) {
+        // Tapped the same player again → deselect
+        clearDefenseSelection();
+        return;
+      }
+
+      // Move / swap the selected player into this spot (uses the existing robust assign logic)
+      const playerToMove = selectedDefensePlayerId;
+      selectedDefensePlayerId = null;
+      vacatedDefensePosition = null;
+
+      hideDefenseActionModal();
+      assignToPosition(playerToMove, posKey);  // handles swap automatically when needed
+    }
+
+    function moveSelectedPlayerToBench() {
+      if (!selectedDefensePlayerId) return;
+
+      const playerId = selectedDefensePlayerId;
+
+      // Find which position they currently occupy so we can offer to fill it
+      let currentPos = null;
+      for (const [k, id] of Object.entries(state.defensivePositions)) {
+        if (id === playerId) { currentPos = k; break; }
+      }
+
+      // Remove them from defense
+      if (currentPos) {
+        delete state.defensivePositions[currentPos];
+      }
+
+      // Remember the vacated spot so the next bench tap can fill it
+      vacatedDefensePosition = currentPos;
+
+      selectedDefensePlayerId = null;
+      hideDefenseActionModal();
+
+      saveState();
+      renderAll(); // will refresh both field and bench chips with new behavior
+    }
+
+    function fillVacatedPosition(playerId) {
+      if (!vacatedDefensePosition || !playerId) {
+        vacatedDefensePosition = null;
+        renderDefense();
+        return;
+      }
+
+      const spot = vacatedDefensePosition;
+      vacatedDefensePosition = null;
+      selectedDefensePlayerId = null;
+
+      assignToPosition(playerId, spot);
+    }
+
+    // Substitute a player from the Subs list directly into a selected defensive position
+    function substituteFromSubs(subPlayerId) {
+      if (!selectedDefensePlayerId) return;
+
+      // Find the current defensive position of the selected player
+      let currentPos = null;
+      for (const [pos, id] of Object.entries(state.defensivePositions)) {
+        if (id === selectedDefensePlayerId) {
+          currentPos = pos;
+          break;
+        }
+      }
+
+      if (!currentPos) {
+        clearDefenseSelection();
+        return;
+      }
+
+      const selectedId = selectedDefensePlayerId;
+
+      // Remove the selected player from their defensive spot
+      delete state.defensivePositions[currentPos];
+
+      // Update batting order: replace the original player with the sub at the exact same index
+      const battingIndex = state.battingOrder.indexOf(selectedId);
+      if (battingIndex !== -1) {
+        state.battingOrder[battingIndex] = subPlayerId;
+      } else {
+        // Fallback: add sub if original wasn't in batting for some reason
+        if (!state.battingOrder.includes(subPlayerId)) {
+          const limit = getBattingLimit();
+          if (state.battingOrder.length < limit) {
+            state.battingOrder.push(subPlayerId);
+          }
+        }
+      }
+
+      // Assign the sub to the defensive position
+      state.defensivePositions[currentPos] = subPlayerId;
+
+      // Clear selection
+      selectedDefensePlayerId = null;
+      vacatedDefensePosition = null;
+
+      saveState();
+      renderAll();
+    }
+
+    function updateDefenseSelectionUI() {
+      const bar = document.getElementById("defense-selection-bar");
+      const benchStrip = document.getElementById("defense-bench-strip");
+      if (!bar || !benchStrip) return;
+
+      // Remove previous target styling
+      benchStrip.classList.remove("bench-target");
+
+      if (!selectedDefensePlayerId && !vacatedDefensePosition) {
+        bar.classList.add("hidden");
+        bar.innerHTML = "";
+        // Remove subs target highlight
+        const subsList = document.getElementById("roster-list");
+        if (subsList) subsList.classList.remove("subs-target");
+        return;
+      }
+
+      bar.classList.remove("hidden");
+
+      if (selectedDefensePlayerId) {
+        const player = state.players.find(p => p.id === selectedDefensePlayerId);
+        const currentPos = getPlayerPosition(selectedDefensePlayerId) || "?";
+
+        bar.innerHTML = `
+          <div class="flex-1 flex items-center gap-x-2 text-stone-800">
+            <span class="font-semibold text-amber-700">SELECTED:</span>
+            <span class="font-bold">${player?.number ? "#" + player.number : ""} ${player?.name || "Player"}</span>
+            <span class="text-stone-500 text-xs">(currently ${currentPos})</span>
+          </div>
+          <button onclick="showSubsListForSubstitutionFromBar(); event.stopImmediatePropagation();"
+                  class="px-3 py-1 text-xs font-semibold bg-red-600 text-white hover:bg-red-700 active:bg-red-800 rounded-xl">
+            <i class="fa-solid fa-user-plus mr-1"></i> SUB OUT
+          </button>
+          <button onclick="moveSelectedPlayerToBench(); event.stopImmediatePropagation();"
+                  class="px-3 py-1 text-xs font-semibold bg-white border border-amber-400 hover:bg-amber-50 active:bg-amber-100 rounded-xl text-amber-800">
+            <i class="fa-solid fa-chair mr-1"></i> BENCH THEM
+          </button>
+          <button onclick="clearDefenseSelection(); event.stopImmediatePropagation();"
+                  class="px-2.5 py-1 text-xs font-medium bg-white/70 hover:bg-white border border-stone-300 rounded-xl">
+            Cancel
+          </button>
+        `;
+
+        // Make the whole bench strip look like a drop target
+        benchStrip.classList.add("bench-target");
+        benchStrip.onclick = (e) => {
+          // Only act on background clicks (chips have their own handlers that stopPropagation)
+          if (!e.target.closest(".player-card")) {
+            moveSelectedPlayerToBench();
+          }
+        };
+
+        // Highlight the Subs list as a valid substitution target
+        const subsList = document.getElementById("roster-list");
+        if (subsList) subsList.classList.add("subs-target");
+      } else if (vacatedDefensePosition) {
+        // We just benched someone and are offering to fill the hole
+        bar.innerHTML = `
+          <div class="flex-1 text-amber-800">
+            <span class="font-semibold">Spot at <strong>${vacatedDefensePosition}</strong> is open.</span>
+            Tap a bench player below to fill it, or tap Cancel to leave it empty.
+          </div>
+          <button onclick="vacatedDefensePosition=null; renderDefense();"
+                  class="px-3 py-1 text-xs font-semibold bg-white border border-amber-400 hover:bg-amber-50 rounded-xl text-amber-800">
+            Leave empty
+          </button>
+        `;
+        benchStrip.classList.add("bench-target");
+        benchStrip.onclick = null; // chips will handle filling
+      }
+    }
+
+    function clearDefense() {
+      if (!confirm("Clear all defensive positions?")) return;
+      POSITIONS.forEach(pos => delete state.defensivePositions[pos]);
+      // Also clear any special-role positions (DP, APn)
+      Object.keys(state.defensivePositions).forEach(k => {
+        if (!POSITIONS.includes(k)) delete state.defensivePositions[k];
+      });
+      selectedDefensePlayerId = null;
+      vacatedDefensePosition = null;
+      saveState();
+      renderAll();
+    }
+
+    function clearBattingOrder() {
+      if (state.battingOrder.length === 0) return;
+      if (!confirm("Move all players to Subs (clear batting order)?")) return;
+
+      state.battingOrder = [];
+      clearDefenseForPlayersNotInBatting();
+      // Ensure all positions are cleared (belt and suspenders)
+      Object.keys(state.defensivePositions).forEach(k => delete state.defensivePositions[k]);
+      selectedDefensePlayerId = null;
+      vacatedDefensePosition = null;
+      saveState();
+      renderAll();
+    }
+
+    function suggestDefense() {
+      // Simple smart suggestion: take players from top of batting order and spread them across positions
+      const available = [...state.battingOrder];
+      if (available.length === 0) return;
+
+      // Clear first
+      POSITIONS.forEach(pos => delete state.defensivePositions[pos]);
+
+      // Logical spread: try to put variety in infield/outfield
+      const order = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"];
+      
+      // Assign first 9 available players (or all if fewer)
+      for (let i = 0; i < Math.min(9, available.length); i++) {
+        const pos = order[i];
+        const playerId = available[i];
+        state.defensivePositions[pos] = playerId;
+      }
+
+      saveState();
+      renderAll();
+    }
+
+    function sortBattingByNumber() {
+      state.battingOrder.sort((a, b) => {
+        const pa = state.players.find(p => p.id === a);
+        const pb = state.players.find(p => p.id === b);
+        const na = pa?.number ?? 999;
+        const nb = pb?.number ?? 999;
+        return na - nb;
+      });
+      saveState();
+      renderAll();
+    }
+
+    function renderDefense() {
+      const benchContainer = document.getElementById("bench-list");
+      benchContainer.innerHTML = "";
+
+      // Render players currently on positions inside the SVG groups
+      POSITIONS.forEach(pos => {
+        const group = document.getElementById(`pos-${pos}`);
+        if (!group) return;
+
+        const rect = group.querySelector("rect");
+        if (!rect) return;
+
+        // Remove old labels
+        group.querySelectorAll(".player-on-pos").forEach(el => el.remove());
+
+        const x = parseFloat(rect.getAttribute("x"));
+        const y = parseFloat(rect.getAttribute("y"));
+        const width = parseFloat(rect.getAttribute("width"));
+        const height = parseFloat(rect.getAttribute("height"));
+
+        const centerX = x + width / 2;
+        const centerY = y + height / 2;
+
+        const playerId = state.defensivePositions[pos];
+
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", centerX);
+        text.setAttribute("y", centerY);
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("dominant-baseline", "middle");
+        text.setAttribute("class", "player-on-pos");
+
+        if (playerId) {
+          // Position filled → show player number (white)
+          const player = state.players.find(p => p.id === playerId);
+          text.setAttribute("fill", "#f1f5f9");
+          text.setAttribute("font-size", "70");
+          text.setAttribute("font-weight", "700");
+          text.textContent = player && player.number ? player.number : "•";
+        } else {
+          // Position empty → show position name in red (alert)
+          text.setAttribute("fill", "#ef4444");
+          text.setAttribute("font-size", "50");
+          text.setAttribute("font-weight", "700");
+          text.textContent = pos;
+        }
+
+        group.appendChild(text);
+
+        // Click-to-select / move model (primary interaction for defense now)
+        group.onclick = (e) => {
+          e.stopImmediatePropagation();
+          handleDefensePositionTap(pos);
+        };
+
+        // Keep old drop support as secondary (may be removed later)
+        group.ondrop = (e) => handlePositionDrop(e, pos);
+        group.ondragover = allowDrop;
+
+        // Visual selection feedback
+        if (selectedDefensePlayerId && state.defensivePositions[pos] === selectedDefensePlayerId) {
+          group.classList.add("selected-for-move");
+        } else {
+          group.classList.remove("selected-for-move");
+        }
+      });
+
+      // Handle special role: only DP in DP/Flex mode (Flex is the last batter and plays a normal field position)
+      const isDpFlexMode = state.battingMode === 'dp-flex';
+      const dpGroup = document.getElementById('pos-DP');
+
+      if (dpGroup) dpGroup.style.display = isDpFlexMode ? '' : 'none';
+
+      if (isDpFlexMode && dpGroup) {
+        // Remove old player labels
+        dpGroup.querySelectorAll(".player-on-pos").forEach(el => el.remove());
+
+        const playerId = state.defensivePositions['DP'];
+        if (playerId) {
+          const player = state.players.find(p => p.id === playerId);
+          if (player) {
+            const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            text.setAttribute("x", "160");
+            text.setAttribute("y", "560");
+            text.setAttribute("text-anchor", "middle");
+            text.setAttribute("dominant-baseline", "middle");
+            text.setAttribute("fill", "#f1f5f9");
+            text.setAttribute("font-size", "64");
+            text.setAttribute("font-weight", "700");
+            text.setAttribute("class", "player-on-pos");
+            text.textContent = player.number ? player.number : "•";
+            dpGroup.appendChild(text);
+          }
+        }
+
+        // Click-to-select / move model for the DP box
+        dpGroup.onclick = (e) => {
+          e.stopImmediatePropagation();
+          handleDefensePositionTap('DP');
+        };
+
+        // Keep drop as secondary
+        dpGroup.ondrop = (e) => handlePositionDrop(e, 'DP');
+        dpGroup.ondragover = allowDrop;
+
+        // Visual selection feedback
+        if (selectedDefensePlayerId && state.defensivePositions['DP'] === selectedDefensePlayerId) {
+          dpGroup.classList.add("selected-for-move");
+        } else {
+          dpGroup.classList.remove("selected-for-move");
+        }
+      }
+
+      // Dynamic AP boxes (far right column)
+      const svg = document.getElementById("diamond");
+      if (svg) {
+        // Remove any previously added dynamic AP groups
+        svg.querySelectorAll(".dynamic-ap-group").forEach(el => el.remove());
+
+        // Use *exactly* the number of AP boxes required by the current batting mode
+        // (battingOrder.length - 9 in Full Roster, or the fixed +1 / +2 count).
+        // Never show extra boxes beyond what the batting order needs.
+        const apCount = getAPSlotCount();
+
+        // Prune assignments to any APn beyond the required count.
+        // Players on those excess slots will now correctly appear in the
+        // "Bench" area below the defense diagram so they can be reassigned
+        // into one of the proper number of AP boxes.
+        let pruned = false;
+        Object.keys(state.defensivePositions || {}).forEach(k => {
+          if (k.startsWith("AP")) {
+            const n = parseInt(k.slice(2), 10) || 0;
+            if (n > apCount) {
+              delete state.defensivePositions[k];
+              pruned = true;
+            }
+          }
+        });
+        if (pruned) {
+          saveState();
+        }
+
+        for (let i = 1; i <= apCount; i++) {
+          const key = `AP${i}`;
+          const playerId = state.defensivePositions[key];
+          const player = playerId ? state.players.find(p => p.id === playerId) : null;
+
+          // Stack APs in lower left corner, growing upward
+          const apBoxWidth = 240;
+          const apBoxHeight = 72;
+          const apLeftX = 50;
+          const apTextCenterX = 170;
+          const apBottomY = 600;   // bottom of the lowest AP box
+          const y = apBottomY - (i * 80);
+
+          const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+          g.setAttribute("class", "position-group dynamic-ap-group");
+          g.setAttribute("data-pos", key);
+
+          // New click-to-select model for AP boxes
+          g.onclick = (e) => {
+            e.stopImmediatePropagation();
+            handleDefensePositionTap(key);
+          };
+
+          // Red box for AP (lower left corner)
+          const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          rect.setAttribute("x", apLeftX);
+          rect.setAttribute("y", y);
+          rect.setAttribute("width", apBoxWidth);
+          rect.setAttribute("height", apBoxHeight);
+          rect.setAttribute("rx", "8");
+          rect.setAttribute("fill", "#9f1239");
+          rect.setAttribute("stroke", "#f1f5f9");
+          rect.setAttribute("stroke-width", "2");
+          g.appendChild(rect);
+
+          // Label or number inside the box
+          const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          label.setAttribute("x", apTextCenterX);
+          label.setAttribute("y", y + 36);
+          label.setAttribute("text-anchor", "middle");
+          label.setAttribute("dominant-baseline", "middle");
+          label.setAttribute("font-size", "56");
+          label.setAttribute("font-weight", "700");
+
+          if (player) {
+            label.setAttribute("fill", "#f1f5f9");
+            label.textContent = player.number ? player.number : "•";
+          } else {
+            label.setAttribute("fill", "#ef4444");
+            label.textContent = key;
+          }
+          g.appendChild(label);
+
+          // Secondary drop support
+          g.ondrop = (e) => handlePositionDrop(e, key);
+          g.ondragover = allowDrop;
+
+          // Selection highlight for AP boxes
+          if (selectedDefensePlayerId && state.defensivePositions[key] === selectedDefensePlayerId) {
+            g.classList.add("selected-for-move");
+          }
+
+          svg.appendChild(g);
+        }
+      }
+
+      // Bench players = in batting order but not assigned to any defensive position
+      const onDefense = new Set(Object.values(state.defensivePositions).filter(Boolean));
+      const benchPlayers = state.battingOrder
+        .map(id => state.players.find(p => p.id === id))
+        .filter(Boolean)
+        .filter(p => !onDefense.has(p.id));
+
+      if (benchPlayers.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "text-xs text-stone-400 px-1 py-1";
+        empty.textContent = "All batters currently on the field";
+        benchContainer.appendChild(empty);
+        return;
+      }
+
+      benchPlayers.forEach(player => {
+        const chip = document.createElement("div");
+        chip.className = `player-card inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-stone-200 rounded-2xl text-xs font-medium cursor-grab active:cursor-grabbing`;
+        chip.draggable = true;
+        chip.dataset.playerId = player.id;
+
+        chip.innerHTML = `
+          ${player.number ? `<span class="font-bold text-red-700">${player.number}</span>` : ""}
+          <span class="truncate max-w-[82px]">${player.name}</span>
+        `;
+
+        // Drag support
+        chip.ondragstart = (e) => {
+          e.dataTransfer.setData("text/plain", JSON.stringify({ playerId: player.id, source: "bench" }));
+          chip.classList.add("opacity-60");
+        };
+        chip.ondragend = () => chip.classList.remove("opacity-60");
+
+        makeCardDraggable(chip, player, "bench");
+
+        // Tap behavior depends on whether we have a pending fill or a selected player
+        chip.onclick = (e) => {
+          e.stopImmediatePropagation();
+
+          if (vacatedDefensePosition) {
+            // Preferred flow: user just benched someone and wants to quickly fill the hole
+            fillVacatedPosition(player.id);
+            return;
+          }
+
+          if (selectedDefensePlayerId) {
+            // If a player is selected on field, tapping a bench chip could be ambiguous.
+            // For now, just move the selected one to bench (user can then tap this chip again to fill).
+            moveSelectedPlayerToBench();
+            return;
+          }
+
+          // Default old behavior: put this bench player on first empty defensive spot
+          const empty = POSITIONS.find(p => !state.defensivePositions[p]);
+          if (empty) {
+            assignToPosition(player.id, empty);
+          }
+        };
+
+        benchContainer.appendChild(chip);
+      });
+
+      // Update the amber selection status bar + bench strip target styling
+      updateDefenseSelectionUI();
+
+      // Clicking the field background while something is selected → cancel selection (nice on iPad)
+      const svgEl = document.getElementById("diamond");
+      if (svgEl) {
+        svgEl.onclick = (e) => {
+          if ((selectedDefensePlayerId || vacatedDefensePosition) && e.target.id === "diamond") {
+            clearDefenseSelection();
+          }
+        };
+      }
+    }
+
+    function handlePositionDrop(e, position) {
+      e.preventDefault();
+      const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+      const player = state.players.find(p => p.id === data.playerId);
+      if (!player) return;
+
+      assignToPosition(player.id, position);
+    }
+
+    // Legacy native drag helpers kept only for the defensive diamond positions (which still use a small amount of native drag).
+    // Main roster + batting order now uses the custom pointer-based system exclusively.
+    function allowDrop(e) {
+      e.preventDefault();
+    }
+
+    // ==================== PLAYER CRUD ====================
+    let editingPlayerId = null;
+
+    function showAddPlayerModal() {
+      editingPlayerId = null;
+      document.getElementById("modal-title").textContent = "Add Player";
+      document.getElementById("modal-save-btn").textContent = "Add Player";
+      document.getElementById("player-name").value = "";
+      document.getElementById("player-number").value = "";
+      document.getElementById("player-notes").value = "";
+      document.getElementById("player-modal").classList.remove("hidden");
+      document.getElementById("player-name").focus();
+    }
+
+    function editPlayer(playerId) {
+      const player = state.players.find(p => p.id === playerId);
+      if (!player) return;
+
+      editingPlayerId = playerId;
+      document.getElementById("modal-title").textContent = "Edit Player";
+      document.getElementById("modal-save-btn").textContent = "Save Changes";
+      document.getElementById("player-name").value = player.name;
+      document.getElementById("player-number").value = player.number || "";
+      document.getElementById("player-notes").value = player.notes || "";
+      document.getElementById("player-modal").classList.remove("hidden");
+      document.getElementById("player-name").focus();
+    }
+
+    function savePlayerFromModal() {
+      const name = document.getElementById("player-name").value.trim();
+      if (!name) {
+        alert("Player name is required");
+        return;
+      }
+
+      const number = document.getElementById("player-number").value ? parseInt(document.getElementById("player-number").value) : undefined;
+      const notes = document.getElementById("player-notes").value.trim() || undefined;
+
+      if (editingPlayerId) {
+        const player = state.players.find(p => p.id === editingPlayerId);
+        if (player) {
+          player.name = name;
+          player.number = number;
+          player.notes = notes;
+        }
+      } else {
+        if (state.players.length >= 14) {
+          alert("Maximum roster size is 14 players for MN Elks 16U.");
+          return;
+        }
+        state.players.push({
+          id: crypto.randomUUID(),
+          name,
+          number,
+          notes
+        });
+      }
+
+      hidePlayerModal();
+      saveState();
+      renderAll();
+    }
+
+    function hidePlayerModal() {
+      document.getElementById("player-modal").classList.add("hidden");
+      editingPlayerId = null;
+    }
+
+    function quickAddNote(tag) {
+      const notesInput = document.getElementById("player-notes");
+      if (!notesInput) return;
+
+      const current = notesInput.value.trim();
+      if (current.includes(tag)) return; // already has it
+
+      notesInput.value = current ? `${current}, ${tag}` : tag;
+      notesInput.focus();
+    }
+
+    // ==================== SAMPLE DATA ====================
+    function loadSampleRoster() {
+      if (state.players.length > 0 && !confirm("Replace current roster with the MN Elks 16U roster?")) return;
+
+      state.players = [
+        { id: "p16", name: "Annabelle Ackerman", number: 16, notes: "" },
+        { id: "p4",  name: "Emily Artmann",     number: 4,  notes: "" },
+        { id: "p7",  name: "Macie Backman",     number: 7,  notes: "" },
+        { id: "p11", name: "Madison Burggraff", number: 11, notes: "" },
+        { id: "p13", name: "Hailee Clinton",    number: 13, notes: "" },
+        { id: "p45", name: "Savanah Emmans",    number: 45, notes: "" },
+        { id: "p10", name: "Tenley Fransen",    number: 10, notes: "" },
+        { id: "p27", name: "Molly Johnson",     number: 27, notes: "" },
+        { id: "p17", name: "Kiana Pegues",      number: 17, notes: "" },
+        { id: "p9",  name: "Avaiyah Sandford",  number: 9,  notes: "" },
+        { id: "p14", name: "Sidney Tischner",   number: 14, notes: "" },
+        { id: "p12", name: "MaKayla Uttke",     number: 12, notes: "" },
+        { id: "p8",  name: "Paisyn Wiley",      number: 8,  notes: "" }
+      ];
+
+      // Load full roster batting (13 players) + clear defense so coach can set starting 9
+      state.battingMode = "roster";
+      state.battingOrder = state.players.map(p => p.id);
+
+      // Start with empty defensive positions
+      state.defensivePositions = {
+        P: null, C: null, "1B": null, "2B": null, "3B": null,
+        SS: null, LF: null, CF: null, RF: null
+      };
+
+      saveState();
+      renderAll();
+    }
+
+    function clearAll() {
+      if (!confirm("Clear the current game's lineup (batting order + defense)?\nRoster and other games are kept.")) return;
+      
+      // Only clear the lineup for *this* game, keep the master roster + other games
+      state.battingOrder = [];
+      state.defensivePositions = {};
+      POSITIONS.forEach(pos => { state.defensivePositions[pos] = null; });
+      saveState();
+      renderAll();
+    }
+
+    // ==================== EXPORT ====================
+    function exportPNG() {
+      const exportArea = document.createElement("div");
+      exportArea.style.cssText = "position:fixed; left:-9999px; width:1100px; background:white; padding:32px; font-family:Inter,system-ui,sans-serif";
+      
+      const onField = Object.values(state.defensivePositions).filter(Boolean).length;
+      const battingLimit = getBattingLimit();
+
+      const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+      // Derive opponent name for PNG filename in the requested format: "MN Elks vs {opponent}"
+      let opponent = (state.gameInfo || '').trim();
+      if (opponent) {
+        // Prefer text immediately after "vs." / "vs " / "versus " anywhere in the string
+        let m = opponent.match(/(?:^|[\s:])vs\.?\s+([A-Za-z][A-Za-z0-9 .'-]*?)(?:\s*[-–—|,]|\s+\d| vs\.? |$)/i);
+        if (m && m[1]) {
+          opponent = m[1].trim();
+        } else {
+          // Fallback: strip leading vs and take pre-separator chunk
+          opponent = opponent.replace(/^\s*(vs\.?|versus)\s*/i, '');
+          opponent = opponent.split(/\s*[-–—|]\s*/)[0].trim();
+        }
+        // Drop trailing time-of-day if present (e.g. "Eagles 6pm")
+        opponent = opponent.replace(/\s*\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)?$/i, '').trim();
+        // Sanitize for safe filenames
+        opponent = opponent.replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim();
+      }
+      const pngFilename = opponent ? `MN Elks vs ${opponent}.png` : 'MN Elks Lineup.png';
+
+      let html = `
+        <div style="max-width:1060px; margin:0 auto;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; border-bottom: 3px solid #166534; padding-bottom: 8px;">
+            <div>
+              <div style="font-size:26px; font-weight:800; color:#9f1239; letter-spacing:-1.5px;">MN ELKS 16U</div>
+              <div style="font-size:14px; color:#3f2a1f; margin-top:1px; font-weight:600;">${state.gameInfo || "Game Lineup"} &nbsp;•&nbsp; ${today}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:11px; color:#3f2a1f; font-weight:600;">COACH FRANSEN</div>
+              <div style="font-size:12px; color:#3f2a1f; margin-top:1px;">
+                ${state.battingMode.toUpperCase()} • ${battingLimit} BATTERS • DEFENSE
+              </div>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns: 320px 1fr; gap:28px;">
+            <!-- Batting Order -->
+            <div>
+              <div style="font-size:11px; font-weight:600; letter-spacing:0.5px; color:#9f1239; margin-bottom:6px;">BATTING ORDER</div>
+              <div style="border:2px solid #9f1239; border-radius:16px; overflow:hidden;">
+      `;
+
+      state.battingOrder.forEach((id, idx) => {
+        const p = state.players.find(x => x.id === id);
+        if (!p) return;
+
+        const defPos = getPlayerPosition(id); // e.g. "P", "LF", "DP", "AP2", etc.
+        const isFlex = (state.battingMode === 'dp-flex' && idx === state.battingOrder.length - 1 && state.battingOrder.length >= 10);
+
+        let nameHtml = p.name;
+        if (isFlex) {
+          nameHtml += ' <span style="color:#b45309; font-weight:700; font-size:11px;">(Flex)</span>';
+        }
+
+        let posText = '';
+        if (defPos) {
+          posText = ` <span style="font-size:10px; color:#854d0e; font-weight:600;">${defPos}</span>`;
+        }
+
+        html += `
+          <div style="display:flex; align-items:center; gap:12px; padding:8px 14px; background:${idx % 2 ? '#fffbeb' : 'white'}; border-bottom:1px solid #fde68c;">
+            <div style="width:26px; font-weight:800; color:#9f1239; font-size:15px;">${idx + 1}</div>
+            <div style="flex:1; font-size:13px; font-weight:600;">${nameHtml}${posText}</div>
+            ${p.number ? `<div style="background:#fefce8; color:#854d0e; font-weight:700; padding:1px 7px; border-radius:999px; font-size:12px;">#${p.number}</div>` : ''}
+            ${p.notes ? `<div style="font-size:11px; color:#166534;">${p.notes}</div>` : ''}
+          </div>`;
+      });
+
+      html += `</div></div>`;
+
+      // Defense side - proper overhead softball field diagram using SVG
+      const isDpFlex = state.battingMode === 'dp-flex';
+      const apCount = getAPSlotCount();
+
+      // Build positions data
+      const positionsData = [
+        { key: 'P',  label: 'P',  x: 260, y: 242 },
+        { key: 'C',  label: 'C',  x: 260, y: 295 },
+        { key: '1B', label: '1B', x: 365, y: 248 },
+        { key: '2B', label: '2B', x: 320, y: 175 },
+        { key: '3B', label: '3B', x: 155, y: 248 },
+        { key: 'SS', label: 'SS', x: 200, y: 175 },
+        { key: 'LF', label: 'LF', x: 130, y: 105 },
+        { key: 'CF', label: 'CF', x: 260, y:  85 },
+        { key: 'RF', label: 'RF', x: 390, y: 105 },
+      ];
+
+      let fieldSvg = `
+        <svg width="620" height="360" viewBox="0 0 620 360" style="display:block; border:1px solid #854d0e; border-radius:8px; background:#f8fafc;">
+          <!-- Grass outfield -->
+          <rect x="0" y="0" width="620" height="360" fill="#15803d"/>
+          
+          <!-- Infield dirt diamond -->
+          <polygon points="260,310 365,248 260,180 155,248" fill="#b45309" stroke="#78350f" stroke-width="3"/>
+          
+          <!-- Infield baselines (drawn on top of the dirt) -->
+          <line x1="260" y1="310" x2="365" y2="248" stroke="#f5f5f4" stroke-width="2.5"/>
+          <line x1="260" y1="310" x2="155" y2="248" stroke="#f5f5f4" stroke-width="2.5"/>
+          <line x1="155" y1="248" x2="260" y2="180" stroke="#f5f5f4" stroke-width="2.5"/>
+          <line x1="365" y1="248" x2="260" y2="180" stroke="#f5f5f4" stroke-width="2.5"/>
+          
+          <!-- Small base markers -->
+          <rect x="358" y="241" width="12" height="12" fill="#f5f5f4" stroke="#78350f" transform="rotate(45 364 247)"/>
+          <rect x="148" y="241" width="12" height="12" fill="#f5f5f4" stroke="#78350f" transform="rotate(45 154 247)"/>
+          <rect x="253" y="173" width="12" height="12" fill="#f5f5f4" stroke="#78350f" transform="rotate(45 259 179)"/>
+          
+          <!-- Position labels with player numbers -->
+      `;
+
+      // Add the 9 field positions
+      positionsData.forEach(pos => {
+        const pid = state.defensivePositions[pos.key];
+        const player = pid ? state.players.find(x => x.id === pid) : null;
+        const num = player && player.number ? player.number : pos.label;
+        const isEmpty = !player;
+
+        const textColor = isEmpty ? '#ef4444' : '#ffffff';
+        const fontSize = isEmpty ? '11' : '18';
+        const fontWeight = isEmpty ? '700' : '900';
+
+        fieldSvg += `
+          <g>
+            <rect x="${pos.x - 22}" y="${pos.y - 13}" width="44" height="26" rx="6" fill="${isEmpty ? '#166534' : '#166534'}" stroke="#f1f5f9" stroke-width="2"/>
+            <text x="${pos.x}" y="${pos.y + 5}" font-family="Inter, system-ui, sans-serif" font-size="${fontSize}" font-weight="${fontWeight}" fill="${textColor}" text-anchor="middle" dominant-baseline="middle">${num}</text>
+          </g>
+        `;
+      });
+
+      // Right side column for DP and APs (outside main diamond)
+      let rightX = 510;
+      let rightY = 70;
+
+      if (isDpFlex) {
+        const pid = state.defensivePositions['DP'];
+        const player = pid ? state.players.find(x => x.id === pid) : null;
+        const num = player && player.number ? player.number : 'DP';
+        const isEmpty = !player;
+        const textColor = isEmpty ? '#ef4444' : '#ffffff';
+        const fontSize = isEmpty ? '10' : '15';
+
+        fieldSvg += `
+          <g>
+            <rect x="${rightX}" y="${rightY}" width="52" height="24" rx="5" fill="#9f1239" stroke="#f1f5f9" stroke-width="1.5"/>
+            <text x="${rightX + 26}" y="${rightY + 13}" font-family="Inter, system-ui, sans-serif" font-size="${fontSize}" font-weight="900" fill="${textColor}" text-anchor="middle" dominant-baseline="middle">${num}</text>
+          </g>
+        `;
+        rightY += 30;
+      }
+
+      for (let i = 1; i <= apCount; i++) {
+        const key = `AP${i}`;
+        const pid = state.defensivePositions[key];
+        const player = pid ? state.players.find(x => x.id === pid) : null;
+        const num = player && player.number ? player.number : key;
+        const isEmpty = !player;
+        const textColor = isEmpty ? '#ef4444' : '#ffffff';
+        const fontSize = isEmpty ? '9' : '13';
+
+        fieldSvg += `
+          <g>
+            <rect x="${rightX}" y="${rightY}" width="52" height="22" rx="5" fill="#9f1239" stroke="#f1f5f9" stroke-width="1.5"/>
+            <text x="${rightX + 26}" y="${rightY + 12}" font-family="Inter, system-ui, sans-serif" font-size="${fontSize}" font-weight="900" fill="${textColor}" text-anchor="middle" dominant-baseline="middle">${num}</text>
+          </g>
+        `;
+        rightY += 26;
+      }
+
+      fieldSvg += `</svg>`;
+
+      let defenseHtml = `
+        <div>
+          <div style="font-size:11px; font-weight:600; letter-spacing:0.5px; color:#9f1239; margin-bottom:6px;">DEFENSE</div>
+          ${fieldSvg}
+        </div>
+      `;
+
+      html += defenseHtml + `</div></div>`;  // close the grid and the main content wrapper
+
+      exportArea.innerHTML = html;
+      document.body.appendChild(exportArea);
+
+      html2canvas(exportArea, { scale: 2, backgroundColor: "#fff" }).then(canvas => {
+        const link = document.createElement("a");
+        link.download = pngFilename;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+        document.body.removeChild(exportArea);
+      }).catch(err => {
+        alert("PNG export failed. Try again or use the JSON export.");
+        document.body.removeChild(exportArea);
+      });
+    }
+
+    // === Simple URL Sharing for Coaches (no accounts, no backend) ===
+    function encodeStateForURL(state) {
+      try {
+        const json = JSON.stringify(state);
+        return btoa(unescape(encodeURIComponent(json)));
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function decodeStateFromURL(encoded) {
+      try {
+        const json = decodeURIComponent(escape(atob(encoded)));
+        return JSON.parse(json);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function copyShareLink() {
+      const encoded = encodeStateForURL(state);
+      if (!encoded) {
+        alert("Could not create share link.");
+        return;
+      }
+
+      const baseUrl = `${location.origin}${location.pathname}`;
+      const shareUrl = `${baseUrl}#state=${encoded}`;
+
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        alert("Link copied! Send this to your coaches.\n\nThey can open it anytime and will see your current lineup.");
+      }).catch(() => {
+        // Fallback for older browsers
+        prompt("Copy this link and send it to your coaches:", shareUrl);
+      });
+    }
+
+    function loadStateFromURL() {
+      const hash = location.hash;
+      if (!hash.startsWith('#state=')) return;
+
+      const encoded = hash.slice(7);
+      const loaded = decodeStateFromURL(encoded);
+
+      if (loaded && loaded.players && Array.isArray(loaded.players)) {
+        // Merge any players from the shared lineup into our master roster (by id)
+        const have = new Set((state.players || []).map(p => p.id));
+        (loaded.players || []).forEach(sp => {
+          if (sp && sp.id && !have.has(sp.id)) {
+            state.players.push({ ...sp });
+            have.add(sp.id);
+          }
+        });
+
+        // Create a *new* game from the shared lineup data so we don't lose the user's other games
+        const sharedId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('g' + Date.now());
+        const sharedGame = {
+          id: sharedId,
+          name: (loaded.gameInfo || "Shared Lineup") + " (from link)",
+          battingMode: loaded.battingMode || "roster",
+          battingOrder: loaded.battingOrder || [],
+          defensivePositions: loaded.defensivePositions || {},
+          lastUpdated: Date.now()
+        };
+        POSITIONS.forEach(pos => {
+          if (!(pos in sharedGame.defensivePositions)) sharedGame.defensivePositions[pos] = null;
+        });
+
+        games.push(sharedGame);
+        currentGameId = sharedId;
+        loadGameIntoState(sharedId);
+
+        saveState();
+        renderAll();
+
+        // Optional: let the user know
+        // (avoid alert on every load; the lineup appearing is feedback enough)
+      }
+    }
+
+    function showExportMenu() {
+      const json = JSON.stringify(state, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mn-elks-lineup-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      // Also offer import hint
+      setTimeout(() => {
+        if (confirm("Lineup exported as JSON. Want to import a previously saved lineup now?")) {
+          importJSON();
+        }
+      }, 400);
+    }
+
+    function importJSON() {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".json";
+      input.onchange = e => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = ev => {
+          try {
+            const imported = JSON.parse(ev.target.result);
+            if (imported.players && Array.isArray(imported.players)) {
+              state = { ...state, ...imported };
+              // Ensure defensivePositions object exists
+              if (!state.defensivePositions) state.defensivePositions = {};
+              saveState();
+              renderAll();
+              alert("Lineup imported successfully!");
+            } else {
+              alert("Invalid lineup file.");
+            }
+          } catch (err) {
+            alert("Failed to import file: " + err.message);
+          }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    }
+
+    // ==================== KEYBOARD SHORTCUTS ====================
+    document.addEventListener("keydown", (e) => {
+      if (e.metaKey && e.key === "s") {
+        e.preventDefault();
+        exportPNG();
+      }
+    });
+
+    // ==================== INIT ====================
+    async function init() {
+      loadState();
+
+      // Preserve team when going back to hub
+      const backLink = document.getElementById('back-to-hub');
+      if (backLink) {
+        const params = new URLSearchParams(location.search);
+        const team = params.get('team');
+        if (team) backLink.href = `../index.html?team=${team}`;
+      }
+
+      // Load lineup from URL if someone shared a link (for coaches)
+      loadStateFromURL();
+
+      // Ensure positions exist
+      POSITIONS.forEach(pos => {
+        if (!(pos in state.defensivePositions)) state.defensivePositions[pos] = null;
+      });
+
+      // No longer needed — batting mode is now a dropdown
+
+      // Initial render
+      renderAll();
+
+      // Make diamond positions nicer on touch
+      document.querySelectorAll("#diamond .position-group").forEach(g => {
+        g.style.cursor = "pointer";
+      });
+
+      // Keyboard hint
+      console.log("%c[MN Elks Lineup] Cmd/Ctrl + S = PNG export", "color:#854d0e");
+
+      // Cloud sync setup (non-blocking)
+      setTimeout(() => {
+        if (typeof initLineupSupabase === 'function') {
+          const ready = initLineupSupabase();
+          if (typeof updateSyncStatusUI === 'function') {
+            updateSyncStatusUI();
+          }
+          // Load is handled by initLineupSupabase (getSession/onAuth paths) or explicit in handleCloudSyncClick.
+          // Removed unconditional early load here to avoid 406 noise before auth session is attached.
+        }
+      }, 300);
+    }
+
+    // ============================================
+    // SUPABASE CLOUD SYNC (for multi-device personal use)
+    // ============================================
+    // To enable: 
+    // 1. Create free Supabase project at supabase.com
+    // 2. Run the SQL from Gabes App Hub/backend/supabase-schema.sql (plus the ALTER for data column)
+    // 3. In Supabase Auth settings, add your Netlify URL (and localhost for testing) as redirect URL
+    // 4. Replace the two constants below with your project values
+    //    - URL is the Project URL (https://....supabase.co)
+    //    - ANON_KEY is the **Publishable key** (the new sb_publishable_... one, not the secret)
+    // 5. (Optional) Create a team in the teams table and add yourself to team_memberships
+    // 6. Access via hub with ?team=your-team-uuid  or set below
+    let LINEUP_SUPABASE_URL = 'https://cylppatfrlazaioptpzo.supabase.co';
+    let LINEUP_SUPABASE_ANON_KEY = 'sb_publishable_E6JngnBP7_yib777_stGEA_CavLtD5z';
+
+    let lineupSupabase = null;
+    let lineupCurrentTeamId = null;
+    let currentUser = null;
+
+    function initLineupSupabase() {
+      if (!window.supabase || LINEUP_SUPABASE_URL === 'YOUR_SUPABASE_URL_HERE') {
+        return false;
+      }
+
+      // Always re-check URL for team ID on every init call (ensures ?team= is picked up even on late calls)
+      const params = new URLSearchParams(location.search);
+      const urlTeam = params.get('team');
+      if (urlTeam) {
+        lineupCurrentTeamId = urlTeam;
+        localStorage.setItem('mn-elks-lineup-team-id', urlTeam);
+      }
+
+      if (lineupSupabase) return true;
+
+      lineupSupabase = window.supabase.createClient(LINEUP_SUPABASE_URL, LINEUP_SUPABASE_ANON_KEY);
+      console.log('[Lineup] Supabase client ready');
+
+      // Listen for auth changes (magic link sign-in from email)
+      lineupSupabase.auth.onAuthStateChange((event, session) => {
+        if (session) {
+          currentUser = session.user;
+          localStorage.setItem('mn-elks-lineup-auth', 'true');
+          try {
+            localStorage.setItem('mn-elks-lineup-supabase-session', JSON.stringify(session));
+          } catch (e) {}
+          updateSyncStatusUI();
+          console.log('[Lineup] Signed in as', currentUser.email);
+          // After sign in, try to load latest from cloud (using correct lineups/_app_data row)
+          loadFromCloudIfEnabled().then(updated => {
+            if (updated) renderAll();
+          });
+        } else {
+          currentUser = null;
+          updateSyncStatusUI();
+        }
+      });
+
+      // Try to restore session
+      lineupSupabase.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          currentUser = data.session.user;
+          updateSyncStatusUI();
+          // Load cloud data now that session is restored
+          loadFromCloudIfEnabled().then(updated => {
+            if (updated) renderAll();
+          });
+        } else {
+          // Try manual stored session as fallback
+          try {
+            const saved = localStorage.getItem('mn-elks-lineup-supabase-session');
+            if (saved) {
+              const sess = JSON.parse(saved);
+              lineupSupabase.auth.setSession(sess).then(() => {
+                currentUser = sess.user;
+                updateSyncStatusUI();
+                loadFromCloudIfEnabled().then(updated => {
+                  if (updated) renderAll();
+                });
+              });
+            }
+          } catch (e) {}
+        }
+      });
+
+      return true;
+    }
+
+    async function syncToCloudIfEnabled(fullData) {
+      if (!initLineupSupabase() || !lineupCurrentTeamId) return;
+
+      try {
+        const payload = {
+          team_id: lineupCurrentTeamId,
+          name: '_app_data',
+          data: fullData,
+          updated_at: new Date().toISOString()
+        };
+
+        const { error } = await lineupSupabase
+          .from('lineups')
+          .upsert(payload, { onConflict: 'team_id,name' });
+
+        if (error) {
+          console.warn('[Lineup] Cloud sync save error', error);
+        } else {
+          console.log('[Lineup] Synced to cloud');
+          updateSyncStatusUI('synced');
+        }
+      } catch (e) {
+        console.warn('[Lineup] Cloud sync failed', e);
+      }
+    }
+
+    async function loadFromCloudIfEnabled() {
+      if (!initLineupSupabase() || !lineupCurrentTeamId) return false;
+
+      try {
+        const { data, error } = await lineupSupabase
+          .from('lineups')
+          .select('data, updated_at')
+          .eq('team_id', lineupCurrentTeamId)
+          .eq('name', '_app_data')
+          .maybeSingle();
+
+        if (error || !data || !data.data) {
+          if (error) console.warn('[Lineup] Cloud load error (may be first save for this team):', error);
+          return false;
+        }
+
+        const cloudData = data.data;
+
+        // Always prefer cloud data if present (cloud is source of truth for this team)
+        if (cloudData.version === 2 && Array.isArray(cloudData.games)) {
+          state.players = Array.isArray(cloudData.roster) ? cloudData.roster : state.players;
+          games = cloudData.games || [];
+          currentGameId = cloudData.currentGameId || null;
+          state.teamName = cloudData.teamName || state.teamName;
+
+          if (currentGameId && games.some(g => g.id === currentGameId)) {
+            loadGameIntoState(currentGameId);
+          } else if (games.length > 0) {
+            loadGameIntoState(games[0].id);
+          }
+
+          // Save the fresh data locally too
+          localStorage.setItem("mn-elks-lineup-v1", JSON.stringify(cloudData));
+          console.log('[Lineup] Loaded data from cloud');
+          updateSyncStatusUI('synced');
+          return true;
+        }
+        return false;
+      } catch (e) {
+        console.warn('[Lineup] Cloud load failed (using local)', e);
+        return false;
+      }
+    }
+
+    async function handleCloudSyncClick() {
+      if (!initLineupSupabase()) {
+        const url = prompt("Enter your Supabase URL (or leave blank to cancel):", LINEUP_SUPABASE_URL);
+        if (url) {
+          LINEUP_SUPABASE_URL = url;
+          const key = prompt("Enter your Supabase anon key:");
+          if (key) {
+            LINEUP_SUPABASE_ANON_KEY = key;
+            initLineupSupabase();
+            alert("Config set for this session. For permanent use after deploy, edit the two constants at the bottom of the HTML source and redeploy to Netlify.");
+          }
+        }
+        return;
+      }
+
+      if (!lineupCurrentTeamId) {
+        const teamId = prompt("Enter your Supabase team UUID (from the teams table):");
+        if (teamId) {
+          lineupCurrentTeamId = teamId;
+          localStorage.setItem('mn-elks-lineup-team-id', teamId);
+          if (typeof updateSyncStatusUI === 'function') updateSyncStatusUI();
+        } else {
+          return;
+        }
+      }
+
+      // Ensure we have latest session state (getSession is fast; prevents re-prompting on click after auto-restore or previous sign-in)
+      if (!currentUser && lineupSupabase) {
+        try {
+          const { data } = await lineupSupabase.auth.getSession();
+          if (data && data.session) {
+            currentUser = data.session.user;
+            updateSyncStatusUI();
+            loadFromCloudIfEnabled().then(updated => {
+              if (updated) renderAll();
+            });
+          }
+        } catch (e) {}
+      }
+
+      if (currentUser) {
+        if (confirm(`Sign out of cloud sync for ${currentUser.email}?`)) {
+          await lineupSupabase.auth.signOut();
+          currentUser = null;
+          updateSyncStatusUI();
+        }
+        return;
+      }
+
+      // Not signed in - use email + password (no more magic links / rate limits)
+      const email = prompt("Email for cloud sync:");
+      if (!email) return;
+      let password = prompt("Password (set one if first time / sign up):");
+      if (!password) return;
+
+      // Try sign in first
+      let { error } = await lineupSupabase.auth.signInWithPassword({ email, password });
+
+      if (error && (error.message.includes('Invalid login credentials') || error.message.includes('User not found'))) {
+        // Not found - offer sign up
+        if (confirm("No account found for that email. Create one now? (you'll use this password to sign in next time)")) {
+          const { error: signUpErr } = await lineupSupabase.auth.signUp({ email, password });
+          if (signUpErr) {
+            alert("Sign up error: " + signUpErr.message);
+          } else {
+            alert("Account created! If your Supabase project has email confirmation enabled, check your inbox. Otherwise you should be signed in now.");
+            updateSyncStatusUI();
+            loadFromCloudIfEnabled().then(updated => {
+              if (updated) renderAll();
+            });
+          }
+        }
+      } else if (error) {
+        alert("Sign in error: " + error.message);
+      } else {
+        // Successful sign in
+        updateSyncStatusUI();
+        loadFromCloudIfEnabled().then(updated => {
+          if (updated) renderAll();
+        });
+      }
+    }
+
+    function updateSyncStatusUI(status) {
+      const btn = document.getElementById('sync-status-btn');
+      const text = document.getElementById('sync-status-text');
+      if (!btn || !text) return;
+
+      if (!lineupSupabase || !LINEUP_SUPABASE_URL || LINEUP_SUPABASE_URL === 'YOUR_SUPABASE_URL_HERE') {
+        text.textContent = 'Local only';
+        btn.title = 'Cloud sync not configured. Click to set up.';
+        btn.style.borderColor = '#d1d5db';
+        return;
+      }
+
+      if (!lineupCurrentTeamId) {
+        text.textContent = 'Set team';
+        btn.title = 'Click to configure your team ID for cloud sync.';
+        btn.style.borderColor = '#fbbf24';
+        return;
+      }
+
+      if (currentUser) {
+        text.textContent = 'Synced';
+        btn.title = `Cloud sync active for ${currentUser.email}. Click to sign out.`;
+        btn.style.borderColor = '#86efac';
+      } else {
+        text.textContent = 'Sign in';
+        btn.title = 'Click to sign in / sign out of cloud sync (email + password).';
+        btn.style.borderColor = '#fbbf24';
+      }
+
+      if (status === 'synced') {
+        btn.style.transition = 'border-color 0.1s';
+        setTimeout(() => {
+          if (currentUser) btn.style.borderColor = '#86efac';
+        }, 800);
+      }
+    }
+
+    // Expose helpers for debugging (use in browser console, e.g. after sign-in):
+    //   MNElksLineup.getGames().length
+    //   MNElksLineup.getGames().map(g => g.name)
+    //   MNElksLineup.getCurrentUser().then(u => console.log(u?.email))
+    window.MNElksLineup = { 
+      loadSample: () => { loadSampleRoster(); }, 
+      getState: () => state,
+      getGames: () => games || [],
+      getCurrentUser: async () => {
+        if (currentUser) return currentUser;
+        if (!lineupSupabase) return null;
+        try {
+          const { data: { user } } = await lineupSupabase.auth.getUser();
+          return user;
+        } catch (e) { return null; }
+      },
+      signIn: () => handleCloudSyncClick()
+    };
+
+    // Boot the app (load local or create initial state + render + start cloud session restore in background)
+    init();
+  </script>
+</body>
+</html>

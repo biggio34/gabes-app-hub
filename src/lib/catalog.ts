@@ -1,440 +1,117 @@
-import type { Product, Settings } from "./types";
+import type { Area } from "./areas";
 
-export const defaultSettings: Settings = {
-  salonName: "Luna Haus Salon",
-  ownerName: "Gabe",
-  fromEmail: "info@lunahaussalon.com",
-  reminderEmails: ["gabriel.fransen@gmail.com", "lunahaussalon@gmail.com"],
-  supplierName: "Paul Sunberg",
-  supplierEmail: "paul@beautybellcollective.com",
-  supplierCompany: "EBW Group / Beauty Bell Collective",
-  supplierPhone: "612-968-7860",
+export type HubApp = {
+  slug: string;
+  file: string;
+  title: string;
+  description: string;
+  area: Area;
+  href?: string;
+  external?: boolean;
 };
 
-function p(
-  partial: Omit<Product, "id"> & { id?: string },
-): Product {
-  return {
-    id:
-      partial.id ??
-      `${partial.brand}-${partial.name}`
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, ""),
-    ...partial,
-  };
-}
-
-export const seedProducts: Product[] = [
-  p({
-    name: "Colore Zenzero 4N Medium Brown",
-    brand: "Avyna",
-    sku: "AVYN-ZENZ-4N",
-    category: "color",
-    supplierId: "beautybell",
-    unit: "3.38 oz tube",
-    singlePrice: 6.25,
-    sixPackPrice: 5.75,
-    onHand: 2,
-    par: 6,
-    notes: "Gray coverage workhorse. 6-pack is the best price on Paul's list.",
-  }),
-  p({
-    name: "Colore Zenzero 5N Light Brown",
-    brand: "Avyna",
-    sku: "AVYN-ZENZ-5N",
-    category: "color",
-    supplierId: "beautybell",
-    unit: "3.38 oz tube",
-    singlePrice: 6.25,
-    sixPackPrice: 5.75,
-    onHand: 3,
-    par: 6,
-  }),
-  p({
-    name: "Colore Zenzero 6N Dark Blonde",
-    brand: "Avyna",
-    sku: "AVYN-ZENZ-6N",
-    category: "color",
-    supplierId: "beautybell",
-    unit: "3.38 oz tube",
-    singlePrice: 6.25,
-    sixPackPrice: 5.75,
-    onHand: 4,
-    par: 6,
-  }),
-  p({
-    name: "Colore Zenzero 7N Medium Blonde",
-    brand: "Avyna",
-    sku: "AVYN-ZENZ-7N",
-    category: "color",
-    supplierId: "beautybell",
-    unit: "3.38 oz tube",
-    singlePrice: 6.25,
-    sixPackPrice: 5.75,
-    onHand: 1,
-    par: 6,
-    notes: "Below par — add a 6-pack on the next Paul run.",
-  }),
-  p({
-    name: "Colore Zenzero 8N Light Blonde",
-    brand: "Avyna",
-    sku: "AVYN-ZENZ-8N",
-    category: "color",
-    supplierId: "beautybell",
-    unit: "3.38 oz tube",
-    singlePrice: 6.25,
-    sixPackPrice: 5.75,
-    onHand: 2,
-    par: 6,
-  }),
-  p({
-    name: "Colore Zenzero 7.1 Ash Blonde",
-    brand: "Avyna",
-    sku: "AVYN-ZENZ-71",
-    category: "color",
-    supplierId: "beautybell",
-    unit: "3.38 oz tube",
-    singlePrice: 6.25,
-    sixPackPrice: 5.75,
-    onHand: 1,
-    par: 6,
-  }),
-  p({
-    name: "Colore Zenzero 8.1 Light Ash Blonde",
-    brand: "Avyna",
-    sku: "AVYN-ZENZ-81",
-    category: "color",
-    supplierId: "beautybell",
-    unit: "3.38 oz tube",
-    singlePrice: 6.25,
-    sixPackPrice: 5.75,
-    onHand: 0,
-    par: 6,
-  }),
-  p({
-    name: "Colore Zenzero 6.3 Golden Dark Blonde",
-    brand: "Avyna",
-    sku: "AVYN-ZENZ-63",
-    category: "color",
-    supplierId: "beautybell",
-    unit: "3.38 oz tube",
-    singlePrice: 6.25,
-    sixPackPrice: 5.75,
-    onHand: 2,
-    par: 3,
-  }),
-  p({
-    name: "Colore Zenzero 7.4 Copper Blonde",
-    brand: "Avyna",
-    sku: "AVYN-ZENZ-74",
-    category: "color",
-    supplierId: "beautybell",
-    unit: "3.38 oz tube",
-    singlePrice: 6.25,
-    sixPackPrice: 5.75,
-    onHand: 1,
-    par: 3,
-  }),
-  p({
-    name: "Colore Zenzero 6.5 Mahogany Dark Blonde",
-    brand: "Avyna",
-    sku: "AVYN-ZENZ-65",
-    category: "color",
-    supplierId: "beautybell",
-    unit: "3.38 oz tube",
-    singlePrice: 6.25,
-    sixPackPrice: 5.75,
-    onHand: 2,
-    par: 3,
-  }),
-  p({
-    name: "Developer 10 Volume",
-    brand: "Avyna",
-    sku: "AVYN-DEV-10",
-    category: "backbar",
-    supplierId: "beautybell",
-    unit: "liter",
-    singlePrice: 8.5,
-    sixPackPrice: 7.75,
-    onHand: 1,
-    par: 2,
-  }),
-  p({
-    name: "Developer 20 Volume",
-    brand: "Avyna",
-    sku: "AVYN-DEV-20",
-    category: "backbar",
-    supplierId: "beautybell",
-    unit: "liter",
-    singlePrice: 8.5,
-    sixPackPrice: 7.75,
-    onHand: 1,
-    par: 2,
-    notes: "Most used developer. Do not let this hit zero.",
-  }),
-  p({
-    name: "Developer 30 Volume",
-    brand: "Avyna",
-    sku: "AVYN-DEV-30",
-    category: "backbar",
-    supplierId: "beautybell",
-    unit: "liter",
-    singlePrice: 8.5,
-    sixPackPrice: 7.75,
-    onHand: 1,
-    par: 2,
-  }),
-  p({
-    name: "Pigmento Zenzero Color Mask",
-    brand: "Avyna",
-    sku: "AVYN-PIG-ZENZ",
-    category: "treatment",
-    supplierId: "beautybell",
-    unit: "8.45 oz",
-    singlePrice: 17.0,
-    onHand: 1,
-    par: 2,
-  }),
-  p({
-    name: "Color Care Shampoo",
-    brand: "Avyna",
-    sku: "AVYN-SH-COLOR",
-    category: "care",
-    supplierId: "beautybell",
-    unit: "retail bottle",
-    singlePrice: 12.5,
-    sixPackPrice: 11.25,
-    onHand: 3,
-    par: 6,
-  }),
-  p({
-    name: "Color Care Conditioner",
-    brand: "Avyna",
-    sku: "AVYN-CD-COLOR",
-    category: "care",
-    supplierId: "beautybell",
-    unit: "retail bottle",
-    singlePrice: 13.5,
-    sixPackPrice: 12.0,
-    onHand: 2,
-    par: 6,
-  }),
-  p({
-    name: "Clay",
-    brand: "Tailor's",
-    sku: "TLR-CLAY",
-    category: "styling",
-    supplierId: "beautybell",
-    unit: "jar",
-    singlePrice: 14.5,
-    sixPackPrice: 13.0,
-    onHand: 1,
-    par: 3,
-    notes: "Swiss men's styling. Matte finish — retail favorite.",
-  }),
-  p({
-    name: "Pomade",
-    brand: "Tailor's",
-    sku: "TLR-POM",
-    category: "styling",
-    supplierId: "beautybell",
-    unit: "jar",
-    singlePrice: 14.5,
-    sixPackPrice: 13.0,
-    onHand: 2,
-    par: 3,
-  }),
-  p({
-    name: "Gum",
-    brand: "Tailor's",
-    sku: "TLR-GUM",
-    category: "styling",
-    supplierId: "beautybell",
-    unit: "jar",
-    singlePrice: 14.5,
-    sixPackPrice: 13.0,
-    onHand: 1,
-    par: 2,
-  }),
-  p({
-    name: "Salt Spray",
-    brand: "Tailor's",
-    sku: "TLR-SALT",
-    category: "styling",
-    supplierId: "beautybell",
-    unit: "bottle",
-    singlePrice: 15.0,
-    sixPackPrice: 13.5,
-    onHand: 1,
-    par: 3,
-  }),
-  p({
-    name: "Styling Gel",
-    brand: "Tailor's",
-    sku: "TLR-GEL",
-    category: "styling",
-    supplierId: "beautybell",
-    unit: "200 ml",
-    singlePrice: 13.0,
-    sixPackPrice: 11.75,
-    onHand: 2,
-    par: 3,
-  }),
-  p({
-    name: "Tea Tree Wash",
-    brand: "Tailor's",
-    sku: "TLR-TTW",
-    category: "care",
-    supplierId: "beautybell",
-    unit: "bottle",
-    singlePrice: 13.5,
-    sixPackPrice: 12.25,
-    onHand: 1,
-    par: 3,
-  }),
-  p({
-    name: "Hair & Body Wash",
-    brand: "Tailor's",
-    sku: "TLR-HBW-250",
-    category: "care",
-    supplierId: "beautybell",
-    unit: "250 ml",
-    singlePrice: 14.0,
-    sixPackPrice: 12.5,
-    onHand: 2,
-    par: 3,
-  }),
-  p({
-    name: "Beard Balm 50ml",
-    brand: "Tailor's",
-    sku: "TLR-BB-50",
-    category: "care",
-    supplierId: "beautybell",
-    unit: "50 ml",
-    singlePrice: 12.0,
-    sixPackPrice: 10.75,
-    onHand: 1,
-    par: 2,
-  }),
-  p({
-    name: "Post Shave Balm",
-    brand: "Tailor's",
-    sku: "TLR-PSB",
-    category: "care",
-    supplierId: "beautybell",
-    unit: "tube",
-    singlePrice: 13.0,
-    onHand: 1,
-    par: 2,
-  }),
-  p({
-    name: "Color Extend Magnetics Sulfate Free Shampoo",
-    brand: "Redken",
-    sku: "RDK-CEM-SH",
-    category: "care",
-    supplierId: "saloncentric",
-    unit: "retail bottle",
-    singlePrice: 16.0,
-    onHand: 2,
-    par: 4,
-    notes: "Last SalonCentric order #20376426 — qty 2 on May 2.",
-  }),
-  p({
-    name: "Beach Spray Texture Spray",
-    brand: "Redken",
-    sku: "RDK-BEACH",
-    category: "styling",
-    supplierId: "saloncentric",
-    unit: "bottle",
-    singlePrice: 15.0,
-    onHand: 2,
-    par: 4,
-  }),
-  p({
-    name: "Quick Blowout Heat Protecting Blowdry Spray",
-    brand: "Redken",
-    sku: "RDK-QBO",
-    category: "styling",
-    supplierId: "saloncentric",
-    unit: "bottle",
-    singlePrice: 17.0,
-    onHand: 2,
-    par: 4,
-  }),
-  p({
-    name: "Dry Texture Spray 6",
-    brand: "Redken",
-    sku: "RDK-DTS6",
-    category: "styling",
-    supplierId: "saloncentric",
-    unit: "bottle",
-    singlePrice: 18.0,
-    onHand: 2,
-    par: 4,
-  }),
-  p({
-    name: "Dry Texture Finishing Spray",
-    brand: "Redken",
-    sku: "RDK-DTFS",
-    category: "styling",
-    supplierId: "saloncentric",
-    unit: "bottle",
-    singlePrice: 18.0,
-    onHand: 2,
-    par: 4,
-  }),
-  p({
-    name: "Acidic Protein Amino Concentrate",
-    brand: "Redken",
-    sku: "RDK-APAC",
-    category: "treatment",
-    supplierId: "saloncentric",
-    unit: "salon exclusive",
-    singlePrice: 22.0,
-    onHand: 1,
-    par: 2,
-    notes: "Customizable treatment. Ordered 1 on May 2.",
-  }),
+export const hubApps: HubApp[] = [
+  {
+    slug: "financial-calcs",
+    file: "financial-calcs.html",
+    title: "Financial Calcs",
+    description:
+      "Net/gross pay, tax distributions, bi-weekly to monthly, and this year’s retirement contribution rules.",
+    area: "financial",
+  },
+  {
+    slug: "calculator",
+    file: "calculator.html",
+    title: "Calculator",
+    description:
+      "Big-button calculator with history, scientific functions, memory, and keyboard support.",
+    area: "financial",
+  },
+  {
+    slug: "practice-planner",
+    file: "practice-planner.html",
+    title: "16U Practice Planner",
+    description:
+      "Drill library, drag-and-drop plans, timeline, and one-page PDF export for MN Elks 16U.",
+    area: "softball",
+  },
+  {
+    slug: "lineup",
+    file: "lineup.html",
+    title: "16U Lineup Builder",
+    description: "Positions, batting order, and export for the 16U team.",
+    area: "softball",
+  },
+  {
+    slug: "team-formation",
+    file: "team-formation.html",
+    title: "Team Formation",
+    description:
+      "Import players, form age-group teams, and use tryout averages plus Offer/Waitlist tags.",
+    area: "softball",
+  },
+  {
+    slug: "tryout-evaluator",
+    file: "tryout-evaluator.html",
+    title: "Tryout Evaluator",
+    description:
+      "Score tryouts and share the roster with Team Formation.",
+    area: "softball",
+  },
+  {
+    slug: "luna-haus-salon",
+    file: "luna-haus-salon.html",
+    title: "Salon Desk",
+    description:
+      "Services and prices, tip split, and a local daily walk-in list.",
+    area: "luna-haus",
+  },
+  {
+    slug: "luna-haus-social",
+    file: "luna-haus-social.html",
+    title: "Social Sync",
+    description:
+      "Copy the latest Luna Haus Facebook post to Google Business. Needs the local sync bot.",
+    area: "luna-haus",
+  },
+  {
+    slug: "book-online",
+    file: "",
+    title: "Book Online",
+    description: "Live GlossGenius booking for Luna Haus in St. Michael.",
+    area: "luna-haus",
+    href: "https://lunahaussalon.glossgenius.com/",
+    external: true,
+  },
 ];
 
-export const supplierLabel: Record<Product["supplierId"], string> = {
-  beautybell: "Beauty Bell / EBW",
-  saloncentric: "SalonCentric",
-  other: "Other",
+export const pathRewrites: Record<string, string> = {
+  "/financial-calcs/": "/apps/financial-calcs",
+  "/financial-calcs": "/apps/financial-calcs",
+  "/calculator/": "/apps/calculator",
+  "/calculator": "/apps/calculator",
+  "/minnesota-elks-practice-planner/": "/apps/practice-planner",
+  "/minnesota-elks-practice-planner": "/apps/practice-planner",
+  "/elks-lineup/": "/apps/lineup",
+  "/elks-lineup": "/apps/lineup",
+  "/mn-elks-team-formation/": "/apps/team-formation",
+  "/mn-elks-team-formation": "/apps/team-formation",
+  "/softball-tryout-evaluator/": "/apps/tryout-evaluator",
+  "/softball-tryout-evaluator": "/apps/tryout-evaluator",
+  "/luna-haus-salon/": "/apps/luna-haus-salon",
+  "/luna-haus-salon": "/apps/luna-haus-salon",
+  "/luna-haus-social/": "/apps/luna-haus-social",
+  "/luna-haus-social": "/apps/luna-haus-social",
 };
 
-export const categoryLabel: Record<Product["category"], string> = {
-  color: "Color",
-  care: "Care",
-  styling: "Styling",
-  treatment: "Treatment",
-  backbar: "Backbar",
-};
-
-export function money(n: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(n);
-}
-
-export function stockStatus(product: Product) {
-  if (product.onHand <= 0) return "out" as const;
-  if (product.onHand < product.par) return "low" as const;
-  return "ok" as const;
-}
-
-export function restockQty(product: Product, preferSix = true) {
-  const needed = Math.max(0, product.par - product.onHand);
-  if (needed === 0) return 0;
-  if (preferSix && product.sixPackPrice != null) {
-    return Math.max(6, Math.ceil(needed / 6) * 6);
+export function rewriteAppHtml(html: string) {
+  let next = html;
+  for (const [from, to] of Object.entries(pathRewrites)) {
+    next = next.replaceAll(`href='${from}'`, `href='${to}'`);
+    next = next.replaceAll(`href="${from}"`, `href="${to}"`);
   }
-  return needed;
-}
-
-export function unitPrice(product: Product, useSixPack: boolean) {
-  if (useSixPack && product.sixPackPrice != null) return product.sixPackPrice;
-  return product.singlePrice;
+  next = next.replaceAll("../shared/elks-data.js", "/shared/elks-data.js");
+  next = next.replaceAll("../sample-roster-import.csv", "/shared/sample-roster-import.csv");
+  next = next.replaceAll("../index.html", "/");
+  return next;
 }

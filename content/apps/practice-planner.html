@@ -1,0 +1,2152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MN Elks 16U - Fransen | Practice Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Supabase for backend (configure keys in the script section at the bottom) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        body {
+            font-family: 'Inter', system_ui, sans-serif;
+        }
+        
+        .title-font {
+            font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+
+        .practice-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .practice-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+        }
+
+        .drill-item {
+            transition: all 0.2s ease;
+        }
+
+        .section-header {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        .softball-green {
+            color: #166534;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200">
+    <div class="max-w-7xl mx-auto px-6 py-8">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <div class="flex items-center gap-x-4">
+                <a class='flex items-center gap-x-1.5 text-sm font-medium text-slate-400 hover:text-red-400 transition-colors' href='/' id='back-to-hub'>
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span class="hidden sm:inline">Hub</span>
+                </a>
+                <div class="w-12 h-12 bg-red-700 rounded-2xl flex items-center justify-center">
+                    <i class="fa-solid fa-baseball-ball text-white text-3xl"></i>
+                </div>
+                <div>
+                    <h1 class="title-font text-4xl font-semibold tracking-tighter">MN Elks 16U - Fransen</h1>
+                    <p class="text-red-400 text-lg -mt-1">Practice Planner</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-x-4">
+                <div class="text-right">
+                    <div class="flex items-baseline justify-end gap-x-2">
+                        <div class="text-sm font-medium">16U</div>
+                        <div id="current-central-time" class="text-sm font-semibold tabular-nums text-red-400"></div>
+                    </div>
+                    <div class="text-xs text-slate-400">MN Elks - Fransen • Central Time</div>
+                </div>
+                <div class="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center">
+                    <i class="fa-solid fa-user text-slate-400"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="flex bg-slate-900 rounded-3xl p-1 mb-8 border border-slate-800 w-fit">
+            <button onclick="switchView('practices')" id="nav-practices"
+                    class="nav-button active px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2">
+                <i class="fa-solid fa-calendar"></i>
+                <span>My Practices</span>
+            </button>
+            <button onclick="switchView('drills')" id="nav-drills"
+                    class="nav-button px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2 text-slate-300 hover:text-slate-200">
+                <i class="fa-solid fa-list-check"></i>
+                <span>Drill Library</span>
+            </button>
+            <button onclick="switchView('templates')" id="nav-templates"
+                    class="nav-button px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2 text-slate-300 hover:text-slate-200">
+                <i class="fa-solid fa-copy"></i>
+                <span>Templates</span>
+            </button>
+        </div>
+
+        <!-- Practices View -->
+        <div id="view-practices">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-semibold tracking-tight">My Practices</h2>
+                <button onclick="createNewPractice()"
+                        class="flex items-center gap-x-2 px-5 py-2.5 bg-red-700 hover:bg-red-600 active:bg-red-800 transition-colors rounded-2xl text-sm font-semibold">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>New Practice</span>
+                </button>
+            </div>
+
+            <div id="practices-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Drill Library View -->
+        <div id="view-drills" class="hidden">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-semibold tracking-tight">Drill Library</h2>
+                    <p class="text-xs text-slate-400" id="drill-count"></p>
+                </div>
+                <div class="flex items-center gap-x-2">
+                    <button onclick="resetDrillLibrary()" 
+                            class="flex items-center gap-x-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-xs font-semibold">
+                        <i class="fa-solid fa-undo"></i>
+                        <span>Reset Defaults</span>
+                    </button>
+                    <button onclick="showAddDrillModal()"
+                            class="flex items-center gap-x-2 px-4 py-2 bg-red-700 hover:bg-red-600 rounded-2xl text-sm font-semibold">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>Add Drill</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="drill-library">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Templates View -->
+        <div id="view-templates" class="hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-semibold tracking-tight">Practice Templates</h2>
+                <div class="text-xs text-slate-400">Reusable practice structures (no date/time/location)</div>
+            </div>
+            <div id="templates-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Populated by renderTemplates() -->
+            </div>
+            <div class="mt-6 text-xs text-slate-500">
+                Tip: While editing a practice, use "Save as Template" to capture the current drill list + durations + focus.
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Add Custom Block Modal -->
+    <div id="custom-block-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+                <h3 class="text-xl font-semibold">Add Custom Block</h3>
+                <button onclick="closeCustomBlockModal()" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="section-header block mb-1.5">Block Name / Title</label>
+                    <input type="text" id="custom-block-name" placeholder="e.g. Team huddle, Water break, Live scrimmage" 
+                           class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="section-header block mb-1.5">Duration (minutes)</label>
+                        <input type="number" id="custom-block-duration" value="10" 
+                               class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5">Category (if saving as drill)</label>
+                        <select id="custom-block-category" class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                            <option value="Custom">Custom</option>
+                            <option value="Warm-up">Warm-up</option>
+                            <option value="Hitting">Hitting</option>
+                            <option value="Short Game">Short Game</option>
+                            <option value="Base Running">Base Running</option>
+                            <option value="Defense">Defense</option>
+                            <option value="Team Defense">Team Defense</option>
+                            <option value="Pitching">Pitching</option>
+                            <option value="Catching">Catching</option>
+                            <option value="Agility">Agility</option>
+                            <option value="Mental">Mental / Situational</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="section-header block mb-1.5">Notes / What to do during this time</label>
+                    <textarea id="custom-block-description" rows="3" placeholder="Free text description of the activity..." 
+                              class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5 resize-y"></textarea>
+                </div>
+
+                <div class="flex items-center gap-2 pt-2">
+                    <input type="checkbox" id="custom-block-save-as-drill" class="w-4 h-4 accent-red-600">
+                    <label for="custom-block-save-as-drill" class="text-sm">Save this as a reusable drill in my library</label>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
+                <button onclick="closeCustomBlockModal()" 
+                        class="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold">Cancel</button>
+                <button onclick="saveCustomBlock()" 
+                        class="px-5 py-2 bg-red-700 hover:bg-red-600 rounded-2xl text-sm font-semibold">Add to Practice</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Segment Modal -->
+    <div id="edit-segment-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+                <h3 class="text-xl font-semibold" id="edit-segment-title">Edit Segment</h3>
+                <button onclick="closeEditSegmentModal()" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="section-header block mb-1.5">Name</label>
+                    <input type="text" id="edit-segment-name" 
+                           class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                </div>
+
+                <div>
+                    <label class="section-header block mb-1.5">Duration (minutes)</label>
+                    <input type="number" id="edit-segment-duration" 
+                           class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                </div>
+
+                <div>
+                    <label class="section-header block mb-1.5">Description / Notes</label>
+                    <textarea id="edit-segment-description" rows="5" placeholder="Description or coaching notes for this segment..."
+                              class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5 resize-y"></textarea>
+                </div>
+
+                <div id="edit-segment-category-display" class="hidden text-xs text-slate-400">
+                    Category: <span id="edit-segment-category" class="font-medium text-red-400"></span>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
+                <button onclick="closeEditSegmentModal()" 
+                        class="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold">Cancel</button>
+                <button onclick="saveEditedSegment()" 
+                        class="px-5 py-2 bg-red-700 hover:bg-red-600 rounded-2xl text-sm font-semibold">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add New Drill Modal -->
+    <div id="add-drill-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+                <h3 class="text-xl font-semibold">Add New Drill</h3>
+                <button onclick="closeAddDrillModal()" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="section-header block mb-1.5">Drill Name</label>
+                    <input type="text" id="new-drill-name" placeholder="e.g. Gap to Gap BP" 
+                           class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="section-header block mb-1.5">Category</label>
+                        <select id="new-drill-category" class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                            <option value="Warm-up">Warm-up</option>
+                            <option value="Hitting">Hitting</option>
+                            <option value="Short Game">Short Game</option>
+                            <option value="Base Running">Base Running</option>
+                            <option value="Defense">Defense</option>
+                            <option value="Team Defense">Team Defense</option>
+                            <option value="Pitching">Pitching</option>
+                            <option value="Catching">Catching</option>
+                            <option value="Agility">Agility</option>
+                            <option value="Mental">Mental / Situational</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5">Default Duration (min)</label>
+                        <input type="number" id="new-drill-duration" value="10" 
+                               class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="section-header block mb-1.5">Description / Coaching Points</label>
+                    <textarea id="new-drill-description" rows="3" placeholder="Key teaching points or focus for this drill..."
+                              class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5 resize-y"></textarea>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
+                <button onclick="closeAddDrillModal()" 
+                        class="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold">Cancel</button>
+                <button onclick="saveNewDrill()" 
+                        class="px-5 py-2 bg-red-700 hover:bg-red-600 rounded-2xl text-sm font-semibold">Add Drill</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Practice Modal -->
+    <div id="practice-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-6xl max-h-[92vh] flex flex-col">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+                <h3 id="modal-title" class="text-xl font-semibold">New Practice</h3>
+                <button onclick="closePracticeModal()" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div class="p-6 flex flex-col flex-1 overflow-hidden">
+                <!-- Top: Practice Details (compact) -->
+                <div class="mb-4">
+                    <div class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Practice Details</div>
+                    <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+                        <div>
+                            <label class="section-header block mb-0.5 text-xs">Date <span class="text-slate-500">(opt)</span></label>
+                            <input type="date" id="practice-date" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="section-header block mb-0.5 text-xs">Start Time <span class="text-slate-500">(Central Time)</span></label>
+                            <div class="flex items-center gap-x-1.5">
+                                <select id="practice-time-hour" class="bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-sm text-center w-16"></select>
+                                <span class="text-slate-400 text-sm">:</span>
+                                <input id="practice-time-minute" type="text" maxlength="2" class="bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-sm text-center w-14" placeholder="00">
+                                <select id="practice-time-ampm" class="bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-sm">
+                                    <option value="AM">AM</option>
+                                    <option value="PM">PM</option>
+                                </select>
+                                <span id="time-zone-indicator" class="text-xs font-medium text-red-400 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg"></span>
+                            </div>
+                            <!-- Hidden 24h value kept for data model / save / exports (never shown to user) -->
+                            <input type="hidden" id="practice-time">
+                        </div>
+                        <div>
+                            <label class="section-header block mb-0.5 text-xs">Duration <span class="text-red-400">*</span></label>
+                            <input type="number" id="practice-duration" value="90" class="w-20 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-center">
+                        </div>
+                        <div class="md:col-span-1">
+                            <label class="section-header block mb-0.5 text-xs">Focus</label>
+                            <input type="text" id="practice-focus" placeholder="Hitting + Defense" 
+                                   class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm">
+                        </div>
+                        <div class="md:col-span-1">
+                            <label class="section-header block mb-0.5 text-xs">Location</label>
+                            <input type="text" id="practice-location" placeholder="Elks Field" 
+                                   class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main two-column area -->
+                <div class="flex flex-1 min-h-0 gap-4">
+                    <!-- Left: Practice Plan / Drills in plan -->
+                    <div class="w-3/5 flex flex-col min-w-0">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="section-header">Practice Plan (drag to reorder)</label>
+                            <button onclick="showCustomBlockModal()" 
+                                    class="text-xs px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-xl flex items-center gap-x-1">
+                                <i class="fa-solid fa-plus text-xs"></i>
+                                <span>Custom</span>
+                            </button>
+                        </div>
+
+                        <!-- Timeline -->
+                        <div class="mb-2">
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-400">Timeline</span>
+                                <span id="timeline-summary" class="font-medium"></span>
+                            </div>
+                            <div id="timeline-bar" class="h-5 bg-slate-800 rounded-lg overflow-hidden flex border border-slate-700">
+                                <!-- JS populated -->
+                            </div>
+                            <div id="timeline-warning" class="text-xs text-red-400 mt-0.5 hidden"></div>
+                        </div>
+
+                        <!-- Draggable segments list -->
+                        <div id="segments-container" class="flex-1 overflow-auto border border-slate-700 rounded-2xl p-2 space-y-1 text-sm">
+                            <!-- Populated by renderSegments() -->
+                        </div>
+                    </div>
+
+                    <!-- Right: Available Drills list -->
+                    <div class="w-2/5 flex flex-col min-w-0 border-l border-slate-700 pl-4">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="section-header">Drills (click to add)</label>
+                        </div>
+                        <input type="text" id="practice-drill-search" placeholder="Search drills..." 
+                               oninput="filterPracticeDrills()"
+                               class="mb-2 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm">
+                        <div id="practice-drill-list" class="flex-1 overflow-auto text-sm space-y-1 pr-1">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 border-t border-slate-700 flex justify-between items-center gap-3">
+                <div class="flex gap-2">
+                    <button onclick="downloadPracticeText()" id="download-txt-btn"
+                            class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+                        <i class="fa-solid fa-download"></i>
+                        <span>Download .txt</span>
+                    </button>
+                    <button onclick="copyPracticeText()" id="copy-text-btn"
+                            class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+                        <i class="fa-solid fa-copy"></i>
+                        <span>Copy to Clipboard</span>
+                    </button>
+                    <button onclick="downloadPracticePDF()" 
+                            class="px-4 py-2 bg-red-700 hover:bg-red-600 rounded-2xl text-sm font-semibold flex items-center gap-x-2 text-white">
+                        <i class="fa-solid fa-file-pdf"></i>
+                        <span>Download PDF</span>
+                    </button>
+                    <button onclick="saveCurrentAsTemplate()" 
+                            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+                        <i class="fa-solid fa-bookmark"></i>
+                        <span>Save as Template</span>
+                    </button>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="closePracticeModal()" 
+                            class="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold">Cancel</button>
+                    <button onclick="savePractice()" 
+                            class="px-5 py-2 bg-red-700 hover:bg-red-600 rounded-2xl text-sm font-semibold">Save Practice</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tailwind config
+        function initTailwind() {
+            // Already using CDN, can add custom config here if needed later
+        }
+
+        let practices = [];
+        let drills = [];
+        let templates = [];
+
+        function loadData() {
+            const savedPractices = localStorage.getItem('elks_practices');
+            if (savedPractices) practices = JSON.parse(savedPractices);
+
+            const savedDrills = localStorage.getItem('elks_drills');
+            if (savedDrills) {
+                drills = JSON.parse(savedDrills);
+            } else {
+                // Seed 16U drills for MN Elks - Fransen
+                drills = getDefaultDrills();
+                localStorage.setItem('elks_drills', JSON.stringify(drills));
+            }
+
+            const savedTemplates = localStorage.getItem('elks_templates');
+            if (savedTemplates) {
+                templates = JSON.parse(savedTemplates);
+            }
+        }
+
+        // Central Time (CDT / CST) helpers - America/Chicago automatically handles DST
+        function getCentralTimeAbbr(date = new Date()) {
+            try {
+                const formatter = new Intl.DateTimeFormat('en-US', {
+                    timeZone: 'America/Chicago',
+                    timeZoneName: 'short'
+                });
+                const parts = formatter.formatToParts(date);
+                const tzPart = parts.find(p => p.type === 'timeZoneName');
+                return tzPart ? tzPart.value : 'CT';
+            } catch (e) {
+                return 'CT';
+            }
+        }
+
+        function getCentralZoneAbbr(dateStr) {
+            if (!dateStr) {
+                return getCentralTimeAbbr(new Date());
+            }
+            // Noon on the date to correctly detect DST (CDT vs CST)
+            const d = new Date(dateStr + 'T12:00:00');
+            return getCentralTimeAbbr(d);
+        }
+
+        function getCurrentCentralTimeHHMM() {
+            const now = new Date();
+            try {
+                const fmt = new Intl.DateTimeFormat('en-US', {
+                    timeZone: 'America/Chicago',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+                return fmt.format(now);
+            } catch (e) {
+                const h = now.getHours().toString().padStart(2, '0');
+                const m = now.getMinutes().toString().padStart(2, '0');
+                return `${h}:${m}`;
+            }
+        }
+
+        function getCurrentCentralTimeDisplay() {
+            const now = new Date();
+            try {
+                const timeFmt = new Intl.DateTimeFormat('en-US', {
+                    timeZone: 'America/Chicago',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                });
+                const tz = getCentralTimeAbbr(now);
+                return `${timeFmt.format(now)} ${tz}`;
+            } catch (e) {
+                return now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' CT';
+            }
+        }
+
+        function formatPracticeDate(dateStr) {
+            if (!dateStr) return '';
+            // Parse as local date (year, month-1, day) to avoid UTC midnight shift
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const date = new Date(y, m - 1, d);
+            return date.toLocaleDateString('en-US', { 
+                weekday: 'short', month: 'short', day: 'numeric' 
+            });
+        }
+
+        function formatPracticeTime(dateVal, timeVal) {
+            if (!timeVal) return '';
+            const display = formatTimeTo12Hour(timeVal);
+            const zone = getCentralZoneAbbr(dateVal);
+            return `${display} ${zone}`;
+        }
+
+        // 12-hour AM/PM conversion (no military time visible anywhere)
+        function formatTimeTo12Hour(time24) {
+            if (!time24 || !time24.includes(':')) return time24 || '';
+            let [h, m] = time24.split(':').map(n => parseInt(n, 10));
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            h = h % 12;
+            if (h === 0) h = 12;
+            return `${h}:${m.toString().padStart(2, '0')} ${ampm}`;
+        }
+
+        function time12To24(hour12, minStr, ampm) {
+            let h = parseInt(hour12, 10) || 12;
+            const m = parseInt((minStr || '0'), 10);
+            if (ampm === 'PM' && h !== 12) h += 12;
+            if (ampm === 'AM' && h === 12) h = 0;
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        }
+
+        function parseTimeToMinutes(time24) {
+            if (!time24 || !time24.includes(':')) return null;
+            const [h, m] = time24.split(':').map(n => parseInt(n, 10));
+            if (isNaN(h) || isNaN(m)) return null;
+            return h * 60 + m;
+        }
+
+        function addMinutesToTime(time24, mins) {
+            const base = parseTimeToMinutes(time24);
+            if (base === null) return null;
+            let total = base + (parseInt(mins, 10) || 0);
+            total = ((total % 1440) + 1440) % 1440; // wrap within 24h
+            const h = Math.floor(total / 60);
+            const m = total % 60;
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        }
+
+        function formatDrillTimeRange(startMin, endMin, practiceStart24) {
+            if (!practiceStart24) {
+                return `${startMin}–${endMin} min`;
+            }
+            const s24 = addMinutesToTime(practiceStart24, startMin);
+            const e24 = addMinutesToTime(practiceStart24, endMin);
+            if (!s24 || !e24) {
+                return `${startMin}–${endMin} min`;
+            }
+            return `${formatTimeTo12Hour(s24)}–${formatTimeTo12Hour(e24)}`;
+        }
+
+        function updateTimeZoneIndicator() {
+            const dateInput = document.getElementById('practice-date');
+            const indicator = document.getElementById('time-zone-indicator');
+            if (!indicator) return;
+            const dateVal = dateInput ? dateInput.value : null;
+            const zone = getCentralZoneAbbr(dateVal);
+            indicator.textContent = zone;
+            indicator.title = `This practice time will be interpreted in ${zone} (Central Time)`;
+        }
+
+        // Custom 12-hour time picker setup (replaces native 24h input)
+        function setupCustomTimePicker() {
+            const hourEl = document.getElementById('practice-time-hour');
+            const minEl = document.getElementById('practice-time-minute');
+            const ampmEl = document.getElementById('practice-time-ampm');
+            const hidden = document.getElementById('practice-time');
+            if (!hourEl || !minEl || !ampmEl || !hidden) return;
+
+            // Populate hours 1-12
+            hourEl.innerHTML = '';
+            for (let i = 1; i <= 12; i++) {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = i;
+                hourEl.appendChild(opt);
+            }
+
+            function normalizeMinute() {
+                let v = (minEl.value || '').replace(/\D/g, '').slice(0, 2);
+                if (v === '') v = '00';
+                let num = parseInt(v, 10);
+                if (isNaN(num)) num = 0;
+                if (num < 0) num = 0;
+                if (num > 59) num = 59;
+                minEl.value = num.toString().padStart(2, '0');
+            }
+
+            function syncToHidden() {
+                if (!hidden) return;
+                normalizeMinute();
+                const t24 = time12To24(hourEl.value, minEl.value, ampmEl.value);
+                hidden.value = t24;
+            }
+
+            hourEl.onchange = syncToHidden;
+            ampmEl.onchange = syncToHidden;
+            minEl.onchange = syncToHidden;
+            minEl.onblur = () => {
+                normalizeMinute();
+                syncToHidden();
+            };
+
+            // If hidden already has a value (e.g. from edit), load it
+            if (hidden.value) {
+                loadTimeIntoControls(hidden.value);
+            } else {
+                // ensure a default minute
+                minEl.value = '00';
+            }
+        }
+
+        function loadTimeIntoControls(time24) {
+            const hourEl = document.getElementById('practice-time-hour');
+            const minEl = document.getElementById('practice-time-minute');
+            const ampmEl = document.getElementById('practice-time-ampm');
+            const hidden = document.getElementById('practice-time');
+            if (!hourEl || !minEl || !ampmEl || !time24) return;
+
+            let [h, m] = time24.split(':').map(n => parseInt(n, 10));
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            let h12 = h % 12;
+            if (h12 === 0) h12 = 12;
+
+            hourEl.value = h12;
+            minEl.value = m.toString().padStart(2, '0');
+            ampmEl.value = ampm;
+
+            if (hidden) hidden.value = time24;
+        }
+
+        function getDefaultDrills() {
+            return [
+                // === WARM-UP ===
+                { id: 'w1', name: 'Dynamic Jog & Movement', category: 'Warm-up', duration: 5, description: 'Light jog with high knees, butt kicks, side shuffles' },
+                { id: 'w2', name: 'Arm Circles & Shoulder Mobility', category: 'Warm-up', duration: 4, description: 'Forward/backward circles, cross-body, doorway stretches' },
+                { id: 'w3', name: 'Leg Swings & Hip Openers', category: 'Warm-up', duration: 4, description: 'Front-to-back and side-to-side leg swings, 90/90 hip stretches' },
+                { id: 'w4', name: 'Walking Lunges with Rotation', category: 'Warm-up', duration: 5, description: 'Lunges with torso twist, focus on hip mobility' },
+                { id: 'w5', name: 'Band Pull-Aparts & Face Pulls', category: 'Warm-up', duration: 4, description: 'Resistance band work for shoulder stability and posture' },
+                { id: 'w6', name: 'Light Throwing Progression', category: 'Warm-up', duration: 8, description: 'Start close, progress to 60-90 ft, focus on mechanics and arm care' },
+                { id: 'w7', name: 'Ground Ball Fielding Warm-up', category: 'Warm-up', duration: 6, description: 'Soft hands, proper angles, no throws – field and roll back' },
+                { id: 'w8', name: 'Tee Work Warm-up (Contact)', category: 'Warm-up', duration: 5, description: 'Light contact off tee, focus on timing and barrel control' },
+
+                // === HITTING ===
+                { id: 'd1', name: 'Tee Work - Middle Away', category: 'Hitting', duration: 8, description: 'Barrel path, contact point, and extension' },
+                { id: 'd2', name: 'Tee Work - Inside Pitch', category: 'Hitting', duration: 8, description: 'Hands inside the ball, quick barrel' },
+                { id: 'd3', name: 'Front Toss - Middle Away', category: 'Hitting', duration: 10, description: 'Timing and barrel control' },
+                { id: 'd4', name: 'Front Toss - Situational', category: 'Hitting', duration: 12, description: '0-0, 2-0, 0-2, 2 strikes' },
+                { id: 'd5', name: 'Live BP - Middle Away', category: 'Hitting', duration: 15, description: 'See the ball deep, stay through it' },
+                { id: 'd6', name: 'Live BP - Two-Strike Approach', category: 'Hitting', duration: 12, description: 'Shorten up, protect, put ball in play' },
+                { id: 'd7', name: 'Live BP - Ahead in Count', category: 'Hitting', duration: 10, description: 'Hunt fastball, drive the ball' },
+                { id: 'd8', name: 'Soft Toss - Pull Side', category: 'Hitting', duration: 8, description: 'Weight transfer and hip rotation' },
+
+                // === SHORT GAME ===
+                { id: 'd9', name: 'Sacrifice Bunting', category: 'Short Game', duration: 8, description: 'Proper stance, bat angle, and placement' },
+                { id: 'd10', name: 'Slap / Drag Bunting', category: 'Short Game', duration: 10, description: 'Footwork, timing, and placement' },
+                { id: 'd11', name: 'Bunt for Base Hit', category: 'Short Game', duration: 8, description: 'Speed and decision making' },
+                { id: 'd12', name: 'Suicide Squeeze / Safety Squeeze', category: 'Short Game', duration: 10, description: 'Timing and execution under pressure' },
+
+                // === BASE RUNNING ===
+                { id: 'd13', name: 'Secondary Leads & Reads', category: 'Base Running', duration: 10, description: 'Timing off the pitcher and first step' },
+                { id: 'd14', name: 'Stealing - Straight & Delayed', category: 'Base Running', duration: 10, description: 'Jumps, reading the catcher, and slides' },
+                { id: 'd15', name: 'First & Third Situations', category: 'Base Running', duration: 12, description: 'Decision making and execution' },
+                { id: 'd16', name: 'Tagging Up & Scoring', category: 'Base Running', duration: 8, description: 'Reads off the bat and aggressive tagging' },
+                { id: 'd17', name: 'Rundown Work', category: 'Base Running', duration: 10, description: 'Communication, positioning, and execution' },
+
+                // === INFIELD DEFENSE ===
+                { id: 'd18', name: 'Ground Ball Footwork & Angles', category: 'Defense', duration: 10, description: 'Proper first step and attack angles' },
+                { id: 'd19', name: 'Backhand & Forehand Work', category: 'Defense', duration: 8, description: 'Range and clean transfers' },
+                { id: 'd20', name: 'Double Play Feeds & Turns', category: 'Defense', duration: 12, description: 'Quick feeds, footwork, and accurate throws' },
+                { id: 'd21', name: 'Infield - 4 Corner / Rapid Fire', category: 'Defense', duration: 10, description: 'Quick transfers and accurate throws under fatigue' },
+                { id: 'd22', name: 'Bunt Defense (1st & 3rd)', category: 'Defense', duration: 10, description: 'Communication and execution' },
+
+                // === OUTFIELD DEFENSE ===
+                { id: 'd23', name: 'Outfield Footwork & Drops', category: 'Defense', duration: 10, description: 'Proper drops and first step reads' },
+                { id: 'd24', name: 'Outfield Communication & Priority', category: 'Defense', duration: 10, description: 'Calls, who has priority, and backup' },
+                { id: 'd25', name: 'Outfield - Cutoff Relays', category: 'Defense', duration: 12, description: 'Full team cutoff and relay work' },
+                { id: 'd26', name: 'Outfield - Diving & Wall Work', category: 'Defense', duration: 8, description: 'Aggressive plays and body control' },
+
+                // === TEAM DEFENSE ===
+                { id: 'd27', name: 'Full Team Defense - Situational', category: 'Team Defense', duration: 15, description: 'Runners on, various outs, live reads' },
+                { id: 'd28', name: 'First & Third Defense', category: 'Team Defense', duration: 12, description: 'Multiple looks and decision making' },
+                { id: 'd29', name: 'Pickoff Work (All Bases)', category: 'Team Defense', duration: 10, description: 'Timing and execution from multiple looks' },
+
+                // === PITCHING ===
+                { id: 'd30', name: 'Pitching Bullpen - Location', category: 'Pitching', duration: 15, description: 'Command of fastball and off-speed' },
+                { id: 'd31', name: 'Pitching - Rise / Drop / Change', category: 'Pitching', duration: 12, description: 'Movement pitches and sequencing' },
+                { id: 'd32', name: 'Pitcher Fielding Practice (PFP)', category: 'Pitching', duration: 10, description: 'Covering 1st, bunts, and comebackers' },
+
+                // === CATCHING ===
+                { id: 'd33', name: 'Catcher - Blocking & Recovery', category: 'Catching', duration: 10, description: 'Blocking technique and quick recovery' },
+                { id: 'd34', name: 'Catcher - Framing & Receiving', category: 'Catching', duration: 8, description: 'Presentation and strike stealing' },
+                { id: 'd35', name: 'Catcher - Pop Time & Throwing', category: 'Catching', duration: 10, description: 'Footwork, exchange, and accurate throws' },
+                { id: 'd36', name: 'Catcher - Bunt Defense & Throws', category: 'Catching', duration: 10, description: 'Fielding bunts and throwing to bases' },
+
+                // === AGILITY / MENTAL ===
+                { id: 'd37', name: 'Agility Ladder + Reaction', category: 'Agility', duration: 8, description: 'Foot speed and reaction drills' },
+                { id: 'd38', name: 'Situational Quiz / Mental Game', category: 'Mental', duration: 8, description: 'Game situations and decision making' },
+            ];
+        }
+
+        function savePractices() {
+            localStorage.setItem('elks_practices', JSON.stringify(practices));
+        }
+
+        function saveTemplates() {
+            localStorage.setItem('elks_templates', JSON.stringify(templates));
+        }
+
+        function switchView(view) {
+            // Hide all views
+            document.getElementById('view-practices').classList.add('hidden');
+            document.getElementById('view-drills').classList.add('hidden');
+            document.getElementById('view-templates').classList.add('hidden');
+
+            // Deactivate nav
+            document.querySelectorAll('.nav-button').forEach(btn => {
+                btn.classList.remove('active', 'bg-red-900');
+                btn.classList.add('text-slate-300');
+            });
+
+            // Show selected view
+            if (view === 'practices') {
+                document.getElementById('view-practices').classList.remove('hidden');
+                document.getElementById('nav-practices').classList.add('active', 'bg-red-900');
+                renderPractices();
+            } else if (view === 'drills') {
+                document.getElementById('view-drills').classList.remove('hidden');
+                document.getElementById('nav-drills').classList.add('active', 'bg-red-900');
+                renderDrills();
+            } else if (view === 'templates') {
+                document.getElementById('view-templates').classList.remove('hidden');
+                document.getElementById('nav-templates').classList.add('active', 'bg-red-900');
+                renderTemplates();
+            }
+        }
+
+        function renderPractices() {
+            const container = document.getElementById('practices-list');
+            container.innerHTML = '';
+
+            if (practices.length === 0) {
+                container.innerHTML = `
+                    <div class="col-span-full bg-slate-900 border border-slate-700 rounded-3xl p-8 text-center">
+                        <i class="fa-solid fa-calendar text-4xl text-slate-600 mb-3"></i>
+                        <p class="text-slate-400">No practices yet. Create your first one!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            practices.forEach((practice, index) => {
+                const div = document.createElement('div');
+                div.className = 'practice-card bg-slate-900 border border-slate-700 rounded-3xl p-5 cursor-pointer';
+
+                let dateTimeHTML = '';
+
+                if (practice.date) {
+                    const formattedDate = formatPracticeDate(practice.date);
+
+                    let timePart = '';
+                    if (practice.time) {
+                        timePart = ` • ${formatPracticeTime(practice.date, practice.time)}`;
+                    }
+
+                    dateTimeHTML = `
+                        <div class="font-semibold">${formattedDate}</div>
+                        <div class="text-red-400 text-sm">${practice.duration} min${timePart}</div>
+                    `;
+                } else {
+                    // No date set — just show duration + current zone for the time
+                    let timePart = '';
+                    if (practice.time) {
+                        timePart = ` • ${formatPracticeTime(null, practice.time)}`;
+                    }
+                    dateTimeHTML = `
+                        <div class="text-red-400 text-sm">${practice.duration} min${timePart}</div>
+                    `;
+                }
+
+                div.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            ${dateTimeHTML}
+                        </div>
+                        <div class="text-xs px-2 py-1 bg-slate-800 rounded-xl text-slate-400">
+                            ${practice.segments ? practice.segments.length : 0} segments
+                        </div>
+                    </div>
+                    <div class="mt-3 font-medium">${practice.focus || 'Practice'}</div>
+                    ${practice.location ? `<div class="text-xs text-slate-400 mt-1">${practice.location}</div>` : ''}
+                `;
+                
+                div.onclick = () => editPractice(index);
+                container.appendChild(div);
+            });
+        }
+
+        function renderDrills() {
+            const container = document.getElementById('drill-library');
+            container.innerHTML = '';
+
+            document.getElementById('drill-count').textContent = `${drills.length} drills in library`;
+
+            drills.forEach(drill => {
+                const div = document.createElement('div');
+                div.className = 'bg-slate-900 border border-slate-700 rounded-3xl p-4 group';
+
+                let deleteButton = '';
+                if (drill.custom) {
+                    deleteButton = `
+                        <button onclick="event.stopImmediatePropagation(); deleteDrill('${drill.id}')" 
+                                class="text-red-400 hover:text-red-500 opacity-70 group-hover:opacity-100">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    `;
+                }
+
+                div.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <div class="font-semibold">${drill.name}</div>
+                            <div class="text-xs text-red-400">${drill.category} • ${drill.duration} min</div>
+                            <div class="text-sm text-slate-400 mt-2">${drill.description || ''}</div>
+                        </div>
+                        <div class="flex flex-col items-end gap-1 ml-3">
+                            ${deleteButton}
+                            <button onclick="event.stopImmediatePropagation(); addDrillToPractice('${drill.id}')" 
+                                    class="text-xs px-2 py-1 bg-red-700 hover:bg-red-600 rounded-lg text-white flex items-center gap-1">
+                                <i class="fa-solid fa-plus text-xs"></i>
+                                <span class="text-[10px]">Add to Practice</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function renderTemplates() {
+            const container = document.getElementById('templates-list');
+            if (!container) return;
+            container.innerHTML = '';
+
+            if (templates.length === 0) {
+                container.innerHTML = `
+                    <div class="col-span-full bg-slate-900 border border-slate-700 rounded-3xl p-8 text-center">
+                        <i class="fa-solid fa-copy text-4xl text-slate-600 mb-3"></i>
+                        <p class="text-slate-400">No templates yet.</p>
+                        <p class="text-xs text-slate-500 mt-1">Edit a practice and click "Save as Template" to create reusable structures.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            templates.forEach((tpl, index) => {
+                const div = document.createElement('div');
+                div.className = 'practice-card bg-slate-900 border border-slate-700 rounded-3xl p-5';
+
+                const segCount = tpl.segments ? tpl.segments.length : 0;
+                const totalDur = tpl.segments ? tpl.segments.reduce((sum, s) => sum + (s.duration || 0), 0) : tpl.duration;
+
+                div.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1 min-w-0">
+                            <div class="font-semibold truncate">${tpl.name}</div>
+                            <div class="text-xs text-red-400 mt-0.5">${tpl.focus || 'Practice'} • ${tpl.duration} min planned</div>
+                        </div>
+                        <div class="text-xs px-2 py-1 bg-slate-800 rounded-xl text-slate-400 flex-shrink-0 ml-2">
+                            ${segCount} drills
+                        </div>
+                    </div>
+                    <div class="mt-3 text-sm text-slate-400">
+                        ${segCount} segments • ${totalDur} min total
+                    </div>
+                    <div class="mt-4 flex gap-2">
+                        <button onclick="event.stopImmediatePropagation(); useTemplate(${index})" 
+                                class="flex-1 text-xs px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded-xl text-white font-semibold flex items-center justify-center gap-1">
+                            <i class="fa-solid fa-play text-xs"></i>
+                            <span>Use</span>
+                        </button>
+                        <button onclick="event.stopImmediatePropagation(); deleteTemplate(${index})" 
+                                class="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-400 hover:text-red-400">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+
+                // Clicking the card could also use it
+                div.onclick = () => useTemplate(index);
+                container.appendChild(div);
+            });
+        }
+
+        function useTemplate(index) {
+            const tpl = templates[index];
+            if (!tpl) return;
+
+            // Create a fresh practice from the template (instance data)
+            currentPractice = null;
+            currentPracticeIndex = null;
+            segments = tpl.segments ? JSON.parse(JSON.stringify(tpl.segments)) : [];  // deep copy
+
+            document.getElementById('modal-title').textContent = 'New Practice from Template';
+            document.getElementById('practice-date').value = '';
+            document.getElementById('practice-time').value = getCurrentCentralTimeHHMM();
+            document.getElementById('practice-duration').value = tpl.duration || 60;
+            document.getElementById('practice-focus').value = tpl.focus || '';
+            document.getElementById('practice-location').value = '';
+
+            document.getElementById('segments-container').innerHTML = '';
+
+            // Switch to practices view first (so underlying content is visible when modal closes),
+            // then open the editor modal on top of it.
+            switchView('practices');
+            document.getElementById('practice-modal').classList.remove('hidden');
+            document.getElementById('practice-modal').classList.add('flex');
+
+            // Setup the 12-hour AM/PM time picker
+            setupCustomTimePicker();
+
+            // Wire listeners like createNewPractice
+            const durInput = document.getElementById('practice-duration');
+            durInput.oninput = () => {
+                renderSegments();
+            };
+
+            const dateInput = document.getElementById('practice-date');
+            dateInput.onchange = updateTimeZoneIndicator;
+            dateInput.oninput = updateTimeZoneIndicator;
+
+            updateTimeZoneIndicator();
+            renderSegments();
+            renderTimeline();
+            renderPracticeDrillsList();
+        }
+
+        function deleteTemplate(index) {
+            if (!confirm("Delete this template?")) return;
+            templates.splice(index, 1);
+            saveTemplates();
+            renderTemplates();
+        }
+
+        function addDrillToPractice(drillId) {
+            const drill = drills.find(d => d.id === drillId);
+            if (!drill) return;
+
+            if (practices.length === 0) {
+                // No practices yet — create a new one with this drill
+                const newPractice = {
+                    date: null,
+                    time: null,
+                    duration: drill.duration,
+                    focus: drill.name,
+                    location: '',
+                    segments: [{
+                        id: Date.now(),
+                        name: drill.name,
+                        duration: drill.duration,
+                        description: drill.description || '',
+                        category: drill.category,
+                        drillId: drill.id
+                    }]
+                };
+                practices.push(newPractice);
+                savePractices();
+                switchView('practices');
+                renderPractices();
+                alert(`Created new practice with "${drill.name}"`);
+                return;
+            }
+
+            // Build a simple numbered list for the user
+            let message = `Add "${drill.name}" to which practice?\n\n`;
+            practices.forEach((p, i) => {
+                const dateStr = p.date ? new Date(p.date).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : 'No date';
+                const focus = p.focus || 'Untitled Practice';
+                message += `${i + 1}. ${dateStr} — ${focus} (${p.duration} min)\n`;
+            });
+            message += `\n${practices.length + 1}. Create a brand new practice with this drill`;
+
+            const choice = prompt(message, "1");
+            if (!choice) return;
+
+            const num = parseInt(choice.trim());
+
+            if (num === practices.length + 1) {
+                // Create new practice
+                const newPractice = {
+                    date: null,
+                    time: null,
+                    duration: drill.duration,
+                    focus: drill.name,
+                    location: '',
+                    segments: [{
+                        id: Date.now(),
+                        name: drill.name,
+                        duration: drill.duration,
+                        description: drill.description || '',
+                        category: drill.category,
+                        drillId: drill.id
+                    }]
+                };
+                practices.push(newPractice);
+            } else if (num > 0 && num <= practices.length) {
+                // Add to existing
+                const target = practices[num - 1];
+                if (!target.segments) target.segments = [];
+                target.segments.push({
+                    id: Date.now(),
+                    name: drill.name,
+                    duration: drill.duration,
+                    description: drill.description || '',
+                    category: drill.category,
+                    drillId: drill.id
+                });
+            } else {
+                return;
+            }
+
+            savePractices();
+            switchView('practices');
+            renderPractices();
+        }
+
+        // === Custom Block Modal Functions ===
+        function showCustomBlockModal() {
+            document.getElementById('custom-block-name').value = '';
+            document.getElementById('custom-block-duration').value = '10';
+            document.getElementById('custom-block-description').value = '';
+            document.getElementById('custom-block-category').value = 'Custom';
+            document.getElementById('custom-block-save-as-drill').checked = false;
+
+            document.getElementById('custom-block-modal').classList.remove('hidden');
+            document.getElementById('custom-block-modal').classList.add('flex');
+        }
+
+        function closeCustomBlockModal() {
+            document.getElementById('custom-block-modal').classList.remove('flex');
+            document.getElementById('custom-block-modal').classList.add('hidden');
+        }
+
+        function saveCustomBlock() {
+            const name = document.getElementById('custom-block-name').value.trim();
+            if (!name) {
+                alert("Please enter a name for this custom block.");
+                return;
+            }
+
+            const duration = parseInt(document.getElementById('custom-block-duration').value) || 5;
+            const description = document.getElementById('custom-block-description').value.trim();
+            const category = document.getElementById('custom-block-category').value;
+            const saveAsDrill = document.getElementById('custom-block-save-as-drill').checked;
+
+            // Create the segment for this practice
+            const newSegment = {
+                id: Date.now(),
+                name: name,
+                duration: duration,
+                description: description,
+                category: saveAsDrill ? category : null
+            };
+
+            segments.push(newSegment);
+
+            if (saveAsDrill) {
+                const newDrill = {
+                    id: 'custom_' + Date.now(),
+                    name: name,
+                    category: category,
+                    duration: duration,
+                    description: description,
+                    custom: true
+                };
+                drills.push(newDrill);
+                localStorage.setItem('elks_drills', JSON.stringify(drills));
+                // If the drill library view is currently visible, refresh it
+                const drillsView = document.getElementById('view-drills');
+                if (!drillsView.classList.contains('hidden')) {
+                    renderDrills();
+                }
+            }
+
+            renderSegments();
+            renderTimeline();
+            renderPracticeDrillsList();
+            closeCustomBlockModal();
+        }
+
+        // === Edit Segment Modal Functions ===
+        let currentEditSegmentIndex = null;
+
+        function editSegment(index) {
+            currentEditSegmentIndex = index;
+            const segment = segments[index];
+
+            document.getElementById('edit-segment-title').textContent = `Edit: ${segment.name || 'Segment'}`;
+            document.getElementById('edit-segment-name').value = segment.name || '';
+            document.getElementById('edit-segment-duration').value = segment.duration || 0;
+            document.getElementById('edit-segment-description').value = segment.description || '';
+
+            const catDisplay = document.getElementById('edit-segment-category-display');
+            const catSpan = document.getElementById('edit-segment-category');
+            if (segment.category) {
+                catSpan.textContent = segment.category;
+                catDisplay.classList.remove('hidden');
+            } else {
+                catDisplay.classList.add('hidden');
+            }
+
+            document.getElementById('edit-segment-modal').classList.remove('hidden');
+            document.getElementById('edit-segment-modal').classList.add('flex');
+        }
+
+        function closeEditSegmentModal() {
+            document.getElementById('edit-segment-modal').classList.remove('flex');
+            document.getElementById('edit-segment-modal').classList.add('hidden');
+            currentEditSegmentIndex = null;
+        }
+
+        function saveEditedSegment() {
+            if (currentEditSegmentIndex === null) return;
+
+            const name = document.getElementById('edit-segment-name').value.trim();
+            const duration = parseInt(document.getElementById('edit-segment-duration').value) || 0;
+            const description = document.getElementById('edit-segment-description').value.trim();
+
+            if (!name) {
+                alert("Name is required.");
+                return;
+            }
+
+            segments[currentEditSegmentIndex].name = name;
+            segments[currentEditSegmentIndex].duration = duration;
+            segments[currentEditSegmentIndex].description = description;
+
+            closeEditSegmentModal();
+            renderSegments();
+            renderTimeline();
+        }
+
+        let currentPractice = null;
+        let currentPracticeIndex = null;
+        let segments = [];
+
+        function createNewPractice() {
+            currentPractice = null;
+            currentPracticeIndex = null;
+            segments = [];
+
+            document.getElementById('modal-title').textContent = 'New Practice';
+            document.getElementById('practice-date').value = '';
+            document.getElementById('practice-time').value = getCurrentCentralTimeHHMM();
+            document.getElementById('practice-duration').value = '90';
+            document.getElementById('practice-focus').value = '';
+            document.getElementById('practice-location').value = '';
+
+            document.getElementById('segments-container').innerHTML = '';
+            document.getElementById('practice-modal').classList.remove('hidden');
+            document.getElementById('practice-modal').classList.add('flex');
+
+            // Setup the 12-hour AM/PM time picker (populates selects + loads from hidden 24h value)
+            setupCustomTimePicker();
+
+            // Live Central zone indicator for the chosen date
+            const dateInput = document.getElementById('practice-date');
+            dateInput.onchange = updateTimeZoneIndicator;
+            dateInput.oninput = updateTimeZoneIndicator;
+
+            // Live update timeline when duration changes
+            const durInput = document.getElementById('practice-duration');
+            durInput.oninput = () => {
+                renderSegments();
+            };
+
+            updateTimeZoneIndicator();
+            renderTimeline();
+            renderPracticeDrillsList();
+        }
+
+        function editPractice(index) {
+            currentPracticeIndex = index;
+            currentPractice = practices[index];
+            segments = currentPractice.segments ? [...currentPractice.segments] : [];
+
+            document.getElementById('modal-title').textContent = 'Edit Practice';
+            document.getElementById('practice-date').value = currentPractice.date;
+            document.getElementById('practice-time').value = currentPractice.time || getCurrentCentralTimeHHMM();
+            document.getElementById('practice-duration').value = currentPractice.duration || 90;
+            document.getElementById('practice-focus').value = currentPractice.focus || '';
+            document.getElementById('practice-location').value = currentPractice.location || '';
+
+            renderSegments();
+            document.getElementById('practice-modal').classList.remove('hidden');
+            document.getElementById('practice-modal').classList.add('flex');
+
+            // Setup the 12-hour AM/PM time picker (populates selects + loads from hidden 24h value)
+            setupCustomTimePicker();
+
+            // Live Central zone indicator for the chosen date
+            const dateInput = document.getElementById('practice-date');
+            dateInput.onchange = updateTimeZoneIndicator;
+            dateInput.oninput = updateTimeZoneIndicator;
+
+            // Live update timeline when duration changes
+            const durInput = document.getElementById('practice-duration');
+            durInput.oninput = () => {
+                renderSegments();
+            };
+
+            updateTimeZoneIndicator();
+
+            renderTimeline();
+            renderPracticeDrillsList();
+        }
+
+        // addSegment kept for potential internal/quick use, but main "Custom" now uses the modal for better input experience
+        function addSegment() {
+            segments.push({
+                id: Date.now(),
+                name: '',
+                duration: 10,
+                description: ''
+            });
+            renderSegments();
+            renderTimeline();
+        }
+
+        function renderSegments() {
+            const container = document.getElementById('segments-container');
+            container.innerHTML = '';
+
+            const practiceDuration = parseInt(document.getElementById('practice-duration')?.value) || 0;
+
+            let cumulative = 0;
+
+            segments.forEach((segment, i) => {
+                const startTime = cumulative;
+                const endTime = cumulative + (segment.duration || 0);
+                const isOver = practiceDuration > 0 && endTime > practiceDuration;
+
+                const div = document.createElement('div');
+                div.className = `bg-slate-950 border rounded-2xl p-3 flex gap-3 items-start ${isOver ? 'border-red-500 bg-red-950/20' : 'border-slate-700'}`;
+                div.draggable = true;
+                div.dataset.index = i;
+
+                // Drag event listeners
+                div.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', i);
+                    div.style.opacity = '0.5';
+                });
+
+                div.addEventListener('dragend', () => {
+                    div.style.opacity = '1';
+                });
+
+                div.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    div.style.borderColor = '#f87171';
+                });
+
+                div.addEventListener('dragleave', () => {
+                    div.style.borderColor = isOver ? '#ef4444' : '#475569';
+                });
+
+                div.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                    const toIndex = parseInt(div.dataset.index);
+
+                    if (fromIndex !== toIndex) {
+                        const [moved] = segments.splice(fromIndex, 1);
+                        segments.splice(toIndex, 0, moved);
+                        renderSegments();           // re-render everything
+                        renderTimeline();
+                    }
+                    div.style.borderColor = isOver ? '#ef4444' : '#475569';
+                });
+
+                let categoryBadge = '';
+                if (segment.category) {
+                    categoryBadge = `<span class="text-[10px] px-2 py-0.5 bg-red-900/50 text-red-300 rounded-full ml-2">${segment.category}</span>`;
+                }
+
+                const startMin = Math.floor(startTime);
+                const endMin = Math.floor(endTime);
+
+                const descPreview = segment.description ? (segment.description.length > 60 ? segment.description.substring(0,57) + '...' : segment.description) : '<span class="text-slate-500 italic">No notes</span>';
+                const escapedDesc = (segment.description || '').replace(/"/g, '&quot;');
+
+                div.innerHTML = `
+                    <div class="flex gap-3 items-start w-full">
+                        <div class="cursor-grab text-slate-500 pt-1 select-none">
+                            <i class="fa-solid fa-grip-vertical"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center flex-wrap gap-x-2">
+                                <span class="text-xs font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">${startMin}–${endMin} min</span>
+                                <input type="text" placeholder="Segment name" 
+                                       value="${segment.name}" 
+                                       class="flex-1 bg-transparent border-b border-slate-600 focus:border-red-500 pb-1 text-sm font-medium min-w-[120px]"
+                                       onchange="updateSegment(${i}, 'name', this.value); renderTimeline();">
+                                ${categoryBadge}
+                            </div>
+                            
+                            <div class="flex gap-3 mt-2">
+                                <div class="w-20">
+                                    <input type="number" value="${segment.duration || 0}" 
+                                           class="w-full bg-slate-900 border border-slate-600 rounded-xl px-2 py-1 text-sm"
+                                           onchange="updateSegment(${i}, 'duration', this.value); renderSegments(); renderTimeline();">
+                                </div>
+                                <div class="flex-1 text-xs text-slate-300 bg-slate-900 border border-slate-600 rounded-xl px-3 py-1 min-h-[28px] flex items-center overflow-hidden" title="${escapedDesc}">
+                                    ${descPreview}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-1 mt-1">
+                            <button onclick="editSegment(${i}); event.stopImmediatePropagation();" class="text-slate-400 hover:text-blue-400" title="Edit segment">
+                                <i class="fa-solid fa-edit"></i>
+                            </button>
+                            <button onclick="removeSegment(${i}); renderTimeline(); event.stopImmediatePropagation();" class="text-slate-400 hover:text-red-400" title="Remove">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+
+                cumulative = endTime;
+            });
+
+            // Also render the timeline
+            renderTimeline();
+        }
+
+        function renderTimeline() {
+            const bar = document.getElementById('timeline-bar');
+            const summary = document.getElementById('timeline-summary');
+            const warning = document.getElementById('timeline-warning');
+
+            if (!bar || !summary) return;
+
+            const practiceDuration = parseInt(document.getElementById('practice-duration')?.value) || 0;
+            const totalSegmentTime = segments.reduce((sum, s) => sum + (parseInt(s.duration) || 0), 0);
+
+            bar.innerHTML = '';
+            summary.textContent = `${totalSegmentTime} / ${practiceDuration} min`;
+
+            if (practiceDuration <= 0) {
+                bar.innerHTML = `<div class="flex-1 bg-slate-700 flex items-center justify-center text-xs text-slate-400">Set practice duration above</div>`;
+                warning.classList.add('hidden');
+                return;
+            }
+
+            // Always base the bar on the practice duration (100%)
+            let cumulative = 0;
+            const scale = 100 / practiceDuration;
+
+            segments.forEach((segment) => {
+                const dur = parseInt(segment.duration) || 0;
+                const startPct = cumulative * scale;
+                let widthPct = dur * scale;
+
+                const isOver = (cumulative + dur) > practiceDuration;
+
+                // If this segment crosses the end, split it visually
+                if (isOver && cumulative < practiceDuration) {
+                    const remaining = practiceDuration - cumulative;
+                    // First part (within window)
+                    const goodDiv = document.createElement('div');
+                    goodDiv.className = `h-full flex items-center justify-center text-[10px] text-white overflow-hidden bg-red-700`;
+                    goodDiv.style.width = `${remaining * scale}%`;
+                    goodDiv.style.minWidth = '10px';
+                    goodDiv.title = `${segment.name} (within window)`;
+                    bar.appendChild(goodDiv);
+
+                    // Overflow part
+                    const overDiv = document.createElement('div');
+                    overDiv.className = `h-full flex items-center justify-center text-[10px] text-white overflow-hidden bg-red-500`;
+                    overDiv.style.width = `${(dur - remaining) * scale}%`;
+                    overDiv.style.minWidth = '10px';
+                    overDiv.title = `${segment.name} (OVER by ${dur - remaining} min)`;
+                    bar.appendChild(overDiv);
+                } else {
+                    const segDiv = document.createElement('div');
+                    segDiv.className = `h-full flex items-center justify-center text-[10px] text-white overflow-hidden ${isOver ? 'bg-red-500' : 'bg-red-700'}`;
+                    segDiv.style.width = `${Math.max(widthPct, 2)}%`;
+                    segDiv.style.minWidth = dur > 0 ? '18px' : '2px';
+                    segDiv.title = `${segment.name} (${dur} min)${isOver ? ' — OVER' : ''}`;
+
+                    if (dur >= 4) {
+                        segDiv.innerHTML = `<span class="px-1 truncate">${segment.name}</span>`;
+                    }
+                    bar.appendChild(segDiv);
+                }
+
+                cumulative += dur;
+            });
+
+            // If under time, show remaining empty space
+            if (cumulative < practiceDuration) {
+                const remainingPct = (practiceDuration - cumulative) * scale;
+                const emptyDiv = document.createElement('div');
+                emptyDiv.className = 'h-full bg-slate-700 flex items-center justify-center text-[10px] text-slate-400';
+                emptyDiv.style.width = `${remainingPct}%`;
+                emptyDiv.innerHTML = `<span class="px-1">Free time</span>`;
+                bar.appendChild(emptyDiv);
+            }
+
+            // Warning
+            if (totalSegmentTime > practiceDuration) {
+                warning.textContent = `⚠ This practice runs ${totalSegmentTime - practiceDuration} minutes over the scheduled time.`;
+                warning.classList.remove('hidden');
+            } else {
+                warning.classList.add('hidden');
+            }
+        }
+
+        function updateSegment(index, field, value) {
+            segments[index][field] = field === 'duration' ? parseInt(value) || 0 : value;
+            renderTimeline();
+        }
+
+        function removeSegment(index) {
+            segments.splice(index, 1);
+            renderSegments();
+            renderTimeline();
+        }
+
+        function savePractice() {
+            const duration = parseInt(document.getElementById('practice-duration').value);
+
+            if (!duration || duration <= 0) {
+                alert("Duration is required. Please enter how long the practice is.");
+                return;
+            }
+
+            const practiceData = {
+                date: document.getElementById('practice-date').value || null,
+                time: document.getElementById('practice-time').value || null,
+                duration: duration,
+                focus: document.getElementById('practice-focus').value,
+                location: document.getElementById('practice-location').value,
+                segments: segments
+            };
+
+            if (currentPracticeIndex !== null) {
+                practices[currentPracticeIndex] = practiceData;
+            } else {
+                practices.push(practiceData);
+            }
+
+            savePractices();
+            closePracticeModal();
+            renderPractices();
+        }
+
+        function saveCurrentAsTemplate() {
+            const duration = parseInt(document.getElementById('practice-duration').value) || 0;
+            const focus = document.getElementById('practice-focus').value.trim() || 'Untitled';
+            const currentSegments = segments || [];
+
+            if (currentSegments.length === 0) {
+                alert("Add some drills to the practice first before saving as a template.");
+                return;
+            }
+
+            const name = prompt("Template name?", focus + " Template");
+            if (!name || !name.trim()) return;
+
+            const template = {
+                id: 'tpl_' + Date.now(),
+                name: name.trim(),
+                duration: duration,
+                focus: focus,
+                segments: currentSegments.map(s => ({
+                    // Deep copy without practice-specific instance ids if wanted, but keep structure
+                    id: Date.now() + Math.random(),
+                    name: s.name,
+                    duration: s.duration,
+                    description: s.description || '',
+                    category: s.category || null
+                }))
+            };
+
+            templates.push(template);
+            saveTemplates();
+            alert(`Template "${template.name}" saved! You can find it in the Templates tab.`);
+
+            // If user is currently looking at templates, refresh the list
+            const templatesView = document.getElementById('view-templates');
+            if (templatesView && !templatesView.classList.contains('hidden')) {
+                renderTemplates();
+            }
+        }
+
+        function closePracticeModal() {
+            document.getElementById('practice-modal').classList.remove('flex');
+            document.getElementById('practice-modal').classList.add('hidden');
+        }
+
+        // Generate plain text for the current practice being edited
+        function generatePracticeText() {
+            const duration = parseInt(document.getElementById('practice-duration').value) || 0;
+            const focus = document.getElementById('practice-focus').value.trim();
+            const location = document.getElementById('practice-location').value.trim();
+            const dateVal = document.getElementById('practice-date').value;
+            const timeVal = document.getElementById('practice-time').value;
+
+            let text = `MN Elks 16U - Fransen Practice Plan\n`;
+            text += `========================================\n\n`;
+
+            if (dateVal) text += `Date: ${dateVal}\n`;
+            if (timeVal) text += `Time: ${formatPracticeTime(dateVal, timeVal)}\n`;
+            text += `Duration: ${duration} minutes\n`;
+            if (focus) text += `Focus: ${focus}\n`;
+            if (location) text += `Location: ${location}\n`;
+
+            text += `\n--- Practice Plan ---\n\n`;
+
+            let cumulative = 0;
+            if (segments && segments.length > 0) {
+                segments.forEach((seg, i) => {
+                    const dur = parseInt(seg.duration) || 0;
+                    const start = cumulative;
+                    const end = cumulative + dur;
+                    const drillTime = formatDrillTimeRange(start, end, timeVal);
+                    text += `${drillTime} (${dur} min) - ${seg.name}\n`;
+                    if (seg.description) {
+                        text += `  ${seg.description}\n`;
+                    }
+                    if (seg.category) {
+                        text += `  [${seg.category}]\n`;
+                    }
+                    text += `\n`;
+                    cumulative = end;
+                });
+            } else {
+                text += `(No segments added yet)\n\n`;
+            }
+
+            text += `---\n`;
+            text += `Total time in plan: ${cumulative} minutes\n`;
+            if (duration > 0 && cumulative > duration) {
+                text += `⚠ OVER by ${cumulative - duration} minutes\n`;
+            }
+
+            text += `\nGenerated by MN Elks 16U - Fransen Practice Planner\n`;
+
+            return text;
+        }
+
+        function downloadPracticeText() {
+            const text = generatePracticeText();
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+
+            const focus = document.getElementById('practice-focus').value.trim() || 'Practice';
+            const dateVal = document.getElementById('practice-date').value || 'nodate';
+            const safeName = focus.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            a.download = `elks-${safeName}-${dateVal}.txt`;
+
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function copyPracticeText() {
+            const text = generatePracticeText();
+            const copyBtnEl = document.getElementById('copy-text-btn');
+
+            navigator.clipboard.writeText(text).then(() => {
+                if (copyBtnEl) {
+                    const originalText = copyBtnEl.innerHTML;
+                    copyBtnEl.innerHTML = `<i class="fa-solid fa-check"></i> <span>Copied!</span>`;
+                    setTimeout(() => {
+                        if (copyBtnEl) copyBtnEl.innerHTML = originalText;
+                    }, 2000);
+                }
+            }).catch(() => {
+                // Fallback for older browsers or permissions
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                if (copyBtnEl) {
+                    const originalText = copyBtnEl.innerHTML;
+                    copyBtnEl.innerHTML = `<i class="fa-solid fa-check"></i> <span>Copied!</span>`;
+                    setTimeout(() => {
+                        if (copyBtnEl) copyBtnEl.innerHTML = originalText;
+                    }, 2000);
+                }
+            });
+        }
+
+        function downloadPracticePDF() {
+            try {
+                console.log('Download PDF clicked, starting generation...');
+                const jsPDFLib = window.jspdf ? window.jspdf.jsPDF : null;
+                if (!jsPDFLib) {
+                    alert("PDF library not loaded. Please check your internet connection and try again.");
+                    return;
+                }
+                const doc = new jsPDFLib({
+                    orientation: 'portrait',
+                    unit: 'pt',
+                    format: 'letter'
+                });
+
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            const margin = 45;
+            const contentWidth = pageWidth - (margin * 2);
+            let y = 50;
+
+            // Subtle page border for professional polish
+            doc.setDrawColor(200, 200, 200);
+            doc.setLineWidth(0.5);
+            doc.rect(20, 20, pageWidth - 40, pageHeight - 40);
+
+            // Exciting left red accent bar
+            doc.setFillColor(153, 27, 30);
+            doc.rect(20, 20, 4, pageHeight - 40, 'F');
+
+            // Small decorative red diamond accents in corners for excitement
+            doc.setFillColor(153, 27, 30);
+            // top left
+            doc.rect(24, 24, 3, 3, 'F');
+            // top right
+            doc.rect(pageWidth - 27, 24, 3, 3, 'F');
+
+            console.log('PDF document created, drawing content...');
+
+            const duration = parseInt(document.getElementById('practice-duration').value) || 0;
+            const focus = document.getElementById('practice-focus').value.trim() || 'Practice';
+            const location = document.getElementById('practice-location').value.trim();
+            const dateVal = document.getElementById('practice-date').value;
+            const timeVal = document.getElementById('practice-time').value;
+
+            // Header bar with red background
+            doc.setFillColor(153, 27, 30);
+            doc.rect(0, 0, pageWidth, 55, 'F');
+
+            // Header - Team name in white (left side)
+            doc.setFontSize(20);
+            doc.setTextColor(255, 255, 255);
+            doc.text('MN ELKS 16U - FRANSEN', margin, 28);
+
+            // Meta info in upper right corner of the header (date/time/duration/focus/location)
+            // Compact white text on red, right-aligned, to save vertical space.
+            // Kept to max ~3 lines to fit nicely inside the red header bar.
+            doc.setFontSize(7);
+            doc.setTextColor(255, 255, 255);
+            const rightX = pageWidth - margin;
+            let metaY = 10;
+            // Line 1: core timing
+            let line1 = [];
+            if (dateVal) line1.push(`Date: ${dateVal}`);
+            if (timeVal) line1.push(`Time: ${formatPracticeTime(dateVal, timeVal)}`);
+            line1.push(`Duration: ${duration} min`);
+            doc.text(line1.join('  •  '), rightX, metaY, { align: 'right' });
+            metaY += 9;
+            // Line 2: focus
+            if (focus) {
+                doc.text(`Focus: ${focus}`, rightX, metaY, { align: 'right' });
+                metaY += 9;
+            }
+            // Line 3: location (only if present)
+            if (location) {
+                doc.text(`Location: ${location}`, rightX, metaY, { align: 'right' });
+            }
+
+            y = 60;
+
+            // Thin red accent line under header
+            doc.setDrawColor(153, 27, 30);
+            doc.setLineWidth(1);
+            doc.line(margin, y, pageWidth - margin, y);
+            y += 10;
+
+            // Segments - clean professional list
+            // We force everything to a single page. If the plan is long we reduce
+            // font sizes + spacing proportionally (down to a readable minimum).
+            let cumulative = 0;
+            const totalSegTime = segments.reduce((sum, s) => sum + (parseInt(s.duration) || 0), 0);
+
+            // --- Dry-run simulation at default sizes to decide if we need to scale ---
+            let simY = y;
+            const defTitleSz = 9;
+            const defDescSz = 8;
+            const defCatSz = 7;
+            const defTitleAdv = 10;
+            const defDescAdv = 9;
+            const defCatAdv = 8;
+            const defAfterAdv = 4;
+
+            if (segments && segments.length > 0) {
+                segments.forEach((seg) => {
+                    simY += defTitleAdv;
+                    if (seg.description) {
+                        doc.setFontSize(defDescSz);
+                        const descLines = doc.splitTextToSize(seg.description, contentWidth - 80);
+                        simY += (descLines.length * defDescAdv) + 1;
+                    }
+                    if (seg.category) {
+                        simY += defCatAdv;
+                    }
+                    simY += defAfterAdv;
+                });
+            }
+            const naturalSegmentsH = simY - y;
+
+            const pageBottom = pageHeight - 50;
+            const fixedBottom = 80; // summary + footer breathing room (signature removed)
+            const availableForList = pageBottom - y - fixedBottom;
+
+            let fontScale = 1.0;
+            if (naturalSegmentsH > availableForList && naturalSegmentsH > 10) {
+                fontScale = Math.max(0.55, availableForList / naturalSegmentsH);
+            }
+
+            // Scaled sizes and vertical spacing (never go too tiny)
+            const titleFontSize = Math.max(6, Math.round(9 * fontScale));
+            const durFontSize   = Math.max(5, Math.round(8 * fontScale));
+            const descFontSize  = Math.max(5, Math.round(8 * fontScale));
+            const catFontSize   = Math.max(5, Math.round(7 * fontScale));
+
+            const titleLineAdvance = Math.max(7, Math.round(10 * fontScale));
+            const descLineAdvance  = Math.max(6, Math.round(9 * fontScale));
+            const catAdvance       = Math.max(5, Math.round(8 * fontScale));
+            const afterItemAdvance = Math.max(3, Math.round(4 * fontScale));
+
+            // Scale the name/duration columns too so tight plans stay proportionally laid out
+            const nameX = margin + Math.round(100 * fontScale);
+            const durationX = margin + Math.round(280 * fontScale);
+
+            const bgH = Math.max(12, Math.round(22 * fontScale));
+            const bgOff = Math.round(8 * fontScale);
+
+            // --- Actual drawing with (possibly reduced) fonts ---
+            if (segments && segments.length > 0) {
+                segments.forEach((seg, idx) => {
+                    const dur = parseInt(seg.duration) || 0;
+                    const start = cumulative;
+                    const end = cumulative + dur;
+
+                    // Alternating subtle background for readability (height also scaled)
+                    if (idx % 2 === 1) {
+                        doc.setFillColor(248, 248, 248);
+                        doc.rect(margin - 3, y - bgOff, contentWidth + 6, bgH, 'F');
+                    }
+
+                    doc.setFontSize(titleFontSize);
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(0, 0, 0);
+
+                    // Time range (clock time when available)
+                    const timeLabel = formatDrillTimeRange(start, end, timeVal);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(timeLabel, margin, y);
+
+                    // Name
+                    doc.setFont('helvetica', 'normal');
+                    let displayName = seg.name || 'Untitled Segment';
+                    const maxNameWidth = durationX - nameX - 10;
+                    if (doc.getTextWidth(displayName) > maxNameWidth) {
+                        while (doc.getTextWidth(displayName + '...') > maxNameWidth && displayName.length > 3) {
+                            displayName = displayName.slice(0, -1);
+                        }
+                        displayName += '...';
+                    }
+                    doc.text(displayName, nameX, y);
+
+                    // Duration badge (red, smaller)
+                    doc.setFontSize(durFontSize);
+                    doc.setTextColor(153, 27, 30);
+                    doc.text(`(${dur} min)`, durationX, y);
+
+                    y += titleLineAdvance;
+
+                    // Description
+                    if (seg.description) {
+                        doc.setFontSize(descFontSize);
+                        doc.setTextColor(70, 70, 70);
+                        const descLines = doc.splitTextToSize(seg.description, contentWidth - 80);
+                        doc.text(descLines, nameX, y);
+                        y += (descLines.length * descLineAdvance) + 1;
+                    }
+
+                    // Category
+                    if (seg.category) {
+                        doc.setFontSize(catFontSize);
+                        doc.setTextColor(140, 140, 140);
+                        doc.text(`[${seg.category}]`, nameX, y);
+                        y += catAdvance;
+                    }
+
+                    y += afterItemAdvance;
+                    cumulative = end;
+                });
+            } else {
+                doc.setFontSize(titleFontSize);
+                doc.setTextColor(100, 100, 100);
+                doc.text('(No segments added yet)', margin, y);
+                y += titleLineAdvance;
+            }
+
+            // Summary box (also scaled when the plan is long)
+            y += Math.round(8 * fontScale);
+            doc.setDrawColor(220, 220, 220);
+            doc.setLineWidth(0.5);
+            doc.line(margin, y, pageWidth - margin, y);
+            y += Math.round(14 * fontScale);
+
+            const sumTitleSize = Math.max(7, Math.round(10 * fontScale));
+            doc.setFontSize(sumTitleSize);
+            doc.setTextColor(0, 0, 0);
+            doc.text(`Total Planned Time: ${totalSegTime} minutes`, margin, y);
+            y += Math.round(13 * fontScale);
+
+            // Only show OVER warning (underscheduled note removed per request)
+            if (duration > 0 && totalSegTime > duration) {
+                const sumNoteSize = Math.max(6, Math.round(9 * fontScale));
+                doc.setFontSize(sumNoteSize);
+                doc.setTextColor(180, 0, 0);
+                doc.text(`⚠ OVER by ${totalSegTime - duration} minutes`, margin, y);
+                y += Math.round(12 * fontScale);
+            }
+
+            // Footer
+            // For short plans we keep the traditional low position (whitespace below summary).
+            // For long plans we place it right after the summary so everything stays on one page.
+            const footerY = Math.max(y + 15, 770);
+            doc.setFontSize(Math.max(5, Math.round(8 * fontScale)));
+            doc.setTextColor(120, 120, 120);
+            doc.text('MN Elks 16U - Fransen  •  Confidential Coaching Document', margin, footerY);
+            const genDate = new Date().toLocaleDateString();
+            doc.text(`Generated ${genDate}`, pageWidth - margin - 110, footerY);
+
+            // Save
+            const focusSafe = (focus || 'practice').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            const dateSafe = dateVal || 'nodate';
+            console.log('PDF ready, triggering download...');
+            doc.save(`elks-practice-plan-${focusSafe}-${dateSafe}.pdf`);
+            } catch (err) {
+                console.error("PDF generation failed:", err);
+                alert("Failed to generate PDF. See browser console (F12) for details. Error: " + (err.message || err));
+            }
+        }
+
+        function showAddDrillModal() {
+            document.getElementById('new-drill-name').value = '';
+            document.getElementById('new-drill-category').value = 'Hitting';
+            document.getElementById('new-drill-duration').value = '10';
+            document.getElementById('new-drill-description').value = '';
+
+            document.getElementById('add-drill-modal').classList.remove('hidden');
+            document.getElementById('add-drill-modal').classList.add('flex');
+        }
+
+        function closeAddDrillModal() {
+            document.getElementById('add-drill-modal').classList.remove('flex');
+            document.getElementById('add-drill-modal').classList.add('hidden');
+        }
+
+        function saveNewDrill() {
+            const name = document.getElementById('new-drill-name').value.trim();
+            if (!name) {
+                alert("Please enter a drill name.");
+                return;
+            }
+
+            const newDrill = {
+                id: 'custom_' + Date.now(),
+                name: name,
+                category: document.getElementById('new-drill-category').value,
+                duration: parseInt(document.getElementById('new-drill-duration').value) || 10,
+                description: document.getElementById('new-drill-description').value.trim(),
+                custom: true
+            };
+
+            drills.push(newDrill);
+            localStorage.setItem('elks_drills', JSON.stringify(drills));
+
+            closeAddDrillModal();
+            renderDrills();
+        }
+
+        function deleteDrill(drillId) {
+            if (!confirm("Delete this drill from your library?")) return;
+
+            drills = drills.filter(d => d.id !== drillId);
+            localStorage.setItem('elks_drills', JSON.stringify(drills));
+            renderDrills();
+        }
+
+        function resetDrillLibrary() {
+            if (!confirm("Reset the entire drill library back to the default 16U set? This will remove any custom drills you added.")) return;
+
+            drills = getDefaultDrills();
+            localStorage.setItem('elks_drills', JSON.stringify(drills));
+            renderDrills();
+        }
+
+        function addDrillAsSegment(drill) {
+            segments.push({
+                id: Date.now(),
+                name: drill.name,
+                duration: drill.duration,
+                description: drill.description || '',
+                drillId: drill.id,           // reference to original drill
+                category: drill.category
+            });
+            renderSegments();
+            renderTimeline();
+        }
+
+        // === Right sidebar drills list for practice editor ===
+        function renderPracticeDrillsList(drillList = null) {
+            const container = document.getElementById('practice-drill-list');
+            if (!container) return;
+            container.innerHTML = '';
+
+            const list = drillList || drills;
+
+            if (list.length === 0) {
+                container.innerHTML = `<div class="text-slate-400 text-center py-4 text-xs">No drills found.</div>`;
+                return;
+            }
+
+            list.forEach(drill => {
+                const div = document.createElement('div');
+                div.className = 'bg-slate-950 border border-slate-700 hover:border-red-600 rounded-xl p-2 cursor-pointer flex justify-between items-center text-xs';
+                
+                div.innerHTML = `
+                    <div class="min-w-0">
+                        <div class="font-medium truncate">${drill.name}</div>
+                        <div class="text-red-400">${drill.category} • ${drill.duration} min</div>
+                    </div>
+                    <i class="fa-solid fa-plus text-red-400 ml-2 flex-shrink-0"></i>
+                `;
+
+                div.onclick = () => {
+                    addDrillAsSegment(drill);
+                    // optional: give quick feedback
+                    const orig = div.style.backgroundColor;
+                    div.style.backgroundColor = '#450a0a';
+                    setTimeout(() => {
+                        div.style.backgroundColor = orig || '';
+                    }, 300);
+                };
+
+                container.appendChild(div);
+            });
+        }
+
+        function filterPracticeDrills() {
+            const input = document.getElementById('practice-drill-search');
+            if (!input) return;
+            const q = input.value.toLowerCase().trim();
+            let filtered = drills;
+            if (q) {
+                filtered = drills.filter(d =>
+                    d.name.toLowerCase().includes(q) ||
+                    d.category.toLowerCase().includes(q) ||
+                    (d.description && d.description.toLowerCase().includes(q))
+                );
+            }
+            renderPracticeDrillsList(filtered);
+        }
+
+        async function init() {
+            initTailwind();
+            await loadData();
+
+            // Preserve team param on the back-to-hub link
+            const backLink = document.getElementById('back-to-hub');
+            if (backLink) {
+                const params = new URLSearchParams(location.search);
+                const team = params.get('team');
+                if (team) {
+                    backLink.href = `../index.html?team=${team}`;
+                }
+            }
+            
+            // Live Central Time (CDT/CST) clock in header
+            function updateClock() {
+                const el = document.getElementById('current-central-time');
+                if (el) el.textContent = getCurrentCentralTimeDisplay();
+            }
+            updateClock();
+            setInterval(updateClock, 30000); // update every 30s
+            
+            // Show practices view by default
+            switchView('practices');
+            
+            // Make first nav active
+            document.getElementById('nav-practices').classList.add('active', 'bg-red-900');
+        }
+
+        // ============================================
+        // SUPABASE BACKEND SUPPORT (for multi-team sync)
+        // Set these two values after creating your Supabase project
+        // (see Gabes App Hub/backend/README.md)
+        // ============================================
+        const SUPABASE_URL = 'YOUR_SUPABASE_URL_HERE';
+        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY_HERE';
+
+        let supabaseClient = null;
+        let currentTeamId = null; // Set this from the hub or query param in future
+
+        function initSupabaseForPlanner() {
+            if (window.supabase && SUPABASE_URL !== 'YOUR_SUPABASE_URL_HERE') {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log('[Planner] Supabase client ready for backend sync');
+
+                // Try to get team from URL (e.g. ?team=xxx) or localStorage
+                const urlParams = new URLSearchParams(window.location.search);
+                currentTeamId = urlParams.get('team') || localStorage.getItem('selectedTeamId');
+            } else {
+                console.log('[Planner] Running in localStorage-only mode (no Supabase keys set)');
+            }
+        }
+
+        // Enhanced loadData that prefers Supabase when available
+        async function loadData() {
+            // Try Supabase first for templates if configured and team selected
+            if (supabaseClient && currentTeamId) {
+                try {
+                    const { data: savedTemplates } = await supabaseClient
+                        .from('practice_templates')
+                        .select('*')
+                        .eq('team_id', currentTeamId);
+                    if (savedTemplates) templates = savedTemplates;
+                    console.log('[Planner] Templates loaded from Supabase');
+                } catch (e) {
+                    console.warn('[Planner] Supabase templates load failed, falling back to localStorage', e);
+                }
+            }
+
+            // Fallback / additional localStorage load (for practices/drills + offline)
+            const savedPractices = localStorage.getItem('elks_practices');
+            if (savedPractices) practices = JSON.parse(savedPractices);
+
+            const savedDrills = localStorage.getItem('elks_drills');
+            if (savedDrills) {
+                drills = JSON.parse(savedDrills);
+            } else {
+                drills = getDefaultDrills();
+                localStorage.setItem('elks_drills', JSON.stringify(drills));
+            }
+
+            const savedTemplatesLocal = localStorage.getItem('elks_templates');
+            if (savedTemplatesLocal && templates.length === 0) {
+                templates = JSON.parse(savedTemplatesLocal);
+            }
+        }
+
+        // Enhanced save for templates
+        async function saveTemplates() {
+            // Always save to localStorage as fallback
+            localStorage.setItem('elks_templates', JSON.stringify(templates));
+
+            // Also save to Supabase if configured + team selected
+            if (supabaseClient && currentTeamId && templates.length > 0) {
+                try {
+                    // Upsert the templates for this team (simple approach: delete + insert for demo)
+                    await supabaseClient
+                        .from('practice_templates')
+                        .delete()
+                        .eq('team_id', currentTeamId);
+
+                    const templatesWithTeam = templates.map(t => ({
+                        ...t,
+                        team_id: currentTeamId
+                    }));
+
+                    const { error } = await supabaseClient
+                        .from('practice_templates')
+                        .insert(templatesWithTeam);
+
+                    if (error) throw error;
+                    console.log('[Planner] Templates synced to Supabase');
+                } catch (e) {
+                    console.warn('[Planner] Failed to sync templates to Supabase (will use localStorage)', e);
+                }
+            }
+        }
+
+        // Call Supabase init early
+        initSupabaseForPlanner();
+
+        window.onload = init;
+    </script>
+</body>
+</html>

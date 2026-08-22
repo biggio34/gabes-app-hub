@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MN Elks Team Formation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="../shared/elks-data.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        body {
+            font-family: 'Inter', system_ui, sans-serif;
+        }
+        
+        .title-font {
+            font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+
+        .app-card {
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+        }
+        
+        .player-row {
+            transition: background-color 0.1s ease;
+        }
+        
+        .player-row:hover {
+            background-color: #1e2937;
+        }
+        
+        .player-row.selected {
+            background-color: #312e81;
+            border-color: #6366f1;
+        }
+
+        .team-panel {
+            transition: border-color 0.1s ease;
+        }
+
+        .section-header {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+
+        .app-toggle a.active {
+            background: #b91c1c;
+            color: white;
+        }
+
+        .score-pill {
+            font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+            font-weight: 600;
+            min-width: 2rem;
+            text-align: center;
+        }
+
+        .rec-offer { color: #34d399; }
+        .rec-waitlist { color: #fbbf24; }
+        .rec-look { color: #60a5fa; }
+        .rec-pass { color: #f87171; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200">
+    <div class="max-w-screen-xl mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-x-4">
+                <a class='flex items-center gap-x-1.5 text-sm font-medium text-slate-400 hover:text-red-400 transition-colors' href='/' id='back-to-hub'>
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span class="hidden sm:inline">Hub</span>
+                </a>
+                <div class="w-10 h-10 bg-red-700 rounded-2xl flex items-center justify-center">
+                    <i class="fa-solid fa-users text-white text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="title-font text-3xl font-semibold tracking-tighter">MN Elks Team Formation</h1>
+                    <p class="text-slate-400 text-sm -mt-0.5">Shared roster with Tryout Evaluator • Assign teams</p>
+                </div>
+            </div>
+            <div class="text-right">
+                <div class="inline-flex items-center gap-x-2 px-3 py-1.5 bg-slate-900 rounded-full border border-slate-800">
+                    <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                    <span class="text-emerald-400 text-xs font-medium tracking-wider">SHARED LOCAL</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- App toggle -->
+        <div class="app-toggle mb-4 flex p-1 bg-slate-900 border border-slate-800 rounded-2xl max-w-md">
+            <a class='flex-1 text-center text-xs sm:text-sm font-semibold py-2 rounded-xl text-slate-400 hover:text-white' href='/softball-tryout-evaluator/'>
+                <i class="fa-solid fa-clipboard-list mr-1"></i>Tryouts
+            </a>
+            <a class='active flex-1 text-center text-xs sm:text-sm font-semibold py-2 rounded-xl' href='/mn-elks-team-formation/'>
+                <i class="fa-solid fa-users mr-1"></i>Teams
+            </a>
+        </div>
+
+        <!-- Top Actions -->
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+            <button onclick="document.getElementById('csv-file').click()" 
+                    class="flex items-center gap-x-2 px-4 py-2 bg-red-700 hover:bg-red-600 active:bg-red-800 rounded-2xl text-sm font-semibold">
+                <i class="fa-solid fa-file-import"></i>
+                <span>Import CSV</span>
+            </button>
+            <input type="file" id="csv-file" accept=".csv" class="hidden" onchange="importFromCSV(event)">
+
+            <a href="../sample-roster-import.csv" download="sample-roster-import.csv"
+               class="flex items-center gap-x-2 px-4 py-2 border border-slate-600 hover:bg-slate-800 rounded-2xl text-sm font-medium">
+                <i class="fa-solid fa-file-csv text-emerald-400"></i>
+                <span class="hidden sm:inline">Sample import file</span>
+                <span class="sm:hidden">Sample CSV</span>
+            </a>
+
+            <button onclick="showAddPlayerModal()" 
+                    class="flex items-center gap-x-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 active:bg-slate-500 rounded-2xl text-sm font-semibold">
+                <i class="fa-solid fa-user-plus"></i>
+                <span>Add Player</span>
+            </button>
+
+            <button onclick="createNewTeam()" 
+                    class="flex items-center gap-x-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 active:bg-slate-500 rounded-2xl text-sm font-semibold">
+                <i class="fa-solid fa-plus"></i>
+                <span>Create Team</span>
+            </button>
+
+            <a class='flex items-center gap-x-2 px-4 py-2 bg-rose-900/50 hover:bg-rose-900 border border-rose-800 rounded-2xl text-sm font-semibold text-rose-200' href='/softball-tryout-evaluator/'>
+                <i class="fa-solid fa-clipboard-list"></i>
+                <span class="hidden sm:inline">Score Tryouts</span>
+            </a>
+
+            <div class="flex-1"></div>
+
+            <button onclick="exportTeamsCSV()" 
+                    class="flex items-center gap-x-2 px-3 py-2 border border-slate-600 hover:bg-slate-800 rounded-2xl text-sm font-medium">
+                <i class="fa-solid fa-download"></i>
+                <span class="hidden sm:inline">Export Teams CSV</span>
+            </button>
+
+            <button onclick="exportFullJSON()" 
+                    class="flex items-center gap-x-2 px-3 py-2 border border-slate-600 hover:bg-slate-800 rounded-2xl text-sm font-medium">
+                <i class="fa-solid fa-file-export"></i>
+                <span class="hidden sm:inline">Export JSON</span>
+            </button>
+
+            <button onclick="clearAllData()" 
+                    class="flex items-center gap-x-2 px-3 py-2 border border-red-900 text-red-400 hover:bg-red-950 rounded-2xl text-sm font-medium">
+                <i class="fa-solid fa-trash"></i>
+                <span class="hidden sm:inline">Clear All</span>
+            </button>
+
+            <button onclick="loadSampleData()" 
+                    class="flex items-center gap-x-2 px-3 py-2 border border-slate-600 hover:bg-slate-800 rounded-2xl text-sm font-medium">
+                <i class="fa-solid fa-flask"></i>
+                <span class="hidden sm:inline">Load Sample</span>
+            </button>
+        </div>
+
+        <!-- Age Eligibility Cutoff -->
+        <div class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm bg-slate-900 border border-slate-700 rounded-2xl p-3">
+            <div class="flex items-center gap-x-2">
+                <span class="text-slate-400 font-medium">Age eligibility cutoff date (USSSA &amp; USA Softball rules for 2027 season):</span>
+                <input type="date" id="cutoff-date" value="2026-08-31" 
+                       class="bg-slate-950 border border-slate-700 focus:border-red-500 rounded-xl px-2 py-1 text-sm"
+                       onchange="renderAll()">
+            </div>
+            <div class="text-xs text-slate-500">
+                Player's age on this date determines their youngest eligible division (e.g. 16U) for the 2027 season. Players can typically play up one level.
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex flex-col lg:flex-row gap-6 items-start">
+            
+            <!-- Player Pool -->
+            <div class="w-full min-w-0 lg:w-1/4 bg-slate-900 border border-slate-700 rounded-3xl p-4 flex flex-col sticky top-20 self-start z-10">
+                <div class="flex items-center justify-between mb-3 min-w-0">
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <div>
+                            <div class="section-header">Player Pool</div>
+                            <div class="text-sm font-semibold" id="pool-count">0 players</div>
+                        </div>
+                        <button onclick="selectAllUnassigned()" class="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded-lg">Select all</button>
+                    </div>
+                    <input type="text" id="pool-search" placeholder="Search players..." 
+                           class="flex-1 min-w-0 max-w-48 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1 text-sm focus:outline-none focus:border-red-500"
+                           oninput="renderPlayerPool()">
+                </div>
+
+                <div class="mb-2 flex flex-wrap gap-1.5 items-center">
+                    <span class="text-[10px] text-slate-500 uppercase tracking-wide">Tryout filter</span>
+                    <select id="pool-rec-filter" onchange="renderPlayerPool()"
+                            class="text-xs bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 focus:outline-none focus:border-red-500">
+                        <option value="all">All recs</option>
+                        <option value="offer">Offer</option>
+                        <option value="waitlist">Waitlist</option>
+                        <option value="look">Need look</option>
+                        <option value="pass">Pass</option>
+                        <option value="none">Unrated</option>
+                    </select>
+                    <select id="pool-sort" onchange="renderPlayerPool()"
+                            class="text-xs bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 focus:outline-none focus:border-red-500">
+                        <option value="birthdate">Oldest first</option>
+                        <option value="score-desc">Best tryout first</option>
+                        <option value="score-asc">Lowest tryout first</option>
+                        <option value="name">Last name A–Z</option>
+                    </select>
+                </div>
+
+                <button id="add-to-pool-btn" onclick="unassignSelected()" 
+                        class="hidden mb-2 text-xs px-3 py-1 bg-emerald-700 hover:bg-emerald-600 rounded-xl flex items-center justify-center gap-x-1.5 text-center"
+                        title="Move selected players from teams back to the unassigned pool">
+                    <i class="fa-solid fa-arrow-up text-xs"></i>
+                    <span>Add selected</span>
+                </button>
+
+                <div id="player-pool" class="space-y-1 pr-1 bg-slate-950 rounded-2xl p-2 border border-slate-800" onclick="handlePoolBackgroundClick(event)">
+                    <!-- Populated by JS -->
+                </div>
+                
+                <div class="text-[10px] text-slate-500 mt-2 px-1">
+                    Click rows to toggle multi-select • Use "Select all" or checkboxes • Use "Add selected" on teams or above to move players
+                </div>
+            </div>
+
+            <!-- Teams Area -->
+            <div class="w-full min-w-0 lg:w-3/4 bg-slate-900 border border-slate-700 rounded-3xl p-4 flex flex-col">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <div class="section-header">Teams</div>
+                        <div class="text-sm font-semibold" id="teams-summary">0 teams • 0 assigned</div>
+                    </div>
+                    <div class="flex items-center gap-1 text-xs">
+                        <span class="text-slate-400">Layout:</span>
+                        <button id="layout-vertical" onclick="setTeamsLayout('vertical')" class="px-2 py-0.5 rounded text-white bg-red-700">Vertical</button>
+                        <button id="layout-horizontal" onclick="setTeamsLayout('horizontal')" class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600">Horizontal</button>
+                    </div>
+                </div>
+
+                <div id="teams-container" class="flex flex-col gap-3 pr-1">
+                    <!-- Team panels populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Selection Bar -->
+        <div id="selection-bar" class="hidden mt-4 bg-slate-900 border border-indigo-700 rounded-3xl p-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-x-3">
+                    <div class="text-sm font-medium">Selection:</div>
+                    <div id="selected-player-name" class="font-semibold text-lg"></div>
+                    <div id="selected-player-info" class="text-xs text-slate-400"></div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button id="unassign-btn" onclick="unassignSelected()" 
+                            class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-medium flex items-center gap-x-1.5">
+                        <i class="fa-solid fa-undo"></i>
+                        <span>Unassign selected</span>
+                    </button>
+                    <button onclick="clearSelection()" 
+                            class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-medium">
+                        Clear
+                    </button>
+                    <div id="assign-buttons" class="flex items-center gap-1.5 flex-wrap">
+                        <!-- Dynamic team assign buttons -->
+                    </div>
+                    <button onclick="clearSelection()" 
+                            class="px-3 py-1.5 border border-slate-600 hover:bg-slate-800 rounded-xl text-sm font-medium">
+                        Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Player Edit Modal -->
+        <div id="player-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50" onclick="if (event.target.id === 'player-modal') hidePlayerModal()">
+            <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto" onclick="event.stopImmediatePropagation()">
+                <h3 class="text-lg font-semibold mb-4" id="modal-title">Add Player</h3>
+                
+                <div class="space-y-4">
+                    <div class="flex items-center gap-4">
+                        <div id="modal-photo-preview" class="w-20 h-20 rounded-2xl bg-slate-950 border border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-user text-2xl text-slate-600"></i>
+                        </div>
+                        <div class="flex-1 min-w-0 space-y-2">
+                            <label class="text-xs text-slate-400 block">Player photo</label>
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" onclick="takeModalPhotoLive()"
+                                        class="px-3 py-2 bg-red-700 hover:bg-red-600 rounded-xl text-xs font-semibold">
+                                    <i class="fa-solid fa-camera mr-1"></i>Take photo
+                                </button>
+                                <button type="button" onclick="document.getElementById('modal-photo-library').click()"
+                                        class="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-semibold">
+                                    <i class="fa-solid fa-image mr-1"></i>Library
+                                </button>
+                                <button type="button" id="modal-photo-remove" onclick="clearModalPhoto()"
+                                        class="hidden px-3 py-2 border border-slate-700 hover:bg-slate-800 rounded-xl text-xs font-semibold text-slate-400">
+                                    Remove
+                                </button>
+                            </div>
+                            <p class="text-[10px] text-slate-500">Mac webcam or phone camera. Compressed &amp; shared with Tryouts on this device.</p>
+                        </div>
+                        <input type="file" id="modal-photo-library" accept="image/*" class="hidden" onchange="onModalPhotoPicked(event)">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-xs text-slate-400 block mb-1">First name</label>
+                            <input type="text" id="modal-first-name" placeholder="First" autocomplete="given-name"
+                                   class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-500">
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-400 block mb-1">Last name</label>
+                            <input type="text" id="modal-last-name" placeholder="Last" autocomplete="family-name"
+                                   class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-500">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs text-slate-400 block mb-1">Birthdate</label>
+                            <input type="date" id="modal-birthdate" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-500">
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-400 block mb-1">Original / Current Team</label>
+                            <input type="text" id="modal-original-team" placeholder="(optional)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-500">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 mt-6">
+                    <button onclick="hidePlayerModal()" class="flex-1 px-4 py-2 border border-slate-600 hover:bg-slate-800 rounded-2xl text-sm font-medium">Cancel</button>
+                    <button onclick="savePlayerFromModal()" class="flex-1 px-4 py-2 bg-red-700 hover:bg-red-600 rounded-2xl text-sm font-semibold">Save Player</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Team Create Modal -->
+        <div id="team-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50" onclick="if (event.target.id === 'team-modal') hideTeamModal()">
+            <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-md mx-4" onclick="event.stopImmediatePropagation()">
+                <h3 class="text-lg font-semibold mb-4">Create New Team</h3>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Team Name <span class="text-red-400">*</span></label>
+                        <input type="text" id="modal-team-name" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-500" placeholder="e.g. Red Team">
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 block mb-1">Age Level <span class="text-red-400">*</span></label>
+                        <select id="modal-team-age" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-500">
+                            <option value="">-- Select age level (required) --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 mt-6">
+                    <button onclick="hideTeamModal()" class="flex-1 px-4 py-2 border border-slate-600 hover:bg-slate-800 rounded-2xl text-sm font-medium">Cancel</button>
+                    <button onclick="saveTeamFromModal()" class="flex-1 px-4 py-2 bg-red-700 hover:bg-red-600 rounded-2xl text-sm font-semibold">Create Team</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== STATE (shared with Tryout Evaluator) ====================
+        if (!window.ElksData) {
+            document.body.innerHTML = '<div style="padding:2rem;color:#f87171;font-family:system-ui">Missing shared/elks-data.js — open from Gabes App Hub so relative paths work.</div>';
+            throw new Error('ElksData missing');
+        }
+
+        let sharedState = ElksData.load();
+        let players = sharedState.players;
+        let teams = sharedState.teams;
+        let selectedPlayerIds = new Set();
+        let teamsLayout = localStorage.getItem('mn-elks-teams-layout') || 'vertical';
+        let editingPhoto = '';
+
+        const AGE_GROUPS = ['8U','9U','10U','11U','12U','13U','14U','15U','16U','18U'];
+
+        // ==================== UTILS ====================
+        function generateId(prefix = 'id') {
+            return ElksData.uid(prefix);
+        }
+
+        function tryoutAvg(player) {
+            return ElksData.playerAvg(player);
+        }
+
+        function tryoutRec(player) {
+            return ElksData.recMeta(player && player.recommendation);
+        }
+
+        function tryoutScoreHTML(player, compact) {
+            const avg = tryoutAvg(player);
+            const rec = tryoutRec(player);
+            const avgLabel = ElksData.fmtAvg(avg);
+            const avgClass = avg == null ? 'text-slate-600' : (avg >= 4 ? 'text-emerald-400' : avg >= 3 ? 'text-amber-300' : 'text-slate-300');
+            if (compact) {
+                return `
+                    <div class="flex flex-col items-end shrink-0 ml-1" title="Tryout average">
+                        <span class="score-pill text-sm ${avgClass}">${avgLabel}</span>
+                        ${rec ? `<span class="text-[9px] ${rec.cls || ''} leading-none">${rec.label}</span>` : ''}
+                    </div>
+                `;
+            }
+            return `
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <span class="score-pill text-base ${avgClass}">${avgLabel}</span>
+                    ${rec ? `<span class="text-[10px] px-1.5 py-0.5 rounded ${rec.badge}">${rec.label}</span>` : ''}
+                </div>
+            `;
+        }
+
+        function getAge(birthdateStr) {
+            if (!birthdateStr) return null;
+            const birth = new Date(birthdateStr);
+            const today = new Date();
+            let age = today.getFullYear() - birth.getFullYear();
+            const m = today.getMonth() - birth.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+                age--;
+            }
+            return age;
+        }
+
+        function getSoftballAgeLevel(birthdateStr) {
+            if (!birthdateStr) return '—';
+            const cutoffInput = document.getElementById('cutoff-date');
+            let cutoff = new Date(2026, 7, 31); // Default: Aug 31, 2026 for 2027 season (USSSA/USA Softball)
+            if (cutoffInput && cutoffInput.value) {
+                const d = new Date(cutoffInput.value);
+                if (!isNaN(d.getTime())) cutoff = d;
+            }
+            const birth = new Date(birthdateStr);
+            let age = cutoff.getFullYear() - birth.getFullYear();
+            const m = cutoff.getMonth() - birth.getMonth();
+            if (m < 0 || (m === 0 && cutoff.getDate() < birth.getDate())) {
+                age--;
+            }
+            if (age < 0) age = 0;
+            return age + 'U';
+        }
+
+        function parseAgeGroup(ageGroupStr) {
+            if (!ageGroupStr) return 99;
+            const num = parseInt(ageGroupStr.replace(/U/i, '').trim());
+            return isNaN(num) ? 99 : num;
+        }
+
+        function isPlayerEligibleForTeam(player, team) {
+            if (!player || !team) return false;
+            if (!player.birthdate) return true; // unknown age - allow with warning
+            const playerAge = parseAgeGroup(getSoftballAgeLevel(player.birthdate));
+            const teamAge = parseAgeGroup(team.ageGroup || '18U');
+            return playerAge <= teamAge;
+        }
+
+        function getTeamAgeGroup(team) {
+            return team.ageGroup || '16U';
+        }
+
+        function formatDateForDisplay(dateStr) {
+            if (!dateStr) return '—';
+            const d = new Date(dateStr);
+            if (isNaN(d)) return dateStr;
+            return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        function sortPlayersByBirthdate(playerList) {
+            // Sort so oldest players (earliest birthdate) appear first / on top
+            return [...playerList].sort((a, b) => {
+                const da = (a && a.birthdate) ? a.birthdate : '9999-12-31';
+                const db = (b && b.birthdate) ? b.birthdate : '9999-12-31';
+                return da.localeCompare(db);
+            });
+        }
+
+        // ==================== STORAGE (shared) ====================
+        function saveState() {
+            sharedState.players = players;
+            sharedState.teams = teams;
+            ElksData.save(sharedState);
+        }
+
+        function loadState() {
+            sharedState = ElksData.load();
+            players = sharedState.players;
+            teams = sharedState.teams;
+        }
+
+        function reloadSharedFromStorage() {
+            const prevSelected = new Set(selectedPlayerIds);
+            loadState();
+            selectedPlayerIds = new Set([...prevSelected].filter(id => players.some(p => p.id === id)));
+            renderAll();
+        }
+
+        // ==================== RENDER ====================
+        let currentPoolSearch = '';
+
+        function renderAll() {
+            renderPlayerPool();
+            renderTeams();
+            renderSelectionBar();
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const poolCount = players.filter(p => !p.assignedTeamId).length;
+            const assignedCount = players.filter(p => p.assignedTeamId).length;
+            
+            const poolEl = document.getElementById('pool-count');
+            if (poolEl) poolEl.textContent = `${poolCount} unassigned`;
+
+            const summaryEl = document.getElementById('teams-summary');
+            if (summaryEl) summaryEl.textContent = `${teams.length} teams • ${assignedCount} assigned`;
+        }
+
+        function renderPlayerPool() {
+            const container = document.getElementById('player-pool');
+            if (!container) return;
+
+            const searchTerm = (document.getElementById('pool-search')?.value || '').toLowerCase().trim();
+            currentPoolSearch = searchTerm;
+
+            const unassigned = players.filter(p => !p.assignedTeamId);
+            const recFilter = document.getElementById('pool-rec-filter')?.value || 'all';
+            const sortBy = document.getElementById('pool-sort')?.value || 'birthdate';
+
+            let filtered = unassigned;
+            if (searchTerm) {
+                filtered = unassigned.filter(p => 
+                    ElksData.displayName(p).toLowerCase().includes(searchTerm) ||
+                    (p.firstName || '').toLowerCase().includes(searchTerm) ||
+                    (p.lastName || '').toLowerCase().includes(searchTerm) ||
+                    (p.originalTeam && p.originalTeam.toLowerCase().includes(searchTerm)) ||
+                    String(p.number || '').includes(searchTerm) ||
+                    (p.position || '').toLowerCase().includes(searchTerm)
+                );
+            }
+            if (recFilter !== 'all') {
+                filtered = filtered.filter(p => {
+                    if (recFilter === 'none') return !p.recommendation;
+                    return p.recommendation === recFilter;
+                });
+            }
+
+            if (sortBy === 'name') {
+                filtered = [...filtered].sort((a, b) => {
+                    const la = (a.lastName || ElksData.displayName(a)).toLowerCase();
+                    const lb = (b.lastName || ElksData.displayName(b)).toLowerCase();
+                    if (la !== lb) return la.localeCompare(lb);
+                    return (a.firstName || '').localeCompare(b.firstName || '');
+                });
+            } else if (sortBy === 'score-desc' || sortBy === 'score-asc') {
+                filtered = [...filtered].sort((a, b) => {
+                    const aa = tryoutAvg(a), bb = tryoutAvg(b);
+                    if (aa == null && bb == null) return 0;
+                    if (aa == null) return 1;
+                    if (bb == null) return -1;
+                    return sortBy === 'score-asc' ? aa - bb : bb - aa;
+                });
+            } else {
+                filtered = sortPlayersByBirthdate(filtered);
+            }
+
+            container.innerHTML = '';
+
+            if (filtered.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'text-center text-slate-500 text-xs py-8';
+                empty.innerHTML = searchTerm || recFilter !== 'all'
+                    ? 'No matching players in pool.'
+                    : 'No players in pool.<br>Import CSV, add players, or score them in Tryouts.';
+                container.appendChild(empty);
+                return;
+            }
+
+            filtered.forEach(player => {
+                const age = getAge(player.birthdate);
+                const ageLevel = getSoftballAgeLevel(player.birthdate);
+                const isSelected = selectedPlayerIds.has(player.id);
+                const pos = [player.position, player.position2].filter(Boolean).join('/');
+                const num = player.number ? `#${player.number}` : '';
+
+                const div = document.createElement('div');
+                div.className = `player-row flex items-center gap-2 px-2.5 py-2 rounded-2xl border border-transparent cursor-pointer ${isSelected ? 'selected border-indigo-500 bg-indigo-900/20' : 'hover:border-slate-600'}`;
+                
+                const playerLabel = ElksData.displayName(player);
+                const avatar = player.photo
+                    ? `<img src="${player.photo}" alt="" class="w-9 h-9 rounded-xl object-cover border border-slate-700 shrink-0" loading="lazy">`
+                    : `<div class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 text-slate-500 text-xs font-semibold">${escapeHtml((playerLabel || '?').charAt(0).toUpperCase())}</div>`;
+
+                div.innerHTML = `
+                    <input type="checkbox" ${isSelected ? 'checked' : ''} class="accent-indigo-500 shrink-0" onclick="event.stopImmediatePropagation(); togglePlayerSelection('${player.id}')">
+                    ${avatar}
+                    <div class="flex-1 min-w-0">
+                        <div class="font-semibold text-sm truncate">${num ? `<span class="text-slate-500 font-medium mr-1">${num}</span>` : ''}${escapeHtml(playerLabel)}</div>
+                        <div class="text-[10px] text-slate-400 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                            <span>${formatDateForDisplay(player.birthdate)}${age ? ` (${age})` : ''}</span>
+                            ${ageLevel && ageLevel !== '—' ? `<span class="px-1.5 py-px bg-emerald-900 text-emerald-300 rounded text-[9px]">${ageLevel}</span>` : ''}
+                            ${pos ? `<span class="px-1.5 py-px bg-slate-800 rounded text-[9px]">${escapeHtml(pos)}</span>` : ''}
+                            ${player.originalTeam ? `<span class="px-1.5 py-px bg-slate-800 rounded text-[9px]">${escapeHtml(player.originalTeam)}</span>` : ''}
+                        </div>
+                    </div>
+                    ${tryoutScoreHTML(player, true)}
+                    <div class="flex items-center gap-1 shrink-0">
+                        <button class="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded-lg" title="Edit" onclick="event.stopImmediatePropagation(); editPlayer('${player.id}')">
+                            <i class="fa-solid fa-edit"></i>
+                        </button>
+                        <button class="text-xs px-2 py-1 bg-red-900/60 hover:bg-red-900 text-red-300 rounded-lg" title="Delete" onclick="event.stopImmediatePropagation(); deletePlayer('${player.id}')">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+
+                div.onclick = (e) => {
+                    if (!e.target.closest('button') && !e.target.closest('input')) {
+                        e.stopPropagation();
+                        togglePlayerSelection(player.id);
+                    }
+                };
+                container.appendChild(div);
+            });
+        }
+
+        function escapeHtml(s) {
+            return String(s || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function renderTeams() {
+            const container = document.getElementById('teams-container');
+            if (!container) return;
+
+            container.className = teamsLayout === 'vertical' 
+                ? 'flex flex-col gap-3 pr-1' 
+                : 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pr-1';
+
+            container.innerHTML = '';
+
+            // Backward compat: ensure teams have ageGroup
+            let needsSave = false;
+            teams.forEach(t => {
+                if (!t.ageGroup) {
+                    t.ageGroup = '16U';
+                    needsSave = true;
+                }
+            });
+            if (needsSave) saveState();
+
+            // Sort teams vertically from older age to younger age (18U first, then 16U, etc.)
+            const sortedTeams = [...teams].sort((a, b) => {
+                const ageA = parseAgeGroup(a.ageGroup || '0U');
+                const ageB = parseAgeGroup(b.ageGroup || '0U');
+                return ageB - ageA;  // descending: older first
+            });
+
+            if (sortedTeams.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = teamsLayout === 'vertical' 
+                    ? 'text-center text-slate-500 text-sm py-8 bg-slate-950 rounded-2xl border border-slate-800' 
+                    : 'col-span-full text-center text-slate-500 text-sm py-8 bg-slate-950 rounded-2xl border border-slate-800';
+                empty.innerHTML = `No teams created yet.<br>Click "Create Team" above to get started.`;
+                container.appendChild(empty);
+                return;
+            }
+
+            sortedTeams.forEach(team => {
+                const teamPlayersRaw = players.filter(p => p.assignedTeamId === team.id);
+                const teamPlayers = sortPlayersByBirthdate(teamPlayersRaw);
+                
+                const panel = document.createElement('div');
+                panel.className = `team-panel w-full min-w-0 bg-slate-950 border border-slate-700 rounded-2xl p-3 flex flex-col`;
+
+                let playersHTML = '';
+                if (teamPlayers.length === 0) {
+                    playersHTML = `<div class="text-xs text-slate-500 italic px-2 py-3">No players assigned</div>`;
+                } else {
+                    // Within team: sort by tryout score when available, else birthdate order already applied
+                    teamPlayers.forEach(p => {
+                        const age = getAge(p.birthdate);
+                        const ageLevel = getSoftballAgeLevel(p.birthdate);
+                        const isSelected = selectedPlayerIds.has(p.id);
+                        const pos = [p.position, p.position2].filter(Boolean).join('/');
+                        const num = p.number ? `#${p.number} ` : '';
+                        const pLabel = ElksData.displayName(p);
+                        const avatar = p.photo
+                            ? `<img src="${p.photo}" alt="" class="w-7 h-7 rounded-lg object-cover border border-slate-700 shrink-0" loading="lazy">`
+                            : `<div class="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 text-slate-500 text-[10px] font-semibold">${escapeHtml((pLabel || '?').charAt(0).toUpperCase())}</div>`;
+                        playersHTML += `
+                            <div class="flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-slate-900 rounded-lg group ${isSelected ? 'bg-indigo-900/30' : ''}" onclick="event.stopImmediatePropagation(); togglePlayerSelection('${p.id}')">
+                                <input type="checkbox" ${isSelected ? 'checked' : ''} class="accent-indigo-500" onclick="event.stopImmediatePropagation(); togglePlayerSelection('${p.id}')">
+                                ${avatar}
+                                <div class="flex-1 min-w-0">
+                                    <div class="font-medium truncate">${num}${escapeHtml(pLabel)}</div>
+                                    <div class="text-[10px] text-slate-500 flex flex-wrap items-center gap-1">
+                                        <span>${formatDateForDisplay(p.birthdate)}${age ? ` (${age})` : ''}</span>
+                                        ${ageLevel && ageLevel !== '—' ? `<span class="px-1 py-px bg-emerald-900 text-emerald-300 rounded text-[9px]">${ageLevel}</span>` : ''}
+                                        ${pos ? `<span class="px-1 py-px bg-slate-800 rounded text-[9px]">${escapeHtml(pos)}</span>` : ''}
+                                    </div>
+                                </div>
+                                ${tryoutScoreHTML(p, true)}
+                                <button onclick="event.stopImmediatePropagation(); removePlayerFromTeam('${p.id}', '${team.id}')" 
+                                        class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 px-1">
+                                    <i class="fa-solid fa-times"></i>
+                                </button>
+                            </div>
+                        `;
+                    });
+                }
+
+                const currentAgeGroup = getTeamAgeGroup(team);
+                const ageOptions = AGE_GROUPS
+                    .map(opt => `<option value="${opt}" ${opt === currentAgeGroup ? 'selected' : ''}>${opt}</option>`).join('');
+
+                panel.innerHTML = `
+                    <div class="flex items-center mb-2">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            <input type="text" value="${team.name}" 
+                                   class="flex-1 min-w-0 bg-transparent font-semibold text-sm border-b border-transparent focus:border-red-500 outline-none px-1 mr-0.5"
+                                   onchange="renameTeam('${team.id}', this.value)">
+                            <span class="px-1.5 py-0.5 bg-emerald-900 text-emerald-300 text-[10px] font-semibold rounded-full min-w-[1rem] text-center flex-shrink-0" title="Players assigned">${teamPlayers.length}</span>
+                            <select onchange="setTeamAgeGroup('${team.id}', this.value)" 
+                                    class="text-xs bg-slate-800 border border-slate-600 rounded px-1 py-0.5 focus:outline-none flex-shrink-0">
+                                ${ageOptions}
+                            </select>
+                            <button onclick="deleteTeam('${team.id}')" class="text-red-400 hover:text-red-300 text-xs p-0.5 flex-shrink-0">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="text-xs border border-slate-800 rounded-xl p-1 bg-slate-900">
+                        ${playersHTML}
+                    </div>
+                    
+                    <button onclick="assignSelectedToTeam('${team.id}')" 
+                            class="mt-2 text-xs px-3 py-1 bg-red-700 hover:bg-red-600 rounded-xl flex items-center justify-center gap-x-1.5 text-center ${selectedPlayerIds.size > 0 && Array.from(selectedPlayerIds).every(id => { const p = players.find(pp => pp.id === id); return p && !isPlayerEligibleForTeam(p, team); }) ? 'opacity-50 cursor-not-allowed' : ''}">
+                        <i class="fa-solid fa-arrow-down text-xs"></i>
+                        <span>Add selected</span>
+                    </button>
+                `;
+
+                // Make panel clickable to bulk assign selected to this team
+                panel.onclick = (e) => {
+                    if (!e.target.closest('input') && !e.target.closest('button')) {
+                        if (selectedPlayerIds.size > 0) {
+                            assignSelectedToTeam(team.id);
+                        }
+                    }
+                };
+
+                container.appendChild(panel);
+            });
+
+            updateLayoutButtons();
+        }
+
+        function renderSelectionBar() {
+            const bar = document.getElementById('selection-bar');
+            if (!bar) return;
+
+            const poolAddBtn = document.getElementById('add-to-pool-btn');
+
+            if (selectedPlayerIds.size === 0) {
+                bar.classList.add('hidden');
+                if (poolAddBtn) poolAddBtn.classList.add('hidden');
+                return;
+            }
+
+            bar.classList.remove('hidden');
+
+            const count = selectedPlayerIds.size;
+            const nameEl = document.getElementById('selected-player-name');
+            const infoEl = document.getElementById('selected-player-info');
+
+            if (count === 1) {
+                const id = [...selectedPlayerIds][0];
+                const player = players.find(p => p.id === id);
+                if (!player) {
+                    clearSelection();
+                    return;
+                }
+                nameEl.textContent = ElksData.displayName(player);
+                const age = getAge(player.birthdate);
+                const ageLevel = getSoftballAgeLevel(player.birthdate);
+                const avg = tryoutAvg(player);
+                const rec = tryoutRec(player);
+                const tryoutBits = [
+                    avg != null ? `Tryout ${avg.toFixed(1)}` : null,
+                    rec ? rec.label : null,
+                ].filter(Boolean).join(' • ');
+                infoEl.textContent = [
+                    formatDateForDisplay(player.birthdate),
+                    age ? `Age ${age}` : null,
+                    ageLevel && ageLevel !== '—' ? ageLevel : null,
+                    tryoutBits || null,
+                ].filter(Boolean).join(' • ');
+            } else {
+                nameEl.textContent = `${count} players selected`;
+                const avgs = [...selectedPlayerIds]
+                    .map(id => tryoutAvg(players.find(p => p.id === id)))
+                    .filter(v => v != null);
+                const mean = avgs.length
+                    ? (avgs.reduce((a, b) => a + b, 0) / avgs.length).toFixed(1)
+                    : null;
+                infoEl.textContent = mean
+                    ? `Bulk actions • avg tryout ${mean} (${avgs.length} rated)`
+                    : 'Bulk actions below';
+            }
+
+            // control unassign / pool-add button visibility
+            const unassignBtn = document.getElementById('unassign-btn');
+            const hasAssigned = Array.from(selectedPlayerIds).some(id => {
+                const p = players.find(pp => pp.id === id);
+                return p && p.assignedTeamId;
+            });
+            if (unassignBtn) {
+                unassignBtn.style.display = hasAssigned ? '' : 'none';
+            }
+            if (poolAddBtn) {
+                if (hasAssigned) {
+                    poolAddBtn.classList.remove('hidden');
+                } else {
+                    poolAddBtn.classList.add('hidden');
+                }
+            }
+
+            // Build assign UI
+            const btnContainer = document.getElementById('assign-buttons');
+            btnContainer.innerHTML = '';
+
+            if (teams.length === 0) {
+                const msg = document.createElement('span');
+                msg.className = 'text-xs text-slate-400 px-2';
+                msg.textContent = 'Create a team first';
+                btnContainer.appendChild(msg);
+                return;
+            }
+
+            if (count === 1) {
+                // Quick buttons for single
+                const id = [...selectedPlayerIds][0];
+                const player = players.find(p => p.id === id);
+                if (!player) return;
+
+                teams.forEach(team => {
+                    if (player.assignedTeamId === team.id) return;
+                    const eligible = isPlayerEligibleForTeam(player, team);
+                    const btn = document.createElement('button');
+                    btn.className = `text-xs px-2.5 py-1 rounded-xl font-medium flex items-center gap-x-1 ${eligible ? 'bg-slate-700 hover:bg-red-700' : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-60'}`;
+                    btn.innerHTML = `<span>→ ${team.name} (${getTeamAgeGroup(team)})</span>`;
+                    if (eligible) {
+                        btn.onclick = () => assignPlayerToTeam(id, team.id);
+                    } else {
+                        btn.title = `Player is too old for this ${getTeamAgeGroup(team)} team`;
+                        btn.disabled = true;
+                    }
+                    btnContainer.appendChild(btn);
+                });
+            } else {
+                // Select + button for bulk multi
+                const select = document.createElement('select');
+                select.className = 'text-xs bg-slate-700 border border-slate-600 rounded px-2 py-1';
+                select.innerHTML = '<option value="">-- Choose team --</option>';
+                teams.forEach(team => {
+                    const opt = document.createElement('option');
+                    opt.value = team.id;
+                    opt.textContent = `${team.name} (${getTeamAgeGroup(team)})`;
+                    select.appendChild(opt);
+                });
+
+                const assignBtn = document.createElement('button');
+                assignBtn.className = 'text-xs px-2.5 py-1 bg-red-700 hover:bg-red-600 rounded-xl font-medium';
+                assignBtn.textContent = 'Assign to team';
+                assignBtn.onclick = () => {
+                    if (select.value) {
+                        bulkAssignToTeam(select.value);
+                    } else {
+                        alert('Please select a team to assign to.');
+                    }
+                };
+
+                btnContainer.appendChild(select);
+                btnContainer.appendChild(assignBtn);
+            }
+        }
+
+        function togglePlayerSelection(playerId) {
+            if (selectedPlayerIds.has(playerId)) {
+                selectedPlayerIds.delete(playerId);
+            } else {
+                selectedPlayerIds.add(playerId);
+            }
+            renderPlayerPool();
+            renderTeams();
+            renderSelectionBar();
+        }
+
+        function clearSelection() {
+            selectedPlayerIds.clear();
+            renderPlayerPool();
+            renderTeams();
+            renderSelectionBar();
+        }
+
+        function selectAllUnassigned() {
+            selectedPlayerIds.clear();
+            players.filter(p => !p.assignedTeamId).forEach(p => selectedPlayerIds.add(p.id));
+            renderPlayerPool();
+            renderTeams();
+            renderSelectionBar();
+        }
+
+        function handlePoolBackgroundClick(e) {
+            // Allow clicking the pool list background (or empty space) to bulk-unassign selected players into the pool,
+            // mirroring how team panels can be clicked to assign selected.
+            if (!e.target.closest('input') && !e.target.closest('button') && selectedPlayerIds.size > 0) {
+                unassignSelected();
+            }
+        }
+
+        // ==================== PLAYER ACTIONS ====================
+        function assignPlayerToTeam(playerId, teamId) {
+            const player = players.find(p => p.id === playerId);
+            if (!player) return;
+
+            const team = teams.find(t => t.id === teamId);
+            if (team && !isPlayerEligibleForTeam(player, team)) {
+                const playerLevel = getSoftballAgeLevel(player.birthdate) || 'unknown';
+                const teamLevel = getTeamAgeGroup(team);
+                alert(`Cannot assign: Player is ${playerLevel} — too old for a ${teamLevel} team.`);
+                return;
+            }
+
+            player.assignedTeamId = teamId;
+            saveState();
+            // Don't clear here for bulk; bulk function handles
+            if (selectedPlayerIds.size <= 1) {
+                clearSelection();
+            }
+            renderAll();
+        }
+
+        function bulkAssignToTeam(teamId) {
+            const team = teams.find(t => t.id === teamId);
+            if (!team) return;
+
+            let assigned = 0;
+            let skipped = [];
+            const toAssign = [...selectedPlayerIds];
+
+            toAssign.forEach(id => {
+                const player = players.find(p => p.id === id);
+                if (player && isPlayerEligibleForTeam(player, team)) {
+                    player.assignedTeamId = teamId;
+                    assigned++;
+                } else if (player) {
+                    skipped.push(ElksData.displayName(player));
+                }
+            });
+
+            saveState();
+            clearSelection();
+            renderAll();
+
+            if (skipped.length > 0) {
+                alert(`Assigned ${assigned} player(s). Skipped ${skipped.length} (too old for ${getTeamAgeGroup(team)} team): ${skipped.join(', ')}`);
+            } else if (assigned > 0) {
+                // silent success or small note
+            }
+        }
+
+        function unassignSelected() {
+            if (selectedPlayerIds.size === 0) return;
+            let changed = false;
+            selectedPlayerIds.forEach(id => {
+                const player = players.find(p => p.id === id);
+                if (player && player.assignedTeamId) {
+                    player.assignedTeamId = null;
+                    changed = true;
+                }
+            });
+            if (changed) {
+                saveState();
+                clearSelection();
+                renderAll();
+            }
+        }
+
+        function removePlayerFromTeam(playerId, teamId) {
+            const player = players.find(p => p.id === playerId);
+            if (player && player.assignedTeamId === teamId) {
+                player.assignedTeamId = null;
+                saveState();
+                renderAll();
+            }
+        }
+
+        function updateModalPhotoPreview() {
+            const box = document.getElementById('modal-photo-preview');
+            const removeBtn = document.getElementById('modal-photo-remove');
+            if (!box) return;
+            if (editingPhoto) {
+                box.innerHTML = `<img src="${editingPhoto}" alt="" class="w-full h-full object-cover">`;
+                if (removeBtn) removeBtn.classList.remove('hidden');
+            } else {
+                box.innerHTML = `<i class="fa-solid fa-user text-2xl text-slate-600"></i>`;
+                if (removeBtn) removeBtn.classList.add('hidden');
+            }
+        }
+
+        function clearModalPhoto() {
+            editingPhoto = '';
+            updateModalPhotoPreview();
+            const lib = document.getElementById('modal-photo-library');
+            if (lib) lib.value = '';
+        }
+
+        function takeModalPhotoLive() {
+            ElksData.takePlayerPhoto(
+                (dataUrl) => {
+                    editingPhoto = dataUrl;
+                    updateModalPhotoPreview();
+                },
+                () => {
+                    const lib = document.getElementById('modal-photo-library');
+                    if (lib) lib.click();
+                }
+            );
+        }
+
+        async function onModalPhotoPicked(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            try {
+                editingPhoto = await ElksData.compressImage(file, { maxWidth: 320, maxHeight: 320, quality: 0.72 });
+                updateModalPhotoPreview();
+            } catch (e) {
+                console.error(e);
+                alert('Could not process that photo. Try another image.');
+            }
+            event.target.value = '';
+        }
+
+        function editPlayer(playerId) {
+            const player = players.find(p => p.id === playerId);
+            if (!player) return;
+
+            const modal = document.getElementById('player-modal');
+            document.getElementById('modal-title').textContent = 'Edit Player';
+            
+            document.getElementById('modal-first-name').value = player.firstName || ElksData.splitFullName(player.name).firstName || '';
+            document.getElementById('modal-last-name').value = player.lastName || ElksData.splitFullName(player.name).lastName || '';
+            document.getElementById('modal-birthdate').value = player.birthdate || '';
+            document.getElementById('modal-original-team').value = player.originalTeam || '';
+            editingPhoto = player.photo || '';
+            updateModalPhotoPreview();
+
+            // Store editing id
+            modal.dataset.editingId = playerId;
+
+            modal.classList.remove('hidden');
+            document.getElementById('modal-first-name').focus();
+        }
+
+        function deletePlayer(playerId) {
+            if (!confirm('Delete this player from the shared roster (Team Formation + Tryout Evaluator)?')) return;
+            ElksData.deletePlayer(sharedState, playerId);
+            players = sharedState.players;
+            if (selectedPlayerIds.has(playerId)) selectedPlayerIds.delete(playerId);
+            saveState();
+            renderAll();
+        }
+
+        function showAddPlayerModal() {
+            const modal = document.getElementById('player-modal');
+            document.getElementById('modal-title').textContent = 'Add New Player';
+            document.getElementById('modal-first-name').value = '';
+            document.getElementById('modal-last-name').value = '';
+            document.getElementById('modal-birthdate').value = '';
+            document.getElementById('modal-original-team').value = '';
+            editingPhoto = '';
+            updateModalPhotoPreview();
+            delete modal.dataset.editingId;
+            modal.classList.remove('hidden');
+            document.getElementById('modal-first-name').focus();
+        }
+
+        function hidePlayerModal() {
+            const modal = document.getElementById('player-modal');
+            modal.classList.add('hidden');
+            delete modal.dataset.editingId;
+            editingPhoto = '';
+            const lib = document.getElementById('modal-photo-library');
+            if (lib) lib.value = '';
+        }
+
+        function savePlayerFromModal() {
+            const modal = document.getElementById('player-modal');
+            const firstName = document.getElementById('modal-first-name').value.trim();
+            const lastName = document.getElementById('modal-last-name').value.trim();
+            const birthdate = document.getElementById('modal-birthdate').value;
+            const originalTeam = document.getElementById('modal-original-team').value.trim();
+            const name = ElksData.joinName(firstName, lastName);
+
+            if (!name) {
+                alert('Enter a first and/or last name.');
+                return;
+            }
+
+            const editingId = modal.dataset.editingId;
+
+            if (editingId) {
+                const player = players.find(p => p.id === editingId);
+                if (player) {
+                    player.firstName = firstName;
+                    player.lastName = lastName;
+                    player.name = name;
+                    player.birthdate = birthdate;
+                    player.originalTeam = originalTeam;
+                    player.photo = editingPhoto || '';
+                }
+            } else {
+                players.push(ElksData.createPlayer({
+                    firstName,
+                    lastName,
+                    name,
+                    birthdate,
+                    originalTeam,
+                    photo: editingPhoto || '',
+                }));
+            }
+
+            sharedState.players = players;
+            saveState();
+            hidePlayerModal();
+            renderAll();
+        }
+
+        // ==================== TEAM ACTIONS ====================
+        function createNewTeam() {
+            showCreateTeamModal();
+        }
+
+        function showCreateTeamModal() {
+            const modal = document.getElementById('team-modal');
+            if (!modal) return;
+
+            document.getElementById('modal-team-name').value = `Team ${teams.length + 1}`;
+
+            const select = document.getElementById('modal-team-age');
+            select.innerHTML = '<option value="">-- Select age level (required) --</option>';
+            AGE_GROUPS.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                opt.textContent = g;
+                select.appendChild(opt);
+            });
+
+            modal.classList.remove('hidden');
+            const nameInput = document.getElementById('modal-team-name');
+            nameInput.focus();
+            nameInput.select();
+        }
+
+        function hideTeamModal() {
+            const modal = document.getElementById('team-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function saveTeamFromModal() {
+            const name = document.getElementById('modal-team-name').value.trim();
+            const age = document.getElementById('modal-team-age').value;
+
+            if (!name) {
+                alert('Team name is required.');
+                return;
+            }
+            if (!age) {
+                alert('Please select an age level for the team.');
+                return;
+            }
+
+            const newTeam = {
+                id: generateId('t'),
+                name: name,
+                ageGroup: age
+            };
+            teams.push(newTeam);
+            saveState();
+            hideTeamModal();
+            renderAll();
+        }
+
+        function renameTeam(teamId, newName) {
+            const team = teams.find(t => t.id === teamId);
+            if (team && newName && newName.trim()) {
+                team.name = newName.trim();
+                saveState();
+                // No full re-render needed for name, but to keep simple:
+                renderTeams();
+            }
+        }
+
+        function setTeamAgeGroup(teamId, newAgeGroup) {
+            const team = teams.find(t => t.id === teamId);
+            if (!team) return;
+
+            const oldGroup = team.ageGroup;
+            team.ageGroup = newAgeGroup;
+            saveState();
+
+            // Check existing players for overage
+            const overagePlayers = players.filter(p => 
+                p.assignedTeamId === teamId && !isPlayerEligibleForTeam(p, team)
+            );
+
+            if (overagePlayers.length > 0) {
+                if (confirm(`${overagePlayers.length} player(s) are now too old for the ${newAgeGroup} age group.\nUnassign them to the pool?`)) {
+                    overagePlayers.forEach(p => { p.assignedTeamId = null; });
+                    saveState();
+                }
+            }
+
+            renderAll();
+        }
+
+        function setTeamsLayout(layout) {
+            teamsLayout = layout;
+            localStorage.setItem('mn-elks-teams-layout', layout);
+            renderTeams();
+            updateLayoutButtons();
+        }
+
+        function updateLayoutButtons() {
+            const v = document.getElementById('layout-vertical');
+            const h = document.getElementById('layout-horizontal');
+            if (v && h) {
+                if (teamsLayout === 'vertical') {
+                    v.className = 'px-2 py-0.5 rounded text-white bg-red-700';
+                    h.className = 'px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600';
+                } else {
+                    v.className = 'px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600';
+                    h.className = 'px-2 py-0.5 rounded text-white bg-red-700';
+                }
+            }
+        }
+
+        function deleteTeam(teamId) {
+            if (!confirm('Delete this team? Players will be moved back to the pool.')) return;
+
+            // Unassign all players in this team
+            players.forEach(p => {
+                if (p.assignedTeamId === teamId) p.assignedTeamId = null;
+            });
+
+            teams = teams.filter(t => t.id !== teamId);
+            // Clear any selections that were on the deleted team
+            selectedPlayerIds.forEach(id => {
+                const p = players.find(pp => pp.id === id);
+                if (p && p.assignedTeamId === teamId) {
+                    selectedPlayerIds.delete(id);
+                }
+            });
+            saveState();
+            renderAll();
+        }
+
+        function assignSelectedToTeam(teamId) {
+            if (selectedPlayerIds.size === 0) {
+                alert('Select one or more players first.');
+                return;
+            }
+            bulkAssignToTeam(teamId);
+        }
+
+        // ==================== IMPORT / EXPORT ====================
+        function importFromCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const imported = parseCSV(text);
+
+                if (imported.length === 0) {
+                    alert('No players found in CSV. Make sure it has a header row with "name" and "birthdate".');
+                    return;
+                }
+
+                // Add new players to shared roster (avoid exact name+birthdate duplicates)
+                let added = 0;
+                imported.forEach(imp => {
+                    const exists = ElksData.findPlayerByIdentity(players, imp.name, imp.birthdate);
+                    if (!exists) {
+                        players.push(ElksData.createPlayer({
+                            firstName: imp.firstName || '',
+                            lastName: imp.lastName || '',
+                            name: imp.name,
+                            birthdate: imp.birthdate,
+                            originalTeam: imp.originalTeam || '',
+                        }));
+                        added++;
+                    }
+                });
+
+                sharedState.players = players;
+                saveState();
+                renderAll();
+                alert(`Imported ${added} new player(s) into shared roster. ${imported.length - added} duplicates skipped.`);
+
+                // reset file input
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function parseCSV(csvText) {
+            const lines = csvText.trim().split(/\r?\n/);
+            if (lines.length < 2) return [];
+
+            // Parse header
+            const headerLine = lines[0];
+            const headers = parseCSVLine(headerLine).map(h => h.toLowerCase().trim());
+
+            const firstIdx = headers.findIndex(h => /first/.test(h) && /name/.test(h));
+            const lastIdx = headers.findIndex(h => /last|surname|family/.test(h));
+            const nameIdx = headers.findIndex(h => h === 'name' || h === 'player' || h === 'player name' || (h.includes('name') && !/first|last|team/.test(h)));
+            const birthIdx = headers.findIndex(h => h.includes('birth') || h.includes('dob') || (h.includes('date') && !/tryout|session/.test(h)));
+            const teamIdx = headers.findIndex(h => h.includes('team') || h.includes('current') || h.includes('original'));
+
+            if (firstIdx < 0 && lastIdx < 0 && nameIdx < 0) {
+                alert('CSV must have first name / last name columns, or a full name column.');
+                return [];
+            }
+
+            const result = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                const cols = parseCSVLine(line);
+
+                let firstName = firstIdx >= 0 ? (cols[firstIdx] || '').trim() : '';
+                let lastName = lastIdx >= 0 ? (cols[lastIdx] || '').trim() : '';
+                if (!firstName && !lastName && nameIdx >= 0) {
+                    const parts = ElksData.splitFullName(cols[nameIdx] || '');
+                    firstName = parts.firstName;
+                    lastName = parts.lastName;
+                }
+                const name = ElksData.joinName(firstName, lastName);
+                if (!name) continue;
+
+                let birthdate = birthIdx >= 0 ? (cols[birthIdx] || '').trim() : '';
+                // Try to normalize date
+                if (birthdate) {
+                    const d = new Date(birthdate);
+                    if (!isNaN(d.getTime())) {
+                        birthdate = d.toISOString().slice(0, 10);
+                    }
+                }
+
+                const originalTeam = teamIdx >= 0 ? (cols[teamIdx] || '').trim() : '';
+
+                result.push({ firstName, lastName, name, birthdate, originalTeam });
+            }
+
+            return result;
+        }
+
+        function parseCSVLine(line) {
+            // Basic CSV line parser that handles simple quoted fields
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"' ) {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result.map(v => v.replace(/^"|"$/g, ''));
+        }
+
+        function exportTeamsCSV() {
+            if (players.length === 0) {
+                alert('No players to export.');
+                return;
+            }
+
+            let csv = 'First Name,Last Name,Name,Number,Position,Birthdate,Original Team,Assigned Team,Tryout Avg,Recommendation\n';
+
+            players.forEach(p => {
+                const assignedTeam = p.assignedTeamId ? (teams.find(t => t.id === p.assignedTeamId)?.name || '') : '';
+                const avg = tryoutAvg(p);
+                const pos = [p.position, p.position2].filter(Boolean).join('/');
+                const full = ElksData.displayName(p);
+                const row = [
+                    `"${(p.firstName || '').replace(/"/g, '""')}"`,
+                    `"${(p.lastName || '').replace(/"/g, '""')}"`,
+                    `"${full.replace(/"/g, '""')}"`,
+                    p.number || '',
+                    `"${pos}"`,
+                    p.birthdate || '',
+                    `"${(p.originalTeam || '').replace(/"/g, '""')}"`,
+                    `"${assignedTeam.replace(/"/g, '""')}"`,
+                    avg != null ? avg.toFixed(2) : '',
+                    p.recommendation || '',
+                ].join(',');
+                csv += row + '\n';
+            });
+
+            downloadFile(csv, 'mn-elks-teams.csv', 'text/csv');
+        }
+
+        function exportFullJSON() {
+            const data = {
+                ...sharedState,
+                players,
+                teams,
+                exported: new Date().toISOString(),
+            };
+            const json = JSON.stringify(data, null, 2);
+            downloadFile(json, 'elks-shared-backup.json', 'application/json');
+        }
+
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function loadSampleData() {
+            if (players.length > 0 || teams.length > 0) {
+                if (!confirm('This will replace shared roster + teams with sample data (also affects Tryout Evaluator). Continue?')) return;
+            }
+
+            players = [
+                ElksData.createPlayer({ firstName: "Ava", lastName: "Thompson", birthdate: "2010-03-12", originalTeam: "Eagles", number: "7", position: "SS", scores: { hitting: 4, power: 3, fielding: 5, arm: 4, speed: 5, iq: 4, attitude: 5 }, recommendation: "offer", evalNotes: "Plus range." }),
+                ElksData.createPlayer({ firstName: "Liam", lastName: "Rodriguez", birthdate: "2009-07-22", originalTeam: "Eagles", number: "12", position: "P", scores: { hitting: 3, power: 3, fielding: 3, arm: 4, speed: 3, iq: 4, attitude: 5, pitching: 5 }, recommendation: "offer" }),
+                ElksData.createPlayer({ firstName: "Sophia", lastName: "Patel", birthdate: "2010-01-05", originalTeam: "", number: "3", position: "OF", scores: { hitting: 5, power: 4, fielding: 3, arm: 3, speed: 4, iq: 3, attitude: 4 }, recommendation: "offer" }),
+                ElksData.createPlayer({ firstName: "Noah", lastName: "Kim", birthdate: "2009-11-30", originalTeam: "Tigers", number: "21", position: "C", scores: { hitting: 3, power: 4, fielding: 4, arm: 5, speed: 2, iq: 4, attitude: 4 }, recommendation: "waitlist" }),
+                ElksData.createPlayer({ firstName: "Isabella", lastName: "Chen", birthdate: "2010-09-14", originalTeam: "Tigers", number: "9", position: "2B", scores: { hitting: 3, power: 2, fielding: 4, arm: 3, speed: 4, iq: 3, attitude: 5 }, recommendation: "look" }),
+                ElksData.createPlayer({ firstName: "Mason", lastName: "Wright", birthdate: "2009-04-18", originalTeam: "", number: "15", position: "3B", scores: { hitting: 2, power: 3, fielding: 3, arm: 4, speed: 3, iq: 2, attitude: 3 }, recommendation: "pass" }),
+                ElksData.createPlayer({ firstName: "Olivia", lastName: "Martinez", birthdate: "2010-06-02", originalTeam: "Eagles", number: "4", position: "OF", scores: { hitting: 4, power: 5, fielding: 2, arm: 3, speed: 3, iq: 3, attitude: 4 }, recommendation: "waitlist" }),
+                ElksData.createPlayer({ firstName: "Ethan", lastName: "Brooks", birthdate: "2009-12-25", originalTeam: "Tigers", number: "18", position: "P" }),
+            ];
+
+            teams = [
+                ElksData.createTeam({ name: "Red Team", ageGroup: "16U" }),
+                ElksData.createTeam({ name: "Blue Team", ageGroup: "16U" }),
+                ElksData.createTeam({ name: "White Team", ageGroup: "14U" }),
+            ];
+
+            players[0].assignedTeamId = teams[0].id;
+            players[1].assignedTeamId = teams[0].id;
+            players[3].assignedTeamId = teams[1].id;
+            players[4].assignedTeamId = teams[1].id;
+
+            // Mirror sample scores into a tryout session so Tryout app matches
+            let tryout = sharedState.tryouts[0];
+            if (!tryout) {
+                tryout = ElksData.createTryout({ name: 'Sample Tryout', ageGroup: '16U' });
+                sharedState.tryouts = [tryout];
+            }
+            tryout.name = 'Sample Tryout';
+            tryout.evaluations = {};
+            players.forEach(p => {
+                if (p.scores && Object.keys(p.scores).length) {
+                    ElksData.setEvalOnTryout(tryout, p.id, {
+                        scores: p.scores,
+                        recommendation: p.recommendation,
+                        notes: p.evalNotes || '',
+                        updatedAt: Date.now(),
+                    });
+                    p.evalUpdatedAt = Date.now();
+                    p.evalTryoutId = tryout.id;
+                }
+            });
+            sharedState.currentTryoutId = tryout.id;
+
+            selectedPlayerIds.clear();
+            sharedState.players = players;
+            sharedState.teams = teams;
+            saveState();
+            renderAll();
+        }
+
+        function clearAllData() {
+            if (!confirm('Clear ALL shared players, teams, and tryout scores? This affects both Team Formation and Tryout Evaluator.')) return;
+            ElksData.clearAll(sharedState);
+            sharedState = ElksData.load();
+            players = sharedState.players;
+            teams = sharedState.teams;
+            selectedPlayerIds.clear();
+            renderAll();
+        }
+
+        // ==================== INIT ====================
+        function init() {
+            // Preserve team param on back link
+            (function() {
+                const params = new URLSearchParams(location.search);
+                const team = params.get('team');
+                if (team) {
+                    const back = document.getElementById('back-to-hub');
+                    if (back) back.href = '../index.html?team=' + encodeURIComponent(team);
+                }
+            })();
+
+            loadState();
+
+            // Initial render
+            renderAll();
+
+            updateLayoutButtons();
+
+            // Keyboard support for search
+            const searchInput = document.getElementById('pool-search');
+            if (searchInput) {
+                searchInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') {
+                        searchInput.value = '';
+                        renderPlayerPool();
+                    }
+                });
+            }
+
+            // Pick up roster/score changes when returning from Tryout Evaluator
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') reloadSharedFromStorage();
+            });
+            window.addEventListener('focus', reloadSharedFromStorage);
+        }
+
+        // Boot
+        window.addEventListener('DOMContentLoaded', init);
+
+        // Expose for debugging
+        window.MNElksTeams = { getState: () => ({ players, teams, sharedState }) };
+    </script>
+</body>
+</html>

@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#020617">
+  <title>Softball Tryout Evaluator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="../shared/elks-data.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+    :root { --safe-bottom: env(safe-area-inset-bottom, 0px); }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+    }
+
+    .title-font {
+      font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+    }
+
+    .section-header {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+
+    .score-btn {
+      min-width: 2.75rem;
+      min-height: 2.75rem;
+      touch-action: manipulation;
+      transition: transform 0.08s ease, background-color 0.08s ease, border-color 0.08s ease;
+    }
+    .score-btn:active { transform: scale(0.94); }
+    .score-btn.active {
+      background-color: #b91c1c;
+      border-color: #ef4444;
+      color: white;
+      font-weight: 700;
+    }
+
+    .player-card { transition: border-color 0.12s ease, background-color 0.12s ease; }
+    .player-card:active { background-color: #1e2937; }
+
+    .rec-offer { color: #34d399; }
+    .rec-waitlist { color: #fbbf24; }
+    .rec-look { color: #60a5fa; }
+    .rec-pass { color: #f87171; }
+
+    .modal-backdrop {
+      background: rgba(2, 6, 23, 0.82);
+      backdrop-filter: blur(4px);
+    }
+
+    .sheet {
+      max-height: min(92vh, 900px);
+      padding-bottom: calc(1rem + var(--safe-bottom));
+    }
+
+    .bottom-bar { padding-bottom: calc(0.75rem + var(--safe-bottom)); }
+
+    input[type="date"], input[type="text"], input[type="number"], select, textarea {
+      font-size: 16px;
+    }
+
+    .app-toggle a.active {
+      background: #b91c1c;
+      color: white;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen">
+  <div class="max-w-3xl mx-auto px-3 sm:px-4 pb-28">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-30 -mx-3 sm:-mx-4 px-3 sm:px-4 pt-3 pb-3 bg-slate-950/95 backdrop-blur border-b border-slate-900">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-x-3 min-w-0">
+          <a class='flex items-center gap-x-1.5 text-sm font-medium text-slate-400 hover:text-red-400 transition-colors shrink-0' href='/'>
+            <i class="fa-solid fa-arrow-left"></i>
+            <span class="hidden sm:inline">Hub</span>
+          </a>
+          <div class="w-10 h-10 bg-red-700 rounded-2xl flex items-center justify-center shrink-0">
+            <i class="fa-solid fa-clipboard-list text-white text-lg"></i>
+          </div>
+          <div class="min-w-0">
+            <h1 class="title-font text-xl sm:text-2xl font-semibold tracking-tighter truncate">Tryout Evaluator</h1>
+            <p class="text-slate-400 text-xs truncate">Shared roster with Team Formation</p>
+          </div>
+        </div>
+        <button onclick="openMenu()" class="w-10 h-10 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center hover:bg-slate-800" aria-label="Menu">
+          <i class="fa-solid fa-ellipsis-vertical"></i>
+        </button>
+      </div>
+
+      <!-- App toggle -->
+      <div class="app-toggle mt-3 flex p-1 bg-slate-900 border border-slate-800 rounded-2xl">
+        <a class='active flex-1 text-center text-xs sm:text-sm font-semibold py-2 rounded-xl' href='/softball-tryout-evaluator/'>
+          <i class="fa-solid fa-clipboard-list mr-1"></i>Tryouts
+        </a>
+        <a class='flex-1 text-center text-xs sm:text-sm font-semibold py-2 rounded-xl text-slate-400 hover:text-white' href='/mn-elks-team-formation/'>
+          <i class="fa-solid fa-users mr-1"></i>Teams
+        </a>
+      </div>
+
+      <!-- Tryout selector -->
+      <div class="mt-3 flex gap-2">
+        <select id="tryout-select" onchange="switchTryout(this.value)"
+                class="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none focus:border-red-500">
+        </select>
+        <button onclick="openTryoutModal()" title="New tryout"
+                class="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-sm font-semibold shrink-0">
+          <i class="fa-solid fa-plus"></i>
+        </button>
+        <button onclick="openTryoutModal(true)" title="Edit tryout"
+                class="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-sm font-semibold shrink-0">
+          <i class="fa-solid fa-pen"></i>
+        </button>
+        <button onclick="deleteCurrentTryout()" title="Delete this tryout"
+                class="px-3 py-2.5 border border-red-900 text-red-400 hover:bg-red-950 rounded-xl text-sm font-semibold shrink-0">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </div>
+    </header>
+
+    <div id="shared-banner" class="mt-3 text-[11px] text-slate-500 bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2 flex items-center gap-2">
+      <i class="fa-solid fa-link text-emerald-500"></i>
+      <span>Players &amp; scores sync with <strong class="text-slate-300">Team Formation</strong> on this device.</span>
+    </div>
+
+    <div id="summary-strip" class="mt-4 grid grid-cols-4 gap-2"></div>
+
+    <div class="mt-4 flex flex-wrap gap-2 items-center">
+      <div class="relative flex-1 min-w-[10rem]">
+        <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+        <input id="search" type="text" placeholder="Search players..." oninput="renderPlayers()"
+               class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-red-500">
+      </div>
+      <select id="filter-rec" onchange="renderPlayers()"
+              class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-red-500">
+        <option value="all">All recs</option>
+        <option value="offer">Offer</option>
+        <option value="waitlist">Waitlist</option>
+        <option value="look">Need look</option>
+        <option value="pass">Pass</option>
+        <option value="none">Unrated</option>
+      </select>
+      <select id="sort-by" onchange="renderPlayers()"
+              class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-red-500">
+        <option value="score-desc">Best first</option>
+        <option value="score-asc">Lowest first</option>
+        <option value="name">Last name A–Z</option>
+        <option value="number">Jersey #</option>
+        <option value="recent">Recently updated</option>
+      </select>
+    </div>
+
+    <div id="player-list" class="mt-4 space-y-2"></div>
+
+    <div id="empty-state" class="hidden mt-10 text-center px-6">
+      <div class="w-16 h-16 mx-auto mb-4 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center">
+        <i class="fa-solid fa-user-plus text-2xl text-slate-500"></i>
+      </div>
+      <h2 class="title-font text-xl mb-1">No players yet</h2>
+      <p class="text-slate-400 text-sm mb-5">Add athletes here or in Team Formation — they appear in both apps.</p>
+      <div class="flex flex-col sm:flex-row gap-2 justify-center">
+        <button onclick="openPlayerModal()" class="px-4 py-3 bg-red-700 hover:bg-red-600 rounded-2xl text-sm font-semibold">
+          <i class="fa-solid fa-user-plus mr-1.5"></i>Add Player
+        </button>
+        <button onclick="document.getElementById('csv-import').click()" class="px-4 py-3 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold">
+          <i class="fa-solid fa-file-import mr-1.5"></i>Import CSV
+        </button>
+        <a href="../sample-roster-import.csv" download="sample-roster-import.csv"
+           class="px-4 py-3 border border-slate-700 hover:bg-slate-900 rounded-2xl text-sm font-semibold inline-flex items-center justify-center">
+          <i class="fa-solid fa-file-csv mr-1.5"></i>Sample import file
+        </a>
+        <button onclick="loadSampleData()" class="px-4 py-3 border border-slate-700 hover:bg-slate-900 rounded-2xl text-sm font-semibold">
+          <i class="fa-solid fa-flask mr-1.5"></i>Sample Data
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="fixed bottom-0 inset-x-0 z-40 bg-slate-950/95 backdrop-blur border-t border-slate-800 bottom-bar">
+    <div class="max-w-3xl mx-auto px-3 sm:px-4 pt-3 flex gap-2">
+      <button onclick="openPlayerModal()" class="flex-1 flex items-center justify-center gap-2 py-3 bg-red-700 hover:bg-red-600 active:bg-red-800 rounded-2xl text-sm font-semibold">
+        <i class="fa-solid fa-user-plus"></i>
+        <span>Add Player</span>
+      </button>
+      <button onclick="openLeaderboard()" class="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold">
+        <i class="fa-solid fa-trophy text-amber-400"></i>
+        <span class="hidden sm:inline">Rankings</span>
+      </button>
+      <a class='flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold' href='/mn-elks-team-formation/'>
+        <i class="fa-solid fa-users text-red-400"></i>
+        <span class="hidden sm:inline">Teams</span>
+      </a>
+    </div>
+  </div>
+
+  <input type="file" id="csv-import" accept=".csv,text/csv" class="hidden" onchange="importCSV(event)">
+
+  <!-- Menu -->
+  <div id="menu-modal" class="fixed inset-0 z-50 hidden modal-backdrop" onclick="if(event.target===this)closeMenu()">
+    <div class="absolute bottom-0 inset-x-0 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-w-md sm:w-full bg-slate-900 border border-slate-700 rounded-t-3xl sm:rounded-3xl p-5 sheet">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="title-font text-lg">Menu</h3>
+        <button onclick="closeMenu()" class="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="space-y-2">
+        <a class='block w-full text-left px-4 py-3 rounded-2xl bg-slate-800 hover:bg-slate-750 flex items-center gap-3' href='/mn-elks-team-formation/'>
+          <i class="fa-solid fa-users w-5 text-red-400"></i><span>Open Team Formation</span>
+        </a>
+        <button onclick="closeMenu(); openTryoutModal(true)" class="w-full text-left px-4 py-3 rounded-2xl bg-slate-800 flex items-center gap-3">
+          <i class="fa-solid fa-pen w-5 text-slate-400"></i><span>Edit current tryout</span>
+        </button>
+        <button onclick="closeMenu(); document.getElementById('csv-import').click()" class="w-full text-left px-4 py-3 rounded-2xl bg-slate-800 flex items-center gap-3">
+          <i class="fa-solid fa-file-import w-5 text-slate-400"></i><span>Import players (CSV)</span>
+        </button>
+        <a href="../sample-roster-import.csv" download="sample-roster-import.csv"
+           onclick="closeMenu()"
+           class="w-full text-left px-4 py-3 rounded-2xl bg-slate-800 flex items-center gap-3">
+          <i class="fa-solid fa-file-csv w-5 text-emerald-400"></i><span>Download sample import file</span>
+        </a>
+        <button onclick="closeMenu(); exportCSV()" class="w-full text-left px-4 py-3 rounded-2xl bg-slate-800 flex items-center gap-3">
+          <i class="fa-solid fa-download w-5 text-slate-400"></i><span>Export evaluations (CSV)</span>
+        </button>
+        <button onclick="closeMenu(); exportJSON()" class="w-full text-left px-4 py-3 rounded-2xl bg-slate-800 flex items-center gap-3">
+          <i class="fa-solid fa-file-export w-5 text-slate-400"></i><span>Export full backup (JSON)</span>
+        </button>
+        <button onclick="closeMenu(); loadSampleData()" class="w-full text-left px-4 py-3 rounded-2xl bg-slate-800 flex items-center gap-3">
+          <i class="fa-solid fa-flask w-5 text-slate-400"></i><span>Load sample data</span>
+        </button>
+        <button onclick="closeMenu(); deleteCurrentTryout()" class="w-full text-left px-4 py-3 rounded-2xl bg-red-950/50 border border-red-900 text-red-300 flex items-center gap-3">
+          <i class="fa-solid fa-trash w-5"></i><span>Delete this tryout session</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tryout modal -->
+  <div id="tryout-modal" class="fixed inset-0 z-50 hidden modal-backdrop" onclick="if(event.target===this)closeTryoutModal()">
+    <div class="absolute bottom-0 inset-x-0 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-w-md sm:w-full bg-slate-900 border border-slate-700 rounded-t-3xl sm:rounded-3xl p-5 sheet overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="title-font text-lg" id="tryout-modal-title">New Tryout</h3>
+        <button onclick="closeTryoutModal()" class="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="space-y-3">
+        <div>
+          <label class="section-header block mb-1.5">Name</label>
+          <input id="tryout-name" type="text" placeholder="e.g. MN Elks 16U Spring Tryouts"
+                 class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="section-header block mb-1.5">Date</label>
+            <input id="tryout-date" type="date" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500">
+          </div>
+          <div>
+            <label class="section-header block mb-1.5">Age group</label>
+            <select id="tryout-age" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500">
+              <option>10U</option><option>12U</option><option>14U</option>
+              <option selected>16U</option><option>18U</option><option>Mixed</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="section-header block mb-1.5">Location (optional)</label>
+          <input id="tryout-location" type="text" placeholder="Field / complex"
+                 class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500">
+        </div>
+        <div>
+          <label class="section-header block mb-1.5">Notes (optional)</label>
+          <textarea id="tryout-notes" rows="2" placeholder="Session notes..."
+                    class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500 resize-none"></textarea>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button type="button" id="tryout-delete-btn" onclick="deleteCurrentTryoutFromModal()"
+                  class="hidden px-4 py-3 border border-red-900 text-red-400 hover:bg-red-950 rounded-2xl font-semibold shrink-0">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+          <button onclick="saveTryout()" class="flex-1 py-3 bg-red-700 hover:bg-red-600 rounded-2xl font-semibold">Save Tryout</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Player modal -->
+  <div id="player-modal" class="fixed inset-0 z-50 hidden modal-backdrop" onclick="if(event.target===this)closePlayerModal()">
+    <div class="absolute bottom-0 inset-x-0 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-w-lg sm:w-full bg-slate-900 border border-slate-700 rounded-t-3xl sm:rounded-3xl p-5 sheet overflow-y-auto">
+      <div class="flex items-center justify-between mb-3 sticky top-0 bg-slate-900 pb-2 z-10">
+        <h3 class="title-font text-lg" id="player-modal-title">Add Player</h3>
+        <button onclick="closePlayerModal()" class="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <input type="hidden" id="edit-player-id">
+      <div class="space-y-4">
+        <!-- Photo -->
+        <div class="flex items-center gap-4">
+          <div id="p-photo-preview" class="w-20 h-20 rounded-2xl bg-slate-950 border border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
+            <i class="fa-solid fa-user text-2xl text-slate-600"></i>
+          </div>
+          <div class="flex-1 min-w-0 space-y-2">
+            <div class="section-header">Player photo</div>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" onclick="takePhotoLive()"
+                      class="px-3 py-2 bg-red-700 hover:bg-red-600 rounded-xl text-xs font-semibold">
+                <i class="fa-solid fa-camera mr-1"></i>Take photo
+              </button>
+              <button type="button" onclick="document.getElementById('p-photo-library').click()"
+                      class="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-semibold">
+                <i class="fa-solid fa-image mr-1"></i>Library
+              </button>
+              <button type="button" id="p-photo-remove" onclick="clearEditingPhoto()"
+                      class="hidden px-3 py-2 border border-slate-700 hover:bg-slate-800 rounded-xl text-xs font-semibold text-slate-400">
+                Remove
+              </button>
+            </div>
+            <p class="text-[10px] text-slate-500">Uses Mac webcam or phone camera. Photos are compressed and saved on this device.</p>
+          </div>
+          <input type="file" id="p-photo-library" accept="image/*" class="hidden" onchange="onPhotoPicked(event)">
+        </div>
+
+        <div class="grid grid-cols-4 gap-2">
+          <div>
+            <label class="section-header block mb-1.5">#</label>
+            <input id="p-number" type="text" inputmode="numeric" placeholder="00"
+                   class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2 py-2.5 text-center font-semibold focus:outline-none focus:border-red-500">
+          </div>
+          <div class="col-span-3 grid grid-cols-2 gap-2">
+            <div>
+              <label class="section-header block mb-1.5">First name</label>
+              <input id="p-first-name" type="text" placeholder="First"
+                     autocomplete="given-name"
+                     class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500">
+            </div>
+            <div>
+              <label class="section-header block mb-1.5">Last name</label>
+              <input id="p-last-name" type="text" placeholder="Last"
+                     autocomplete="family-name"
+                     class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500">
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="section-header block mb-1.5">Primary pos</label>
+            <select id="p-position" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500">
+              <option value="">—</option>
+              <option>P</option><option>C</option><option>1B</option><option>2B</option>
+              <option>3B</option><option>SS</option><option>OF</option><option>UT</option>
+            </select>
+          </div>
+          <div>
+            <label class="section-header block mb-1.5">Secondary</label>
+            <select id="p-position2" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500">
+              <option value="">—</option>
+              <option>P</option><option>C</option><option>1B</option><option>2B</option>
+              <option>3B</option><option>SS</option><option>OF</option><option>UT</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="section-header block mb-1.5">Birthdate</label>
+            <input id="p-birthdate" type="date"
+                   class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500">
+          </div>
+          <div>
+            <label class="section-header block mb-1.5">Current team</label>
+            <input id="p-original-team" type="text" placeholder="Optional"
+                   class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500">
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <div class="section-header">Skill ratings (1–5)</div>
+            <div class="text-xs text-slate-500">Tap a number</div>
+          </div>
+          <div id="skill-rows" class="space-y-3"></div>
+        </div>
+
+        <div class="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3">
+          <div>
+            <div class="section-header">Average</div>
+            <div id="avg-display" class="title-font text-2xl text-white">—</div>
+          </div>
+          <div class="text-right">
+            <div class="section-header mb-1.5">Recommendation</div>
+            <div class="flex flex-wrap gap-1.5 justify-end" id="rec-buttons"></div>
+          </div>
+        </div>
+
+        <div>
+          <label class="section-header block mb-1.5">Notes</label>
+          <textarea id="p-notes" rows="3" placeholder="Strengths, concerns, specific plays..."
+                    class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500 resize-none"></textarea>
+        </div>
+
+        <div class="flex gap-2 pt-1">
+          <button id="delete-player-btn" onclick="deletePlayer()" class="hidden px-4 py-3 border border-red-900 text-red-400 rounded-2xl font-semibold">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+          <button onclick="savePlayer()" class="flex-1 py-3 bg-red-700 hover:bg-red-600 rounded-2xl font-semibold">
+            Save Evaluation
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaderboard -->
+  <div id="leaderboard-modal" class="fixed inset-0 z-50 hidden modal-backdrop" onclick="if(event.target===this)closeLeaderboard()">
+    <div class="absolute bottom-0 inset-x-0 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-w-lg sm:w-full bg-slate-900 border border-slate-700 rounded-t-3xl sm:rounded-3xl p-5 sheet overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="title-font text-lg"><i class="fa-solid fa-trophy text-amber-400 mr-2"></i>Rankings</h3>
+        <button onclick="closeLeaderboard()" class="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="leaderboard-body" class="space-y-1.5"></div>
+    </div>
+  </div>
+
+  <script>
+    if (!window.ElksData) {
+      document.body.innerHTML = '<div style="padding:2rem;color:#f87171;font-family:system-ui">Missing shared/elks-data.js — open this app from Gabes App Hub so relative paths work.</div>';
+      throw new Error('ElksData missing');
+    }
+
+    const { SKILLS, RECS } = ElksData;
+    let state = ElksData.load();
+    let editingScores = {};
+    let editingRec = null;
+    let editingTryoutId = null;
+    let editingPhoto = '';
+
+    function persist() { ElksData.save(state); }
+
+    function getTryout() { return ElksData.getCurrentTryout(state); }
+
+    function viewPlayers() {
+      const tryout = getTryout();
+      return state.players.map((p) => ElksData.playerWithEval(p, tryout));
+    }
+
+    function avgScore(viewPlayer) {
+      return ElksData.avgFromScores(viewPlayer.scores);
+    }
+
+    function fmtAvg(n) { return ElksData.fmtAvg(n); }
+    function recMeta(key) { return ElksData.recMeta(key); }
+
+    function renderTryoutSelect() {
+      const sel = document.getElementById('tryout-select');
+      sel.innerHTML = state.tryouts.map((t) => {
+        const label = `${t.name} · ${t.ageGroup} · ${t.date || 'no date'}`;
+        return `<option value="${t.id}" ${t.id === state.currentTryoutId ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+      }).join('');
+    }
+
+    function switchTryout(id) {
+      state.currentTryoutId = id;
+      persist();
+      renderAll();
+    }
+
+    function renderSummary() {
+      const players = viewPlayers();
+      const rated = players.filter((p) => avgScore(p) != null);
+      const offers = players.filter((p) => p.recommendation === 'offer').length;
+      const top = rated.length ? Math.max(...rated.map((p) => avgScore(p))) : null;
+      const cells = [
+        { label: 'Players', value: state.players.length, color: 'text-white' },
+        { label: 'Rated', value: rated.length, color: 'text-slate-200' },
+        { label: 'Offers', value: offers, color: 'text-emerald-400' },
+        { label: 'Top avg', value: top != null ? top.toFixed(1) : '—', color: 'text-amber-400' },
+      ];
+      document.getElementById('summary-strip').innerHTML = cells.map((c) => `
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl px-2 py-2.5 text-center">
+          <div class="section-header mb-0.5">${c.label}</div>
+          <div class="title-font text-lg ${c.color}">${c.value}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderPlayers() {
+      const list = document.getElementById('player-list');
+      const empty = document.getElementById('empty-state');
+      let players = viewPlayers();
+      const q = (document.getElementById('search').value || '').trim().toLowerCase();
+      const recFilter = document.getElementById('filter-rec').value;
+      const sortBy = document.getElementById('sort-by').value;
+
+      if (q) {
+        players = players.filter((p) =>
+          ElksData.displayName(p).toLowerCase().includes(q) ||
+          (p.firstName || '').toLowerCase().includes(q) ||
+          (p.lastName || '').toLowerCase().includes(q) ||
+          String(p.number || '').includes(q) ||
+          (p.position || '').toLowerCase().includes(q) ||
+          (p.originalTeam || '').toLowerCase().includes(q)
+        );
+      }
+      if (recFilter !== 'all') {
+        players = players.filter((p) => {
+          if (recFilter === 'none') return !p.recommendation;
+          return p.recommendation === recFilter;
+        });
+      }
+
+      players.sort((a, b) => {
+        if (sortBy === 'name') {
+          const la = (a.lastName || ElksData.displayName(a)).toLowerCase();
+          const lb = (b.lastName || ElksData.displayName(b)).toLowerCase();
+          if (la !== lb) return la.localeCompare(lb);
+          return (a.firstName || '').localeCompare(b.firstName || '');
+        }
+        if (sortBy === 'number') return String(a.number || '').localeCompare(String(b.number || ''), undefined, { numeric: true });
+        if (sortBy === 'recent') return (b.updatedAt || 0) - (a.updatedAt || 0);
+        const aa = avgScore(a), bb = avgScore(b);
+        if (aa == null && bb == null) return 0;
+        if (aa == null) return 1;
+        if (bb == null) return -1;
+        return sortBy === 'score-asc' ? aa - bb : bb - aa;
+      });
+
+      if (state.players.length === 0) {
+        list.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+      empty.classList.add('hidden');
+
+      if (players.length === 0) {
+        list.innerHTML = `<div class="text-center text-slate-500 text-sm py-10">No players match your filters.</div>`;
+        return;
+      }
+
+      list.innerHTML = players.map((p) => {
+        const avg = avgScore(p);
+        const rec = recMeta(p.recommendation);
+        const pos = [p.position, p.position2].filter(Boolean).join(' / ');
+        const scoreDots = SKILLS.filter((s) => !s.optional || p.scores?.[s.key]).map((s) => {
+          const filled = typeof p.scores?.[s.key] === 'number';
+          return `<span class="inline-block w-1.5 h-1.5 rounded-full ${filled ? 'bg-red-500' : 'bg-slate-700'}"></span>`;
+        }).join('');
+        const teamBadge = p.assignedTeamId
+          ? (() => {
+              const team = state.teams.find((t) => t.id === p.assignedTeamId);
+              return team
+                ? `<span class="text-[10px] px-1.5 py-0.5 rounded-md bg-indigo-950 text-indigo-300 shrink-0">${escapeHtml(team.name)}</span>`
+                : '';
+            })()
+          : '';
+
+        const avatar = p.photo
+          ? `<img src="${p.photo}" alt="" class="w-11 h-11 rounded-xl object-cover bg-slate-800 border border-slate-700 shrink-0">`
+          : `<div class="w-11 h-11 rounded-xl bg-slate-950 border border-slate-700 flex flex-col items-center justify-center shrink-0">
+              <span class="text-[10px] text-slate-500 leading-none">#</span>
+              <span class="font-bold text-sm leading-tight">${escapeHtml(String(p.number || '—'))}</span>
+            </div>`;
+
+        return `
+          <button onclick="openPlayerModal('${p.id}')"
+                  class="player-card w-full text-left bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl p-3.5 flex items-center gap-3">
+            ${avatar}
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-semibold truncate">${escapeHtml(ElksData.displayName(p))}</span>
+                ${p.number && p.photo ? `<span class="text-[10px] text-slate-500">#${escapeHtml(String(p.number))}</span>` : ''}
+                ${pos ? `<span class="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 shrink-0">${escapeHtml(pos)}</span>` : ''}
+                ${teamBadge}
+              </div>
+              <div class="flex items-center gap-2 mt-1">
+                <div class="flex gap-0.5">${scoreDots}</div>
+                ${rec ? `<span class="text-xs font-medium ${rec.cls}">${rec.label}</span>` : `<span class="text-xs text-slate-600">Not rated</span>`}
+              </div>
+            </div>
+            <div class="text-right shrink-0">
+              <div class="title-font text-xl ${avg != null ? 'text-white' : 'text-slate-600'}">${fmtAvg(avg)}</div>
+              <div class="text-[10px] text-slate-500">avg</div>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function renderAll() {
+      renderTryoutSelect();
+      renderSummary();
+      renderPlayers();
+    }
+
+    function openTryoutModal(edit = false) {
+      editingTryoutId = edit ? state.currentTryoutId : null;
+      const t = edit ? getTryout() : null;
+      document.getElementById('tryout-modal-title').textContent = edit ? 'Edit Tryout' : 'New Tryout';
+      document.getElementById('tryout-name').value = t?.name || '';
+      document.getElementById('tryout-date').value = t?.date || new Date().toISOString().slice(0, 10);
+      document.getElementById('tryout-age').value = t?.ageGroup || '16U';
+      document.getElementById('tryout-location').value = t?.location || '';
+      document.getElementById('tryout-notes').value = t?.notes || '';
+      document.getElementById('tryout-delete-btn').classList.toggle('hidden', !edit);
+      document.getElementById('tryout-modal').classList.remove('hidden');
+    }
+
+    function deleteCurrentTryoutFromModal() {
+      closeTryoutModal();
+      deleteCurrentTryout();
+    }
+
+    function closeTryoutModal() {
+      document.getElementById('tryout-modal').classList.add('hidden');
+      editingTryoutId = null;
+    }
+
+    function saveTryout() {
+      const fields = {
+        name: document.getElementById('tryout-name').value.trim() || 'Untitled Tryout',
+        date: document.getElementById('tryout-date').value,
+        ageGroup: document.getElementById('tryout-age').value,
+        location: document.getElementById('tryout-location').value.trim(),
+        notes: document.getElementById('tryout-notes').value.trim(),
+      };
+      if (editingTryoutId) {
+        const t = state.tryouts.find((x) => x.id === editingTryoutId);
+        if (t) Object.assign(t, fields);
+      } else {
+        const t = ElksData.createTryout(fields);
+        state.tryouts.push(t);
+        state.currentTryoutId = t.id;
+      }
+      persist();
+      closeTryoutModal();
+      renderAll();
+    }
+
+    function deleteCurrentTryout() {
+      const t = getTryout();
+      if (!t) return;
+      const ratedCount = Object.keys(t.evaluations || {}).length;
+      const msg = [
+        `Delete tryout "${t.name}"?`,
+        '',
+        ratedCount
+          ? `This removes ${ratedCount} evaluation(s) from this session only.`
+          : 'This session has no saved evaluations yet.',
+        'Players stay on the shared roster.',
+        state.tryouts.length <= 1
+          ? 'A blank tryout will be created after delete (you always need one session).'
+          : '',
+      ].filter(Boolean).join('\n');
+      if (!confirm(msg)) return;
+
+      state.tryouts = state.tryouts.filter((x) => x.id !== t.id);
+      if (state.tryouts.length === 0) {
+        const neu = ElksData.createTryout({ name: 'MN Elks Tryouts', date: new Date().toISOString().slice(0, 10), ageGroup: '16U' });
+        state.tryouts.push(neu);
+      }
+      state.currentTryoutId = state.tryouts[0].id;
+      // Refresh denormalized scores from remaining tryouts (latest per player)
+      state.players.forEach((p) => {
+        let best = null;
+        let bestId = null;
+        state.tryouts.forEach((tr) => {
+          const ev = ElksData.getEval(tr, p.id);
+          if (ev && (!best || (ev.updatedAt || 0) >= (best.updatedAt || 0))) {
+            best = ev;
+            bestId = tr.id;
+          }
+        });
+        if (best) ElksData.denormalizeEvalToPlayer(p, best, bestId);
+        else {
+          p.scores = {};
+          p.recommendation = null;
+          p.evalNotes = '';
+          p.evalUpdatedAt = null;
+          p.evalTryoutId = null;
+        }
+      });
+      persist();
+      renderAll();
+    }
+
+    function openPlayerModal(playerId = null) {
+      const tryout = getTryout();
+      const base = playerId ? state.players.find((x) => x.id === playerId) : null;
+      const p = base ? ElksData.playerWithEval(base, tryout) : null;
+
+      document.getElementById('player-modal-title').textContent = p ? 'Evaluate Player' : 'Add Player';
+      document.getElementById('edit-player-id').value = p?.id || '';
+      document.getElementById('p-number').value = p?.number || '';
+      document.getElementById('p-first-name').value = p?.firstName || (p ? ElksData.splitFullName(p.name).firstName : '') || '';
+      document.getElementById('p-last-name').value = p?.lastName || (p ? ElksData.splitFullName(p.name).lastName : '') || '';
+      document.getElementById('p-position').value = p?.position || '';
+      document.getElementById('p-position2').value = p?.position2 || '';
+      document.getElementById('p-birthdate').value = p?.birthdate || '';
+      document.getElementById('p-original-team').value = p?.originalTeam || '';
+      document.getElementById('p-notes').value = p?.notes || '';
+      document.getElementById('delete-player-btn').classList.toggle('hidden', !p);
+
+      editingScores = { ...(p?.scores || {}) };
+      editingRec = p?.recommendation || null;
+      // Photo lives on shared player identity (not per-tryout eval)
+      editingPhoto = base?.photo || '';
+      updatePhotoPreview();
+
+      renderSkillRows();
+      renderRecButtons();
+      updateAvgDisplay();
+      document.getElementById('player-modal').classList.remove('hidden');
+      if (!p) setTimeout(() => document.getElementById('p-first-name').focus(), 100);
+    }
+
+    function closePlayerModal() {
+      document.getElementById('player-modal').classList.add('hidden');
+      editingPhoto = '';
+      document.getElementById('p-photo-library').value = '';
+    }
+
+    function updatePhotoPreview() {
+      const box = document.getElementById('p-photo-preview');
+      const removeBtn = document.getElementById('p-photo-remove');
+      if (editingPhoto) {
+        box.innerHTML = `<img src="${editingPhoto}" alt="" class="w-full h-full object-cover">`;
+        removeBtn.classList.remove('hidden');
+      } else {
+        box.innerHTML = `<i class="fa-solid fa-user text-2xl text-slate-600"></i>`;
+        removeBtn.classList.add('hidden');
+      }
+    }
+
+    function clearEditingPhoto() {
+      editingPhoto = '';
+      updatePhotoPreview();
+      document.getElementById('p-photo-library').value = '';
+    }
+
+    function takePhotoLive() {
+      ElksData.takePlayerPhoto(
+        (dataUrl) => {
+          editingPhoto = dataUrl;
+          updatePhotoPreview();
+        },
+        () => {
+          // Fallback: open library picker if live camera API missing
+          document.getElementById('p-photo-library').click();
+        }
+      );
+    }
+
+    async function onPhotoPicked(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      try {
+        editingPhoto = await ElksData.compressImage(file, { maxWidth: 320, maxHeight: 320, quality: 0.72 });
+        updatePhotoPreview();
+      } catch (e) {
+        console.error(e);
+        alert('Could not process that photo. Try another image.');
+      }
+      event.target.value = '';
+    }
+
+    function renderSkillRows() {
+      document.getElementById('skill-rows').innerHTML = SKILLS.map((s) => {
+        const val = editingScores[s.key];
+        const buttons = [1, 2, 3, 4, 5].map((n) => `
+          <button type="button" onclick="setScore('${s.key}', ${n})"
+                  class="score-btn rounded-xl border border-slate-700 bg-slate-950 text-sm ${val === n ? 'active' : 'text-slate-300 hover:border-slate-500'}">${n}</button>
+        `).join('');
+        return `
+          <div class="flex items-center gap-2">
+            <div class="w-36 sm:w-44 shrink-0 flex items-center gap-2">
+              <i class="fa-solid ${s.icon} text-slate-500 text-xs w-4 text-center"></i>
+              <span class="text-sm ${s.optional ? 'text-slate-400' : ''}">${s.label}${s.optional ? ' <span class="text-[10px] text-slate-600">(opt)</span>' : ''}</span>
+            </div>
+            <div class="flex gap-1.5 flex-1 justify-end">${buttons}</div>
+            ${val != null ? `<button type="button" onclick="setScore('${s.key}', null)" class="text-slate-600 hover:text-slate-400 text-xs px-1"><i class="fa-solid fa-xmark"></i></button>` : '<span class="w-5"></span>'}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function setScore(key, n) {
+      if (n == null) delete editingScores[key];
+      else editingScores[key] = n;
+      renderSkillRows();
+      updateAvgDisplay();
+    }
+
+    function renderRecButtons() {
+      document.getElementById('rec-buttons').innerHTML = RECS.map((r) => {
+        const on = editingRec === r.key;
+        return `
+          <button type="button" onclick="setRec('${r.key}')"
+                  class="text-xs px-2.5 py-1.5 rounded-lg border font-medium ${on ? r.bg + ' ring-1 ring-offset-1 ring-offset-slate-900 ring-white/20' : 'border-slate-700 text-slate-400 hover:border-slate-500'}">${r.label}</button>
+        `;
+      }).join('');
+    }
+
+    function setRec(key) {
+      editingRec = editingRec === key ? null : key;
+      renderRecButtons();
+    }
+
+    function updateAvgDisplay() {
+      document.getElementById('avg-display').textContent = fmtAvg(ElksData.avgFromScores(editingScores));
+    }
+
+    function savePlayer() {
+      const id = document.getElementById('edit-player-id').value;
+      const firstName = document.getElementById('p-first-name').value.trim();
+      const lastName = document.getElementById('p-last-name').value.trim();
+      if (!firstName && !lastName) {
+        alert('Enter a first and/or last name.');
+        return;
+      }
+      const identity = {
+        number: document.getElementById('p-number').value.trim(),
+        firstName,
+        lastName,
+        name: ElksData.joinName(firstName, lastName) || 'Unnamed',
+        position: document.getElementById('p-position').value,
+        position2: document.getElementById('p-position2').value,
+        birthdate: document.getElementById('p-birthdate').value,
+        originalTeam: document.getElementById('p-original-team').value.trim(),
+      };
+
+      let playerId = id;
+      if (!playerId) {
+        const p = ElksData.createPlayer({ ...identity, photo: editingPhoto || '' });
+        state.players.push(p);
+        playerId = p.id;
+      }
+
+      ElksData.savePlayerEvaluation(state, playerId, {
+        ...identity,
+        photo: editingPhoto || '',
+        scores: { ...editingScores },
+        recommendation: editingRec,
+        notes: document.getElementById('p-notes').value.trim(),
+      });
+
+      persist();
+      closePlayerModal();
+      renderAll();
+    }
+
+    function deletePlayer() {
+      const id = document.getElementById('edit-player-id').value;
+      if (!id) return;
+      const p = state.players.find((x) => x.id === id);
+      if (!confirm(`Remove ${p ? ElksData.displayName(p) : 'this player'} from the shared roster (both Tryouts and Team Formation)?`)) return;
+      ElksData.deletePlayer(state, id);
+      persist();
+      closePlayerModal();
+      renderAll();
+    }
+
+    function openLeaderboard() {
+      const players = viewPlayers()
+        .map((p) => ({ p, avg: avgScore(p) }))
+        .filter((x) => x.avg != null)
+        .sort((a, b) => b.avg - a.avg);
+
+      const body = document.getElementById('leaderboard-body');
+      if (!players.length) {
+        body.innerHTML = `<p class="text-slate-500 text-sm text-center py-8">Rate some players to see rankings.</p>`;
+      } else {
+        body.innerHTML = players.map((x, i) => {
+          const rec = recMeta(x.p.recommendation);
+          const medal = i === 0 ? 'text-amber-400' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-amber-700' : 'text-slate-600';
+          const thumb = x.p.photo
+            ? `<img src="${x.p.photo}" alt="" class="w-8 h-8 rounded-lg object-cover shrink-0">`
+            : '';
+          return `
+            <button onclick="closeLeaderboard(); openPlayerModal('${x.p.id}')"
+                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-800 text-left">
+              <span class="title-font w-7 text-center ${medal}">${i + 1}</span>
+              ${thumb}
+              <div class="flex-1 min-w-0">
+                <div class="font-medium truncate">${escapeHtml(ElksData.displayName(x.p))}${x.p.number ? ` <span class="text-slate-500 text-xs">#${escapeHtml(String(x.p.number))}</span>` : ''}</div>
+                ${rec ? `<div class="text-xs ${rec.cls}">${rec.label}</div>` : ''}
+              </div>
+              <div class="title-font text-lg">${x.avg.toFixed(1)}</div>
+            </button>
+          `;
+        }).join('');
+      }
+      document.getElementById('leaderboard-modal').classList.remove('hidden');
+    }
+
+    function closeLeaderboard() {
+      document.getElementById('leaderboard-modal').classList.add('hidden');
+    }
+
+    function openMenu() { document.getElementById('menu-modal').classList.remove('hidden'); }
+    function closeMenu() { document.getElementById('menu-modal').classList.add('hidden'); }
+
+    function exportCSV() {
+      const tryout = getTryout();
+      const headers = ['number', 'firstName', 'lastName', 'name', 'birthdate', 'position', 'position2', 'originalTeam', ...SKILLS.map((s) => s.key), 'average', 'recommendation', 'notes', 'assignedTeam'];
+      const rows = viewPlayers().map((p) => {
+        const avg = avgScore(p);
+        const team = p.assignedTeamId ? (state.teams.find((t) => t.id === p.assignedTeamId)?.name || '') : '';
+        return [
+          p.number, p.firstName || '', p.lastName || '', ElksData.displayName(p), p.birthdate, p.position, p.position2, p.originalTeam,
+          ...SKILLS.map((s) => p.scores?.[s.key] ?? ''),
+          avg != null ? avg.toFixed(2) : '',
+          p.recommendation || '',
+          (p.notes || '').replace(/"/g, '""'),
+          team,
+        ].map((v) => `"${v ?? ''}"`).join(',');
+      });
+      downloadFile(`${slug(tryout?.name || 'tryout')}-evaluations.csv`, [headers.join(','), ...rows].join('\n'), 'text/csv');
+    }
+
+    function exportJSON() {
+      downloadFile('elks-shared-backup.json', JSON.stringify(state, null, 2), 'application/json');
+    }
+
+    function importCSV(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const lines = reader.result.split(/\r?\n/).filter((l) => l.trim());
+          if (lines.length < 2) { alert('CSV looks empty.'); return; }
+          const headers = parseCSVLine(lines[0]).map((h) => h.toLowerCase().trim());
+          const firstIdx = headers.findIndex((h) => /first/.test(h) && /name/.test(h));
+          const lastIdx = headers.findIndex((h) => /last|surname|family/.test(h));
+          const nameIdx = headers.findIndex((h) => h === 'name' || h === 'player' || h === 'player name' || (h.includes('name') && !/first|last|team/.test(h)));
+          const numIdx = headers.findIndex((h) => /number|jersey|#|no\.?/.test(h));
+          const posIdx = headers.findIndex((h) => /pos|position/.test(h) && !/2|secondary/.test(h));
+          const birthIdx = headers.findIndex((h) => /birth|dob/.test(h) || (h.includes('date') && !/tryout|session/.test(h)));
+          const teamIdx = headers.findIndex((h) => /team|current|original/.test(h));
+          if (firstIdx < 0 && lastIdx < 0 && nameIdx < 0) {
+            alert('CSV needs first name / last name columns, or a full name column.');
+            return;
+          }
+
+          let added = 0;
+          for (let i = 1; i < lines.length; i++) {
+            const cols = parseCSVLine(lines[i]);
+            let firstName = firstIdx >= 0 ? (cols[firstIdx] || '').trim() : '';
+            let lastName = lastIdx >= 0 ? (cols[lastIdx] || '').trim() : '';
+            if (!firstName && !lastName && nameIdx >= 0) {
+              const parts = ElksData.splitFullName(cols[nameIdx] || '');
+              firstName = parts.firstName;
+              lastName = parts.lastName;
+            }
+            const name = ElksData.joinName(firstName, lastName);
+            if (!name) continue;
+            let birthdate = birthIdx >= 0 ? (cols[birthIdx] || '').trim() : '';
+            if (birthdate) {
+              const d = new Date(birthdate);
+              if (!isNaN(d.getTime())) birthdate = d.toISOString().slice(0, 10);
+            }
+            const exists = ElksData.findPlayerByIdentity(state.players, name, birthdate)
+              || state.players.find((p) => ElksData.displayName(p).toLowerCase() === name.toLowerCase() && !birthdate);
+            if (exists) continue;
+            state.players.push(ElksData.createPlayer({
+              firstName,
+              lastName,
+              name,
+              number: numIdx >= 0 ? cols[numIdx]?.trim() || '' : '',
+              position: posIdx >= 0 ? cols[posIdx]?.trim() || '' : '',
+              birthdate,
+              originalTeam: teamIdx >= 0 ? cols[teamIdx]?.trim() || '' : '',
+            }));
+            added++;
+          }
+          persist();
+          renderAll();
+          alert(`Imported ${added} players into the shared roster.`);
+        } catch (e) {
+          console.error(e);
+          alert('Could not parse CSV.');
+        }
+        event.target.value = '';
+      };
+      reader.readAsText(file);
+    }
+
+    function parseCSVLine(line) {
+      const out = [];
+      let cur = '', inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') {
+          if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+          else inQ = !inQ;
+        } else if (c === ',' && !inQ) {
+          out.push(cur); cur = '';
+        } else cur += c;
+      }
+      out.push(cur);
+      return out;
+    }
+
+    function downloadFile(name, content, type) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([content], { type }));
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function slug(s) {
+      return (s || 'tryout').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    }
+
+    function loadSampleData() {
+      if (!confirm('Add sample players to the shared roster (visible in Team Formation too)?')) return;
+      const sample = [
+        { number: '7', firstName: 'Ava', lastName: 'Johnson', birthdate: '2010-03-12', position: 'SS', position2: '2B', originalTeam: 'Eagles', scores: { hitting: 4, power: 3, fielding: 5, arm: 4, speed: 5, iq: 4, attitude: 5 }, recommendation: 'offer', notes: 'Plus range at short. Leader.' },
+        { number: '12', firstName: 'Mia', lastName: 'Chen', birthdate: '2009-07-22', position: 'P', position2: '1B', originalTeam: 'Eagles', scores: { hitting: 3, power: 3, fielding: 3, arm: 4, speed: 3, iq: 4, attitude: 5, pitching: 5 }, recommendation: 'offer', notes: 'Strong riseball, good command.' },
+        { number: '3', firstName: 'Sophia', lastName: 'Rivera', birthdate: '2010-01-05', position: 'OF', position2: 'C', originalTeam: '', scores: { hitting: 5, power: 4, fielding: 3, arm: 3, speed: 4, iq: 3, attitude: 4 }, recommendation: 'offer', notes: 'Best bat in the group.' },
+        { number: '21', firstName: 'Emma', lastName: 'Brooks', birthdate: '2009-11-30', position: 'C', position2: '3B', originalTeam: 'Tigers', scores: { hitting: 3, power: 4, fielding: 4, arm: 5, speed: 2, iq: 4, attitude: 4 }, recommendation: 'waitlist', notes: 'Cannon arm. Needs footwork work.' },
+        { number: '9', firstName: 'Lily', lastName: 'Park', birthdate: '2010-09-14', position: '2B', position2: 'OF', originalTeam: 'Tigers', scores: { hitting: 3, power: 2, fielding: 4, arm: 3, speed: 4, iq: 3, attitude: 5 }, recommendation: 'look', notes: 'Good glove, wants more looks live.' },
+        { number: '15', firstName: 'Harper', lastName: 'Lee', birthdate: '2009-04-18', position: '3B', position2: 'SS', originalTeam: '', scores: { hitting: 2, power: 3, fielding: 3, arm: 4, speed: 3, iq: 2, attitude: 3 }, recommendation: 'pass', notes: 'Behind peer group currently.' },
+        { number: '4', firstName: 'Zoe', lastName: 'Martinez', birthdate: '2010-06-02', position: 'OF', position2: '', originalTeam: 'Eagles', scores: { hitting: 4, power: 5, fielding: 2, arm: 3, speed: 3, iq: 3, attitude: 4 }, recommendation: 'waitlist', notes: 'Power bat, OF routes raw.' },
+        { number: '18', firstName: 'Chloe', lastName: 'Anderson', birthdate: '2009-12-25', position: 'P', position2: 'OF', originalTeam: 'Tigers', scores: {}, recommendation: null, notes: '' },
+      ];
+      sample.forEach((s) => {
+        const { scores, recommendation, notes, ...identity } = s;
+        const full = ElksData.joinName(identity.firstName, identity.lastName);
+        if (state.players.some((p) => ElksData.displayName(p).toLowerCase() === full.toLowerCase())) return;
+        const p = ElksData.createPlayer(identity);
+        state.players.push(p);
+        if (scores && Object.keys(scores).length) {
+          ElksData.savePlayerEvaluation(state, p.id, { scores, recommendation, notes });
+        }
+      });
+      const t = getTryout();
+      if (t && (!t.name || t.name === 'MN Elks Tryouts')) {
+        t.name = 'MN Elks 16U Sample Tryout';
+        t.ageGroup = '16U';
+      }
+      persist();
+      renderAll();
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // Reload shared state when returning to this tab
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        state = ElksData.load();
+        renderAll();
+      }
+    });
+    window.addEventListener('focus', () => {
+      state = ElksData.load();
+      renderAll();
+    });
+
+    renderAll();
+  </script>
+</body>
+</html>
