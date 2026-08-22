@@ -9,6 +9,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <!-- Supabase for backend (configure in script at bottom) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../shared/elks-data.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
     
@@ -625,6 +626,7 @@
 
     function saveState() {
       saveCurrentGameToList();
+      pushRosterToShared();
       const data = {
         version: 2,
         roster: state.players,
@@ -637,6 +639,47 @@
 
       // Fire and forget cloud sync if configured
       syncToCloudIfEnabled(data);
+    }
+
+    function applyHubTeamName() {
+      if (window.HUB_SOFTBALL && window.HUB_SOFTBALL.teamName) {
+        const club = window.HUB_SOFTBALL.clubName || "MN Elks";
+        state.teamName = club + " " + window.HUB_SOFTBALL.teamName;
+      }
+    }
+
+    function syncRosterFromShared() {
+      if (!window.ElksData) return;
+      const shared = ElksData.load();
+      if (shared.players.length === 0 && state.players.length) {
+        state.players.forEach((player) => {
+          ElksData.upsertPlayer(shared, {
+            id: player.id,
+            name: player.name,
+            number: player.number != null ? String(player.number) : "",
+            evalNotes: player.notes || "",
+            assignedTeamId: window.HUB_SOFTBALL ? window.HUB_SOFTBALL.teamId : null,
+          });
+        });
+        ElksData.save(shared);
+      } else if (shared.players.length) {
+        state.players = ElksData.lineupPlayers(shared);
+      }
+      applyHubTeamName();
+    }
+
+    function pushRosterToShared() {
+      if (!window.ElksData) return;
+      const shared = ElksData.load();
+      state.players.forEach((player) => {
+        ElksData.upsertPlayer(shared, {
+          id: player.id,
+          name: player.name,
+          number: player.number != null ? String(player.number) : "",
+          evalNotes: player.notes || "",
+        });
+      });
+      ElksData.save(shared);
     }
 
     function loadState() {
@@ -688,6 +731,7 @@
         // Brand new
         createInitialGameFromCurrentState();
       }
+      syncRosterFromShared();
     }
 
     function createNewGame() {
@@ -1415,6 +1459,11 @@
     function removePlayerFromAll(playerId) {
       state.players = state.players.filter(p => p.id !== playerId);
       state.battingOrder = state.battingOrder.filter(id => id !== playerId);
+      if (window.ElksData) {
+        const shared = ElksData.load();
+        ElksData.deletePlayer(shared, playerId);
+        ElksData.save(shared);
+      }
       clearDefenseForPlayersNotInBatting();
       saveState();
       renderAll();
@@ -2708,6 +2757,13 @@
     // ==================== INIT ====================
     async function init() {
       loadState();
+      if (window.ElksData && window.ElksData.connectCloud) {
+        ElksData.connectCloud();
+      }
+      window.addEventListener("elks-data-updated", () => {
+        syncRosterFromShared();
+        renderAll();
+      });
 
       // Preserve team when going back to hub
       const backLink = document.getElementById('back-to-hub');

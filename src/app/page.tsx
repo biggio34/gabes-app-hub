@@ -63,6 +63,12 @@ export default async function HubHome() {
               <p className="mb-3 text-xs font-semibold tracking-[0.16em] text-slate-400 uppercase">
                 {meta.label}
               </p>
+              {area === "softball" ? (
+                <p className="mb-3 text-sm text-slate-400">
+                  Tryouts, team formation, lineup, and practice planner share one
+                  MN Elks · 16U Fransen roster.
+                </p>
+              ) : null}
               <div className="grid gap-4 md:grid-cols-2">
                 {apps.map((app) => {
                   const href = app.external ? app.href! : `/apps/${app.slug}`;

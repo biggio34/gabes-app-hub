@@ -1536,6 +1536,10 @@
             })();
 
             loadState();
+            if (window.ElksData && window.ElksData.connectCloud) {
+                ElksData.connectCloud();
+            }
+            window.addEventListener('elks-data-updated', reloadSharedFromStorage);
 
             // Initial render
             renderAll();

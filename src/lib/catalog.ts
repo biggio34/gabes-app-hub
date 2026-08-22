@@ -32,14 +32,14 @@ export const hubApps: HubApp[] = [
     file: "practice-planner.html",
     title: "16U Practice Planner",
     description:
-      "Drill library, drag-and-drop plans, timeline, and one-page PDF export for MN Elks 16U.",
+      "Drill library and practice plans for the shared 16U Fransen roster.",
     area: "softball",
   },
   {
     slug: "lineup",
     file: "lineup.html",
     title: "16U Lineup Builder",
-    description: "Positions, batting order, and export for the 16U team.",
+    description: "Game lineups from the shared 16U Fransen roster.",
     area: "softball",
   },
   {
@@ -47,7 +47,7 @@ export const hubApps: HubApp[] = [
     file: "team-formation.html",
     title: "Team Formation",
     description:
-      "Import players, form age-group teams, and use tryout averages plus Offer/Waitlist tags.",
+      "Put shared-roster players onto teams using tryout scores.",
     area: "softball",
   },
   {
@@ -55,7 +55,7 @@ export const hubApps: HubApp[] = [
     file: "tryout-evaluator.html",
     title: "Tryout Evaluator",
     description:
-      "Score tryouts and share the roster with Team Formation.",
+      "Score tryouts. Players land on the same roster as Lineup and Team Formation.",
     area: "softball",
   },
   {

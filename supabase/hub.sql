@@ -57,3 +57,11 @@ on conflict (id) do nothing;
 insert into hub_teams (id, club_id, name)
 values ('team-16u-fransen', 'club-mn-elks', '16U Fransen')
 on conflict (id) do nothing;
+
+create table if not exists hub_softball_state (
+  team_id text primary key,
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table hub_softball_state enable row level security;

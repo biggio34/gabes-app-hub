@@ -1072,6 +1072,14 @@
       renderAll();
     });
 
+    if (window.ElksData && window.ElksData.connectCloud) {
+      ElksData.connectCloud();
+    }
+    window.addEventListener('elks-data-updated', () => {
+      state = ElksData.load();
+      renderAll();
+    });
+
     renderAll();
   </script>
 </body>

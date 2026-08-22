@@ -1,6 +1,6 @@
 /**
  * MN Elks shared roster + tryout + team formation data.
- * Used by: softball-tryout-evaluator, mn-elks-team-formation
+ * Used by: tryout evaluator, team formation, lineup, practice planner
  * Storage key: mn-elks-shared-v1
  *
  * Players are canonical and shared. Team assignment lives on the player.
@@ -45,6 +45,10 @@
       teams: [],
       tryouts: [],
       currentTryoutId: null,
+      practices: [],
+      drills: [],
+      templates: [],
+      updatedAt: 0,
       version: 1,
     };
   }
@@ -523,9 +527,13 @@
     }
   }
 
-  function saveState(state) {
+  let cloudTimer = null;
+
+  function saveState(state, opts) {
     try {
+      state.updatedAt = Date.now();
       localStorage.setItem(SHARED_KEY, JSON.stringify(state));
+      if (!opts || !opts.skipCloud) scheduleCloudSave(state);
     } catch (e) {
       console.warn('ElksData: failed to save', e);
     }
@@ -651,6 +659,10 @@
     if (!state.players) state.players = [];
     if (!state.teams) state.teams = [];
     if (!state.tryouts) state.tryouts = [];
+    if (!state.practices) state.practices = [];
+    if (!state.drills) state.drills = [];
+    if (!state.templates) state.templates = [];
+    if (!state.updatedAt) state.updatedAt = 0;
     state.players = state.players.map(normalizePlayer);
 
     if (state.tryouts.length === 0) {
@@ -765,8 +777,72 @@
     state.teams = next.teams;
     state.tryouts = next.tryouts;
     state.currentTryoutId = next.currentTryoutId;
+    state.practices = next.practices;
+    state.drills = next.drills;
+    state.templates = next.templates;
+    state.updatedAt = next.updatedAt;
     state.version = next.version;
     saveState(state);
+  }
+
+  function toLineupPlayer(player) {
+    return {
+      id: player.id,
+      name: displayName(player),
+      number: player.number ? Number(player.number) || player.number : undefined,
+      notes: player.evalNotes || '',
+    };
+  }
+
+  function lineupPlayers(state) {
+    return (state.players || []).map(toLineupPlayer);
+  }
+
+  function connectCloud() {
+    pullFromCloud();
+  }
+
+  async function pullFromCloud() {
+    try {
+      const response = await fetch('/api/softball/state');
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!data || !data.state) return;
+      const local = loadRaw();
+      const remoteUpdated = Number(data.state.updatedAt || 0);
+      const localUpdated = Number((local && local.updatedAt) || 0);
+      if (!local || remoteUpdated >= localUpdated) {
+        saveState(ensureDefaults(data.state), { skipCloud: true });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('elks-data-updated'));
+        }
+      } else {
+        pushToCloud(local);
+      }
+    } catch (e) {
+      console.warn('ElksData: cloud pull failed', e);
+    }
+  }
+
+  function scheduleCloudSave(state) {
+    if (typeof fetch !== 'function') return;
+    clearTimeout(cloudTimer);
+    const snapshot = JSON.parse(JSON.stringify(state));
+    cloudTimer = setTimeout(function () {
+      pushToCloud(snapshot);
+    }, 500);
+  }
+
+  async function pushToCloud(state) {
+    try {
+      await fetch('/api/softball/state', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ state: state }),
+      });
+    } catch (e) {
+      console.warn('ElksData: cloud push failed', e);
+    }
   }
 
   global.ElksData = {
@@ -804,5 +880,8 @@
     deletePlayer,
     findPlayerByIdentity,
     clearAll,
+    toLineupPlayer,
+    lineupPlayers,
+    connectCloud,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

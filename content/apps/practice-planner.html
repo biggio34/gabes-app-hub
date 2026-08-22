@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <!-- Supabase for backend (configure keys in the script section at the bottom) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../shared/elks-data.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
@@ -61,7 +62,7 @@
                     <i class="fa-solid fa-baseball-ball text-white text-3xl"></i>
                 </div>
                 <div>
-                    <h1 class="title-font text-4xl font-semibold tracking-tighter">MN Elks 16U - Fransen</h1>
+                    <h1 id="planner-title" class="title-font text-4xl font-semibold tracking-tighter">MN Elks 16U - Fransen</h1>
                     <p class="text-red-400 text-lg -mt-1">Practice Planner</p>
                 </div>
             </div>
@@ -72,7 +73,7 @@
                         <div class="text-sm font-medium">16U</div>
                         <div id="current-central-time" class="text-sm font-semibold tabular-nums text-red-400"></div>
                     </div>
-                    <div class="text-xs text-slate-400">MN Elks - Fransen • Central Time</div>
+                    <div id="planner-subtitle" class="text-xs text-slate-400">MN Elks - Fransen • Central Time</div>
                 </div>
                 <div class="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center">
                     <i class="fa-solid fa-user text-slate-400"></i>
@@ -459,23 +460,50 @@
         let drills = [];
         let templates = [];
 
+        function applyPlannerHub() {
+            if (!window.HUB_SOFTBALL) return;
+            const title = document.getElementById('planner-title');
+            const subtitle = document.getElementById('planner-subtitle');
+            const club = window.HUB_SOFTBALL.clubName || 'MN Elks';
+            const team = window.HUB_SOFTBALL.teamName || '16U Fransen';
+            if (title) title.textContent = club + ' ' + team;
+            if (subtitle) subtitle.textContent = club + ' · ' + team + ' • Central Time';
+        }
+
+        function persistPlannerToShared() {
+            if (!window.ElksData) return;
+            const shared = ElksData.load();
+            shared.practices = practices;
+            shared.drills = drills;
+            shared.templates = templates;
+            ElksData.save(shared);
+        }
+
         function loadData() {
+            if (window.ElksData) {
+                const shared = ElksData.load();
+                if (shared.practices && shared.practices.length) practices = shared.practices;
+                if (shared.drills && shared.drills.length) drills = shared.drills;
+                if (shared.templates && shared.templates.length) templates = shared.templates;
+            }
+
             const savedPractices = localStorage.getItem('elks_practices');
-            if (savedPractices) practices = JSON.parse(savedPractices);
+            if ((!practices || !practices.length) && savedPractices) practices = JSON.parse(savedPractices);
 
             const savedDrills = localStorage.getItem('elks_drills');
-            if (savedDrills) {
+            if (savedDrills && (!drills || !drills.length)) {
                 drills = JSON.parse(savedDrills);
-            } else {
-                // Seed 16U drills for MN Elks - Fransen
+            } else if (!drills || !drills.length) {
                 drills = getDefaultDrills();
                 localStorage.setItem('elks_drills', JSON.stringify(drills));
             }
 
             const savedTemplates = localStorage.getItem('elks_templates');
-            if (savedTemplates) {
+            if (savedTemplates && (!templates || !templates.length)) {
                 templates = JSON.parse(savedTemplates);
             }
+            persistPlannerToShared();
+            applyPlannerHub();
         }
 
         // Central Time (CDT / CST) helpers - America/Chicago automatically handles DST
@@ -751,10 +779,12 @@
 
         function savePractices() {
             localStorage.setItem('elks_practices', JSON.stringify(practices));
+            persistPlannerToShared();
         }
 
         function saveTemplates() {
             localStorage.setItem('elks_templates', JSON.stringify(templates));
+            persistPlannerToShared();
         }
 
         function switchView(view) {
@@ -2028,6 +2058,12 @@
         async function init() {
             initTailwind();
             await loadData();
+            if (window.ElksData && window.ElksData.connectCloud) {
+                ElksData.connectCloud();
+            }
+            window.addEventListener('elks-data-updated', () => {
+                loadData();
+            });
 
             // Preserve team param on the back-to-hub link
             const backLink = document.getElementById('back-to-hub');
@@ -2094,14 +2130,23 @@
                 }
             }
 
+            if (window.ElksData) {
+                const shared = ElksData.load();
+                if (shared.practices && shared.practices.length) practices = shared.practices;
+                if (shared.drills && shared.drills.length) drills = shared.drills;
+                if (shared.templates && shared.templates.length && templates.length === 0) {
+                    templates = shared.templates;
+                }
+            }
+
             // Fallback / additional localStorage load (for practices/drills + offline)
             const savedPractices = localStorage.getItem('elks_practices');
-            if (savedPractices) practices = JSON.parse(savedPractices);
+            if ((!practices || !practices.length) && savedPractices) practices = JSON.parse(savedPractices);
 
             const savedDrills = localStorage.getItem('elks_drills');
-            if (savedDrills) {
+            if (savedDrills && (!drills || !drills.length)) {
                 drills = JSON.parse(savedDrills);
-            } else {
+            } else if (!drills || !drills.length) {
                 drills = getDefaultDrills();
                 localStorage.setItem('elks_drills', JSON.stringify(drills));
             }
@@ -2110,12 +2155,15 @@
             if (savedTemplatesLocal && templates.length === 0) {
                 templates = JSON.parse(savedTemplatesLocal);
             }
+            persistPlannerToShared();
+            applyPlannerHub();
         }
 
         // Enhanced save for templates
         async function saveTemplates() {
             // Always save to localStorage as fallback
             localStorage.setItem('elks_templates', JSON.stringify(templates));
+            persistPlannerToShared();
 
             // Also save to Supabase if configured + team selected
             if (supabaseClient && currentTeamId && templates.length > 0) {
