@@ -28,8 +28,13 @@ Optional env:
 
 - `HUB_ADMIN_PASSWORD` — owner password on first launch
 - `HUB_SESSION_SECRET` — cookie signing secret
+- `GMAIL_USER` — Gmail address that sends invite emails
+- `GMAIL_APP_PASSWORD` — 16-character Google app password (not your normal Gmail password)
+- `HUB_PUBLIC_URL` — optional, defaults to the live Netlify site
 
-People and passwords are stored in `data/users.json` (not committed). **People** in the hub is where you add logins and tick Financial / Softball / Luna Haus.
+**People** is where you add logins, tick Financial / Softball / Luna Haus, and email them a link to the sign-in page. The email includes their username and the password you typed.
+
+On Netlify, add `GMAIL_USER` and `GMAIL_APP_PASSWORD`, then deploy again. Create the app password at [Google App Passwords](https://myaccount.google.com/apppasswords) after 2-Step Verification is on. Do not put that password in this repo.
 
 ## Split
 

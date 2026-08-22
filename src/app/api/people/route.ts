@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { isArea, type Area } from "@/lib/areas";
+import { isInviteEmailConfigured, sendInviteEmail } from "@/lib/invite-email";
 import {
   createUser,
   deleteUser,
@@ -8,6 +9,8 @@ import {
   publicUser,
   updateUser,
 } from "@/lib/users";
+
+export const runtime = "nodejs";
 
 function requireOwner() {
   return getSession().then((session) => {
@@ -22,7 +25,10 @@ export async function GET() {
   const { error } = await requireOwner();
   if (error) return error;
   const users = await listUsers();
-  return NextResponse.json({ users: users.map(publicUser) });
+  return NextResponse.json({
+    users: users.map(publicUser),
+    emailReady: isInviteEmailConfigured(),
+  });
 }
 
 export async function POST(request: Request) {
@@ -31,17 +37,31 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     username?: string;
     name?: string;
+    email?: string;
     password?: string;
     areas?: string[];
   } | null;
   try {
+    const password = body?.password ?? "";
     const user = await createUser({
       username: body?.username ?? "",
       name: body?.name ?? "",
-      password: body?.password ?? "",
+      email: body?.email ?? "",
+      password,
       areas: (body?.areas ?? []).filter(isArea) as Area[],
     });
-    return NextResponse.json({ user: publicUser(user) });
+    const invite = await sendInviteEmail({
+      to: user.email ?? "",
+      name: user.name,
+      username: user.username,
+      password,
+      areas: user.areas,
+    });
+    return NextResponse.json({
+      user: publicUser(user),
+      emailSent: invite.sent,
+      emailError: invite.error,
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not create user" },
@@ -56,6 +76,7 @@ export async function PATCH(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     id?: string;
     name?: string;
+    email?: string;
     password?: string;
     areas?: string[];
   } | null;
@@ -65,6 +86,7 @@ export async function PATCH(request: Request) {
   try {
     const user = await updateUser(body.id, {
       name: body.name,
+      email: body.email,
       password: body.password,
       areas: body.areas?.filter(isArea),
     });

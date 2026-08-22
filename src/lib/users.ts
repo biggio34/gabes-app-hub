@@ -7,6 +7,7 @@ export type StoredUser = {
   id: string;
   username: string;
   name: string;
+  email?: string;
   passwordHash: string;
   role: Role;
   areas: Area[];
@@ -24,16 +25,60 @@ function ownerPassword() {
   return process.env.HUB_ADMIN_PASSWORD || "FransenHub2026";
 }
 
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 async function ownerUser(): Promise<StoredUser> {
   return {
     id: "user-gabe",
     username: "gabe",
     name: "Gabe Fransen",
+    email: process.env.GMAIL_USER || undefined,
     passwordHash: await hashPassword(ownerPassword()),
     role: "owner",
     areas: [...AREAS],
     createdAt: new Date().toISOString(),
   };
+}
+
+async function blobStore() {
+  if (!process.env.NETLIFY) return null;
+  try {
+    const { getStore } = await import("@netlify/blobs");
+    return getStore({ name: "gabes-hub", consistency: "strong" });
+  } catch {
+    return null;
+  }
+}
+
+async function readBlobs(): Promise<StoredUser[] | null> {
+  try {
+    const store = await blobStore();
+    if (!store) return null;
+    const parsed = (await store.get("users", { type: "json" })) as {
+      users?: StoredUser[];
+    } | null;
+    if (parsed?.users?.length) return parsed.users;
+  } catch {
+    // blobs unavailable locally or on first run
+  }
+  return null;
+}
+
+async function writeBlobs(users: StoredUser[]) {
+  try {
+    const store = await blobStore();
+    if (!store) return false;
+    await store.setJSON("users", { users });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function readStore(file: string): Promise<StoredUser[] | null> {
@@ -59,12 +104,18 @@ async function writeStore(file: string, users: StoredUser[]): Promise<boolean> {
 
 async function persist(users: StoredUser[]) {
   memoryUsers = users;
+  if (await writeBlobs(users)) return;
   for (const file of storePaths) {
     if (await writeStore(file, users)) return;
   }
 }
 
 async function ensureStore() {
+  const fromBlobs = await readBlobs();
+  if (fromBlobs) {
+    memoryUsers = fromBlobs;
+    return fromBlobs;
+  }
   if (memoryUsers?.length) return memoryUsers;
 
   for (const file of storePaths) {
@@ -104,12 +155,15 @@ export function matchesOwnerPassword(user: StoredUser, password: string) {
 export async function createUser(input: {
   username: string;
   name: string;
+  email: string;
   password: string;
   areas: Area[];
 }) {
   const users = await ensureStore();
   const username = input.username.trim().toLowerCase();
+  const email = normalizeEmail(input.email);
   if (!username) throw new Error("Username is required");
+  if (!isValidEmail(email)) throw new Error("A real email address is required");
   if (users.some((user) => user.username === username)) {
     throw new Error("That username is already taken");
   }
@@ -120,6 +174,7 @@ export async function createUser(input: {
     id: `user-${Date.now()}`,
     username,
     name: input.name.trim() || username,
+    email,
     passwordHash: await hashPassword(input.password),
     role: "member",
     areas: input.areas.filter((area) => AREAS.includes(area)),
@@ -132,13 +187,20 @@ export async function createUser(input: {
 
 export async function updateUser(
   id: string,
-  patch: { name?: string; areas?: Area[]; password?: string },
+  patch: { name?: string; email?: string; areas?: Area[]; password?: string },
 ) {
   const users = await ensureStore();
   const index = users.findIndex((user) => user.id === id);
   if (index < 0) throw new Error("User not found");
   const current = users[index];
   if (patch.name) current.name = patch.name.trim();
+  if (patch.email !== undefined) {
+    const email = normalizeEmail(patch.email);
+    if (email && !isValidEmail(email)) {
+      throw new Error("That email address does not look right");
+    }
+    current.email = email || undefined;
+  }
   if (patch.areas) {
     current.areas = patch.areas.filter((area) => AREAS.includes(area));
     if (current.role === "owner") current.areas = [...AREAS];
@@ -167,6 +229,7 @@ export function publicUser(user: StoredUser) {
     id: user.id,
     username: user.username,
     name: user.name,
+    email: user.email ?? "",
     role: user.role,
     areas: user.areas,
   };
