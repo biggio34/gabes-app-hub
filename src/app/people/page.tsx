@@ -317,9 +317,9 @@ export default function PeoplePage() {
 
         {databaseReady ? null : (
           <p className="rounded-2xl border border-amber-700/60 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
-            People, clubs, and teams are in a real database on this computer.
-            The live website still needs the hosted database so extra clubs
-            stay saved after a publish.
+            People, clubs, and teams are saved on this computer until
+            Supabase is connected. The live site needs the Supabase service
+            key in Netlify so extra clubs stay saved.
           </p>
         )}
         {emailReady ? null : (

@@ -24,14 +24,17 @@ First login (change this after you add other people):
 - Username: `gabe`
 - Password: `FransenHub2026`
 
-People, clubs, and teams live in a real SQLite database (`data/hub.db` locally). On the live site, point that same database at a hosted [Turso](https://turso.tech) database so many clubs and teams persist.
+People, clubs, and teams live in a real database. Locally that is SQLite (`data/hub.db`). On the live site they go to the existing Supabase project (`cylppatfrlazaioptpzo`) in `hub_*` tables, so the old lineup tables stay untouched.
+
+1. In the Supabase SQL editor, run `supabase/hub.sql`.
+2. In Netlify, add `SUPABASE_SERVICE_ROLE_KEY` (Project Settings → API → `service_role`, secret). Optional: `SUPABASE_URL` if you use a different project.
 
 Optional env:
 
 - `HUB_ADMIN_PASSWORD` — owner password on first launch
 - `HUB_SESSION_SECRET` — cookie signing secret
-- `TURSO_DATABASE_URL` — hosted libSQL URL (`libsql://...`)
-- `TURSO_AUTH_TOKEN` — Turso token
+- `SUPABASE_URL` — defaults to the existing lineup project
+- `SUPABASE_SERVICE_ROLE_KEY` — server-only secret; do not put this in the browser
 - `GMAIL_USER` — Gmail address that sends invite emails
 - `GMAIL_APP_PASSWORD` — 16-character Google app password (not your normal Gmail password)
 - `HUB_PUBLIC_URL` — optional, defaults to the live Netlify site

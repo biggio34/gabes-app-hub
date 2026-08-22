@@ -10,6 +10,7 @@ import {
 } from "@/lib/models";
 import * as schema from "./schema";
 import { importJsonStoreIfPresent } from "./import-json";
+import { isSupabaseConfigured } from "./supabase";
 
 const SCHEMA_SQL = [
   "PRAGMA foreign_keys = ON",
@@ -63,8 +64,7 @@ export function ownerPasswordValue() {
 }
 
 export function isRemoteDatabase() {
-  const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || "";
-  return url.startsWith("libsql:") || url.startsWith("https:");
+  return isSupabaseConfigured();
 }
 
 function databaseUrl() {

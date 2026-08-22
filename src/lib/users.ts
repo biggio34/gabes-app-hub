@@ -2,6 +2,8 @@ import { eq, inArray } from "drizzle-orm";
 import { AREAS, type Area } from "./areas";
 import { hashPassword } from "./auth";
 import { ownerPasswordValue, readyDb } from "./db/client";
+import { isSupabaseConfigured } from "./db/supabase";
+import * as supabaseStore from "./db/supabase-store";
 import { clubs, teams, userAreas, userClubs, userTeams, users } from "./db/schema";
 import {
   publicUser,
@@ -51,12 +53,14 @@ async function hydrate(rows: (typeof users.$inferSelect)[]): Promise<StoredUser[
 }
 
 export async function listUsers() {
+  if (isSupabaseConfigured()) return supabaseStore.listUsers();
   const db = await readyDb();
   const rows = await db.select().from(users);
   return hydrate(rows);
 }
 
 export async function findUserByUsername(username: string) {
+  if (isSupabaseConfigured()) return supabaseStore.findUserByUsername(username);
   const db = await readyDb();
   const rows = await db
     .select()
@@ -67,6 +71,7 @@ export async function findUserByUsername(username: string) {
 }
 
 export async function findUserById(id: string) {
+  if (isSupabaseConfigured()) return supabaseStore.findUserById(id);
   const db = await readyDb();
   const rows = await db.select().from(users).where(eq(users.id, id));
   const [user] = await hydrate(rows);
@@ -131,7 +136,6 @@ export async function createUser(input: {
   clubIds?: string[];
   teamIds?: string[];
 }) {
-  const db = await readyDb();
   const username = input.username.trim().toLowerCase();
   const email = normalizeEmail(input.email);
   if (!username) throw new Error("Username is required");
@@ -142,7 +146,9 @@ export async function createUser(input: {
   if (input.password.length < 6) {
     throw new Error("Password must be at least 6 characters");
   }
-  const assigned = await validAssignments(input.clubIds, input.teamIds);
+  const assigned = isSupabaseConfigured()
+    ? await supabaseStore.checkAssignments(input.clubIds, input.teamIds)
+    : await validAssignments(input.clubIds, input.teamIds);
   const user: StoredUser = {
     id: slugId("user"),
     username,
@@ -155,6 +161,11 @@ export async function createUser(input: {
     teamIds: assigned.teamIds,
     createdAt: new Date().toISOString(),
   };
+  if (isSupabaseConfigured()) {
+    await supabaseStore.insertUser(user);
+    return user;
+  }
+  const db = await readyDb();
   await db.insert(users).values({
     id: user.id,
     username: user.username,
@@ -179,7 +190,6 @@ export async function updateUser(
     teamIds?: string[];
   },
 ) {
-  const db = await readyDb();
   const current = await findUserById(id);
   if (!current) throw new Error("User not found");
 
@@ -196,10 +206,15 @@ export async function updateUser(
     if (current.role === "owner") current.areas = [...AREAS];
   }
   if (patch.clubIds || patch.teamIds) {
-    const assigned = await validAssignments(
-      patch.clubIds ?? current.clubIds,
-      patch.teamIds ?? current.teamIds,
-    );
+    const assigned = isSupabaseConfigured()
+      ? await supabaseStore.checkAssignments(
+          patch.clubIds ?? current.clubIds,
+          patch.teamIds ?? current.teamIds,
+        )
+      : await validAssignments(
+          patch.clubIds ?? current.clubIds,
+          patch.teamIds ?? current.teamIds,
+        );
     current.clubIds = assigned.clubIds;
     current.teamIds = assigned.teamIds;
   }
@@ -210,6 +225,15 @@ export async function updateUser(
     current.passwordHash = await hashPassword(patch.password);
   }
 
+  if (isSupabaseConfigured()) {
+    await supabaseStore.saveUser(current, {
+      areas: Boolean(patch.areas),
+      clubs: Boolean(patch.clubIds || patch.teamIds),
+      teams: Boolean(patch.clubIds || patch.teamIds),
+    });
+    return current;
+  }
+  const db = await readyDb();
   await db
     .update(users)
     .set({
@@ -227,10 +251,14 @@ export async function updateUser(
 }
 
 export async function deleteUser(id: string) {
-  const db = await readyDb();
   const current = await findUserById(id);
   if (!current) throw new Error("User not found");
   if (current.role === "owner") throw new Error("The owner account cannot be deleted");
+  if (isSupabaseConfigured()) {
+    await supabaseStore.removeUser(id);
+    return;
+  }
+  const db = await readyDb();
   await db.delete(userAreas).where(eq(userAreas.userId, id));
   await db.delete(userClubs).where(eq(userClubs.userId, id));
   await db.delete(userTeams).where(eq(userTeams.userId, id));

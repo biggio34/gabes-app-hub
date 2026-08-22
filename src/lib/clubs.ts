@@ -1,5 +1,7 @@
 import { eq } from "drizzle-orm";
 import { readyDb } from "./db/client";
+import { isSupabaseConfigured } from "./db/supabase";
+import * as supabaseStore from "./db/supabase-store";
 import { clubs, teams, userClubs, userTeams } from "./db/schema";
 import {
   assignmentLabels,
@@ -25,6 +27,7 @@ function toTeam(row: typeof teams.$inferSelect): Team {
 }
 
 export async function listOrgs() {
+  if (isSupabaseConfigured()) return supabaseStore.listOrgs();
   const db = await readyDb();
   const [clubRows, teamRows] = await Promise.all([
     db.select().from(clubs),
@@ -44,10 +47,9 @@ export function clubWithTeams(clubList: Club[], teamList: Team[]) {
 }
 
 export async function createClub(name: string) {
-  const db = await readyDb();
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Club name is required");
-  const existing = await db.select().from(clubs);
+  const { clubs: existing } = await listOrgs();
   if (existing.some((club) => club.name.toLowerCase() === trimmed.toLowerCase())) {
     throw new Error("That club already exists");
   }
@@ -56,18 +58,27 @@ export async function createClub(name: string) {
     name: trimmed,
     createdAt: new Date().toISOString(),
   };
-  await db.insert(clubs).values(club);
+  if (isSupabaseConfigured()) {
+    await supabaseStore.insertClub(club);
+    return club;
+  }
+  await (await readyDb()).insert(clubs).values(club);
   return club;
 }
 
 export async function createTeam(clubId: string, name: string) {
-  const db = await readyDb();
-  const club = (await db.select().from(clubs).where(eq(clubs.id, clubId)))[0];
-  if (!club) throw new Error("Club not found");
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Team name is required");
-  const existing = await db.select().from(teams).where(eq(teams.clubId, clubId));
-  if (existing.some((team) => team.name.toLowerCase() === trimmed.toLowerCase())) {
+  const { clubs: existingClubs, teams: existingTeams } = await listOrgs();
+  if (!existingClubs.some((club) => club.id === clubId)) {
+    throw new Error("Club not found");
+  }
+  if (
+    existingTeams.some(
+      (team) =>
+        team.clubId === clubId && team.name.toLowerCase() === trimmed.toLowerCase(),
+    )
+  ) {
     throw new Error("That team already exists in this club");
   }
   const team: Team = {
@@ -76,11 +87,23 @@ export async function createTeam(clubId: string, name: string) {
     name: trimmed,
     createdAt: new Date().toISOString(),
   };
-  await db.insert(teams).values(team);
+  if (isSupabaseConfigured()) {
+    await supabaseStore.insertTeam(team);
+    return team;
+  }
+  await (await readyDb()).insert(teams).values(team);
   return team;
 }
 
 export async function deleteClub(id: string) {
+  if (isSupabaseConfigured()) {
+    const orgs = await supabaseStore.listOrgs();
+    if (!orgs.clubs.some((club) => club.id === id)) {
+      throw new Error("Club not found");
+    }
+    await supabaseStore.removeClub(id);
+    return;
+  }
   const db = await readyDb();
   const club = (await db.select().from(clubs).where(eq(clubs.id, id)))[0];
   if (!club) throw new Error("Club not found");
@@ -97,6 +120,14 @@ export async function deleteClub(id: string) {
 }
 
 export async function deleteTeam(id: string) {
+  if (isSupabaseConfigured()) {
+    const orgs = await supabaseStore.listOrgs();
+    if (!orgs.teams.some((team) => team.id === id)) {
+      throw new Error("Team not found");
+    }
+    await supabaseStore.removeTeam(id);
+    return;
+  }
   const db = await readyDb();
   const team = (await db.select().from(teams).where(eq(teams.id, id)))[0];
   if (!team) throw new Error("Team not found");
