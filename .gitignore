@@ -43,5 +43,7 @@ next-env.d.ts
 # local agent scratch
 /agent-tools
 
-# runtime user store (passwords)
+# runtime user store (passwords) and local database
 /data/users.json
+/data/*.db
+/data/*.db-*

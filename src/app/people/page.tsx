@@ -27,6 +27,7 @@ export default function PeoplePage() {
   const [clubs, setClubs] = useState<Club[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [emailReady, setEmailReady] = useState(true);
+  const [databaseReady, setDatabaseReady] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeOk, setNoticeOk] = useState(true);
@@ -52,6 +53,7 @@ export default function PeoplePage() {
       clubs?: Club[];
       teams?: Team[];
       emailReady?: boolean;
+      databaseReady?: boolean;
     };
     setUsers(
       data.users.map((user) => ({
@@ -63,6 +65,7 @@ export default function PeoplePage() {
     setClubs(data.clubs ?? []);
     setTeams(data.teams ?? []);
     setEmailReady(data.emailReady !== false);
+    setDatabaseReady(data.databaseReady !== false);
   }
 
   useEffect(() => {
@@ -312,6 +315,13 @@ export default function PeoplePage() {
           </p>
         </div>
 
+        {databaseReady ? null : (
+          <p className="rounded-2xl border border-amber-700/60 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
+            People, clubs, and teams are in a real database on this computer.
+            The live website still needs the hosted database so extra clubs
+            stay saved after a publish.
+          </p>
+        )}
         {emailReady ? null : (
           <p className="rounded-2xl border border-amber-700/60 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
             The site can save new logins, but it cannot email them yet. Add

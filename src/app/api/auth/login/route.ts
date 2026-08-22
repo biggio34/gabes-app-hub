@@ -6,6 +6,8 @@ import {
 } from "@/lib/auth";
 import { findUserByUsername, matchesOwnerPassword } from "@/lib/users";
 
+export const runtime = "nodejs";
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => null)) as {

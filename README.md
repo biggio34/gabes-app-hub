@@ -24,10 +24,14 @@ First login (change this after you add other people):
 - Username: `gabe`
 - Password: `FransenHub2026`
 
+People, clubs, and teams live in a real SQLite database (`data/hub.db` locally). On the live site, point that same database at a hosted [Turso](https://turso.tech) database so many clubs and teams persist.
+
 Optional env:
 
 - `HUB_ADMIN_PASSWORD` — owner password on first launch
 - `HUB_SESSION_SECRET` — cookie signing secret
+- `TURSO_DATABASE_URL` — hosted libSQL URL (`libsql://...`)
+- `TURSO_AUTH_TOKEN` — Turso token
 - `GMAIL_USER` — Gmail address that sends invite emails
 - `GMAIL_APP_PASSWORD` — 16-character Google app password (not your normal Gmail password)
 - `HUB_PUBLIC_URL` — optional, defaults to the live Netlify site

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { isArea, type Area } from "@/lib/areas";
+import { isRemoteDatabase } from "@/lib/db/client";
 import { assignmentLabels, listOrgs } from "@/lib/clubs";
 import { isInviteEmailConfigured, sendInviteEmail } from "@/lib/invite-email";
 import {
@@ -31,6 +32,7 @@ export async function GET() {
     clubs: orgs.clubs,
     teams: orgs.teams,
     emailReady: isInviteEmailConfigured(),
+    databaseReady: isRemoteDatabase(),
   });
 }
 
