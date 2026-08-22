@@ -13,35 +13,71 @@ export type StoredUser = {
   createdAt: string;
 };
 
-const dataFile = path.join(process.cwd(), "data", "users.json");
+const storePaths = [
+  path.join(process.cwd(), "data", "users.json"),
+  path.join("/tmp", "gabes-hub-users.json"),
+];
 
-async function ensureStore() {
-  await mkdir(path.dirname(dataFile), { recursive: true });
-  try {
-    const raw = await readFile(dataFile, "utf8");
-    const parsed = JSON.parse(raw) as { users: StoredUser[] };
-    if (parsed.users?.length) return parsed.users;
-  } catch {
-    // first run
-  }
+let memoryUsers: StoredUser[] | null = null;
 
-  const password = process.env.HUB_ADMIN_PASSWORD || "FransenHub2026";
-  const owner: StoredUser = {
+function ownerPassword() {
+  return process.env.HUB_ADMIN_PASSWORD || "FransenHub2026";
+}
+
+async function ownerUser(): Promise<StoredUser> {
+  return {
     id: "user-gabe",
     username: "gabe",
     name: "Gabe Fransen",
-    passwordHash: await hashPassword(password),
+    passwordHash: await hashPassword(ownerPassword()),
     role: "owner",
     areas: [...AREAS],
     createdAt: new Date().toISOString(),
   };
-  await writeFile(dataFile, JSON.stringify({ users: [owner] }, null, 2));
-  return [owner];
 }
 
-async function save(users: StoredUser[]) {
-  await mkdir(path.dirname(dataFile), { recursive: true });
-  await writeFile(dataFile, JSON.stringify({ users }, null, 2));
+async function readStore(file: string): Promise<StoredUser[] | null> {
+  try {
+    const raw = await readFile(file, "utf8");
+    const parsed = JSON.parse(raw) as { users?: StoredUser[] };
+    if (parsed.users?.length) return parsed.users;
+  } catch {
+    // missing or unreadable
+  }
+  return null;
+}
+
+async function writeStore(file: string, users: StoredUser[]): Promise<boolean> {
+  try {
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify({ users }, null, 2));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function persist(users: StoredUser[]) {
+  memoryUsers = users;
+  for (const file of storePaths) {
+    if (await writeStore(file, users)) return;
+  }
+}
+
+async function ensureStore() {
+  if (memoryUsers?.length) return memoryUsers;
+
+  for (const file of storePaths) {
+    const users = await readStore(file);
+    if (users) {
+      memoryUsers = users;
+      return users;
+    }
+  }
+
+  const users = [await ownerUser()];
+  await persist(users);
+  return users;
 }
 
 export async function listUsers() {
@@ -59,6 +95,10 @@ export async function findUserByUsername(username: string) {
 export async function findUserById(id: string) {
   const users = await ensureStore();
   return users.find((user) => user.id === id) ?? null;
+}
+
+export function matchesOwnerPassword(user: StoredUser, password: string) {
+  return user.role === "owner" && password === ownerPassword();
 }
 
 export async function createUser(input: {
@@ -86,7 +126,7 @@ export async function createUser(input: {
     createdAt: new Date().toISOString(),
   };
   users.push(user);
-  await save(users);
+  await persist(users);
   return user;
 }
 
@@ -110,7 +150,7 @@ export async function updateUser(
     current.passwordHash = await hashPassword(patch.password);
   }
   users[index] = current;
-  await save(users);
+  await persist(users);
   return current;
 }
 
@@ -119,7 +159,7 @@ export async function deleteUser(id: string) {
   const target = users.find((user) => user.id === id);
   if (!target) throw new Error("User not found");
   if (target.role === "owner") throw new Error("The owner account cannot be deleted");
-  await save(users.filter((user) => user.id !== id));
+  await persist(users.filter((user) => user.id !== id));
 }
 
 export function publicUser(user: StoredUser) {

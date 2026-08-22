@@ -14,19 +14,24 @@ export default function LoginPage() {
     event.preventDefault();
     setBusy(true);
     setError("");
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-    const data = (await response.json()) as { error?: string };
-    setBusy(false);
-    if (!response.ok) {
-      setError(data.error || "Could not sign in");
-      return;
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setError(data.error || "Could not sign in");
+        return;
+      }
+      router.push("/");
+      router.refresh();
+    } catch {
+      setError("Could not reach the sign-in page. Try again.");
+    } finally {
+      setBusy(false);
     }
-    router.push("/");
-    router.refresh();
   }
 
   return (
