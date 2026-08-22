@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { assignmentLabels, listOrgs } from "@/lib/clubs";
 import { sendInviteEmail } from "@/lib/invite-email";
 import { findUserById } from "@/lib/users";
 
@@ -30,12 +31,14 @@ export async function POST(request: Request) {
     );
   }
 
+  const orgs = await listOrgs();
   const invite = await sendInviteEmail({
     to: user.email,
     name: user.name,
     username: user.username,
     password: body.password,
     areas: user.areas,
+    assignments: assignmentLabels(user, orgs.clubs, orgs.teams),
   });
   if (!invite.sent) {
     return NextResponse.json(

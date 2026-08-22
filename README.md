@@ -32,7 +32,9 @@ Optional env:
 - `GMAIL_APP_PASSWORD` — 16-character Google app password (not your normal Gmail password)
 - `HUB_PUBLIC_URL` — optional, defaults to the live Netlify site
 
-**People** is where you add logins, tick Financial / Softball / Luna Haus, and email them a link to the sign-in page. The email includes their username and the password you typed.
+**People** is where you add logins, tick Financial / Softball / Luna Haus, assign a club and team, and email them a link to the sign-in page. The email includes their username and the password you typed.
+
+Default softball org: **MN Elks** (club) and **16U Fransen** (team). You can add more clubs and teams on the People page.
 
 On Netlify, add `GMAIL_USER` and `GMAIL_APP_PASSWORD`, then deploy again. Create the app password at [Google App Passwords](https://myaccount.google.com/apppasswords) after 2-Step Verification is on. Do not put that password in this repo.
 

@@ -3,11 +3,17 @@ import { redirect } from "next/navigation";
 import { areaMeta, AREAS } from "@/lib/areas";
 import { canAccessArea, getSession } from "@/lib/auth";
 import { hubApps } from "@/lib/catalog";
+import { labelsForUser } from "@/lib/clubs";
+import { findUserById } from "@/lib/users";
 
 export default async function HubHome() {
   const session = await getSession();
   if (!session) redirect("/login");
 
+  const stored = await findUserById(session.id);
+  const assignments = stored
+    ? await labelsForUser(stored)
+    : [];
   const visibleAreas = AREAS.filter((area) => canAccessArea(session, area));
 
   return (
@@ -20,6 +26,9 @@ export default async function HubHome() {
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Gabe&apos;s Apps</h1>
             <p className="text-red-400">Signed in as {session.name}</p>
+            {assignments.length ? (
+              <p className="text-sm text-slate-400">{assignments.join(" · ")}</p>
+            ) : null}
           </div>
         </div>
         <div className="flex items-center gap-2">

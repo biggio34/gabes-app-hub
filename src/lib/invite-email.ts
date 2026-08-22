@@ -26,6 +26,7 @@ export async function sendInviteEmail(input: {
   username: string;
   password?: string;
   areas: Area[];
+  assignments?: string[];
 }): Promise<{ sent: boolean; error?: string }> {
   const to = input.to.trim();
   if (!isValidEmail(to)) {
@@ -41,6 +42,7 @@ export async function sendInviteEmail(input: {
   const loginUrl = loginPageUrl();
   const firstName = input.name.trim().split(/\s+/)[0] || input.username;
   const areaList = input.areas.map((area) => areaMeta[area].label).join(", ");
+  const assignmentList = (input.assignments ?? []).join(", ");
   const subject = "Your login for Gabe's Apps";
   const passwordLine = input.password
     ? `Password: ${input.password}`
@@ -54,6 +56,7 @@ export async function sendInviteEmail(input: {
     `Username: ${input.username}`,
     passwordLine,
     areaList ? `You will see: ${areaList}` : "",
+    assignmentList ? `Club / team: ${assignmentList}` : "",
     "",
     "If you were not expecting this, you can ignore the email.",
   ]
@@ -78,6 +81,11 @@ export async function sendInviteEmail(input: {
         ${
           areaList
             ? `<p style="margin:16px 0 0;font-size:14px;color:#94a3b8">You will see: ${escapeHtml(areaList)}</p>`
+            : ""
+        }
+        ${
+          assignmentList
+            ? `<p style="margin:8px 0 0;font-size:14px;color:#94a3b8">Club / team: ${escapeHtml(assignmentList)}</p>`
             : ""
         }
       </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { isArea, type Area } from "@/lib/areas";
+import { assignmentLabels, listOrgs } from "@/lib/clubs";
 import { isInviteEmailConfigured, sendInviteEmail } from "@/lib/invite-email";
 import {
   createUser,
@@ -24,9 +25,11 @@ function requireOwner() {
 export async function GET() {
   const { error } = await requireOwner();
   if (error) return error;
-  const users = await listUsers();
+  const [users, orgs] = await Promise.all([listUsers(), listOrgs()]);
   return NextResponse.json({
     users: users.map(publicUser),
+    clubs: orgs.clubs,
+    teams: orgs.teams,
     emailReady: isInviteEmailConfigured(),
   });
 }
@@ -40,6 +43,8 @@ export async function POST(request: Request) {
     email?: string;
     password?: string;
     areas?: string[];
+    clubIds?: string[];
+    teamIds?: string[];
   } | null;
   try {
     const password = body?.password ?? "";
@@ -49,13 +54,17 @@ export async function POST(request: Request) {
       email: body?.email ?? "",
       password,
       areas: (body?.areas ?? []).filter(isArea) as Area[],
+      clubIds: body?.clubIds ?? [],
+      teamIds: body?.teamIds ?? [],
     });
+    const orgs = await listOrgs();
     const invite = await sendInviteEmail({
       to: user.email ?? "",
       name: user.name,
       username: user.username,
       password,
       areas: user.areas,
+      assignments: assignmentLabels(user, orgs.clubs, orgs.teams),
     });
     return NextResponse.json({
       user: publicUser(user),
@@ -79,6 +88,8 @@ export async function PATCH(request: Request) {
     email?: string;
     password?: string;
     areas?: string[];
+    clubIds?: string[];
+    teamIds?: string[];
   } | null;
   if (!body?.id) {
     return NextResponse.json({ error: "Missing user" }, { status: 400 });
@@ -89,6 +100,8 @@ export async function PATCH(request: Request) {
       email: body.email,
       password: body.password,
       areas: body.areas?.filter(isArea),
+      clubIds: body.clubIds,
+      teamIds: body.teamIds,
     });
     return NextResponse.json({ user: publicUser(user) });
   } catch (err) {
