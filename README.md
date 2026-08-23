@@ -43,7 +43,7 @@ Optional env:
 
 Default softball org: **MN Elks** (club) and **16U Fransen** (team). You can add more clubs and teams on the People page.
 
-The four softball apps share one roster (Tryouts, Team Formation, Lineup, Practice Planner). After `supabase/hub.sql`, also run `supabase/softball-state.sql` so that roster syncs in the cloud.
+Softball **Team Roster** is where you add, edit, and remove players. Tryouts, Team Formation, Lineup, and Practice Planner all use that list. After `supabase/hub.sql`, also run `supabase/softball-state.sql` so the roster syncs in the cloud.
 
 On Netlify, add `GMAIL_USER` and `GMAIL_APP_PASSWORD`, then deploy again. Create the app password at [Google App Passwords](https://myaccount.google.com/apppasswords) after 2-Step Verification is on. Do not put that password in this repo.
 
