@@ -85,7 +85,7 @@
                 </div>
                 <div>
                     <h1 class="title-font text-3xl font-semibold tracking-tighter">MN Elks Team Formation</h1>
-                    <p class="text-slate-400 text-sm -mt-0.5">Shared roster • <a class="text-red-400 hover:underline" href="/apps/roster">Edit players</a></p>
+                    <p class="text-slate-400 text-sm -mt-0.5"><span id="hub-team-label">Shared roster</span> • <a class="text-red-400 hover:underline" href="/apps/roster">Edit players</a></p>
                 </div>
             </div>
             <div class="text-right">
@@ -385,6 +385,36 @@
 
         const AGE_GROUPS = ['8U','9U','10U','11U','12U','13U','14U','15U','16U','18U'];
 
+        function formationTeamIds() {
+            return new Set((teams || []).map((team) => team.id));
+        }
+
+        function assignedFormationId(player) {
+            if (!player || !player.assignedTeamId) return null;
+            return formationTeamIds().has(player.assignedTeamId) ? player.assignedTeamId : null;
+        }
+
+        function isUnassigned(player) {
+            return !assignedFormationId(player);
+        }
+
+        function hubTeamLabel() {
+            const hub = window.HUB_SOFTBALL || {};
+            const club = hub.clubName || 'MN Elks';
+            const team = hub.teamName || '16U Fransen';
+            return club + ' · ' + team;
+        }
+
+        function ensureHubFormationTeam() {
+            if ((teams || []).length > 0) return false;
+            const hub = window.HUB_SOFTBALL || {};
+            teams.push(ElksData.createTeam({
+                name: hub.teamName || '16U Fransen',
+                ageGroup: '16U',
+            }));
+            return true;
+        }
+
         // ==================== UTILS ====================
         function generateId(prefix = 'id') {
             return ElksData.uid(prefix);
@@ -499,6 +529,9 @@
         function reloadSharedFromStorage() {
             const prevSelected = new Set(selectedPlayerIds);
             loadState();
+            if (ensureHubFormationTeam()) saveState();
+            const label = document.getElementById('hub-team-label');
+            if (label) label.textContent = hubTeamLabel();
             selectedPlayerIds = new Set([...prevSelected].filter(id => players.some(p => p.id === id)));
             renderAll();
         }
@@ -514,8 +547,8 @@
         }
 
         function updateSummary() {
-            const poolCount = players.filter(p => !p.assignedTeamId).length;
-            const assignedCount = players.filter(p => p.assignedTeamId).length;
+            const poolCount = players.filter(isUnassigned).length;
+            const assignedCount = players.filter((p) => !isUnassigned(p)).length;
             
             const poolEl = document.getElementById('pool-count');
             if (poolEl) poolEl.textContent = `${poolCount} unassigned`;
@@ -531,7 +564,7 @@
             const searchTerm = (document.getElementById('pool-search')?.value || '').toLowerCase().trim();
             currentPoolSearch = searchTerm;
 
-            const unassigned = players.filter(p => !p.assignedTeamId);
+            const unassigned = players.filter(isUnassigned);
             const recFilter = document.getElementById('pool-rec-filter')?.value || 'all';
             const sortBy = document.getElementById('pool-sort')?.value || 'birthdate';
 
@@ -579,7 +612,7 @@
                 empty.className = 'text-center text-slate-500 text-xs py-8';
                 empty.innerHTML = searchTerm || recFilter !== 'all'
                     ? 'No matching players in pool.'
-                    : 'No players in pool.<br>Import CSV, add players, or score them in Tryouts.';
+                    : 'No players in the pool.<br>Add them in Team Roster, or they are already on a team.';
                 container.appendChild(empty);
                 return;
             }
@@ -825,7 +858,7 @@
             const unassignBtn = document.getElementById('unassign-btn');
             const hasAssigned = Array.from(selectedPlayerIds).some(id => {
                 const p = players.find(pp => pp.id === id);
-                return p && p.assignedTeamId;
+                return p && assignedFormationId(p);
             });
             if (unassignBtn) {
                 unassignBtn.style.display = hasAssigned ? '' : 'none';
@@ -918,7 +951,7 @@
 
         function selectAllUnassigned() {
             selectedPlayerIds.clear();
-            players.filter(p => !p.assignedTeamId).forEach(p => selectedPlayerIds.add(p.id));
+            players.filter(isUnassigned).forEach(p => selectedPlayerIds.add(p.id));
             renderPlayerPool();
             renderTeams();
             renderSelectionBar();
@@ -1536,6 +1569,9 @@
             })();
 
             loadState();
+            if (ensureHubFormationTeam()) saveState();
+            const label = document.getElementById('hub-team-label');
+            if (label) label.textContent = hubTeamLabel();
             if (window.ElksData && window.ElksData.connectCloud) {
                 ElksData.connectCloud();
             }

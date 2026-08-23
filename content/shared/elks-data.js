@@ -664,6 +664,12 @@
     if (!state.templates) state.templates = [];
     if (!state.updatedAt) state.updatedAt = 0;
     state.players = state.players.map(normalizePlayer);
+    const formationIds = new Set(state.teams.map((team) => team.id));
+    state.players.forEach((player) => {
+      if (player.assignedTeamId && !formationIds.has(player.assignedTeamId)) {
+        player.assignedTeamId = null;
+      }
+    });
 
     if (state.tryouts.length === 0) {
       const t = createTryout({

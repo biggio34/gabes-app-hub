@@ -248,7 +248,6 @@
         name: ElksData.joinName(firstName, lastName),
         number,
         position,
-        assignedTeamId: window.HUB_SOFTBALL ? window.HUB_SOFTBALL.teamId : null,
       };
       if (editingId) {
         ElksData.upsertPlayer(state, { ...fields, id: editingId });
