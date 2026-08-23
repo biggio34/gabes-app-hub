@@ -647,35 +647,33 @@
     function syncRosterFromShared() {
       if (!window.ElksData) return;
       const shared = ElksData.load();
-      if (shared.players.length === 0 && state.players.length) {
-        state.players.forEach((player) => {
-          ElksData.upsertPlayer(shared, {
-            id: player.id,
-            name: player.name,
-            number: player.number != null ? String(player.number) : "",
-            evalNotes: player.notes || "",
-            assignedTeamId: window.HUB_SOFTBALL ? window.HUB_SOFTBALL.teamId : null,
-          });
-        });
-        ElksData.save(shared);
-      } else if (shared.players.length) {
-        state.players = ElksData.lineupPlayers(shared);
-      }
+      state.players = ElksData.lineupPlayers(shared);
+      const ids = new Set(state.players.map((p) => p.id));
+      state.battingOrder = (state.battingOrder || []).filter((id) => ids.has(id));
+      state.unavailableIds = (state.unavailableIds || []).filter((id) => ids.has(id));
+      Object.keys(state.defensivePositions || {}).forEach((pos) => {
+        const pid = state.defensivePositions[pos];
+        if (pid && !ids.has(pid)) delete state.defensivePositions[pos];
+      });
       applyHubTeamName();
     }
 
     function pushRosterToShared() {
       if (!window.ElksData) return;
       const shared = ElksData.load();
+      const sharedIds = new Set((shared.players || []).map((p) => p.id));
+      let changed = false;
       state.players.forEach((player) => {
+        if (!sharedIds.has(player.id)) return;
         ElksData.upsertPlayer(shared, {
           id: player.id,
           name: player.name,
           number: player.number != null ? String(player.number) : "",
           evalNotes: player.notes || "",
         });
+        changed = true;
       });
-      ElksData.save(shared);
+      if (changed) ElksData.save(shared);
     }
 
     function loadState() {
@@ -729,6 +727,7 @@
         createInitialGameFromCurrentState();
       }
       syncRosterFromShared();
+      saveState();
     }
 
     function createNewGame() {
@@ -2367,6 +2366,7 @@
       const number = document.getElementById("player-number").value ? parseInt(document.getElementById("player-number").value) : undefined;
       const notes = document.getElementById("player-notes").value.trim() || undefined;
 
+      let playerId = editingPlayerId;
       if (editingPlayerId) {
         const player = state.players.find(p => p.id === editingPlayerId);
         if (player) {
@@ -2379,12 +2379,25 @@
           alert("Maximum roster size is 14 players for MN Elks 16U.");
           return;
         }
+        playerId = crypto.randomUUID();
         state.players.push({
-          id: crypto.randomUUID(),
+          id: playerId,
           name,
           number,
           notes
         });
+      }
+
+      if (window.ElksData && playerId) {
+        const shared = ElksData.load();
+        ElksData.upsertPlayer(shared, {
+          id: playerId,
+          name,
+          number: number != null ? String(number) : "",
+          evalNotes: notes || "",
+          assignedTeamId: window.HUB_SOFTBALL ? window.HUB_SOFTBALL.teamId : null,
+        });
+        ElksData.save(shared);
       }
 
       hidePlayerModal();
@@ -2695,6 +2708,7 @@
       }
       window.addEventListener("elks-data-updated", () => {
         syncRosterFromShared();
+        saveState();
         renderAll();
       });
 
