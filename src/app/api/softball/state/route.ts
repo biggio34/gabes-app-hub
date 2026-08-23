@@ -33,11 +33,20 @@ export async function GET() {
   if (!supabase) {
     return NextResponse.json({ state: null, team: auth.context });
   }
-  const { data, error } = await supabase
+  const clubId = auth.context.clubId;
+  let result = await supabase
     .from("hub_softball_state")
     .select("*")
-    .eq("team_id", auth.context.teamId)
+    .eq("team_id", clubId)
     .maybeSingle();
+  if (!result.data && auth.context.teamId && auth.context.teamId !== clubId) {
+    result = await supabase
+      .from("hub_softball_state")
+      .select("*")
+      .eq("team_id", auth.context.teamId)
+      .maybeSingle();
+  }
+  const { data, error } = result;
   if (error) {
     return NextResponse.json(
       {
@@ -75,7 +84,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Missing softball data." }, { status: 400 });
   }
   const { error } = await supabase.from("hub_softball_state").upsert({
-    team_id: auth.context.teamId,
+    team_id: auth.context.clubId,
     payload: body.state,
     updated_at: new Date().toISOString(),
   });

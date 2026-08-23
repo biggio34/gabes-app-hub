@@ -516,9 +516,19 @@
     return players.find((p) => matchPlayerKey(p) === key) || null;
   }
 
+  function storageKey() {
+    try {
+      const clubId = global.HUB_SOFTBALL && global.HUB_SOFTBALL.clubId;
+      if (clubId) return SHARED_KEY + ':' + clubId;
+    } catch (e) {}
+    return SHARED_KEY;
+  }
+
   function loadRaw() {
     try {
-      const raw = localStorage.getItem(SHARED_KEY);
+      const key = storageKey();
+      let raw = localStorage.getItem(key);
+      if (!raw && key !== SHARED_KEY) raw = localStorage.getItem(SHARED_KEY);
       if (!raw) return null;
       return JSON.parse(raw);
     } catch (e) {
@@ -532,7 +542,7 @@
   function saveState(state, opts) {
     try {
       state.updatedAt = Date.now();
-      localStorage.setItem(SHARED_KEY, JSON.stringify(state));
+      localStorage.setItem(storageKey(), JSON.stringify(state));
       if (!opts || !opts.skipCloud) scheduleCloudSave(state);
     } catch (e) {
       console.warn('ElksData: failed to save', e);
@@ -664,12 +674,6 @@
     if (!state.templates) state.templates = [];
     if (!state.updatedAt) state.updatedAt = 0;
     state.players = state.players.map(normalizePlayer);
-    const formationIds = new Set(state.teams.map((team) => team.id));
-    state.players.forEach((player) => {
-      if (player.assignedTeamId && !formationIds.has(player.assignedTeamId)) {
-        player.assignedTeamId = null;
-      }
-    });
 
     if (state.tryouts.length === 0) {
       const t = createTryout({
@@ -686,13 +690,135 @@
     return state;
   }
 
+  function selectedTeamKey() {
+    return 'hub-softball-selected-team';
+  }
+
+  function applySelectedHubTeam() {
+    const hub = global.HUB_SOFTBALL;
+    if (!hub || !Array.isArray(hub.teams) || !hub.teams.length) return hub || {};
+    let saved = null;
+    try {
+      saved = global.sessionStorage && sessionStorage.getItem(selectedTeamKey());
+    } catch (e) {}
+    const team =
+      hub.teams.find((item) => item.id === saved) ||
+      hub.teams.find((item) => item.id === hub.teamId) ||
+      hub.teams[0];
+    if (team) {
+      hub.teamId = team.id;
+      hub.teamName = team.name;
+      hub.clubId = team.clubId || hub.clubId;
+      hub.clubName = team.clubName || hub.clubName;
+    }
+    return hub;
+  }
+
+  function currentHubTeam() {
+    const hub = applySelectedHubTeam();
+    return {
+      id: hub.teamId || '',
+      name: hub.teamName || '16U Fransen',
+      clubId: hub.clubId || '',
+      clubName: hub.clubName || 'MN Elks',
+    };
+  }
+
+  function setCurrentHubTeam(teamId) {
+    try {
+      if (global.sessionStorage) sessionStorage.setItem(selectedTeamKey(), teamId);
+    } catch (e) {}
+    applySelectedHubTeam();
+    if (typeof global.dispatchEvent === 'function') {
+      global.dispatchEvent(new CustomEvent('hub-team-changed'));
+    }
+  }
+
+  function ageGroupFromName(name) {
+    const match = String(name || '').match(/(\d{1,2})\s*U/i);
+    return match ? match[1] + 'U' : '16U';
+  }
+
+  function syncHubTeams(state) {
+    const hub = applySelectedHubTeam();
+    const hubTeams = (hub && hub.teams) || [];
+    if (!state || !hubTeams.length) return state;
+    if (!state.teams) state.teams = [];
+    const byId = {};
+    state.teams.forEach((team) => {
+      byId[team.id] = team;
+    });
+    hubTeams.forEach((hubTeam) => {
+      const age = ageGroupFromName(hubTeam.name);
+      if (byId[hubTeam.id]) {
+        byId[hubTeam.id].name = hubTeam.name;
+        if (!byId[hubTeam.id].ageGroup) byId[hubTeam.id].ageGroup = age;
+      } else {
+        state.teams.push({
+          id: hubTeam.id,
+          name: hubTeam.name,
+          ageGroup: age,
+        });
+      }
+    });
+    const formationIds = new Set(state.teams.map((team) => team.id));
+    (state.players || []).forEach((player) => {
+      if (player.assignedTeamId && !formationIds.has(player.assignedTeamId)) {
+        player.assignedTeamId = null;
+      }
+    });
+    return state;
+  }
+
+  function playerOnHubTeam(player, teamId) {
+    if (!player) return false;
+    if (!teamId) return true;
+    return !player.assignedTeamId || player.assignedTeamId === teamId;
+  }
+
+  function playersOnHubTeam(players, teamId) {
+    return (players || []).filter((player) => playerOnHubTeam(player, teamId));
+  }
+
+  function mountTeamPicker(el, opts) {
+    if (!el) return;
+    applySelectedHubTeam();
+    const hub = global.HUB_SOFTBALL || {};
+    const teams = hub.teams || [];
+    const light = opts && opts.theme === 'light';
+    if (teams.length === 0) {
+      el.textContent = (hub.clubName || 'MN Elks') + ' · ' + (hub.teamName || '16U Fransen');
+      return;
+    }
+    if (teams.length === 1) {
+      el.textContent = (teams[0].clubName || hub.clubName || 'MN Elks') + ' · ' + teams[0].name;
+      return;
+    }
+    el.innerHTML = '';
+    const select = document.createElement('select');
+    select.className = light
+      ? 'max-w-full rounded-xl border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-red-900 focus:outline-none focus:border-red-500'
+      : 'max-w-full rounded-xl border border-slate-700 bg-slate-950 px-2 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-red-500';
+    teams.forEach((team) => {
+      const option = document.createElement('option');
+      option.value = team.id;
+      option.textContent = (team.clubName ? team.clubName + ' · ' : '') + team.name;
+      if (team.id === hub.teamId) option.selected = true;
+      select.appendChild(option);
+    });
+    select.onchange = function () {
+      setCurrentHubTeam(select.value);
+    };
+    el.appendChild(select);
+  }
+
   function load() {
     let state = loadRaw();
     if (!state) {
       const migrated = migrateFromLegacy();
       state = migrated || emptyState();
     }
-    return ensureDefaults(state);
+    return syncHubTeams(ensureDefaults(state));
   }
 
   function getCurrentTryout(state) {
@@ -797,6 +923,7 @@
       name: displayName(player),
       number: player.number ? Number(player.number) || player.number : undefined,
       notes: player.evalNotes || '',
+      assignedTeamId: player.assignedTeamId || null,
     };
   }
 
@@ -818,7 +945,7 @@
       const remoteUpdated = Number(data.state.updatedAt || 0);
       const localUpdated = Number((local && local.updatedAt) || 0);
       if (!local || remoteUpdated >= localUpdated) {
-        saveState(ensureDefaults(data.state), { skipCloud: true });
+        saveState(syncHubTeams(ensureDefaults(data.state)), { skipCloud: true });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('elks-data-updated'));
         }
@@ -889,5 +1016,12 @@
     toLineupPlayer,
     lineupPlayers,
     connectCloud,
+    applySelectedHubTeam,
+    currentHubTeam,
+    setCurrentHubTeam,
+    syncHubTeams,
+    playerOnHubTeam,
+    playersOnHubTeam,
+    mountTeamPicker,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

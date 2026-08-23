@@ -62,8 +62,8 @@
                     <i class="fa-solid fa-baseball-ball text-white text-3xl"></i>
                 </div>
                 <div>
-                    <h1 id="planner-title" class="title-font text-4xl font-semibold tracking-tighter">MN Elks 16U - Fransen</h1>
-                    <p class="text-red-400 text-lg -mt-1">Practice Planner</p>
+                    <h1 id="planner-title" class="title-font text-4xl font-semibold tracking-tighter">Practice Planner</h1>
+                    <div id="hub-team-picker" class="text-red-400 text-sm -mt-1"></div>
                 </div>
             </div>
             
@@ -461,13 +461,45 @@
         let templates = [];
 
         function applyPlannerHub() {
-            if (!window.HUB_SOFTBALL) return;
+            if (window.ElksData && window.ElksData.applySelectedHubTeam) {
+                ElksData.applySelectedHubTeam();
+            }
             const title = document.getElementById('planner-title');
             const subtitle = document.getElementById('planner-subtitle');
-            const club = window.HUB_SOFTBALL.clubName || 'MN Elks';
-            const team = window.HUB_SOFTBALL.teamName || '16U Fransen';
-            if (title) title.textContent = club + ' ' + team;
+            const picker = document.getElementById('hub-team-picker');
+            const hub = window.HUB_SOFTBALL || {};
+            const current = window.ElksData && window.ElksData.currentHubTeam
+                ? ElksData.currentHubTeam()
+                : { clubName: hub.clubName, name: hub.teamName };
+            const club = current.clubName || hub.clubName || 'MN Elks';
+            const team = current.name || hub.teamName || '16U Fransen';
+            if (title) title.textContent = 'Practice Planner';
             if (subtitle) subtitle.textContent = club + ' · ' + team + ' • Central Time';
+            if (picker && window.ElksData && window.ElksData.mountTeamPicker) {
+                ElksData.mountTeamPicker(picker);
+            } else if (picker) {
+                picker.textContent = club + ' · ' + team;
+            }
+        }
+
+        function currentPlannerTeamId() {
+            if (window.ElksData && window.ElksData.currentHubTeam) {
+                return ElksData.currentHubTeam().id || '';
+            }
+            return (window.HUB_SOFTBALL && window.HUB_SOFTBALL.teamId) || '';
+        }
+
+        function practicesForTeam() {
+            const teamId = currentPlannerTeamId();
+            return practices
+                .map((practice, index) => ({ practice, index }))
+                .filter(({ practice }) => !teamId || !practice.teamId || practice.teamId === teamId);
+        }
+
+        function stampPracticeTeam(practice) {
+            const teamId = currentPlannerTeamId();
+            if (teamId && !practice.teamId) practice.teamId = teamId;
+            return practice;
         }
 
         function persistPlannerToShared() {
@@ -818,8 +850,9 @@
         function renderPractices() {
             const container = document.getElementById('practices-list');
             container.innerHTML = '';
+            const visible = practicesForTeam();
 
-            if (practices.length === 0) {
+            if (visible.length === 0) {
                 container.innerHTML = `
                     <div class="col-span-full bg-slate-900 border border-slate-700 rounded-3xl p-8 text-center">
                         <i class="fa-solid fa-calendar text-4xl text-slate-600 mb-3"></i>
@@ -829,7 +862,7 @@
                 return;
             }
 
-            practices.forEach((practice, index) => {
+            visible.forEach(({ practice, index }) => {
                 const div = document.createElement('div');
                 div.className = 'practice-card bg-slate-900 border border-slate-700 rounded-3xl p-5 cursor-pointer';
 
@@ -1026,9 +1059,10 @@
             const drill = drills.find(d => d.id === drillId);
             if (!drill) return;
 
-            if (practices.length === 0) {
+            const visible = practicesForTeam();
+            if (visible.length === 0) {
                 // No practices yet — create a new one with this drill
-                const newPractice = {
+                const newPractice = stampPracticeTeam({
                     date: null,
                     time: null,
                     duration: drill.duration,
@@ -1042,7 +1076,7 @@
                         category: drill.category,
                         drillId: drill.id
                     }]
-                };
+                });
                 practices.push(newPractice);
                 savePractices();
                 switchView('practices');
@@ -1053,21 +1087,21 @@
 
             // Build a simple numbered list for the user
             let message = `Add "${drill.name}" to which practice?\n\n`;
-            practices.forEach((p, i) => {
+            visible.forEach(({ practice: p }, i) => {
                 const dateStr = p.date ? new Date(p.date).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : 'No date';
                 const focus = p.focus || 'Untitled Practice';
                 message += `${i + 1}. ${dateStr} — ${focus} (${p.duration} min)\n`;
             });
-            message += `\n${practices.length + 1}. Create a brand new practice with this drill`;
+            message += `\n${visible.length + 1}. Create a brand new practice with this drill`;
 
             const choice = prompt(message, "1");
             if (!choice) return;
 
             const num = parseInt(choice.trim());
 
-            if (num === practices.length + 1) {
+            if (num === visible.length + 1) {
                 // Create new practice
-                const newPractice = {
+                const newPractice = stampPracticeTeam({
                     date: null,
                     time: null,
                     duration: drill.duration,
@@ -1081,11 +1115,11 @@
                         category: drill.category,
                         drillId: drill.id
                     }]
-                };
+                });
                 practices.push(newPractice);
-            } else if (num > 0 && num <= practices.length) {
+            } else if (num > 0 && num <= visible.length) {
                 // Add to existing
-                const target = practices[num - 1];
+                const target = visible[num - 1].practice;
                 if (!target.segments) target.segments = [];
                 target.segments.push({
                     id: Date.now(),
@@ -1526,8 +1560,10 @@
             };
 
             if (currentPracticeIndex !== null) {
+                practiceData.teamId = practices[currentPracticeIndex].teamId || currentPlannerTeamId();
                 practices[currentPracticeIndex] = practiceData;
             } else {
+                stampPracticeTeam(practiceData);
                 practices.push(practiceData);
             }
 
@@ -2063,6 +2099,10 @@
             }
             window.addEventListener('elks-data-updated', () => {
                 loadData();
+            });
+            window.addEventListener('hub-team-changed', () => {
+                applyPlannerHub();
+                renderPractices();
             });
 
             // Preserve team param on the back-to-hub link

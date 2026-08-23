@@ -38,16 +38,16 @@ export const hubApps: HubApp[] = [
   {
     slug: "practice-planner",
     file: "practice-planner.html",
-    title: "16U Practice Planner",
+    title: "Practice Planner",
     description:
-      "Drill library and practice plans for the shared 16U Fransen roster.",
+      "Drill library and practice plans for the team you pick from People.",
     area: "softball",
   },
   {
     slug: "lineup",
     file: "lineup.html",
-    title: "16U Lineup Builder",
-    description: "Game lineups from the shared Team Roster.",
+    title: "Lineup Builder",
+    description: "Game lineups from the Team Roster for the team you pick.",
     area: "softball",
   },
   {
@@ -55,7 +55,7 @@ export const hubApps: HubApp[] = [
     file: "team-formation.html",
     title: "Team Formation",
     description:
-      "Put shared-roster players onto teams using tryout scores.",
+      "Put shared-roster players onto the teams from People, using tryout scores.",
     area: "softball",
   },
   {

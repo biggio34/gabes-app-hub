@@ -85,7 +85,11 @@
                 </div>
                 <div>
                     <h1 class="title-font text-3xl font-semibold tracking-tighter">MN Elks Team Formation</h1>
-                    <p class="text-slate-400 text-sm -mt-0.5"><span id="hub-team-label">Shared roster</span> • <a class="text-red-400 hover:underline" href="/apps/roster">Edit players</a></p>
+                    <p class="text-slate-400 text-sm -mt-0.5 flex flex-wrap items-center gap-2">
+                      <span id="hub-team-picker">Shared roster</span>
+                      <span>•</span>
+                      <a class="text-red-400 hover:underline" href="/apps/roster">Edit players</a>
+                    </p>
                 </div>
             </div>
             <div class="text-right">
@@ -398,21 +402,12 @@
             return !assignedFormationId(player);
         }
 
-        function hubTeamLabel() {
-            const hub = window.HUB_SOFTBALL || {};
-            const club = hub.clubName || 'MN Elks';
-            const team = hub.teamName || '16U Fransen';
-            return club + ' · ' + team;
-        }
-
-        function ensureHubFormationTeam() {
-            if ((teams || []).length > 0) return false;
-            const hub = window.HUB_SOFTBALL || {};
-            teams.push(ElksData.createTeam({
-                name: hub.teamName || '16U Fransen',
-                ageGroup: '16U',
-            }));
-            return true;
+        function syncPeopleTeams() {
+            ElksData.syncHubTeams(sharedState);
+            teams = sharedState.teams;
+            if (ElksData.mountTeamPicker) {
+                ElksData.mountTeamPicker(document.getElementById('hub-team-picker'));
+            }
         }
 
         // ==================== UTILS ====================
@@ -529,9 +524,7 @@
         function reloadSharedFromStorage() {
             const prevSelected = new Set(selectedPlayerIds);
             loadState();
-            if (ensureHubFormationTeam()) saveState();
-            const label = document.getElementById('hub-team-label');
-            if (label) label.textContent = hubTeamLabel();
+            syncPeopleTeams();
             selectedPlayerIds = new Set([...prevSelected].filter(id => players.some(p => p.id === id)));
             renderAll();
         }
@@ -705,7 +698,7 @@
                 empty.className = teamsLayout === 'vertical' 
                     ? 'text-center text-slate-500 text-sm py-8 bg-slate-950 rounded-2xl border border-slate-800' 
                     : 'col-span-full text-center text-slate-500 text-sm py-8 bg-slate-950 rounded-2xl border border-slate-800';
-                empty.innerHTML = `No teams created yet.<br>Click "Create Team" above to get started.`;
+                empty.innerHTML = `No teams yet.<br>Add a team on People, or click Create Team for a tryout group.`;
                 container.appendChild(empty);
                 return;
             }
@@ -1569,13 +1562,12 @@
             })();
 
             loadState();
-            if (ensureHubFormationTeam()) saveState();
-            const label = document.getElementById('hub-team-label');
-            if (label) label.textContent = hubTeamLabel();
+            syncPeopleTeams();
             if (window.ElksData && window.ElksData.connectCloud) {
                 ElksData.connectCloud();
             }
             window.addEventListener('elks-data-updated', reloadSharedFromStorage);
+            window.addEventListener('hub-team-changed', syncPeopleTeams);
 
             // Initial render
             renderAll();

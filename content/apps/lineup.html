@@ -144,9 +144,9 @@
           <div>
             <div class="flex items-baseline gap-x-2">
               <span class="title-font text-3xl font-semibold tracking-tighter text-red-800">MN Elks</span>
-              <span class="text-red-700 text-xl font-semibold tracking-tight">16U</span>
+              <span class="text-red-700 text-xl font-semibold tracking-tight">Lineup</span>
             </div>
-            <div class="text-[10px] text-red-700 -mt-1 font-medium tracking-[1px]">LINEUP BUILDER</div>
+            <div id="hub-team-picker" class="text-[10px] text-red-700 -mt-0.5 font-medium"></div>
           </div>
         </div>
 
@@ -623,6 +623,35 @@
       state.gameInfo = initialGame.name;
     }
 
+    function currentLineupTeam() {
+      if (window.ElksData && window.ElksData.currentHubTeam) {
+        return ElksData.currentHubTeam();
+      }
+      const hub = window.HUB_SOFTBALL || {};
+      return {
+        id: hub.teamId || "",
+        name: hub.teamName || "16U Fransen",
+        clubName: hub.clubName || "MN Elks",
+      };
+    }
+
+    function lineupStorageKey() {
+      const teamId = currentLineupTeam().id;
+      return teamId ? "mn-elks-lineup-v1:" + teamId : "mn-elks-lineup-v1";
+    }
+
+    function readSavedLineup() {
+      const key = lineupStorageKey();
+      let saved = localStorage.getItem(key);
+      if (!saved && key !== "mn-elks-lineup-v1") {
+        const teamId = key.slice("mn-elks-lineup-v1:".length);
+        if (teamId === "team-16u-fransen") {
+          saved = localStorage.getItem("mn-elks-lineup-v1");
+        }
+      }
+      return saved;
+    }
+
     function saveState() {
       saveCurrentGameToList();
       pushRosterToShared();
@@ -634,20 +663,24 @@
         teamName: state.teamName,
         lastUpdated: Date.now()
       };
-      localStorage.setItem("mn-elks-lineup-v1", JSON.stringify(data));
+      localStorage.setItem(lineupStorageKey(), JSON.stringify(data));
     }
 
     function applyHubTeamName() {
-      if (window.HUB_SOFTBALL && window.HUB_SOFTBALL.teamName) {
-        const club = window.HUB_SOFTBALL.clubName || "MN Elks";
-        state.teamName = club + " " + window.HUB_SOFTBALL.teamName;
+      const team = currentLineupTeam();
+      if (team.name) {
+        state.teamName = (team.clubName || "MN Elks") + " " + team.name;
       }
     }
 
     function syncRosterFromShared() {
       if (!window.ElksData) return;
       const shared = ElksData.load();
-      state.players = ElksData.lineupPlayers(shared);
+      const all = ElksData.lineupPlayers(shared);
+      const teamId = ElksData.currentHubTeam ? ElksData.currentHubTeam().id : "";
+      state.players = ElksData.playersOnHubTeam
+        ? ElksData.playersOnHubTeam(all, teamId)
+        : all;
       const ids = new Set(state.players.map((p) => p.id));
       state.battingOrder = (state.battingOrder || []).filter((id) => ids.has(id));
       state.unavailableIds = (state.unavailableIds || []).filter((id) => ids.has(id));
@@ -677,7 +710,7 @@
     }
 
     function loadState() {
-      const saved = localStorage.getItem("mn-elks-lineup-v1");
+      const saved = readSavedLineup();
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -2407,12 +2440,17 @@
 
       if (window.ElksData && playerId) {
         const shared = ElksData.load();
-        ElksData.upsertPlayer(shared, {
+        const payload = {
           id: playerId,
           name,
           number: number != null ? String(number) : "",
           evalNotes: notes || "",
-        });
+        };
+        if (!editingPlayerId) {
+          const teamId = currentLineupTeam().id;
+          if (teamId) payload.assignedTeamId = teamId;
+        }
+        ElksData.upsertPlayer(shared, payload);
         ElksData.save(shared);
       }
 
@@ -2719,12 +2757,22 @@
     // ==================== INIT ====================
     async function init() {
       loadState();
+      if (window.ElksData && window.ElksData.mountTeamPicker) {
+        ElksData.mountTeamPicker(document.getElementById("hub-team-picker"), { theme: "light" });
+      }
       if (window.ElksData && window.ElksData.connectCloud) {
         ElksData.connectCloud();
       }
       window.addEventListener("elks-data-updated", () => {
         syncRosterFromShared();
         saveState();
+        renderAll();
+      });
+      window.addEventListener("hub-team-changed", () => {
+        loadState();
+        if (window.ElksData && window.ElksData.mountTeamPicker) {
+          ElksData.mountTeamPicker(document.getElementById("hub-team-picker"), { theme: "light" });
+        }
         renderAll();
       });
 

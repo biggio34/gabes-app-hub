@@ -45,7 +45,11 @@ export async function PATCH(request: Request) {
   } | null;
   const softball = await softballContext(session);
   const id = String(body?.id || "").trim();
-  if (!id || (session.role !== "owner" && id !== softball.teamId)) {
+  const canRename =
+    session.role === "owner" ||
+    softball.teams.some((team) => team.id === id) ||
+    id === softball.teamId;
+  if (!id || !canRename) {
     return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   }
   try {

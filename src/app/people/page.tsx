@@ -396,8 +396,10 @@ export default function PeoplePage() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">People</h1>
           <p className="text-sm text-slate-400">
             Give someone a login, pick Financial / Softball / Luna Haus, then
-            put them on a club or team. You can also change a username or set
-            a new password. Saved passwords cannot be shown again.
+            put them on a club or team. Teams you add here show in Team Roster,
+            Lineup, Team Formation, Tryouts, and Practice Planner. You can also
+            change a username or set a new password. Saved passwords cannot be
+            shown again.
           </p>
         </div>
 

@@ -43,7 +43,7 @@ Optional env:
 
 **People** is where you add logins, tick Financial / Softball / Luna Haus, assign a club and team, and email them a link to the sign-in page. The email includes their username and the password you typed. You can also change anyone’s username or set a new password there.
 
-Default softball org: **MN Elks** (club) and **16U Fransen** (team). You can add more clubs and teams on the People page.
+Default softball org: **MN Elks** (club) and **16U Fransen** (team). You can add more clubs and teams on the People page. Those teams show in Team Roster, Lineup, Team Formation, Tryouts, and Practice Planner.
 
 Softball **Team Roster** is where you add, edit, and remove players, and change the team name. Tryouts, Team Formation, Lineup, and Practice Planner all use that list. After `supabase/hub.sql`, also run `supabase/softball-state.sql` so the roster syncs in the cloud.
 

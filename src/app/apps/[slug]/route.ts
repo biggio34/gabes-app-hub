@@ -28,9 +28,12 @@ export async function GET(
   if (app.area === "softball") {
     const softball = await softballContext(session);
     const boot = JSON.stringify({
+      clubId: softball.clubId,
+      clubName: softball.clubName,
       teamId: softball.teamId,
       teamName: softball.teamName,
-      clubName: softball.clubName,
+      teams: softball.teams,
+      clubs: softball.clubs,
     }).replaceAll("<", "\\u003c");
     html = html.replace(
       "<head>",

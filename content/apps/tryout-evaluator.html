@@ -95,7 +95,7 @@
           </div>
           <div class="min-w-0">
             <h1 class="title-font text-xl sm:text-2xl font-semibold tracking-tighter truncate">Tryout Evaluator</h1>
-            <p class="text-slate-400 text-xs truncate">Shared roster with Team Formation</p>
+            <div id="hub-team-picker" class="text-slate-400 text-xs truncate">Shared roster with Team Formation</div>
           </div>
         </div>
         <button onclick="openMenu()" class="w-10 h-10 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center hover:bg-slate-800" aria-label="Menu">
@@ -838,7 +838,12 @@
 
       let playerId = id;
       if (!playerId) {
-        const p = ElksData.createPlayer({ ...identity, photo: editingPhoto || '' });
+        const current = ElksData.currentHubTeam ? ElksData.currentHubTeam() : {};
+        const p = ElksData.createPlayer({
+          ...identity,
+          photo: editingPhoto || '',
+          assignedTeamId: current.id || null,
+        });
         state.players.push(p);
         playerId = p.id;
       }
@@ -970,6 +975,7 @@
             const exists = ElksData.findPlayerByIdentity(state.players, name, birthdate)
               || state.players.find((p) => ElksData.displayName(p).toLowerCase() === name.toLowerCase() && !birthdate);
             if (exists) continue;
+            const current = ElksData.currentHubTeam ? ElksData.currentHubTeam() : {};
             state.players.push(ElksData.createPlayer({
               firstName,
               lastName,
@@ -978,6 +984,7 @@
               position: posIdx >= 0 ? cols[posIdx]?.trim() || '' : '',
               birthdate,
               originalTeam: teamIdx >= 0 ? cols[teamIdx]?.trim() || '' : '',
+              assignedTeamId: current.id || null,
             }));
             added++;
           }
@@ -1072,12 +1079,20 @@
       renderAll();
     });
 
+    if (window.ElksData && window.ElksData.mountTeamPicker) {
+      ElksData.mountTeamPicker(document.getElementById('hub-team-picker'));
+    }
     if (window.ElksData && window.ElksData.connectCloud) {
       ElksData.connectCloud();
     }
     window.addEventListener('elks-data-updated', () => {
       state = ElksData.load();
       renderAll();
+    });
+    window.addEventListener('hub-team-changed', () => {
+      if (window.ElksData && window.ElksData.mountTeamPicker) {
+        ElksData.mountTeamPicker(document.getElementById('hub-team-picker'));
+      }
     });
 
     renderAll();
