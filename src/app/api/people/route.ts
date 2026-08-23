@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { applySessionCookie, createSessionToken, getSession } from "@/lib/auth";
 import { isArea, type Area } from "@/lib/areas";
 import { isRemoteDatabase } from "@/lib/db/client";
 import { assignmentLabels, listOrgs } from "@/lib/clubs";
@@ -82,12 +82,13 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const { error } = await requireOwner();
+  const { session, error } = await requireOwner();
   if (error) return error;
   const body = (await request.json().catch(() => null)) as {
     id?: string;
     name?: string;
     email?: string;
+    username?: string;
     password?: string;
     areas?: string[];
     clubIds?: string[];
@@ -100,12 +101,24 @@ export async function PATCH(request: Request) {
     const user = await updateUser(body.id, {
       name: body.name,
       email: body.email,
+      username: body.username,
       password: body.password,
       areas: body.areas?.filter(isArea),
       clubIds: body.clubIds,
       teamIds: body.teamIds,
     });
-    return NextResponse.json({ user: publicUser(user) });
+    const response = NextResponse.json({ user: publicUser(user) });
+    if (session && session.id === user.id) {
+      const token = await createSessionToken({
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+        areas: user.areas,
+      });
+      applySessionCookie(response, token);
+    }
+    return response;
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not update user" },

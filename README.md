@@ -39,7 +39,9 @@ Optional env:
 - `GMAIL_APP_PASSWORD` — 16-character Google app password (not your normal Gmail password)
 - `HUB_PUBLIC_URL` — optional, defaults to the live Netlify site
 
-**People** is where you add logins, tick Financial / Softball / Luna Haus, assign a club and team, and email them a link to the sign-in page. The email includes their username and the password you typed.
+**Account** is where you view your username and change your username or password. Saved passwords cannot be shown again; type a new one to change it.
+
+**People** is where you add logins, tick Financial / Softball / Luna Haus, assign a club and team, and email them a link to the sign-in page. The email includes their username and the password you typed. You can also change anyone’s username or set a new password there.
 
 Default softball org: **MN Elks** (club) and **16U Fransen** (team). You can add more clubs and teams on the People page.
 

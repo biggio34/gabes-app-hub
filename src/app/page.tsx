@@ -25,13 +25,22 @@ export default async function HubHome() {
           </div>
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Gabe&apos;s Apps</h1>
-            <p className="text-red-400">Signed in as {session.name}</p>
+            <p className="text-red-400">
+              Signed in as {session.name}{" "}
+              <span className="text-slate-400">@{session.username}</span>
+            </p>
             {assignments.length ? (
               <p className="text-sm text-slate-400">{assignments.join(" · ")}</p>
             ) : null}
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/account"
+            className="rounded-xl bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
+          >
+            Account
+          </Link>
           {session.role === "owner" ? (
             <Link
               href="/people"

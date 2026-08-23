@@ -1,6 +1,7 @@
 import { compare, hash } from "bcryptjs";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
+import type { NextResponse } from "next/server";
 import type { Area, Role } from "./areas";
 import { SESSION_COOKIE, SESSION_SECRET } from "./session-cookie";
 
@@ -66,4 +67,15 @@ export async function getSession(): Promise<SessionUser | null> {
 
 export function canAccessArea(user: SessionUser, area: Area) {
   return user.role === "owner" || user.areas.includes(area);
+}
+
+export function applySessionCookie(response: NextResponse, token: string) {
+  response.cookies.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 14,
+  });
+  return response;
 }

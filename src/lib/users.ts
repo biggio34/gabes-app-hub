@@ -179,11 +179,16 @@ export async function createUser(input: {
   return user;
 }
 
+function normalizeUsername(value: string) {
+  return value.trim().toLowerCase();
+}
+
 export async function updateUser(
   id: string,
   patch: {
     name?: string;
     email?: string;
+    username?: string;
     areas?: Area[];
     password?: string;
     clubIds?: string[];
@@ -192,6 +197,18 @@ export async function updateUser(
 ) {
   const current = await findUserById(id);
   if (!current) throw new Error("User not found");
+
+  if (patch.username !== undefined) {
+    const username = normalizeUsername(patch.username);
+    if (!username) throw new Error("Username is required");
+    if (username.length < 2) throw new Error("Username must be at least 2 characters");
+    if (/\s/.test(username)) throw new Error("Username cannot have spaces");
+    const taken = await findUserByUsername(username);
+    if (taken && taken.id !== id) {
+      throw new Error("That username is already taken");
+    }
+    current.username = username;
+  }
 
   if (patch.name) current.name = patch.name.trim();
   if (patch.email !== undefined) {
@@ -237,6 +254,7 @@ export async function updateUser(
   await db
     .update(users)
     .set({
+      username: current.username,
       name: current.name,
       email: current.email ?? null,
       passwordHash: current.passwordHash,

@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  SESSION_COOKIE,
-  createSessionToken,
-  verifyPassword,
-} from "@/lib/auth";
+import { applySessionCookie, createSessionToken, verifyPassword } from "@/lib/auth";
 import { findUserByUsername, matchesOwnerPassword } from "@/lib/users";
 
 export const runtime = "nodejs";
@@ -44,14 +40,7 @@ export async function POST(request: Request) {
     });
 
     const response = NextResponse.json({ ok: true });
-    response.cookies.set(SESSION_COOKIE, token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 14,
-    });
-    return response;
+    return applySessionCookie(response, token);
   } catch {
     return NextResponse.json(
       { error: "Sign-in failed. Try again in a moment." },

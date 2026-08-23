@@ -256,6 +256,7 @@ export async function saveUser(
     await supabase
       .from("hub_users")
       .update({
+        username: user.username,
         name: user.name,
         email: user.email ?? null,
         password_hash: user.passwordHash,

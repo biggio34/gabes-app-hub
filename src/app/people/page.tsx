@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AREAS, areaMeta, type Area } from "@/lib/areas";
+import { SecretField } from "@/components/secret-field";
 
 type Person = {
   id: string;
@@ -20,6 +21,81 @@ type Team = { id: string; clubId: string; name: string };
 
 function toggleValue<T>(list: T[], value: T) {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+function LoginEditor({
+  username,
+  onSave,
+}: {
+  username: string;
+  onSave: (patch: { username: string; password?: string }) => Promise<void>;
+}) {
+  const [nextUsername, setNextUsername] = useState(username);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setNextUsername(username);
+  }, [username]);
+
+  async function saveLogin(event: React.FormEvent) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    setBusy(true);
+    try {
+      await onSave({
+        username: nextUsername,
+        password: password.trim() || undefined,
+      });
+      setPassword("");
+      setNotice("Login saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save login.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={saveLogin} className="mt-4 grid gap-3 border-t border-slate-800 pt-4">
+      <p className="text-xs font-semibold tracking-[0.12em] text-slate-500 uppercase">
+        Username and password
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="grid gap-1.5 text-sm">
+          Username
+          <input
+            autoComplete="username"
+            className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500"
+            value={nextUsername}
+            onChange={(e) => setNextUsername(e.target.value)}
+          />
+        </label>
+        <SecretField
+          label="New password"
+          value={password}
+          onChange={setPassword}
+          placeholder="Leave blank to keep it"
+        />
+      </div>
+      <p className="text-xs text-slate-500">
+        The saved password cannot be shown. Type a new one to change it, and
+        use Show to see what you typed.
+      </p>
+      <button
+        type="submit"
+        disabled={busy}
+        className="w-fit rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700 disabled:opacity-60"
+      >
+        {busy ? "Saving…" : "Save login"}
+      </button>
+      {error ? <p className="text-sm text-red-400">{error}</p> : null}
+      {notice ? <p className="text-sm text-emerald-400">{notice}</p> : null}
+    </form>
+  );
 }
 
 export default function PeoplePage() {
@@ -149,13 +225,23 @@ export default function PeoplePage() {
 
   async function savePerson(
     id: string,
-    patch: { areas?: Area[]; clubIds?: string[]; teamIds?: string[] },
+    patch: {
+      areas?: Area[];
+      clubIds?: string[];
+      teamIds?: string[];
+      username?: string;
+      password?: string;
+    },
   ) {
-    await fetch("/api/people", {
+    const response = await fetch("/api/people", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id, ...patch }),
     });
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    if (!response.ok) {
+      throw new Error(data.error || "Could not save those changes");
+    }
     await load();
   }
 
@@ -310,8 +396,8 @@ export default function PeoplePage() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">People</h1>
           <p className="text-sm text-slate-400">
             Give someone a login, pick Financial / Softball / Luna Haus, then
-            put them on a club or team. MN Elks is the club. 16U Fransen is the
-            team.
+            put them on a club or team. You can also change a username or set
+            a new password. Saved passwords cannot be shown again.
           </p>
         </div>
 
@@ -451,14 +537,10 @@ export default function PeoplePage() {
               onChange={(e) => setUsername(e.target.value)}
               required
             />
-            <input
-              placeholder="Password"
-              type="password"
-              autoComplete="new-password"
-              className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            <SecretField
+              label="Password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
+              onChange={setPassword}
             />
           </div>
           <div>
@@ -557,6 +639,12 @@ export default function PeoplePage() {
                     </div>
                   ) : null}
                 </div>
+                <LoginEditor
+                  username={user.username}
+                  onSave={async (next) => {
+                    await savePerson(user.id, next);
+                  }}
+                />
                 {user.role === "owner" ? null : (
                   <div className="mt-3 grid gap-3">
                     <div className="flex flex-wrap gap-2">
@@ -567,6 +655,8 @@ export default function PeoplePage() {
                           onClick={() => {
                             void savePerson(user.id, {
                               areas: toggleValue(user.areas, area),
+                            }).catch(() => {
+                              void load();
                             });
                           }}
                           className={`rounded-full px-3 py-1 text-xs font-semibold ${
@@ -586,12 +676,16 @@ export default function PeoplePage() {
                         void savePerson(user.id, {
                           clubIds: toggleValue(user.clubIds, id),
                           teamIds: user.teamIds,
+                        }).catch(() => {
+                          void load();
                         });
                       }}
                       onTeam={(id) => {
                         void savePerson(user.id, {
                           clubIds: user.clubIds,
                           teamIds: toggleValue(user.teamIds, id),
+                        }).catch(() => {
+                          void load();
                         });
                       }}
                     />
