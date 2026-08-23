@@ -65,8 +65,8 @@ export default async function HubHome() {
               </p>
               {area === "softball" ? (
                 <p className="mb-3 text-sm text-slate-400">
-                  Start with Team Roster to add or remove players. The other
-                  softball tools use that same MN Elks · 16U Fransen list.
+                  Start with Team Roster to add or remove players and to change
+                  the team name. The other softball tools use that same list.
                 </p>
               ) : null}
               <div className="grid gap-4 md:grid-cols-2">

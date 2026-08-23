@@ -23,14 +23,26 @@
         </div>
         <div class="min-w-0">
           <h1 class="title-font text-2xl font-semibold">Team Roster</h1>
-          <p id="team-label" class="text-sm text-slate-400">MN Elks · 16U Fransen</p>
+          <div id="team-view" class="flex flex-wrap items-center gap-2">
+            <p id="team-label" class="text-sm text-slate-400">MN Elks · 16U Fransen</p>
+            <button type="button" id="edit-team-name" class="text-xs text-slate-400 hover:text-red-400">
+              Edit name
+            </button>
+          </div>
+          <form id="team-name-form" class="hidden mt-1 flex-wrap items-center gap-2">
+            <span id="club-prefix" class="text-sm text-slate-400">MN Elks ·</span>
+            <input id="team-name-input" maxlength="60" class="min-w-0 w-40 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500" autocomplete="off">
+            <button type="submit" class="rounded-lg bg-red-700 px-2.5 py-1 text-xs font-semibold hover:bg-red-600">Save</button>
+            <button type="button" id="cancel-team-name" class="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold hover:bg-slate-700">Cancel</button>
+          </form>
+          <p id="team-name-error" class="hidden mt-1 text-xs text-red-400"></p>
         </div>
       </div>
       <p id="count-label" class="text-sm text-slate-500 shrink-0"></p>
     </header>
 
     <p class="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
-      Add or remove players here. Lineup, tryouts, team formation, and practice planner all use this list.
+      Add or remove players here. Use Edit name to change the team name for this game year. Lineup, tryouts, team formation, and practice planner all use this list.
     </p>
 
     <form id="player-form" class="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-5">
@@ -89,11 +101,40 @@
     let state = null;
     let editingId = null;
 
-    function teamLabel() {
+    function currentTeam() {
       const hub = window.HUB_SOFTBALL || {};
-      const club = hub.clubName || "MN Elks";
-      const team = hub.teamName || "16U Fransen";
-      return club + " · " + team;
+      return {
+        id: hub.teamId || "",
+        club: hub.clubName || "MN Elks",
+        name: hub.teamName || "16U Fransen",
+      };
+    }
+
+    function teamLabel() {
+      const team = currentTeam();
+      return team.club + " · " + team.name;
+    }
+
+    function showTeamNameError(message) {
+      const el = document.getElementById("team-name-error");
+      el.textContent = message;
+      el.classList.toggle("hidden", !message);
+    }
+
+    function setTeamNameMode(editing) {
+      const form = document.getElementById("team-name-form");
+      document.getElementById("team-view").classList.toggle("hidden", editing);
+      form.classList.toggle("hidden", !editing);
+      form.classList.toggle("flex", editing);
+      if (!editing) showTeamNameError("");
+    }
+
+    function renderTeamLabel() {
+      const team = currentTeam();
+      document.getElementById("team-label").textContent = teamLabel();
+      document.getElementById("club-prefix").textContent = team.club + " ·";
+      document.getElementById("team-name-input").value = team.name;
+      document.getElementById("edit-team-name").classList.toggle("hidden", !team.id);
     }
 
     function showError(message) {
@@ -121,7 +162,7 @@
         return;
       }
       state = ElksData.load();
-      document.getElementById("team-label").textContent = teamLabel();
+      renderTeamLabel();
       render();
     }
 
@@ -225,6 +266,56 @@
     });
 
     document.getElementById("cancel-edit").addEventListener("click", resetForm);
+
+    document.getElementById("edit-team-name").addEventListener("click", () => {
+      renderTeamLabel();
+      setTeamNameMode(true);
+      document.getElementById("team-name-input").focus();
+      document.getElementById("team-name-input").select();
+    });
+
+    document.getElementById("cancel-team-name").addEventListener("click", () => {
+      setTeamNameMode(false);
+      renderTeamLabel();
+    });
+
+    document.getElementById("team-name-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const team = currentTeam();
+      const name = document.getElementById("team-name-input").value.trim();
+      if (!team.id) {
+        showTeamNameError("Open Team Roster from the hub so the team can be saved.");
+        return;
+      }
+      if (!name) {
+        showTeamNameError("Team name is required.");
+        return;
+      }
+      const saveButton = event.submitter || document.querySelector("#team-name-form [type=submit]");
+      if (saveButton) saveButton.disabled = true;
+      showTeamNameError("");
+      try {
+        const response = await fetch("/api/teams", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: team.id, name }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || "Could not rename the team.");
+        }
+        window.HUB_SOFTBALL = Object.assign({}, window.HUB_SOFTBALL || {}, {
+          teamId: data.team.id,
+          teamName: data.team.name,
+        });
+        setTeamNameMode(false);
+        renderTeamLabel();
+      } catch (err) {
+        showTeamNameError(err instanceof Error ? err.message : "Could not rename the team.");
+      } finally {
+        if (saveButton) saveButton.disabled = false;
+      }
+    });
 
     function escapeHtml(value) {
       return String(value)

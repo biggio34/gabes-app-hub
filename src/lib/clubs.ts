@@ -95,6 +95,35 @@ export async function createTeam(clubId: string, name: string) {
   return team;
 }
 
+export async function renameTeam(id: string, name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Team name is required");
+  if (trimmed.length > 60) throw new Error("Keep the team name under 60 characters");
+  const { teams: existingTeams } = await listOrgs();
+  const team = existingTeams.find((item) => item.id === id);
+  if (!team) throw new Error("Team not found");
+  if (
+    existingTeams.some(
+      (item) =>
+        item.id !== id &&
+        item.clubId === team.clubId &&
+        item.name.toLowerCase() === trimmed.toLowerCase(),
+    )
+  ) {
+    throw new Error("That team already exists in this club");
+  }
+  const updated: Team = { ...team, name: trimmed };
+  if (isSupabaseConfigured()) {
+    await supabaseStore.updateTeam(updated);
+    return updated;
+  }
+  await (await readyDb())
+    .update(teams)
+    .set({ name: trimmed })
+    .where(eq(teams.id, id));
+  return updated;
+}
+
 export async function deleteClub(id: string) {
   if (isSupabaseConfigured()) {
     const orgs = await supabaseStore.listOrgs();

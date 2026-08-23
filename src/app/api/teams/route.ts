@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { createTeam, deleteTeam } from "@/lib/clubs";
+import { canAccessArea, getSession } from "@/lib/auth";
+import { createTeam, deleteTeam, renameTeam } from "@/lib/clubs";
+import { softballContext } from "@/lib/softball";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,34 @@ export async function POST(request: Request) {
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not add team" },
+      { status: 400 },
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Sign in first" }, { status: 401 });
+  }
+  if (!canAccessArea(session, "softball")) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  }
+  const body = (await request.json().catch(() => null)) as {
+    id?: string;
+    name?: string;
+  } | null;
+  const softball = await softballContext(session);
+  const id = String(body?.id || "").trim();
+  if (!id || (session.role !== "owner" && id !== softball.teamId)) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  }
+  try {
+    const team = await renameTeam(id, body?.name ?? "");
+    return NextResponse.json({ team });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Could not rename team" },
       { status: 400 },
     );
   }

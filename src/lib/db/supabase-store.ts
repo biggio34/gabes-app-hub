@@ -332,6 +332,14 @@ export async function insertTeam(team: Team) {
   );
 }
 
+export async function updateTeam(team: Team) {
+  const supabase = await client();
+  throwIfError(
+    await supabase.from("hub_teams").update({ name: team.name }).eq("id", team.id),
+    "Could not rename team.",
+  );
+}
+
 export async function removeClub(id: string) {
   const supabase = await client();
   throwIfError(

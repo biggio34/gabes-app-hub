@@ -32,7 +32,7 @@ export const hubApps: HubApp[] = [
     file: "roster.html",
     title: "Team Roster",
     description:
-      "Add, edit, and remove players. Lineup, tryouts, and the other softball tools use this list.",
+      "Add, edit, and remove players, and change the team name. Lineup, tryouts, and the other softball tools use this list.",
     area: "softball",
   },
   {
