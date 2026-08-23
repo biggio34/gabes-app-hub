@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Roster</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="../shared/elks-data.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+    body { font-family: Inter, system-ui, sans-serif; }
+    .title-font { font-family: 'Space Grotesk', Inter, sans-serif; letter-spacing: -0.03em; }
+  </style>
+</head>
+<body class="min-h-dvh bg-slate-950 text-slate-200">
+  <div class="mx-auto grid w-full max-w-3xl gap-6 px-4 py-6 sm:px-6">
+    <header class="flex items-start justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <a href="/" class="text-sm text-slate-400 hover:text-red-400 shrink-0">← Hub</a>
+        <div class="flex size-12 items-center justify-center rounded-2xl bg-red-700 shrink-0">
+          <i class="fa-solid fa-clipboard-user text-white text-lg"></i>
+        </div>
+        <div class="min-w-0">
+          <h1 class="title-font text-2xl font-semibold">Team Roster</h1>
+          <p id="team-label" class="text-sm text-slate-400">MN Elks · 16U Fransen</p>
+        </div>
+      </div>
+      <p id="count-label" class="text-sm text-slate-500 shrink-0"></p>
+    </header>
+
+    <p class="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
+      Add or remove players here. Lineup, tryouts, team formation, and practice planner all use this list.
+    </p>
+
+    <form id="player-form" class="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+      <h2 id="form-title" class="font-semibold">Add a player</h2>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <label class="grid gap-1.5 text-sm">
+          First name
+          <input id="first-name" required class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+        <label class="grid gap-1.5 text-sm">
+          Last name
+          <input id="last-name" required class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+        <label class="grid gap-1.5 text-sm">
+          Number
+          <input id="number" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+        <label class="grid gap-1.5 text-sm">
+          Position
+          <select id="position" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+            <option value="">Any / unset</option>
+            <option>P</option>
+            <option>C</option>
+            <option>1B</option>
+            <option>2B</option>
+            <option>3B</option>
+            <option>SS</option>
+            <option>LF</option>
+            <option>CF</option>
+            <option>RF</option>
+            <option>UT</option>
+            <option>DP</option>
+          </select>
+        </label>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button type="submit" class="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold hover:bg-red-600">
+          Save player
+        </button>
+        <button type="button" id="cancel-edit" class="hidden rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">
+          Cancel
+        </button>
+      </div>
+      <p id="form-error" class="hidden text-sm text-red-400"></p>
+    </form>
+
+    <div id="empty" class="hidden rounded-3xl border border-slate-800 bg-slate-900 px-6 py-12 text-center text-slate-400">
+      No players yet. Add the first girl above.
+    </div>
+
+    <ul id="player-list" class="grid gap-3"></ul>
+  </div>
+
+  <script>
+    const POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "UT", "DP"];
+    let state = null;
+    let editingId = null;
+
+    function teamLabel() {
+      const hub = window.HUB_SOFTBALL || {};
+      const club = hub.clubName || "MN Elks";
+      const team = hub.teamName || "16U Fransen";
+      return club + " · " + team;
+    }
+
+    function showError(message) {
+      const el = document.getElementById("form-error");
+      el.textContent = message;
+      el.classList.toggle("hidden", !message);
+    }
+
+    function resetForm() {
+      editingId = null;
+      document.getElementById("player-form").reset();
+      document.getElementById("form-title").textContent = "Add a player";
+      document.getElementById("cancel-edit").classList.add("hidden");
+      showError("");
+    }
+
+    function persist() {
+      ElksData.save(state);
+    }
+
+    function load() {
+      if (!window.ElksData) {
+        document.getElementById("empty").classList.remove("hidden");
+        document.getElementById("empty").textContent = "Roster data could not load. Refresh and try again.";
+        return;
+      }
+      state = ElksData.load();
+      document.getElementById("team-label").textContent = teamLabel();
+      render();
+    }
+
+    function sortedPlayers() {
+      return [...(state.players || [])].sort((a, b) => {
+        const last = (a.lastName || "").localeCompare(b.lastName || "");
+        if (last) return last;
+        return ElksData.displayName(a).localeCompare(ElksData.displayName(b));
+      });
+    }
+
+    function render() {
+      const players = sortedPlayers();
+      const list = document.getElementById("player-list");
+      const empty = document.getElementById("empty");
+      document.getElementById("count-label").textContent = players.length
+        ? players.length + (players.length === 1 ? " player" : " players")
+        : "";
+      empty.classList.toggle("hidden", players.length > 0);
+      list.innerHTML = "";
+      players.forEach((player) => {
+        const li = document.createElement("li");
+        li.className = "rounded-3xl border border-slate-800 bg-slate-900 p-5";
+        const number = player.number ? "#" + player.number : "No number";
+        const position = player.position || "No position";
+        li.innerHTML = `
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p class="font-semibold">${escapeHtml(ElksData.displayName(player))}</p>
+              <p class="text-xs text-slate-500">${escapeHtml(number)} · ${escapeHtml(position)}</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <button type="button" data-edit class="text-xs text-slate-400 hover:text-red-400">Edit</button>
+              <button type="button" data-remove class="text-xs text-slate-400 hover:text-red-400">Remove</button>
+            </div>
+          </div>
+        `;
+        li.querySelector("[data-edit]").onclick = () => startEdit(player.id);
+        li.querySelector("[data-remove]").onclick = () => removePlayer(player.id);
+        list.appendChild(li);
+      });
+    }
+
+    function startEdit(id) {
+      const player = state.players.find((item) => item.id === id);
+      if (!player) return;
+      editingId = id;
+      document.getElementById("form-title").textContent = "Edit player";
+      document.getElementById("first-name").value = player.firstName || "";
+      document.getElementById("last-name").value = player.lastName || "";
+      document.getElementById("number").value = player.number || "";
+      document.getElementById("position").value = POSITIONS.includes(player.position) ? player.position : "";
+      document.getElementById("cancel-edit").classList.remove("hidden");
+      document.getElementById("first-name").focus();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function removePlayer(id) {
+      const player = state.players.find((item) => item.id === id);
+      const name = player ? ElksData.displayName(player) : "this player";
+      if (!confirm("Remove " + name + " from the shared roster? She will leave lineup, tryouts, and team formation too.")) {
+        return;
+      }
+      ElksData.deletePlayer(state, id);
+      persist();
+      if (editingId === id) resetForm();
+      render();
+    }
+
+    document.getElementById("player-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const firstName = document.getElementById("first-name").value.trim();
+      const lastName = document.getElementById("last-name").value.trim();
+      const number = document.getElementById("number").value.trim();
+      const position = document.getElementById("position").value;
+      if (!firstName || !lastName) {
+        showError("First and last name are required.");
+        return;
+      }
+      const fields = {
+        firstName,
+        lastName,
+        name: ElksData.joinName(firstName, lastName),
+        number,
+        position,
+        assignedTeamId: window.HUB_SOFTBALL ? window.HUB_SOFTBALL.teamId : null,
+      };
+      if (editingId) {
+        ElksData.upsertPlayer(state, { ...fields, id: editingId });
+      } else {
+        const exists = ElksData.findPlayerByIdentity(state.players, fields.name, "");
+        if (exists) {
+          showError("That player is already on the roster.");
+          return;
+        }
+        ElksData.upsertPlayer(state, fields);
+      }
+      persist();
+      resetForm();
+      render();
+    });
+
+    document.getElementById("cancel-edit").addEventListener("click", resetForm);
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    load();
+    if (window.ElksData && window.ElksData.connectCloud) {
+      ElksData.connectCloud();
+    }
+    window.addEventListener("elks-data-updated", load);
+  </script>
+</body>
+</html>

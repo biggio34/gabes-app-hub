@@ -28,6 +28,14 @@ export const hubApps: HubApp[] = [
     area: "financial",
   },
   {
+    slug: "roster",
+    file: "roster.html",
+    title: "Team Roster",
+    description:
+      "Add, edit, and remove players. Lineup, tryouts, and the other softball tools use this list.",
+    area: "softball",
+  },
+  {
     slug: "practice-planner",
     file: "practice-planner.html",
     title: "16U Practice Planner",
@@ -90,6 +98,8 @@ export const pathRewrites: Record<string, string> = {
   "/financial-calcs": "/apps/financial-calcs",
   "/calculator/": "/apps/calculator",
   "/calculator": "/apps/calculator",
+  "/roster/": "/apps/roster",
+  "/roster": "/apps/roster",
   "/minnesota-elks-practice-planner/": "/apps/practice-planner",
   "/minnesota-elks-practice-planner": "/apps/practice-planner",
   "/elks-lineup/": "/apps/lineup",
