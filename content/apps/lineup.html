@@ -1048,9 +1048,12 @@
           outBtn.textContent = "Out";
           outBtn.onclick = (e) => {
             e.stopImmediatePropagation();
+            e.preventDefault();
             setUnavailable(player.id, true);
           };
+          outBtn.onpointerdown = (e) => e.stopImmediatePropagation();
           outBtn.onmousedown = (e) => e.stopImmediatePropagation();
+          outBtn.ontouchstart = (e) => e.stopImmediatePropagation();
           row.appendChild(outBtn);
 
           slot.appendChild(row);
@@ -1095,10 +1098,10 @@
         : '';
 
       const availabilityBtn = unavailable
-        ? `<button type="button" onclick="event.stopImmediatePropagation(); setUnavailable('${player.id}', false);"
-                    class="px-2 py-0.5 text-[10px] font-semibold rounded-lg bg-stone-200 text-stone-700 hover:bg-stone-300">In</button>`
-        : `<button type="button" onclick="event.stopImmediatePropagation(); setUnavailable('${player.id}', true);"
-                    class="px-2 py-0.5 text-[10px] font-semibold rounded-lg bg-stone-100 text-stone-500 hover:bg-red-50 hover:text-red-700">Out</button>`;
+        ? `<button type="button" data-availability="in"
+                    class="px-2.5 py-1 text-[10px] font-semibold rounded-lg bg-stone-200 text-stone-700 hover:bg-stone-300">In</button>`
+        : `<button type="button" data-availability="out"
+                    class="px-2.5 py-1 text-[10px] font-semibold rounded-lg bg-stone-100 text-stone-500 hover:bg-red-50 hover:text-red-700">Out</button>`;
 
       card.innerHTML = `
         <div class="flex items-center gap-3 flex-1 min-w-0">
@@ -1117,6 +1120,19 @@
           ` : ''}
         </div>
       `;
+
+      const availabilityControl = card.querySelector("[data-availability]");
+      if (availabilityControl) {
+        const stopDrag = (e) => e.stopImmediatePropagation();
+        availabilityControl.addEventListener("pointerdown", stopDrag);
+        availabilityControl.addEventListener("mousedown", stopDrag);
+        availabilityControl.addEventListener("touchstart", stopDrag, { passive: true });
+        availabilityControl.addEventListener("click", (e) => {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          setUnavailable(player.id, availabilityControl.dataset.availability === "out");
+        });
+      }
 
       if (unavailable) return card;
 
@@ -1158,6 +1174,7 @@
 
       const onPointerDown = (e) => {
         if (e.button && e.button !== 0) return; // only primary button / touch
+        if (e.target.closest("button, select, input, a")) return;
         
         dragState = { player, source, battingIndex, startX: e.clientX, startY: e.clientY };
         
