@@ -7,8 +7,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <!-- Supabase for backend (configure in script at bottom) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../shared/elks-data.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
@@ -183,13 +181,6 @@
             <span class="hidden sm:inline">Games</span>
           </button>
 
-          <button id="sync-status-btn" onclick="handleCloudSyncClick()" 
-                  class="flex items-center gap-x-1.5 px-3 py-1.5 rounded-2xl border border-stone-300 hover:bg-stone-50 text-sm font-medium"
-                  title="Cloud sync status - click to sign in or manage">
-            <i class="fa-solid fa-cloud"></i>
-            <span id="sync-status-text" class="hidden sm:inline">Sync</span>
-          </button>
-
           <button onclick="exportPNG()" 
                   class="flex items-center gap-x-2 px-4 py-2 rounded-2xl bg-red-700 hover:bg-red-800 active:bg-black transition-colors text-white text-sm font-semibold shadow">
             <i class="fa-solid fa-camera mr-1.5"></i>
@@ -203,12 +194,6 @@
               <span class="hidden sm:inline">Export</span>
             </button>
           </div>
-
-          <button onclick="copyShareLink()" 
-                  class="flex items-center gap-x-2 px-4 py-2 rounded-2xl bg-red-700 hover:bg-red-800 active:bg-black transition-colors text-white text-sm font-semibold shadow">
-            <i class="fa-solid fa-link mr-1.5"></i>
-            <span>Share Lineup</span>
-          </button>
         </div>
       </div>
     </div>
@@ -216,12 +201,6 @@
     <div class="p-1 max-w-screen-xl mx-auto">
       <!-- Quick Actions (Batting Mode moved to top header) -->
       <div class="flex items-center justify-end gap-2 mb-3">
-        <button onclick="loadSampleRoster()" 
-                class="px-3 py-1.5 text-xs font-semibold rounded-2xl border border-red-700 text-red-800 hover:bg-red-50 flex items-center gap-x-1.5 active:bg-red-100">
-          <i class="fa-solid fa-users"></i>
-          <span>Load Roster</span>
-        </button>
-        
         <button onclick="clearAll()" 
                 class="px-3 py-1.5 text-xs font-semibold rounded-2xl border border-stone-300 hover:bg-stone-50 flex items-center gap-x-1.5 text-stone-600">
           <i class="fa-solid fa-trash"></i>
@@ -405,11 +384,7 @@
       <!-- Footer / Tips -->
       <div class="mt-4 text-center text-xs text-stone-400">
         Tap a player on the defense diagram to select them → click another field position to swap, or click any player in the Subs list to sub them in (fewer clicks).
-        Works great on iPad &amp; iPhone. Data saved automatically in this browser.
-      </div>
-
-      <div class="mt-2 text-center text-[10px] text-stone-400">
-        Share current lineup with coaches using the red "Share Lineup" button above.
+        Works great on iPad &amp; iPhone. Players come from Team Roster. Games stay on this device.
       </div>
     </div>
   </div>
@@ -502,22 +477,8 @@
     let state = {
       teamName: "MN Elks 16U",
       gameInfo: "",
-      players: [
-        { id: "p16", name: "Annabelle Ackerman", number: 16, notes: "" },
-        { id: "p4",  name: "Emily Artmann",     number: 4,  notes: "" },
-        { id: "p7",  name: "Macie Backman",     number: 7,  notes: "" },
-        { id: "p11", name: "Madison Burggraff", number: 11, notes: "" },
-        { id: "p13", name: "Hailee Clinton",    number: 13, notes: "" },
-        { id: "p45", name: "Savanah Emmans",    number: 45, notes: "" },
-        { id: "p10", name: "Tenley Fransen",    number: 10, notes: "" },
-        { id: "p27", name: "Molly Johnson",     number: 27, notes: "" },
-        { id: "p17", name: "Kiana Pegues",      number: 17, notes: "" },
-        { id: "p9",  name: "Avaiyah Sandford",  number: 9,  notes: "" },
-        { id: "p14", name: "Sidney Tischner",   number: 14, notes: "" },
-        { id: "p12", name: "MaKayla Uttke",     number: 12, notes: "" },
-        { id: "p8",  name: "Paisyn Wiley",      number: 8,  notes: "" }
-      ],
-      battingOrder: ["p16","p4","p7","p11","p13","p45","p10","p27","p17","p9","p14","p12","p8"],
+      players: [],
+      battingOrder: [],
       defensivePositions: {
         P: null, C: null, "1B": null, "2B": null, "3B": null,
         SS: null, LF: null, CF: null, RF: null
@@ -636,9 +597,6 @@
         lastUpdated: Date.now()
       };
       localStorage.setItem("mn-elks-lineup-v1", JSON.stringify(data));
-
-      // Fire and forget cloud sync if configured
-      syncToCloudIfEnabled(data);
     }
 
     function applyHubTeamName() {
@@ -860,7 +818,7 @@
       updateModeButtons();
       updateGameInfoInputs();
 
-      // Keep the games list in sync if the modal is open (e.g. after cloud load overwrites the games array while modal was visible)
+      // Keep the games list in sync if the modal is open
       const gmodal = document.getElementById("games-modal");
       if (gmodal && !gmodal.classList.contains("hidden")) {
         renderGamesList();
@@ -2371,40 +2329,6 @@
       notesInput.focus();
     }
 
-    // ==================== SAMPLE DATA ====================
-    function loadSampleRoster() {
-      if (state.players.length > 0 && !confirm("Replace current roster with the MN Elks 16U roster?")) return;
-
-      state.players = [
-        { id: "p16", name: "Annabelle Ackerman", number: 16, notes: "" },
-        { id: "p4",  name: "Emily Artmann",     number: 4,  notes: "" },
-        { id: "p7",  name: "Macie Backman",     number: 7,  notes: "" },
-        { id: "p11", name: "Madison Burggraff", number: 11, notes: "" },
-        { id: "p13", name: "Hailee Clinton",    number: 13, notes: "" },
-        { id: "p45", name: "Savanah Emmans",    number: 45, notes: "" },
-        { id: "p10", name: "Tenley Fransen",    number: 10, notes: "" },
-        { id: "p27", name: "Molly Johnson",     number: 27, notes: "" },
-        { id: "p17", name: "Kiana Pegues",      number: 17, notes: "" },
-        { id: "p9",  name: "Avaiyah Sandford",  number: 9,  notes: "" },
-        { id: "p14", name: "Sidney Tischner",   number: 14, notes: "" },
-        { id: "p12", name: "MaKayla Uttke",     number: 12, notes: "" },
-        { id: "p8",  name: "Paisyn Wiley",      number: 8,  notes: "" }
-      ];
-
-      // Load full roster batting (13 players) + clear defense so coach can set starting 9
-      state.battingMode = "roster";
-      state.battingOrder = state.players.map(p => p.id);
-
-      // Start with empty defensive positions
-      state.defensivePositions = {
-        P: null, C: null, "1B": null, "2B": null, "3B": null,
-        SS: null, LF: null, CF: null, RF: null
-      };
-
-      saveState();
-      renderAll();
-    }
-
     function clearAll() {
       if (!confirm("Clear the current game's lineup (batting order + defense)?\nRoster and other games are kept.")) return;
       
@@ -2618,86 +2542,6 @@
       });
     }
 
-    // === Simple URL Sharing for Coaches (no accounts, no backend) ===
-    function encodeStateForURL(state) {
-      try {
-        const json = JSON.stringify(state);
-        return btoa(unescape(encodeURIComponent(json)));
-      } catch (e) {
-        return null;
-      }
-    }
-
-    function decodeStateFromURL(encoded) {
-      try {
-        const json = decodeURIComponent(escape(atob(encoded)));
-        return JSON.parse(json);
-      } catch (e) {
-        return null;
-      }
-    }
-
-    function copyShareLink() {
-      const encoded = encodeStateForURL(state);
-      if (!encoded) {
-        alert("Could not create share link.");
-        return;
-      }
-
-      const baseUrl = `${location.origin}${location.pathname}`;
-      const shareUrl = `${baseUrl}#state=${encoded}`;
-
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        alert("Link copied! Send this to your coaches.\n\nThey can open it anytime and will see your current lineup.");
-      }).catch(() => {
-        // Fallback for older browsers
-        prompt("Copy this link and send it to your coaches:", shareUrl);
-      });
-    }
-
-    function loadStateFromURL() {
-      const hash = location.hash;
-      if (!hash.startsWith('#state=')) return;
-
-      const encoded = hash.slice(7);
-      const loaded = decodeStateFromURL(encoded);
-
-      if (loaded && loaded.players && Array.isArray(loaded.players)) {
-        // Merge any players from the shared lineup into our master roster (by id)
-        const have = new Set((state.players || []).map(p => p.id));
-        (loaded.players || []).forEach(sp => {
-          if (sp && sp.id && !have.has(sp.id)) {
-            state.players.push({ ...sp });
-            have.add(sp.id);
-          }
-        });
-
-        // Create a *new* game from the shared lineup data so we don't lose the user's other games
-        const sharedId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('g' + Date.now());
-        const sharedGame = {
-          id: sharedId,
-          name: (loaded.gameInfo || "Shared Lineup") + " (from link)",
-          battingMode: loaded.battingMode || "roster",
-          battingOrder: loaded.battingOrder || [],
-          defensivePositions: loaded.defensivePositions || {},
-          lastUpdated: Date.now()
-        };
-        POSITIONS.forEach(pos => {
-          if (!(pos in sharedGame.defensivePositions)) sharedGame.defensivePositions[pos] = null;
-        });
-
-        games.push(sharedGame);
-        currentGameId = sharedId;
-        loadGameIntoState(sharedId);
-
-        saveState();
-        renderAll();
-
-        // Optional: let the user know
-        // (avoid alert on every load; the lineup appearing is feedback enough)
-      }
-    }
-
     function showExportMenu() {
       const json = JSON.stringify(state, null, 2);
       const blob = new Blob([json], { type: "application/json" });
@@ -2765,345 +2609,22 @@
         renderAll();
       });
 
-      // Preserve team when going back to hub
-      const backLink = document.getElementById('back-to-hub');
-      if (backLink) {
-        const params = new URLSearchParams(location.search);
-        const team = params.get('team');
-        if (team) backLink.href = `../index.html?team=${team}`;
-      }
-
-      // Load lineup from URL if someone shared a link (for coaches)
-      loadStateFromURL();
-
-      // Ensure positions exist
       POSITIONS.forEach(pos => {
         if (!(pos in state.defensivePositions)) state.defensivePositions[pos] = null;
       });
 
-      // No longer needed — batting mode is now a dropdown
-
-      // Initial render
       renderAll();
 
-      // Make diamond positions nicer on touch
       document.querySelectorAll("#diamond .position-group").forEach(g => {
         g.style.cursor = "pointer";
       });
-
-      // Keyboard hint
-      console.log("%c[MN Elks Lineup] Cmd/Ctrl + S = PNG export", "color:#854d0e");
-
-      // Cloud sync setup (non-blocking)
-      setTimeout(() => {
-        if (typeof initLineupSupabase === 'function') {
-          const ready = initLineupSupabase();
-          if (typeof updateSyncStatusUI === 'function') {
-            updateSyncStatusUI();
-          }
-          // Load is handled by initLineupSupabase (getSession/onAuth paths) or explicit in handleCloudSyncClick.
-          // Removed unconditional early load here to avoid 406 noise before auth session is attached.
-        }
-      }, 300);
     }
 
-    // ============================================
-    // SUPABASE CLOUD SYNC (for multi-device personal use)
-    // ============================================
-    // To enable: 
-    // 1. Create free Supabase project at supabase.com
-    // 2. Run the SQL from Gabes App Hub/backend/supabase-schema.sql (plus the ALTER for data column)
-    // 3. In Supabase Auth settings, add your Netlify URL (and localhost for testing) as redirect URL
-    // 4. Replace the two constants below with your project values
-    //    - URL is the Project URL (https://....supabase.co)
-    //    - ANON_KEY is the **Publishable key** (the new sb_publishable_... one, not the secret)
-    // 5. (Optional) Create a team in the teams table and add yourself to team_memberships
-    // 6. Access via hub with ?team=your-team-uuid  or set below
-    let LINEUP_SUPABASE_URL = 'https://cylppatfrlazaioptpzo.supabase.co';
-    let LINEUP_SUPABASE_ANON_KEY = 'sb_publishable_E6JngnBP7_yib777_stGEA_CavLtD5z';
-
-    let lineupSupabase = null;
-    let lineupCurrentTeamId = null;
-    let currentUser = null;
-
-    function initLineupSupabase() {
-      if (!window.supabase || LINEUP_SUPABASE_URL === 'YOUR_SUPABASE_URL_HERE') {
-        return false;
-      }
-
-      // Always re-check URL for team ID on every init call (ensures ?team= is picked up even on late calls)
-      const params = new URLSearchParams(location.search);
-      const urlTeam = params.get('team');
-      if (urlTeam) {
-        lineupCurrentTeamId = urlTeam;
-        localStorage.setItem('mn-elks-lineup-team-id', urlTeam);
-      }
-
-      if (lineupSupabase) return true;
-
-      lineupSupabase = window.supabase.createClient(LINEUP_SUPABASE_URL, LINEUP_SUPABASE_ANON_KEY);
-      console.log('[Lineup] Supabase client ready');
-
-      // Listen for auth changes (magic link sign-in from email)
-      lineupSupabase.auth.onAuthStateChange((event, session) => {
-        if (session) {
-          currentUser = session.user;
-          localStorage.setItem('mn-elks-lineup-auth', 'true');
-          try {
-            localStorage.setItem('mn-elks-lineup-supabase-session', JSON.stringify(session));
-          } catch (e) {}
-          updateSyncStatusUI();
-          console.log('[Lineup] Signed in as', currentUser.email);
-          // After sign in, try to load latest from cloud (using correct lineups/_app_data row)
-          loadFromCloudIfEnabled().then(updated => {
-            if (updated) renderAll();
-          });
-        } else {
-          currentUser = null;
-          updateSyncStatusUI();
-        }
-      });
-
-      // Try to restore session
-      lineupSupabase.auth.getSession().then(({ data }) => {
-        if (data.session) {
-          currentUser = data.session.user;
-          updateSyncStatusUI();
-          // Load cloud data now that session is restored
-          loadFromCloudIfEnabled().then(updated => {
-            if (updated) renderAll();
-          });
-        } else {
-          // Try manual stored session as fallback
-          try {
-            const saved = localStorage.getItem('mn-elks-lineup-supabase-session');
-            if (saved) {
-              const sess = JSON.parse(saved);
-              lineupSupabase.auth.setSession(sess).then(() => {
-                currentUser = sess.user;
-                updateSyncStatusUI();
-                loadFromCloudIfEnabled().then(updated => {
-                  if (updated) renderAll();
-                });
-              });
-            }
-          } catch (e) {}
-        }
-      });
-
-      return true;
-    }
-
-    async function syncToCloudIfEnabled(fullData) {
-      if (!initLineupSupabase() || !lineupCurrentTeamId) return;
-
-      try {
-        const payload = {
-          team_id: lineupCurrentTeamId,
-          name: '_app_data',
-          data: fullData,
-          updated_at: new Date().toISOString()
-        };
-
-        const { error } = await lineupSupabase
-          .from('lineups')
-          .upsert(payload, { onConflict: 'team_id,name' });
-
-        if (error) {
-          console.warn('[Lineup] Cloud sync save error', error);
-        } else {
-          console.log('[Lineup] Synced to cloud');
-          updateSyncStatusUI('synced');
-        }
-      } catch (e) {
-        console.warn('[Lineup] Cloud sync failed', e);
-      }
-    }
-
-    async function loadFromCloudIfEnabled() {
-      if (!initLineupSupabase() || !lineupCurrentTeamId) return false;
-
-      try {
-        const { data, error } = await lineupSupabase
-          .from('lineups')
-          .select('data, updated_at')
-          .eq('team_id', lineupCurrentTeamId)
-          .eq('name', '_app_data')
-          .maybeSingle();
-
-        if (error || !data || !data.data) {
-          if (error) console.warn('[Lineup] Cloud load error (may be first save for this team):', error);
-          return false;
-        }
-
-        const cloudData = data.data;
-
-        // Always prefer cloud data if present (cloud is source of truth for this team)
-        if (cloudData.version === 2 && Array.isArray(cloudData.games)) {
-          state.players = Array.isArray(cloudData.roster) ? cloudData.roster : state.players;
-          games = cloudData.games || [];
-          currentGameId = cloudData.currentGameId || null;
-          state.teamName = cloudData.teamName || state.teamName;
-
-          if (currentGameId && games.some(g => g.id === currentGameId)) {
-            loadGameIntoState(currentGameId);
-          } else if (games.length > 0) {
-            loadGameIntoState(games[0].id);
-          }
-
-          // Save the fresh data locally too
-          localStorage.setItem("mn-elks-lineup-v1", JSON.stringify(cloudData));
-          console.log('[Lineup] Loaded data from cloud');
-          updateSyncStatusUI('synced');
-          return true;
-        }
-        return false;
-      } catch (e) {
-        console.warn('[Lineup] Cloud load failed (using local)', e);
-        return false;
-      }
-    }
-
-    async function handleCloudSyncClick() {
-      if (!initLineupSupabase()) {
-        const url = prompt("Enter your Supabase URL (or leave blank to cancel):", LINEUP_SUPABASE_URL);
-        if (url) {
-          LINEUP_SUPABASE_URL = url;
-          const key = prompt("Enter your Supabase anon key:");
-          if (key) {
-            LINEUP_SUPABASE_ANON_KEY = key;
-            initLineupSupabase();
-            alert("Config set for this session. For permanent use after deploy, edit the two constants at the bottom of the HTML source and redeploy to Netlify.");
-          }
-        }
-        return;
-      }
-
-      if (!lineupCurrentTeamId) {
-        const teamId = prompt("Enter your Supabase team UUID (from the teams table):");
-        if (teamId) {
-          lineupCurrentTeamId = teamId;
-          localStorage.setItem('mn-elks-lineup-team-id', teamId);
-          if (typeof updateSyncStatusUI === 'function') updateSyncStatusUI();
-        } else {
-          return;
-        }
-      }
-
-      // Ensure we have latest session state (getSession is fast; prevents re-prompting on click after auto-restore or previous sign-in)
-      if (!currentUser && lineupSupabase) {
-        try {
-          const { data } = await lineupSupabase.auth.getSession();
-          if (data && data.session) {
-            currentUser = data.session.user;
-            updateSyncStatusUI();
-            loadFromCloudIfEnabled().then(updated => {
-              if (updated) renderAll();
-            });
-          }
-        } catch (e) {}
-      }
-
-      if (currentUser) {
-        if (confirm(`Sign out of cloud sync for ${currentUser.email}?`)) {
-          await lineupSupabase.auth.signOut();
-          currentUser = null;
-          updateSyncStatusUI();
-        }
-        return;
-      }
-
-      // Not signed in - use email + password (no more magic links / rate limits)
-      const email = prompt("Email for cloud sync:");
-      if (!email) return;
-      let password = prompt("Password (set one if first time / sign up):");
-      if (!password) return;
-
-      // Try sign in first
-      let { error } = await lineupSupabase.auth.signInWithPassword({ email, password });
-
-      if (error && (error.message.includes('Invalid login credentials') || error.message.includes('User not found'))) {
-        // Not found - offer sign up
-        if (confirm("No account found for that email. Create one now? (you'll use this password to sign in next time)")) {
-          const { error: signUpErr } = await lineupSupabase.auth.signUp({ email, password });
-          if (signUpErr) {
-            alert("Sign up error: " + signUpErr.message);
-          } else {
-            alert("Account created! If your Supabase project has email confirmation enabled, check your inbox. Otherwise you should be signed in now.");
-            updateSyncStatusUI();
-            loadFromCloudIfEnabled().then(updated => {
-              if (updated) renderAll();
-            });
-          }
-        }
-      } else if (error) {
-        alert("Sign in error: " + error.message);
-      } else {
-        // Successful sign in
-        updateSyncStatusUI();
-        loadFromCloudIfEnabled().then(updated => {
-          if (updated) renderAll();
-        });
-      }
-    }
-
-    function updateSyncStatusUI(status) {
-      const btn = document.getElementById('sync-status-btn');
-      const text = document.getElementById('sync-status-text');
-      if (!btn || !text) return;
-
-      if (!lineupSupabase || !LINEUP_SUPABASE_URL || LINEUP_SUPABASE_URL === 'YOUR_SUPABASE_URL_HERE') {
-        text.textContent = 'Local only';
-        btn.title = 'Cloud sync not configured. Click to set up.';
-        btn.style.borderColor = '#d1d5db';
-        return;
-      }
-
-      if (!lineupCurrentTeamId) {
-        text.textContent = 'Set team';
-        btn.title = 'Click to configure your team ID for cloud sync.';
-        btn.style.borderColor = '#fbbf24';
-        return;
-      }
-
-      if (currentUser) {
-        text.textContent = 'Synced';
-        btn.title = `Cloud sync active for ${currentUser.email}. Click to sign out.`;
-        btn.style.borderColor = '#86efac';
-      } else {
-        text.textContent = 'Sign in';
-        btn.title = 'Click to sign in / sign out of cloud sync (email + password).';
-        btn.style.borderColor = '#fbbf24';
-      }
-
-      if (status === 'synced') {
-        btn.style.transition = 'border-color 0.1s';
-        setTimeout(() => {
-          if (currentUser) btn.style.borderColor = '#86efac';
-        }, 800);
-      }
-    }
-
-    // Expose helpers for debugging (use in browser console, e.g. after sign-in):
-    //   MNElksLineup.getGames().length
-    //   MNElksLineup.getGames().map(g => g.name)
-    //   MNElksLineup.getCurrentUser().then(u => console.log(u?.email))
-    window.MNElksLineup = { 
-      loadSample: () => { loadSampleRoster(); }, 
+    window.MNElksLineup = {
       getState: () => state,
-      getGames: () => games || [],
-      getCurrentUser: async () => {
-        if (currentUser) return currentUser;
-        if (!lineupSupabase) return null;
-        try {
-          const { data: { user } } = await lineupSupabase.auth.getUser();
-          return user;
-        } catch (e) { return null; }
-      },
-      signIn: () => handleCloudSyncClick()
+      getGames: () => games || []
     };
 
-    // Boot the app (load local or create initial state + render + start cloud session restore in background)
     init();
   </script>
 </body>

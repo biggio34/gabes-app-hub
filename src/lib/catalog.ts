@@ -47,7 +47,7 @@ export const hubApps: HubApp[] = [
     slug: "lineup",
     file: "lineup.html",
     title: "16U Lineup Builder",
-    description: "Game lineups from the shared 16U Fransen roster.",
+    description: "Game lineups from the shared Team Roster.",
     area: "softball",
   },
   {
