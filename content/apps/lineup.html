@@ -2447,7 +2447,9 @@
           evalNotes: notes || "",
         };
         if (!editingPlayerId) {
-          const teamId = currentLineupTeam().id;
+          const teamId = ElksData.realTeamId
+            ? ElksData.realTeamId(currentLineupTeam().id)
+            : currentLineupTeam().id;
           if (teamId) payload.assignedTeamId = teamId;
         }
         ElksData.upsertPlayer(shared, payload);

@@ -42,7 +42,7 @@
     </header>
 
     <p class="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
-      Pick a team in the dropdown. Unassigned girls only show under All teams. Ty and Katie only see the team they are assigned to.
+      Pick Any / all players to see everyone, Not assigned for girls with no team yet, or one team.
     </p>
     <p id="save-status" class="hidden text-xs text-slate-500"></p>
 
@@ -144,7 +144,7 @@
       }
       document.getElementById("club-prefix").textContent = team.club + " ·";
       document.getElementById("team-name-input").value = team.name;
-      document.getElementById("edit-team-name").classList.toggle("hidden", !team.id || team.id === "all");
+      document.getElementById("edit-team-name").classList.toggle("hidden", !team.id || team.id === "all" || team.id === "unassigned");
     }
 
     function showError(message) {
@@ -266,7 +266,7 @@
         number,
         position,
       };
-      if (!editingId && currentTeam().id && currentTeam().id !== "all") {
+      if (!editingId && currentTeam().id && currentTeam().id !== "all" && currentTeam().id !== "unassigned") {
         fields.assignedTeamId = currentTeam().id;
       }
       if (editingId) {

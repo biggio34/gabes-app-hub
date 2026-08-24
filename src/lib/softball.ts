@@ -65,7 +65,7 @@ export function canUseSoftballTeam(
   context: Awaited<ReturnType<typeof softballContext>>,
   teamId?: string,
 ) {
-  if (!teamId || teamId === "all") return true;
+  if (!teamId || teamId === "all" || teamId === "unassigned") return true;
   if (!context.teams.length) return teamId === context.teamId;
   return context.teams.some((team) => team.id === teamId);
 }

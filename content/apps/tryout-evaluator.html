@@ -450,7 +450,26 @@
 
     function viewPlayers() {
       const tryout = getTryout();
-      return state.players.map((p) => ElksData.playerWithEval(p, tryout));
+      const teamId = ElksData.currentHubTeam ? ElksData.currentHubTeam().id : 'all';
+      const list = ElksData.playersOnHubTeam
+        ? ElksData.playersOnHubTeam(state.players || [], teamId)
+        : state.players || [];
+      return list.map((p) => ElksData.playerWithEval(p, tryout));
+    }
+
+    function assignmentId() {
+      const current = ElksData.currentHubTeam ? ElksData.currentHubTeam() : {};
+      if (ElksData.realTeamId) return ElksData.realTeamId(current.id);
+      if (!current.id || current.id === 'all' || current.id === 'unassigned') return null;
+      return current.id;
+    }
+
+    function renderHubPicker() {
+      if (!window.ElksData || !window.ElksData.mountTeamPicker) return;
+      ElksData.mountTeamPicker(document.getElementById('hub-team-picker'), {
+        allTeams: true,
+        extraTeams: state.teams || [],
+      });
     }
 
     function avgScore(viewPlayer) {
@@ -839,11 +858,10 @@
 
       let playerId = id;
       if (!playerId) {
-        const current = ElksData.currentHubTeam ? ElksData.currentHubTeam() : {};
         const p = ElksData.createPlayer({
           ...identity,
           photo: editingPhoto || '',
-          assignedTeamId: current.id || null,
+          assignedTeamId: assignmentId(),
         });
         state.players.push(p);
         playerId = p.id;
@@ -976,7 +994,6 @@
             const exists = ElksData.findPlayerByIdentity(state.players, name, birthdate)
               || state.players.find((p) => ElksData.displayName(p).toLowerCase() === name.toLowerCase() && !birthdate);
             if (exists) continue;
-            const current = ElksData.currentHubTeam ? ElksData.currentHubTeam() : {};
             state.players.push(ElksData.createPlayer({
               firstName,
               lastName,
@@ -985,7 +1002,7 @@
               position: posIdx >= 0 ? cols[posIdx]?.trim() || '' : '',
               birthdate,
               originalTeam: teamIdx >= 0 ? cols[teamIdx]?.trim() || '' : '',
-              assignedTeamId: current.id || null,
+              assignedTeamId: assignmentId(),
             }));
             added++;
           }
@@ -1081,13 +1098,14 @@
     });
 
     if (window.ElksData && window.ElksData.mountTeamPicker) {
-      ElksData.mountTeamPicker(document.getElementById('hub-team-picker'));
+      renderHubPicker();
     }
     if (window.ElksData && window.ElksData.connectCloud) {
       ElksData.connectCloud();
     }
     window.addEventListener('elks-data-updated', () => {
       state = ElksData.load();
+      renderHubPicker();
       renderAll();
     });
     window.addEventListener('elks-save-failed', (event) => {
@@ -1105,9 +1123,8 @@
       el.classList.add('text-emerald-400');
     });
     window.addEventListener('hub-team-changed', () => {
-      if (window.ElksData && window.ElksData.mountTeamPicker) {
-        ElksData.mountTeamPicker(document.getElementById('hub-team-picker'));
-      }
+      renderHubPicker();
+      renderAll();
     });
 
     renderAll();

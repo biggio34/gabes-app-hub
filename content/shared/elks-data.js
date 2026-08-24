@@ -698,28 +698,37 @@
     return !teamId || teamId === 'all';
   }
 
+  function isUnassignedId(teamId) {
+    return teamId === 'unassigned';
+  }
+
+  function realTeamId(teamId) {
+    if (isAllTeamsId(teamId) || isUnassignedId(teamId)) return null;
+    return teamId;
+  }
+
   function applySelectedHubTeam() {
     const hub = global.HUB_SOFTBALL;
     if (!hub) return {};
-    if (!Array.isArray(hub.teams) || !hub.teams.length) return hub;
     let saved = null;
     try {
       saved = global.sessionStorage && sessionStorage.getItem(selectedTeamKey());
     } catch (e) {}
-    if (hub.role === 'owner' && (saved === 'all' || saved == null || saved === '')) {
-      hub.teamId = 'all';
-      hub.teamName = 'All teams';
+    if (saved === 'unassigned') {
+      hub.teamId = 'unassigned';
+      hub.teamName = 'Not assigned';
       return hub;
     }
-    if (saved === 'all') {
+    if (saved === 'all' || ((hub.role === 'owner' || hub.showAllPicker) && (saved == null || saved === ''))) {
       hub.teamId = 'all';
-      hub.teamName = 'All teams';
+      hub.teamName = 'Any / all players';
       return hub;
     }
+    const teams = hub.teams || [];
     const team =
-      hub.teams.find((item) => item.id === saved) ||
-      hub.teams.find((item) => item.id === hub.teamId && hub.teamId !== 'all') ||
-      hub.teams[0];
+      teams.find((item) => item.id === saved) ||
+      teams.find((item) => item.id === hub.teamId && realTeamId(hub.teamId)) ||
+      teams[0];
     if (team) {
       hub.teamId = team.id;
       hub.teamName = team.name;
@@ -809,6 +818,7 @@
   function playerOnHubTeam(player, teamId) {
     if (!player) return false;
     if (isAllTeamsId(teamId)) return true;
+    if (isUnassignedId(teamId)) return !player.assignedTeamId;
     return player.assignedTeamId === teamId;
   }
 
@@ -826,7 +836,7 @@
     return (found && found.name) || 'Unassigned';
   }
 
-  function pickerTeams() {
+  function pickerTeams(extraTeams) {
     const hub = applySelectedHubTeam();
     const teams = ((hub && hub.teams) || []).map((team) => ({
       id: team.id,
@@ -834,18 +844,20 @@
       clubName: team.clubName || hub.clubName || 'MN Elks',
     }));
     const seen = new Set(teams.map((team) => team.id));
+    const extras = extraTeams ? extraTeams.slice() : [];
     try {
       const raw = loadRaw();
-      ((raw && raw.teams) || []).forEach((team) => {
-        if (!team || !team.id || seen.has(team.id)) return;
-        seen.add(team.id);
-        teams.push({
-          id: team.id,
-          name: team.name,
-          clubName: (hub && hub.clubName) || 'MN Elks',
-        });
-      });
+      extras.push.apply(extras, (raw && raw.teams) || []);
     } catch (e) {}
+    extras.forEach((team) => {
+      if (!team || !team.id || seen.has(team.id)) return;
+      seen.add(team.id);
+      teams.push({
+        id: team.id,
+        name: team.name,
+        clubName: (hub && hub.clubName) || 'MN Elks',
+      });
+    });
     return teams;
   }
 
@@ -853,11 +865,11 @@
     if (!el) return;
     applySelectedHubTeam();
     const hub = global.HUB_SOFTBALL || {};
-    const teams = pickerTeams();
+    const extraTeams = opts && opts.extraTeams;
+    const teams = pickerTeams(extraTeams);
     const light = opts && opts.theme === 'light';
-    const owner = hub.role === 'owner';
-    const showAll = owner || teams.length > 1;
-    if (!showAll) {
+    const showSpecials = hub.role === 'owner' || (opts && opts.allTeams) || teams.length > 1;
+    if (!showSpecials && teams.length <= 1) {
       const only = teams[0];
       el.textContent = only
         ? (only.clubName || hub.clubName || 'MN Elks') + ' · ' + only.name
@@ -869,13 +881,17 @@
     select.className = light
       ? 'max-w-full rounded-xl border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-red-900 focus:outline-none focus:border-red-500'
       : 'max-w-full rounded-xl border border-slate-700 bg-slate-950 px-2 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-red-500';
-    if (owner) {
-      const all = document.createElement('option');
-      all.value = 'all';
-      all.textContent = 'All teams';
-      if (hub.teamId === 'all') all.selected = true;
-      select.appendChild(all);
-    }
+    const specials = [
+      { id: 'all', label: 'Any / all players' },
+      { id: 'unassigned', label: 'Not assigned to a team' },
+    ];
+    specials.forEach((item) => {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.label;
+      if (hub.teamId === item.id) option.selected = true;
+      select.appendChild(option);
+    });
     teams.forEach((team) => {
       const option = document.createElement('option');
       option.value = team.id;
@@ -1179,6 +1195,7 @@
     playerOnHubTeam,
     playersOnHubTeam,
     teamNameForPlayer,
+    realTeamId,
     mountTeamPicker,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
