@@ -3,6 +3,7 @@ import { listOrgs } from "@/lib/clubs";
 import { DEFAULT_CLUB_ID, DEFAULT_TEAM_ID } from "@/lib/models";
 import { findUserById } from "@/lib/users";
 import type { SessionUser } from "@/lib/auth";
+import { ensureElksSeasonTeams } from "@/lib/softball-state";
 
 export type HubSoftballTeam = {
   id: string;
@@ -13,6 +14,7 @@ export type HubSoftballTeam = {
 
 export async function softballContext(session: SessionUser) {
   const stored = await findUserById(session.id);
+  await ensureElksSeasonTeams();
   const orgs = await listOrgs();
   const clubById = new Map(orgs.clubs.map((club) => [club.id, club]));
 

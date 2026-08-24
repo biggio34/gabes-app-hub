@@ -160,8 +160,12 @@
       showError("");
     }
 
-    function persist() {
-      ElksData.save(state);
+    async function persist() {
+      const result = await ElksData.save(state, { flushCloud: true });
+      if (result && result.ok === false) {
+        showError(result.error || "Saved on this device, but not to your account yet.");
+      }
+      return result;
     }
 
     function load() {
@@ -236,19 +240,19 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
-    function removePlayer(id) {
+    async function removePlayer(id) {
       const player = state.players.find((item) => item.id === id);
       const name = player ? ElksData.displayName(player) : "this player";
       if (!confirm("Remove " + name + " from the shared roster? She will leave lineup, tryouts, and team formation too.")) {
         return;
       }
       ElksData.deletePlayer(state, id);
-      persist();
+      await persist();
       if (editingId === id) resetForm();
       render();
     }
 
-    document.getElementById("player-form").addEventListener("submit", (event) => {
+    document.getElementById("player-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const firstName = document.getElementById("first-name").value.trim();
       const lastName = document.getElementById("last-name").value.trim();
@@ -278,7 +282,7 @@
         }
         ElksData.upsertPlayer(state, fields);
       }
-      persist();
+      await persist();
       resetForm();
       render();
     });
@@ -349,7 +353,7 @@
 
     load();
     if (window.ElksData && window.ElksData.connectCloud) {
-      ElksData.connectCloud();
+      void ElksData.connectCloud();
     }
     window.addEventListener("elks-data-updated", load);
     window.addEventListener("hub-team-changed", () => {

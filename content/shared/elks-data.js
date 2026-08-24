@@ -543,9 +543,16 @@
     try {
       state.updatedAt = Date.now();
       localStorage.setItem(storageKey(), JSON.stringify(state));
-      if (!opts || !opts.skipCloud) scheduleCloudSave(state);
+      if (opts && opts.skipCloud) return Promise.resolve({ ok: true, skipped: true });
+      if (opts && opts.flushCloud) {
+        clearTimeout(cloudTimer);
+        return pushToCloud(state);
+      }
+      scheduleCloudSave(state);
+      return Promise.resolve({ ok: true, scheduled: true });
     } catch (e) {
       console.warn('ElksData: failed to save', e);
+      return Promise.resolve({ ok: false, error: e && e.message });
     }
   }
 
@@ -798,9 +805,9 @@
       if (player.assignedTeamId && !formationIds.has(player.assignedTeamId)) {
         if (hubIds.size === 1) {
           player.assignedTeamId = hubTeams[0].id;
-        } else {
-          player.assignedTeamId = null;
         }
+        // Keep unknown assignments. Wiping them made every girl Unassigned
+        // when People team ids did not match the cached roster ids.
       }
     });
     return state;
@@ -1015,7 +1022,64 @@
   }
 
   function connectCloud() {
-    pullFromCloud();
+    return pullFromCloud();
+  }
+
+  function playerIdentity(player) {
+    const name = displayName(player).trim().toLowerCase().replace(/\s+/g, ' ');
+    const number = player && player.number != null ? String(player.number).trim() : '';
+    return name + '|' + number;
+  }
+
+  function assignedCount(state) {
+    return ((state && state.players) || []).filter(function (player) {
+      return !!(player && player.assignedTeamId);
+    }).length;
+  }
+
+  function applyHubTeam(team) {
+    if (!team || typeof team !== 'object') return;
+    const hub = Object.assign({}, global.HUB_SOFTBALL || {}, team);
+    global.HUB_SOFTBALL = hub;
+    applySelectedHubTeam();
+  }
+
+  function mergeSharedState(remote, local) {
+    const server = remote && typeof remote === 'object' ? remote : emptyState();
+    const client = local && typeof local === 'object' ? local : emptyState();
+    const merged = Object.assign({}, server);
+    merged.tryouts = (server.tryouts && server.tryouts.length) ? server.tryouts : (client.tryouts || []);
+    merged.currentTryoutId = server.currentTryoutId != null ? server.currentTryoutId : (client.currentTryoutId || null);
+    merged.practices = Array.isArray(server.practices) && server.practices.length ? server.practices : (client.practices || []);
+    merged.drills = Array.isArray(server.drills) && server.drills.length ? server.drills : (client.drills || []);
+    merged.templates = Array.isArray(server.templates) && server.templates.length ? server.templates : (client.templates || []);
+    merged.teams = (server.teams && server.teams.length) ? server.teams : (client.teams || []);
+
+    const byId = {};
+    const byKey = {};
+    function ingest(list, preferAssignment) {
+      (list || []).forEach(function (item) {
+        const player = normalizePlayer(item);
+        if (!player) return;
+        const key = playerIdentity(player);
+        const existing = (player.id && byId[player.id]) || byKey[key];
+        if (!existing) {
+          if (player.id) byId[player.id] = player;
+          byKey[key] = player;
+          return;
+        }
+        if (preferAssignment && player.assignedTeamId && !existing.assignedTeamId) {
+          existing.assignedTeamId = player.assignedTeamId;
+        }
+        if (!existing.number && player.number) existing.number = player.number;
+        if (!existing.position && player.position) existing.position = player.position;
+        if (!existing.photo && player.photo) existing.photo = player.photo;
+      });
+    }
+    ingest(server.players, false);
+    ingest(client.players, true);
+    merged.players = Object.keys(byKey).map(function (key) { return byKey[key]; });
+    return merged;
   }
 
   async function pullFromCloud() {
@@ -1023,23 +1087,19 @@
       const response = await fetch('/api/softball/state');
       if (!response.ok) return;
       const data = await response.json();
+      if (data && data.team) applyHubTeam(data.team);
       if (!data || !data.state) return;
       const local = loadRaw();
-      const remoteUpdated = Number(data.state.updatedAt || 0);
-      const localUpdated = Number((local && local.updatedAt) || 0);
-      const remotePlayers = (data.state.players || []).length;
-      const localPlayers = ((local && local.players) || []).length;
-      if (remotePlayers === 0 && localPlayers > 0) {
-        pushToCloud(local);
-        return;
-      }
-      if (!local || remoteUpdated >= localUpdated) {
-        saveState(syncHubTeams(ensureDefaults(data.state)), { skipCloud: true });
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('elks-data-updated'));
-        }
-      } else {
-        pushToCloud(local);
+      const merged = mergeSharedState(data.state, local);
+      const shouldPush =
+        ((merged.players || []).length > ((data.state.players || []).length)) ||
+        assignedCount(merged) > assignedCount(data.state);
+      await saveState(syncHubTeams(ensureDefaults(merged)), {
+        skipCloud: !shouldPush,
+        flushCloud: shouldPush,
+      });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('elks-data-updated'));
       }
     } catch (e) {
       console.warn('ElksData: cloud pull failed', e);
@@ -1057,13 +1117,26 @@
 
   async function pushToCloud(state) {
     try {
-      await fetch('/api/softball/state', {
+      const response = await fetch('/api/softball/state', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ state: state }),
       });
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        console.warn('ElksData: cloud push failed', data.error || response.status);
+        return { ok: false, error: data.error || 'Could not save roster to the server.' };
+      }
+      if (data && data.state) {
+        saveState(syncHubTeams(ensureDefaults(data.state)), { skipCloud: true });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('elks-data-updated'));
+        }
+      }
+      return { ok: true, localOnly: !!data.localOnly, state: data.state || null };
     } catch (e) {
       console.warn('ElksData: cloud push failed', e);
+      return { ok: false, error: e && e.message };
     }
   }
 
@@ -1105,6 +1178,8 @@
     toLineupPlayer,
     lineupPlayers,
     connectCloud,
+    pushToCloud,
+    mergeSharedState,
     applySelectedHubTeam,
     currentHubTeam,
     setCurrentHubTeam,

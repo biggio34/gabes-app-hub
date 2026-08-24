@@ -49,6 +49,11 @@ const SCHEMA_SQL = [
     team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, team_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS softball_state (
+    team_id TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
 ];
 
 type HubDb = LibSQLDatabase<typeof schema>;
@@ -84,6 +89,11 @@ function getClient() {
     });
   }
   return globalForDb.hubClient;
+}
+
+export async function getRawClient() {
+  await readyDb();
+  return getClient();
 }
 
 export function getDb() {

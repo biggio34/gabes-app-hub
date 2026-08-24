@@ -66,7 +66,7 @@ export async function createClub(name: string) {
   return club;
 }
 
-export async function createTeam(clubId: string, name: string) {
+export async function createTeam(clubId: string, name: string, id?: string) {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Team name is required");
   const { clubs: existingClubs, teams: existingTeams } = await listOrgs();
@@ -81,8 +81,12 @@ export async function createTeam(clubId: string, name: string) {
   ) {
     throw new Error("That team already exists in this club");
   }
+  const preferredId = id?.trim();
+  if (preferredId && existingTeams.some((team) => team.id === preferredId)) {
+    throw new Error("That team already exists in this club");
+  }
   const team: Team = {
-    id: slugId("team"),
+    id: preferredId || slugId("team"),
     clubId,
     name: trimmed,
     createdAt: new Date().toISOString(),

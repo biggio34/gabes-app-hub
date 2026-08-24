@@ -55,3 +55,9 @@ export const userTeams = sqliteTable(
     pk: primaryKey({ columns: [table.userId, table.teamId] }),
   }),
 );
+
+export const softballState = sqliteTable("softball_state", {
+  teamId: text("team_id").primaryKey(),
+  payload: text("payload").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
