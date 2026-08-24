@@ -926,6 +926,19 @@
     return added > 0;
   }
 
+  function pinLoosePlayersToFransen(state) {
+    if (!state || state.pinnedLoosePlayersToFransen16u) return false;
+    let changed = false;
+    (state.players || []).forEach((player) => {
+      if (!player.assignedTeamId) {
+        player.assignedTeamId = 'team-16u-fransen';
+        changed = true;
+      }
+    });
+    state.pinnedLoosePlayersToFransen16u = true;
+    return changed;
+  }
+
   function load() {
     let state = loadRaw();
     if (!state) {
@@ -933,9 +946,8 @@
       state = migrated || emptyState();
     }
     state = syncHubTeams(ensureDefaults(state));
-    if (restoreFransenRoster(state)) {
-      saveState(state);
-    }
+    const changed = restoreFransenRoster(state) || pinLoosePlayersToFransen(state);
+    if (changed) saveState(state);
     return state;
   }
 
@@ -1070,7 +1082,7 @@
       }
       if (!local || remoteUpdated >= localUpdated) {
         const next = syncHubTeams(ensureDefaults(data.state));
-        const seeded = restoreFransenRoster(next);
+        const seeded = restoreFransenRoster(next) || pinLoosePlayersToFransen(next);
         saveState(next, seeded ? undefined : { skipCloud: true });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('elks-data-updated'));
