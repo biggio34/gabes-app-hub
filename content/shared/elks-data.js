@@ -895,13 +895,54 @@
     el.appendChild(select);
   }
 
+  const FRANSEN_16U_SEED = [
+    { firstName: 'Annabelle', lastName: 'Ackerman', number: '16' },
+    { firstName: 'Emily', lastName: 'Artmann', number: '4' },
+    { firstName: 'Macie', lastName: 'Backman', number: '7' },
+    { firstName: 'Madison', lastName: 'Burggraff', number: '11' },
+    { firstName: 'Hailee', lastName: 'Clinton', number: '13' },
+    { firstName: 'Savanah', lastName: 'Emmans', number: '45' },
+    { firstName: 'Tenley', lastName: 'Fransen', number: '10' },
+    { firstName: 'Molly', lastName: 'Johnson', number: '27' },
+    { firstName: 'Kiana', lastName: 'Pegues', number: '17' },
+    { firstName: 'Avaiyah', lastName: 'Sandford', number: '9' },
+    { firstName: 'Sidney', lastName: 'Tischner', number: '14' },
+    { firstName: 'MaKayla', lastName: 'Uttke', number: '12' },
+    { firstName: 'Paisyn', lastName: 'Wiley', number: '8' },
+  ];
+
+  function restoreFransenRoster(state) {
+    if (!state || state.restoredFransen16u) return false;
+    if (!state.players) state.players = [];
+    let added = 0;
+    FRANSEN_16U_SEED.forEach((fields) => {
+      const name = joinName(fields.firstName, fields.lastName);
+      if (findPlayerByIdentity(state.players, name, '')) return;
+      const player = createPlayer({
+        firstName: fields.firstName,
+        lastName: fields.lastName,
+        name: name,
+        number: fields.number,
+        assignedTeamId: 'team-16u-fransen',
+      });
+      state.players.push(player);
+      added += 1;
+    });
+    state.restoredFransen16u = true;
+    return added > 0;
+  }
+
   function load() {
     let state = loadRaw();
     if (!state) {
       const migrated = migrateFromLegacy();
       state = migrated || emptyState();
     }
-    return syncHubTeams(ensureDefaults(state));
+    state = syncHubTeams(ensureDefaults(state));
+    if (restoreFransenRoster(state)) {
+      saveState(state);
+    }
+    return state;
   }
 
   function getCurrentTryout(state) {
