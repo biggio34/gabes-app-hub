@@ -739,20 +739,36 @@
     return match ? match[1] + 'U' : '16U';
   }
 
+  function teamNamesMatch(a, b) {
+    const left = String(a || '').trim().toLowerCase();
+    const right = String(b || '').trim().toLowerCase();
+    if (!left || !right) return false;
+    return left === right || left.includes(right) || right.includes(left);
+  }
+
   function syncHubTeams(state) {
     const hub = applySelectedHubTeam();
     const hubTeams = (hub && hub.teams) || [];
     if (!state || !hubTeams.length) return state;
     if (!state.teams) state.teams = [];
-    const byId = {};
-    state.teams.forEach((team) => {
-      byId[team.id] = team;
-    });
     hubTeams.forEach((hubTeam) => {
       const age = ageGroupFromName(hubTeam.name);
-      if (byId[hubTeam.id]) {
-        byId[hubTeam.id].name = hubTeam.name;
-        if (!byId[hubTeam.id].ageGroup) byId[hubTeam.id].ageGroup = age;
+      const duplicate = state.teams.find(
+        (team) =>
+          team.id !== hubTeam.id && teamNamesMatch(team.name, hubTeam.name),
+      );
+      if (duplicate) {
+        (state.players || []).forEach((player) => {
+          if (player.assignedTeamId === duplicate.id) {
+            player.assignedTeamId = hubTeam.id;
+          }
+        });
+        state.teams = state.teams.filter((team) => team.id !== duplicate.id);
+      }
+      const existing = state.teams.find((team) => team.id === hubTeam.id);
+      if (existing) {
+        existing.name = hubTeam.name;
+        if (!existing.ageGroup) existing.ageGroup = age;
       } else {
         state.teams.push({
           id: hubTeam.id,
@@ -762,9 +778,14 @@
       }
     });
     const formationIds = new Set(state.teams.map((team) => team.id));
+    const hubIds = new Set(hubTeams.map((team) => team.id));
     (state.players || []).forEach((player) => {
       if (player.assignedTeamId && !formationIds.has(player.assignedTeamId)) {
-        player.assignedTeamId = null;
+        if (hubIds.size === 1) {
+          player.assignedTeamId = hubTeams[0].id;
+        } else {
+          player.assignedTeamId = null;
+        }
       }
     });
     return state;
@@ -773,7 +794,13 @@
   function playerOnHubTeam(player, teamId) {
     if (!player) return false;
     if (!teamId) return true;
-    return !player.assignedTeamId || player.assignedTeamId === teamId;
+    if (!player.assignedTeamId || player.assignedTeamId === teamId) return true;
+    const hubTeams = (global.HUB_SOFTBALL && global.HUB_SOFTBALL.teams) || [];
+    const onAnotherPeopleTeam = hubTeams.some(
+      (team) => team.id === player.assignedTeamId && team.id !== teamId,
+    );
+    if (onAnotherPeopleTeam) return false;
+    return hubTeams.length <= 1;
   }
 
   function playersOnHubTeam(players, teamId) {
@@ -944,6 +971,12 @@
       const local = loadRaw();
       const remoteUpdated = Number(data.state.updatedAt || 0);
       const localUpdated = Number((local && local.updatedAt) || 0);
+      const remotePlayers = (data.state.players || []).length;
+      const localPlayers = ((local && local.players) || []).length;
+      if (remotePlayers === 0 && localPlayers > 0) {
+        pushToCloud(local);
+        return;
+      }
       if (!local || remoteUpdated >= localUpdated) {
         saveState(syncHubTeams(ensureDefaults(data.state)), { skipCloud: true });
         if (typeof window !== 'undefined') {

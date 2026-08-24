@@ -11,6 +11,17 @@ type SoftballRow = {
   updated_at: string;
 };
 
+function payloadPlayers(payload: Record<string, unknown> | null | undefined) {
+  return Array.isArray(payload?.players) ? (payload.players as unknown[]) : [];
+}
+
+async function readStateRow(
+  supabase: NonNullable<ReturnType<typeof getSupabase>>,
+  teamId: string,
+) {
+  return supabase.from("hub_softball_state").select("*").eq("team_id", teamId).maybeSingle();
+}
+
 async function requireSoftball() {
   const session = await getSession();
   if (!session) {
@@ -34,17 +45,17 @@ export async function GET() {
     return NextResponse.json({ state: null, team: auth.context });
   }
   const clubId = auth.context.clubId;
-  let result = await supabase
-    .from("hub_softball_state")
-    .select("*")
-    .eq("team_id", clubId)
-    .maybeSingle();
-  if (!result.data && auth.context.teamId && auth.context.teamId !== clubId) {
-    result = await supabase
-      .from("hub_softball_state")
-      .select("*")
-      .eq("team_id", auth.context.teamId)
-      .maybeSingle();
+  let result = await readStateRow(supabase, clubId);
+  const clubPlayers = payloadPlayers((result.data as SoftballRow | null)?.payload);
+  if (
+    clubPlayers.length === 0 &&
+    auth.context.teamId &&
+    auth.context.teamId !== clubId
+  ) {
+    const legacy = await readStateRow(supabase, auth.context.teamId);
+    if (payloadPlayers((legacy.data as SoftballRow | null)?.payload).length > 0) {
+      result = legacy;
+    }
   }
   const { data, error } = result;
   if (error) {
@@ -83,9 +94,28 @@ export async function PUT(request: Request) {
   if (!body?.state || typeof body.state !== "object") {
     return NextResponse.json({ error: "Missing softball data." }, { status: 400 });
   }
+  const payload = { ...body.state };
+  if (payloadPlayers(payload).length === 0) {
+    const clubRow = await readStateRow(supabase, auth.context.clubId);
+    const legacyRow =
+      auth.context.teamId && auth.context.teamId !== auth.context.clubId
+        ? await readStateRow(supabase, auth.context.teamId)
+        : clubRow;
+    const clubPlayers = payloadPlayers((clubRow.data as SoftballRow | null)?.payload);
+    const legacyPlayers = payloadPlayers((legacyRow.data as SoftballRow | null)?.payload);
+    const recovered = clubPlayers.length ? clubPlayers : legacyPlayers;
+    if (recovered.length) {
+      payload.players = recovered;
+      const source = clubPlayers.length ? clubRow.data : legacyRow.data;
+      const teams = (source as SoftballRow | null)?.payload?.teams;
+      if ((!Array.isArray(payload.teams) || payload.teams.length === 0) && teams) {
+        payload.teams = teams;
+      }
+    }
+  }
   const { error } = await supabase.from("hub_softball_state").upsert({
     team_id: auth.context.clubId,
-    payload: body.state,
+    payload,
     updated_at: new Date().toISOString(),
   });
   if (error) {
