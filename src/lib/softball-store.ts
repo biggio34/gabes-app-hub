@@ -79,7 +79,7 @@ function mergePlayerLists(jsonPlayers: JsonPlayer[], dbPlayers: JsonPlayer[]) {
       byId.set(String(player.id), player);
       return;
     }
-    const merged = {
+    const merged: JsonPlayer = {
       ...current,
       ...player,
       scores: current.scores || player.scores,
