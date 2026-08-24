@@ -49,6 +49,27 @@ const SCHEMA_SQL = [
     team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, team_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS softball_state (
+    club_id TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS players (
+    id TEXT PRIMARY KEY,
+    club_id TEXT NOT NULL,
+    assigned_team_id TEXT,
+    first_name TEXT NOT NULL DEFAULT '',
+    last_name TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    number TEXT NOT NULL DEFAULT '',
+    position TEXT NOT NULL DEFAULT '',
+    position2 TEXT NOT NULL DEFAULT '',
+    birthdate TEXT NOT NULL DEFAULT '',
+    original_team TEXT NOT NULL DEFAULT '',
+    extra TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
 ];
 
 type HubDb = LibSQLDatabase<typeof schema>;

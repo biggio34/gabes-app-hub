@@ -55,3 +55,26 @@ export const userTeams = sqliteTable(
     pk: primaryKey({ columns: [table.userId, table.teamId] }),
   }),
 );
+
+export const softballState = sqliteTable("softball_state", {
+  clubId: text("club_id").primaryKey(),
+  payload: text("payload").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const players = sqliteTable("players", {
+  id: text("id").primaryKey(),
+  clubId: text("club_id").notNull(),
+  assignedTeamId: text("assigned_team_id"),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  name: text("name").notNull(),
+  number: text("number").notNull(),
+  position: text("position").notNull(),
+  position2: text("position2").notNull(),
+  birthdate: text("birthdate").notNull(),
+  originalTeam: text("original_team").notNull(),
+  extra: text("extra").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

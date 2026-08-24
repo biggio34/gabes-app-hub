@@ -1,26 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getSupabase, isSupabaseConfigured } from "@/lib/db/supabase";
 import { softballContext } from "@/lib/softball";
+import { readSoftballState, writeSoftballState } from "@/lib/softball-store";
 
 export const runtime = "nodejs";
-
-type SoftballRow = {
-  team_id: string;
-  payload: Record<string, unknown> | null;
-  updated_at: string;
-};
-
-function payloadPlayers(payload: Record<string, unknown> | null | undefined) {
-  return Array.isArray(payload?.players) ? (payload.players as unknown[]) : [];
-}
-
-async function readStateRow(
-  supabase: NonNullable<ReturnType<typeof getSupabase>>,
-  teamId: string,
-) {
-  return supabase.from("hub_softball_state").select("*").eq("team_id", teamId).maybeSingle();
-}
 
 async function requireSoftball() {
   const session = await getSession();
@@ -37,96 +20,46 @@ async function requireSoftball() {
 export async function GET() {
   const auth = await requireSoftball();
   if (auth.error) return auth.error;
-  if (!isSupabaseConfigured()) {
-    return NextResponse.json({ state: null, team: auth.context });
-  }
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ state: null, team: auth.context });
-  }
-  const clubId = auth.context.clubId;
-  let result = await readStateRow(supabase, clubId);
-  const clubPlayers = payloadPlayers((result.data as SoftballRow | null)?.payload);
-  if (
-    clubPlayers.length === 0 &&
-    auth.context.teamId &&
-    auth.context.teamId !== clubId
-  ) {
-    const legacy = await readStateRow(supabase, auth.context.teamId);
-    if (payloadPlayers((legacy.data as SoftballRow | null)?.payload).length > 0) {
-      result = legacy;
-    }
-  }
-  const { data, error } = result;
-  if (error) {
+  try {
+    const result = await readSoftballState(auth.context.clubId, auth.context.teamId);
+    return NextResponse.json({
+      state: result.state,
+      team: auth.context,
+      updatedAt: result.updatedAt,
+      stored: result.stored,
+    });
+  } catch (err) {
     return NextResponse.json(
       {
         state: null,
         team: auth.context,
-        error: /does not exist|schema cache/i.test(error.message)
-          ? "Run supabase/softball-state.sql in the SQL editor."
-          : error.message,
+        error: err instanceof Error ? err.message : "Could not read softball data.",
       },
       { status: 200 },
     );
   }
-  const row = data as SoftballRow | null;
-  return NextResponse.json({
-    state: row?.payload ?? null,
-    team: auth.context,
-    updatedAt: row?.updated_at ?? null,
-  });
 }
 
 export async function PUT(request: Request) {
   const auth = await requireSoftball();
   if (auth.error) return auth.error;
-  if (!isSupabaseConfigured()) {
-    return NextResponse.json({ ok: true, localOnly: true });
-  }
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ ok: true, localOnly: true });
-  }
   const body = (await request.json().catch(() => null)) as {
     state?: Record<string, unknown>;
   } | null;
   if (!body?.state || typeof body.state !== "object") {
     return NextResponse.json({ error: "Missing softball data." }, { status: 400 });
   }
-  const payload = { ...body.state };
-  if (payloadPlayers(payload).length === 0) {
-    const clubRow = await readStateRow(supabase, auth.context.clubId);
-    const legacyRow =
-      auth.context.teamId && auth.context.teamId !== auth.context.clubId
-        ? await readStateRow(supabase, auth.context.teamId)
-        : clubRow;
-    const clubPlayers = payloadPlayers((clubRow.data as SoftballRow | null)?.payload);
-    const legacyPlayers = payloadPlayers((legacyRow.data as SoftballRow | null)?.payload);
-    const recovered = clubPlayers.length ? clubPlayers : legacyPlayers;
-    if (recovered.length) {
-      payload.players = recovered;
-      const source = clubPlayers.length ? clubRow.data : legacyRow.data;
-      const teams = (source as SoftballRow | null)?.payload?.teams;
-      if ((!Array.isArray(payload.teams) || payload.teams.length === 0) && teams) {
-        payload.teams = teams;
-      }
-    }
-  }
-  const { error } = await supabase.from("hub_softball_state").upsert({
-    team_id: auth.context.clubId,
-    payload,
-    updated_at: new Date().toISOString(),
-  });
-  if (error) {
+  try {
+    const result = await writeSoftballState(
+      auth.context.clubId,
+      auth.context.teamId,
+      body.state,
+    );
+    return NextResponse.json(result);
+  } catch (err) {
     return NextResponse.json(
-      {
-        error: /does not exist|schema cache/i.test(error.message)
-          ? "Run supabase/softball-state.sql in the SQL editor."
-          : error.message,
-      },
+      { error: err instanceof Error ? err.message : "Could not save softball data." },
       { status: 400 },
     );
   }
-  return NextResponse.json({ ok: true });
 }

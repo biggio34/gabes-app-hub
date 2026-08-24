@@ -1057,13 +1057,31 @@
 
   async function pushToCloud(state) {
     try {
-      await fetch('/api/softball/state', {
+      const response = await fetch('/api/softball/state', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ state: state }),
       });
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('elks-save-failed', {
+            detail: data.error || 'Could not save players to the database.',
+          }));
+        }
+        console.warn('ElksData: cloud push failed', data.error);
+        return;
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('elks-save-ok', { detail: data.stored || 'database' }));
+      }
     } catch (e) {
       console.warn('ElksData: cloud push failed', e);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('elks-save-failed', {
+          detail: 'Could not save players to the database.',
+        }));
+      }
     }
   }
 

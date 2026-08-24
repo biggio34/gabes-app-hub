@@ -96,6 +96,7 @@
           <div class="min-w-0">
             <h1 class="title-font text-xl sm:text-2xl font-semibold tracking-tighter truncate">Tryout Evaluator</h1>
             <div id="hub-team-picker" class="text-slate-400 text-xs truncate">Shared roster with Team Formation</div>
+            <div id="save-status" class="hidden text-[11px] mt-0.5"></div>
           </div>
         </div>
         <button onclick="openMenu()" class="w-10 h-10 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center hover:bg-slate-800" aria-label="Menu">
@@ -1088,6 +1089,20 @@
     window.addEventListener('elks-data-updated', () => {
       state = ElksData.load();
       renderAll();
+    });
+    window.addEventListener('elks-save-failed', (event) => {
+      const el = document.getElementById('save-status');
+      if (!el) return;
+      el.textContent = event.detail || 'Could not save players to the database.';
+      el.classList.remove('hidden', 'text-slate-500', 'text-emerald-400');
+      el.classList.add('text-red-400');
+    });
+    window.addEventListener('elks-save-ok', () => {
+      const el = document.getElementById('save-status');
+      if (!el) return;
+      el.textContent = 'Saved to the database.';
+      el.classList.remove('hidden', 'text-red-400');
+      el.classList.add('text-emerald-400');
     });
     window.addEventListener('hub-team-changed', () => {
       if (window.ElksData && window.ElksData.mountTeamPicker) {

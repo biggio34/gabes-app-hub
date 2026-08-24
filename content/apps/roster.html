@@ -44,6 +44,7 @@
     <p class="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
       Pick All teams to see every girl, or pick one team. Ty and Katie only see the team they are assigned to.
     </p>
+    <p id="save-status" class="hidden text-xs text-slate-500"></p>
 
     <form id="player-form" class="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-5">
       <h2 id="form-title" class="font-semibold">Add a player</h2>
@@ -355,6 +356,18 @@
     window.addEventListener("hub-team-changed", () => {
       renderTeamLabel();
       render();
+    });
+    window.addEventListener("elks-save-failed", (event) => {
+      const el = document.getElementById("save-status");
+      el.textContent = event.detail || "Could not save players to the database.";
+      el.classList.remove("hidden", "text-slate-500", "text-emerald-400");
+      el.classList.add("text-red-400");
+    });
+    window.addEventListener("elks-save-ok", () => {
+      const el = document.getElementById("save-status");
+      el.textContent = "Saved to the database.";
+      el.classList.remove("hidden", "text-red-400");
+      el.classList.add("text-emerald-400");
     });
   </script>
 </body>

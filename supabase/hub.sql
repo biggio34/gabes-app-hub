@@ -65,3 +65,22 @@ create table if not exists hub_softball_state (
 );
 
 alter table hub_softball_state enable row level security;
+
+create table if not exists hub_players (
+  id text primary key,
+  club_id text not null references hub_clubs(id) on delete cascade,
+  assigned_team_id text,
+  first_name text not null default '',
+  last_name text not null default '',
+  name text not null,
+  number text not null default '',
+  position text not null default '',
+  position2 text not null default '',
+  birthdate text not null default '',
+  original_team text not null default '',
+  extra jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table hub_players enable row level security;
