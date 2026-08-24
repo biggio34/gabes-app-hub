@@ -809,13 +809,7 @@
   function playerOnHubTeam(player, teamId) {
     if (!player) return false;
     if (isAllTeamsId(teamId)) return true;
-    if (!player.assignedTeamId || player.assignedTeamId === teamId) return true;
-    const hubTeams = (global.HUB_SOFTBALL && global.HUB_SOFTBALL.teams) || [];
-    const onAnotherPeopleTeam = hubTeams.some(
-      (team) => team.id === player.assignedTeamId && team.id !== teamId,
-    );
-    if (onAnotherPeopleTeam) return false;
-    return hubTeams.length <= 1;
+    return player.assignedTeamId === teamId;
   }
 
   function playersOnHubTeam(players, teamId) {
@@ -1075,7 +1069,9 @@
         return;
       }
       if (!local || remoteUpdated >= localUpdated) {
-        saveState(syncHubTeams(ensureDefaults(data.state)), { skipCloud: true });
+        const next = syncHubTeams(ensureDefaults(data.state));
+        const seeded = restoreFransenRoster(next);
+        saveState(next, seeded ? undefined : { skipCloud: true });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('elks-data-updated'));
         }
