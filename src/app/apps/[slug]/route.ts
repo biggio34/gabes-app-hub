@@ -28,6 +28,7 @@ export async function GET(
   if (app.area === "softball") {
     const softball = await softballContext(session);
     const boot = JSON.stringify({
+      role: softball.role,
       clubId: softball.clubId,
       clubName: softball.clubName,
       teamId: softball.teamId,

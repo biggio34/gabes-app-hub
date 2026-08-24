@@ -51,6 +51,7 @@ export async function softballContext(session: SessionUser) {
 
   return {
     canAccess: canAccessArea(session, "softball"),
+    role: session.role,
     clubId: club?.id || DEFAULT_CLUB_ID,
     clubName: club?.name || "MN Elks",
     teamId: team?.id || DEFAULT_TEAM_ID,
@@ -64,7 +65,7 @@ export function canUseSoftballTeam(
   context: Awaited<ReturnType<typeof softballContext>>,
   teamId?: string,
 ) {
-  if (!teamId) return true;
+  if (!teamId || teamId === "all") return true;
   if (!context.teams.length) return teamId === context.teamId;
   return context.teams.some((team) => team.id === teamId);
 }

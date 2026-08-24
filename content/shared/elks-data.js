@@ -691,19 +691,34 @@
   }
 
   function selectedTeamKey() {
-    return 'hub-softball-selected-team';
+    return 'hub-softball-selected-team-v2';
+  }
+
+  function isAllTeamsId(teamId) {
+    return !teamId || teamId === 'all';
   }
 
   function applySelectedHubTeam() {
     const hub = global.HUB_SOFTBALL;
-    if (!hub || !Array.isArray(hub.teams) || !hub.teams.length) return hub || {};
+    if (!hub) return {};
+    if (!Array.isArray(hub.teams) || !hub.teams.length) return hub;
     let saved = null;
     try {
       saved = global.sessionStorage && sessionStorage.getItem(selectedTeamKey());
     } catch (e) {}
+    if (hub.role === 'owner' && (saved === 'all' || saved == null || saved === '')) {
+      hub.teamId = 'all';
+      hub.teamName = 'All teams';
+      return hub;
+    }
+    if (saved === 'all') {
+      hub.teamId = 'all';
+      hub.teamName = 'All teams';
+      return hub;
+    }
     const team =
       hub.teams.find((item) => item.id === saved) ||
-      hub.teams.find((item) => item.id === hub.teamId) ||
+      hub.teams.find((item) => item.id === hub.teamId && hub.teamId !== 'all') ||
       hub.teams[0];
     if (team) {
       hub.teamId = team.id;
@@ -793,7 +808,7 @@
 
   function playerOnHubTeam(player, teamId) {
     if (!player) return false;
-    if (!teamId) return true;
+    if (isAllTeamsId(teamId)) return true;
     if (!player.assignedTeamId || player.assignedTeamId === teamId) return true;
     const hubTeams = (global.HUB_SOFTBALL && global.HUB_SOFTBALL.teams) || [];
     const onAnotherPeopleTeam = hubTeams.some(
@@ -807,18 +822,52 @@
     return (players || []).filter((player) => playerOnHubTeam(player, teamId));
   }
 
+  function teamNameForPlayer(player, teams) {
+    if (!player || !player.assignedTeamId) return 'Unassigned';
+    const list = teams || [];
+    const hubTeams = (global.HUB_SOFTBALL && global.HUB_SOFTBALL.teams) || [];
+    const found =
+      list.find((team) => team.id === player.assignedTeamId) ||
+      hubTeams.find((team) => team.id === player.assignedTeamId);
+    return (found && found.name) || 'Unassigned';
+  }
+
+  function pickerTeams() {
+    const hub = applySelectedHubTeam();
+    const teams = ((hub && hub.teams) || []).map((team) => ({
+      id: team.id,
+      name: team.name,
+      clubName: team.clubName || hub.clubName || 'MN Elks',
+    }));
+    const seen = new Set(teams.map((team) => team.id));
+    try {
+      const raw = loadRaw();
+      ((raw && raw.teams) || []).forEach((team) => {
+        if (!team || !team.id || seen.has(team.id)) return;
+        seen.add(team.id);
+        teams.push({
+          id: team.id,
+          name: team.name,
+          clubName: (hub && hub.clubName) || 'MN Elks',
+        });
+      });
+    } catch (e) {}
+    return teams;
+  }
+
   function mountTeamPicker(el, opts) {
     if (!el) return;
     applySelectedHubTeam();
     const hub = global.HUB_SOFTBALL || {};
-    const teams = hub.teams || [];
+    const teams = pickerTeams();
     const light = opts && opts.theme === 'light';
-    if (teams.length === 0) {
-      el.textContent = (hub.clubName || 'MN Elks') + ' · ' + (hub.teamName || '16U Fransen');
-      return;
-    }
-    if (teams.length === 1) {
-      el.textContent = (teams[0].clubName || hub.clubName || 'MN Elks') + ' · ' + teams[0].name;
+    const owner = hub.role === 'owner';
+    const showAll = owner || teams.length > 1;
+    if (!showAll) {
+      const only = teams[0];
+      el.textContent = only
+        ? (only.clubName || hub.clubName || 'MN Elks') + ' · ' + only.name
+        : (hub.clubName || 'MN Elks') + ' · ' + (hub.teamName || '16U Fransen');
       return;
     }
     el.innerHTML = '';
@@ -826,6 +875,13 @@
     select.className = light
       ? 'max-w-full rounded-xl border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-red-900 focus:outline-none focus:border-red-500'
       : 'max-w-full rounded-xl border border-slate-700 bg-slate-950 px-2 py-1 text-xs font-semibold text-slate-200 focus:outline-none focus:border-red-500';
+    if (owner) {
+      const all = document.createElement('option');
+      all.value = 'all';
+      all.textContent = 'All teams';
+      if (hub.teamId === 'all') all.selected = true;
+      select.appendChild(all);
+    }
     teams.forEach((team) => {
       const option = document.createElement('option');
       option.value = team.id;
@@ -1055,6 +1111,7 @@
     syncHubTeams,
     playerOnHubTeam,
     playersOnHubTeam,
+    teamNameForPlayer,
     mountTeamPicker,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

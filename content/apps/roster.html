@@ -42,7 +42,7 @@
     </header>
 
     <p class="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
-      Add or remove players for the team selected above. Teams come from People. Lineup, tryouts, team formation, and practice planner use the same teams.
+      Pick All teams to see every girl, or pick one team. Ty and Katie only see the team they are assigned to.
     </p>
 
     <form id="player-form" class="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-5">
@@ -143,7 +143,7 @@
       }
       document.getElementById("club-prefix").textContent = team.club + " ·";
       document.getElementById("team-name-input").value = team.name;
-      document.getElementById("edit-team-name").classList.toggle("hidden", !team.id);
+      document.getElementById("edit-team-name").classList.toggle("hidden", !team.id || team.id === "all");
     }
 
     function showError(message) {
@@ -201,11 +201,14 @@
         li.className = "rounded-3xl border border-slate-800 bg-slate-900 p-5";
         const number = player.number ? "#" + player.number : "No number";
         const position = player.position || "No position";
+        const teamName = ElksData.teamNameForPlayer
+          ? ElksData.teamNameForPlayer(player, state.teams || [])
+          : "";
         li.innerHTML = `
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p class="font-semibold">${escapeHtml(ElksData.displayName(player))}</p>
-              <p class="text-xs text-slate-500">${escapeHtml(number)} · ${escapeHtml(position)}</p>
+              <p class="text-xs text-slate-500">${escapeHtml(number)} · ${escapeHtml(position)}${teamName ? " · " + escapeHtml(teamName) : ""}</p>
             </div>
             <div class="flex items-center gap-3">
               <button type="button" data-edit class="text-xs text-slate-400 hover:text-red-400">Edit</button>
@@ -262,7 +265,7 @@
         number,
         position,
       };
-      if (!editingId && currentTeam().id) {
+      if (!editingId && currentTeam().id && currentTeam().id !== "all") {
         fields.assignedTeamId = currentTeam().id;
       }
       if (editingId) {
