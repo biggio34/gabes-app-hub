@@ -45,7 +45,7 @@ Optional env:
 
 Default softball org: **MN Elks** (club) and **16U Fransen** (team). You can add more clubs and teams on the People page. Those teams show in Team Roster, Lineup, Team Formation, Tryouts, and Practice Planner.
 
-Softball **Team Roster** is where you add, edit, and remove players, and change the team name. Tryouts, Team Formation, Lineup, and Practice Planner all use that list. Manual adds and CSV imports save to the hub database (`players` locally, `hub_players` on Supabase) plus the softball state blob. Re-run `supabase/hub.sql` so `hub_players` exists. After that, also run `supabase/softball-state.sql` if you have not already.
+Softball **Team Roster** is the one player list. Tryouts, Team Formation, Lineup, and Practice Planner all read and write that same list — Lineup no longer keeps a second roster. Manual adds and CSV imports save to the hub database (`players` locally, `hub_players` on Supabase) plus the softball state blob. Re-run `supabase/hub.sql` so `hub_players` exists. After that, also run `supabase/softball-state.sql` if you have not already.
 
 On Netlify, add `GMAIL_USER` and `GMAIL_APP_PASSWORD`, then deploy again. Create the app password at [Google App Passwords](https://myaccount.google.com/apppasswords) after 2-Step Verification is on. Do not put that password in this repo.
 

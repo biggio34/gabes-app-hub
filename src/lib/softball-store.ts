@@ -62,7 +62,7 @@ function rowToPlayer(row: {
     position2: row.position2,
     birthdate: row.birthdate,
     originalTeam: row.originalTeam,
-    assignedTeamId: row.assignedTeamId,
+    assignedTeamId: row.assignedTeamId || extra.assignedTeamId || null,
     createdAt: row.createdAt,
   };
 }
@@ -75,7 +75,19 @@ function mergePlayerLists(jsonPlayers: JsonPlayer[], dbPlayers: JsonPlayer[]) {
   dbPlayers.forEach((player) => {
     if (!player?.id) return;
     const current = byId.get(String(player.id));
-    byId.set(String(player.id), current ? { ...current, ...player, scores: current.scores || player.scores, photo: current.photo || player.photo } : player);
+    if (!current) {
+      byId.set(String(player.id), player);
+      return;
+    }
+    const merged = {
+      ...current,
+      ...player,
+      scores: current.scores || player.scores,
+      photo: current.photo || player.photo,
+    };
+    merged.assignedTeamId =
+      current.assignedTeamId || player.assignedTeamId || merged.assignedTeamId || null;
+    byId.set(String(player.id), merged);
   });
   return [...byId.values()];
 }

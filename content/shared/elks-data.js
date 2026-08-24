@@ -724,15 +724,27 @@
       hub.teamName = 'Any / all players';
       return hub;
     }
-    const teams = hub.teams || [];
-    const team =
-      teams.find((item) => item.id === saved) ||
-      teams.find((item) => item.id === hub.teamId && realTeamId(hub.teamId)) ||
-      teams[0];
+    const teams = allKnownTeams();
+    let team = teams.find((item) => item.id === saved);
+    if (!team && saved) {
+      const leftover = storedFormationTeams().find((item) => item.id === saved);
+      if (leftover) {
+        team = hubOrgTeams().find((item) => teamNamesMatch(item.name, leftover.name));
+      }
+    }
+    if (!team && saved) {
+      team = teams.find((item) => teamNamesMatch(item.name, saved));
+    }
+    if (!team) {
+      team =
+        teams.find((item) => item.id === hub.teamId && realTeamId(hub.teamId)) ||
+        hubOrgTeams()[0] ||
+        teams[0];
+    }
     if (team) {
       hub.teamId = team.id;
       hub.teamName = team.name;
-      hub.clubId = team.clubId || hub.clubId;
+      if (team.clubId) hub.clubId = team.clubId;
       hub.clubName = team.clubName || hub.clubName;
     }
     return hub;
@@ -763,16 +775,100 @@
     return match ? match[1] + 'U' : '16U';
   }
 
+  function normalizeTeamName(name) {
+    return String(name || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^(mn\s+elks|elks)\s*[·\-:]+\s*/i, '')
+      .replace(/\s+/g, ' ');
+  }
+
   function teamNamesMatch(a, b) {
-    const left = String(a || '').trim().toLowerCase();
-    const right = String(b || '').trim().toLowerCase();
+    const left = normalizeTeamName(a);
+    const right = normalizeTeamName(b);
     if (!left || !right) return false;
-    return left === right || left.includes(right) || right.includes(left);
+    if (left === right) return true;
+    const sorted = (value) =>
+      value
+        .split(' ')
+        .filter(Boolean)
+        .sort()
+        .join(' ');
+    return sorted(left) === sorted(right);
+  }
+
+  function hubOrgTeams() {
+    const hub = global.HUB_SOFTBALL || {};
+    return ((hub.teams) || []).map((team) => ({
+      id: team.id,
+      name: team.name,
+      clubId: team.clubId || hub.clubId || '',
+      clubName: team.clubName || hub.clubName || 'MN Elks',
+    }));
+  }
+
+  const teamIdAliases = {};
+
+  function storedFormationTeams(teamsHint) {
+    const found = [];
+    const seen = new Set();
+    function add(list) {
+      (list || []).forEach((team) => {
+        if (!team || !team.id || seen.has(team.id)) return;
+        seen.add(team.id);
+        found.push(team);
+      });
+    }
+    add(teamsHint);
+    try {
+      const raw = loadRaw();
+      add(raw && raw.teams);
+    } catch (e) {}
+    return found;
+  }
+
+  function allKnownTeams(extraTeams, teamsHint) {
+    const teams = hubOrgTeams();
+    const seen = new Set(teams.map((team) => team.id));
+    const extras = extraTeams ? extraTeams.slice() : [];
+    extras.push.apply(extras, storedFormationTeams(teamsHint));
+    extras.forEach((team) => {
+      if (!team || !team.id || seen.has(team.id)) return;
+      if (teams.some((item) => teamNamesMatch(item.name, team.name))) return;
+      seen.add(team.id);
+      teams.push({
+        id: team.id,
+        name: team.name,
+        clubId: team.clubId || '',
+        clubName: team.clubName || (global.HUB_SOFTBALL && global.HUB_SOFTBALL.clubName) || 'MN Elks',
+      });
+    });
+    return teams;
+  }
+
+  function canonicalTeamId(assignedId, teamsHint) {
+    if (!assignedId || isAllTeamsId(assignedId) || isUnassignedId(assignedId)) return null;
+    if (teamIdAliases[assignedId]) return teamIdAliases[assignedId];
+    const org = hubOrgTeams();
+    const exactOrg = org.find((team) => team.id === assignedId);
+    if (exactOrg) return exactOrg.id;
+    const namedOrg = org.find((team) => teamNamesMatch(team.name, assignedId));
+    if (namedOrg) return namedOrg.id;
+    const leftover = storedFormationTeams(teamsHint).find((team) => team.id === assignedId);
+    if (leftover) {
+      const orgMatch = org.find((team) => teamNamesMatch(team.name, leftover.name));
+      if (orgMatch) return orgMatch.id;
+      return leftover.id;
+    }
+    const known = allKnownTeams(null, teamsHint).find(
+      (team) => team.id === assignedId || teamNamesMatch(team.name, assignedId),
+    );
+    return known ? known.id : assignedId;
   }
 
   function syncHubTeams(state) {
     const hub = applySelectedHubTeam();
-    const hubTeams = (hub && hub.teams) || [];
+    const hubTeams = hubOrgTeams();
     if (!state || !hubTeams.length) return state;
     if (!state.teams) state.teams = [];
     hubTeams.forEach((hubTeam) => {
@@ -782,6 +878,7 @@
           team.id !== hubTeam.id && teamNamesMatch(team.name, hubTeam.name),
       );
       if (duplicate) {
+        teamIdAliases[duplicate.id] = hubTeam.id;
         (state.players || []).forEach((player) => {
           if (player.assignedTeamId === duplicate.id) {
             player.assignedTeamId = hubTeam.id;
@@ -801,16 +898,13 @@
         });
       }
     });
-    const formationIds = new Set(state.teams.map((team) => team.id));
-    const hubIds = new Set(hubTeams.map((team) => team.id));
     (state.players || []).forEach((player) => {
-      if (player.assignedTeamId && !formationIds.has(player.assignedTeamId)) {
-        if (hubIds.size === 1) {
-          player.assignedTeamId = hubTeams[0].id;
-        } else {
-          player.assignedTeamId = null;
-        }
+      if (!player.assignedTeamId) return;
+      const canonical = canonicalTeamId(player.assignedTeamId, state.teams);
+      if (canonical && canonical !== player.assignedTeamId) {
+        teamIdAliases[player.assignedTeamId] = canonical;
       }
+      player.assignedTeamId = canonical;
     });
     return state;
   }
@@ -818,47 +912,118 @@
   function playerOnHubTeam(player, teamId) {
     if (!player) return false;
     if (isAllTeamsId(teamId)) return true;
-    if (isUnassignedId(teamId)) return !player.assignedTeamId;
-    return player.assignedTeamId === teamId;
+    const assignedId = canonicalTeamId(player.assignedTeamId);
+    if (isUnassignedId(teamId)) return !assignedId;
+    const selectedId = canonicalTeamId(teamId) || teamId;
+    if (!assignedId) return false;
+    if (assignedId === selectedId || assignedId === teamId) return true;
+    const selected =
+      hubOrgTeams().find((team) => team.id === selectedId || team.id === teamId) ||
+      allKnownTeams().find((team) => team.id === selectedId || team.id === teamId);
+    const assigned =
+      hubOrgTeams().find((team) => team.id === assignedId) ||
+      allKnownTeams().find((team) => team.id === assignedId);
+    if (selected && assigned) return teamNamesMatch(selected.name, assigned.name);
+    return teamNamesMatch(selected && selected.name, player.assignedTeamId);
   }
 
   function playersOnHubTeam(players, teamId) {
     return (players || []).filter((player) => playerOnHubTeam(player, teamId));
   }
 
+  function playersForTeam(state, teamId) {
+    const id = teamId == null ? currentHubTeam().id : teamId;
+    return playersOnHubTeam((state && state.players) || [], id);
+  }
+
+  function assignmentFingerprint(state) {
+    const players = ((state && state.players) || [])
+      .map((player) => String(player.id || '') + ':' + String(player.assignedTeamId || ''))
+      .sort()
+      .join('|');
+    const teams = ((state && state.teams) || [])
+      .map((team) => String(team.id || ''))
+      .sort()
+      .join(',');
+    return players + '#' + teams;
+  }
+
+  function mergePlayerRecord(preferred, other) {
+    const merged = Object.assign({}, other || {}, preferred || {});
+    merged.assignedTeamId =
+      (preferred && preferred.assignedTeamId) ||
+      (other && other.assignedTeamId) ||
+      merged.assignedTeamId ||
+      null;
+    const preferredScores =
+      preferred && preferred.scores && typeof preferred.scores === 'object' ? preferred.scores : null;
+    const otherScores =
+      other && other.scores && typeof other.scores === 'object' ? other.scores : null;
+    merged.scores =
+      (preferredScores && Object.keys(preferredScores).length && preferredScores) ||
+      (otherScores && Object.keys(otherScores).length && otherScores) ||
+      {};
+    merged.photo = (preferred && preferred.photo) || (other && other.photo) || '';
+    return normalizePlayer(merged);
+  }
+
+  function mergePlayerArrays(primary, secondary) {
+    const byId = new Map();
+    (secondary || []).forEach((player) => {
+      if (player && player.id) byId.set(String(player.id), player);
+    });
+    (primary || []).forEach((player) => {
+      if (!player || !player.id) return;
+      const existing = byId.get(String(player.id));
+      byId.set(String(player.id), existing ? mergePlayerRecord(player, existing) : player);
+    });
+    return [...byId.values()].map(normalizePlayer);
+  }
+
+  function mergeSharedStates(local, remote) {
+    const localState = ensureDefaults(local || emptyState());
+    const remoteState = ensureDefaults(remote || emptyState());
+    const next = Object.assign({}, localState, remoteState);
+    next.players = mergePlayerArrays(remoteState.players, localState.players);
+    const teamsById = new Map();
+    (localState.teams || []).forEach((team) => {
+      if (team && team.id) teamsById.set(team.id, team);
+    });
+    (remoteState.teams || []).forEach((team) => {
+      if (!team || !team.id) return;
+      teamsById.set(team.id, Object.assign({}, teamsById.get(team.id) || {}, team));
+    });
+    next.teams = [...teamsById.values()];
+    if (!(remoteState.tryouts && remoteState.tryouts.length) && localState.tryouts.length) {
+      next.tryouts = localState.tryouts;
+      next.currentTryoutId = localState.currentTryoutId;
+    }
+    if (!(remoteState.practices && remoteState.practices.length) && (localState.practices || []).length) {
+      next.practices = localState.practices;
+    }
+    if (!(remoteState.drills && remoteState.drills.length) && (localState.drills || []).length) {
+      next.drills = localState.drills;
+    }
+    if (!(remoteState.templates && remoteState.templates.length) && (localState.templates || []).length) {
+      next.templates = localState.templates;
+    }
+    return syncHubTeams(ensureDefaults(next));
+  }
+
   function teamNameForPlayer(player, teams) {
-    if (!player || !player.assignedTeamId) return 'Unassigned';
+    const assignedId = canonicalTeamId(player && player.assignedTeamId, teams);
+    if (!assignedId) return 'Unassigned';
     const list = teams || [];
-    const hubTeams = (global.HUB_SOFTBALL && global.HUB_SOFTBALL.teams) || [];
     const found =
-      list.find((team) => team.id === player.assignedTeamId) ||
-      hubTeams.find((team) => team.id === player.assignedTeamId);
+      list.find((team) => team.id === assignedId) ||
+      hubOrgTeams().find((team) => team.id === assignedId) ||
+      allKnownTeams(null, teams).find((team) => team.id === assignedId);
     return (found && found.name) || 'Unassigned';
   }
 
   function pickerTeams(extraTeams) {
-    const hub = applySelectedHubTeam();
-    const teams = ((hub && hub.teams) || []).map((team) => ({
-      id: team.id,
-      name: team.name,
-      clubName: team.clubName || hub.clubName || 'MN Elks',
-    }));
-    const seen = new Set(teams.map((team) => team.id));
-    const extras = extraTeams ? extraTeams.slice() : [];
-    try {
-      const raw = loadRaw();
-      extras.push.apply(extras, (raw && raw.teams) || []);
-    } catch (e) {}
-    extras.forEach((team) => {
-      if (!team || !team.id || seen.has(team.id)) return;
-      seen.add(team.id);
-      teams.push({
-        id: team.id,
-        name: team.name,
-        clubName: (hub && hub.clubName) || 'MN Elks',
-      });
-    });
-    return teams;
+    applySelectedHubTeam();
+    return allKnownTeams(extraTeams);
   }
 
   function mountTeamPicker(el, opts) {
@@ -961,8 +1126,11 @@
       const migrated = migrateFromLegacy();
       state = migrated || emptyState();
     }
-    state = syncHubTeams(ensureDefaults(state));
-    const changed = restoreFransenRoster(state) || pinLoosePlayersToFransen(state);
+    state = ensureDefaults(state);
+    const before = assignmentFingerprint(state);
+    state = syncHubTeams(state);
+    const remapped = assignmentFingerprint(state) !== before;
+    const changed = restoreFransenRoster(state) || pinLoosePlayersToFransen(state) || remapped;
     if (changed) saveState(state);
     return state;
   }
@@ -1096,10 +1264,11 @@
         pushToCloud(local);
         return;
       }
-      if (!local || remoteUpdated >= localUpdated) {
-        const next = syncHubTeams(ensureDefaults(data.state));
+      if (!local || remoteUpdated >= localUpdated || remotePlayers > localPlayers) {
+        const next = mergeSharedStates(local, data.state);
+        const remapped = assignmentFingerprint(next) !== assignmentFingerprint(data.state);
         const seeded = restoreFransenRoster(next) || pinLoosePlayersToFransen(next);
-        saveState(next, seeded ? undefined : { skipCloud: true });
+        saveState(next, seeded || remapped ? undefined : { skipCloud: true });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('elks-data-updated'));
         }
@@ -1194,7 +1363,9 @@
     syncHubTeams,
     playerOnHubTeam,
     playersOnHubTeam,
+    playersForTeam,
     teamNameForPlayer,
+    canonicalTeamId,
     realTeamId,
     mountTeamPicker,
   };

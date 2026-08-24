@@ -95,7 +95,7 @@
           </div>
           <div class="min-w-0">
             <h1 class="title-font text-xl sm:text-2xl font-semibold tracking-tighter truncate">Tryout Evaluator</h1>
-            <div id="hub-team-picker" class="text-slate-400 text-xs truncate">Shared roster with Team Formation</div>
+            <div id="hub-team-picker" class="text-slate-400 text-xs min-w-0 max-w-full">Shared roster with Team Formation</div>
             <div id="save-status" class="hidden text-[11px] mt-0.5"></div>
           </div>
         </div>
@@ -451,9 +451,11 @@
     function viewPlayers() {
       const tryout = getTryout();
       const teamId = ElksData.currentHubTeam ? ElksData.currentHubTeam().id : 'all';
-      const list = ElksData.playersOnHubTeam
-        ? ElksData.playersOnHubTeam(state.players || [], teamId)
-        : state.players || [];
+      const list = ElksData.playersForTeam
+        ? ElksData.playersForTeam(state, teamId)
+        : ElksData.playersOnHubTeam
+          ? ElksData.playersOnHubTeam(state.players || [], teamId)
+          : state.players || [];
       return list.map((p) => ElksData.playerWithEval(p, tryout));
     }
 

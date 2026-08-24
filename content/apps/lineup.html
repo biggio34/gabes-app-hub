@@ -654,10 +654,8 @@
 
     function saveState() {
       saveCurrentGameToList();
-      pushRosterToShared();
       const data = {
         version: 2,
-        roster: state.players,
         games: games,
         currentGameId: currentGameId,
         teamName: state.teamName,
@@ -673,14 +671,39 @@
       }
     }
 
+    function importSharedPlayers(roster) {
+      if (!window.ElksData || !Array.isArray(roster) || !roster.length) return;
+      const shared = ElksData.load();
+      const teamId = ElksData.realTeamId
+        ? ElksData.realTeamId(currentLineupTeam().id)
+        : currentLineupTeam().id;
+      let changed = false;
+      roster.forEach((player) => {
+        if (!player || !player.name) return;
+        const exists = (player.id && shared.players.some((item) => item.id === player.id))
+          || ElksData.findPlayerByIdentity(shared.players, player.name, "");
+        if (exists) return;
+        ElksData.upsertPlayer(shared, {
+          id: player.id,
+          name: player.name,
+          number: player.number != null ? String(player.number) : "",
+          evalNotes: player.notes || "",
+          assignedTeamId: teamId && teamId !== "all" && teamId !== "unassigned" ? teamId : null,
+        });
+        changed = true;
+      });
+      if (changed) ElksData.save(shared);
+    }
+
     function syncRosterFromShared() {
       if (!window.ElksData) return;
+      if (window.ElksData.applySelectedHubTeam) ElksData.applySelectedHubTeam();
       const shared = ElksData.load();
-      const all = ElksData.lineupPlayers(shared);
-      const teamId = ElksData.currentHubTeam ? ElksData.currentHubTeam().id : "";
-      state.players = ElksData.playersOnHubTeam
-        ? ElksData.playersOnHubTeam(all, teamId)
-        : all;
+      const team = ElksData.currentHubTeam ? ElksData.currentHubTeam() : currentLineupTeam();
+      const teamId = team && team.id ? team.id : "";
+      state.players = ElksData.playersForTeam
+        ? ElksData.playersForTeam(shared, teamId).map(ElksData.toLineupPlayer)
+        : ElksData.lineupPlayers(shared);
       const ids = new Set(state.players.map((p) => p.id));
       state.battingOrder = (state.battingOrder || []).filter((id) => ids.has(id));
       state.unavailableIds = (state.unavailableIds || []).filter((id) => ids.has(id));
@@ -691,32 +714,14 @@
       applyHubTeamName();
     }
 
-    function pushRosterToShared() {
-      if (!window.ElksData) return;
-      const shared = ElksData.load();
-      const sharedIds = new Set((shared.players || []).map((p) => p.id));
-      let changed = false;
-      state.players.forEach((player) => {
-        if (!sharedIds.has(player.id)) return;
-        ElksData.upsertPlayer(shared, {
-          id: player.id,
-          name: player.name,
-          number: player.number != null ? String(player.number) : "",
-          evalNotes: player.notes || "",
-        });
-        changed = true;
-      });
-      if (changed) ElksData.save(shared);
-    }
-
     function loadState() {
       const saved = readSavedLineup();
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           if (parsed.version === 2 && Array.isArray(parsed.games)) {
-            // Multi-game format
-            state.players = Array.isArray(parsed.roster) ? parsed.roster : state.players;
+            // Multi-game format. Players always come from the shared Team Roster.
+            if (Array.isArray(parsed.roster)) importSharedPlayers(parsed.roster);
             games = parsed.games || [];
             currentGameId = parsed.currentGameId || null;
             state.teamName = parsed.teamName || state.teamName;
@@ -731,7 +736,7 @@
           } else {
             // Legacy single-state v1 — migrate to a game
             const old = parsed;
-            state.players = Array.isArray(old.players) ? old.players : state.players;
+            if (Array.isArray(old.players)) importSharedPlayers(old.players);
             state.teamName = old.teamName || state.teamName;
 
             const migId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('g' + Date.now());
@@ -958,8 +963,8 @@
         div.className = "px-3 py-8 text-center";
         div.innerHTML = `
           <div class="text-red-700 mb-2"><i class="fa-solid fa-users text-2xl"></i></div>
-          <div class="text-sm font-medium text-stone-600">No players yet</div>
-          <div class="text-xs text-stone-400 mt-1">Add players in Team Roster</div>
+          <div class="text-sm font-medium text-stone-600">No players on this team</div>
+          <div class="text-xs text-stone-400 mt-1">They come from Team Roster. Add them there, or pick Any / all players.</div>
         `;
         container.appendChild(div);
         return;
@@ -2730,9 +2735,13 @@
           try {
             const imported = JSON.parse(ev.target.result);
             if (imported.players && Array.isArray(imported.players)) {
-              state = { ...state, ...imported };
-              // Ensure defensivePositions object exists
+              importSharedPlayers(imported.players);
+              if (imported.games) games = imported.games;
+              if (imported.currentGameId) currentGameId = imported.currentGameId;
+              if (imported.battingOrder) state.battingOrder = imported.battingOrder;
+              if (imported.defensivePositions) state.defensivePositions = imported.defensivePositions;
               if (!state.defensivePositions) state.defensivePositions = {};
+              syncRosterFromShared();
               saveState();
               renderAll();
               alert("Lineup imported successfully!");

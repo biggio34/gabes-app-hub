@@ -42,7 +42,7 @@
     </header>
 
     <p class="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
-      Pick Any / all players to see everyone, Not assigned for girls with no team yet, or one team.
+      This is the shared player list. Lineup, tryouts, and team formation use these same girls. Pick Any / all players to see everyone, Not assigned for girls with no team yet, or one team.
     </p>
     <p id="save-status" class="hidden text-xs text-slate-500"></p>
 
@@ -178,9 +178,11 @@
 
     function sortedPlayers() {
       const teamId = currentTeam().id;
-      const list = window.ElksData && window.ElksData.playersOnHubTeam
-        ? ElksData.playersOnHubTeam(state.players || [], teamId)
-        : [...(state.players || [])];
+      const list = window.ElksData && window.ElksData.playersForTeam
+        ? ElksData.playersForTeam(state, teamId)
+        : window.ElksData && window.ElksData.playersOnHubTeam
+          ? ElksData.playersOnHubTeam(state.players || [], teamId)
+          : [...(state.players || [])];
       return [...list].sort((a, b) => {
         const last = (a.lastName || "").localeCompare(b.lastName || "");
         if (last) return last;
@@ -196,6 +198,16 @@
         ? players.length + (players.length === 1 ? " player" : " players")
         : "";
       empty.classList.toggle("hidden", players.length > 0);
+      const team = currentTeam();
+      if (!players.length) {
+        if (team.id === "unassigned") {
+          empty.textContent = "Everyone on the shared roster already has a team.";
+        } else if (team.id && team.id !== "all") {
+          empty.textContent = "No players assigned to " + team.name + " yet. Pick Any / all players to see the shared roster, or add a girl below.";
+        } else {
+          empty.textContent = "No players yet. Add the first girl above.";
+        }
+      }
       list.innerHTML = "";
       players.forEach((player) => {
         const li = document.createElement("li");
@@ -266,8 +278,13 @@
         number,
         position,
       };
-      if (!editingId && currentTeam().id && currentTeam().id !== "all" && currentTeam().id !== "unassigned") {
-        fields.assignedTeamId = currentTeam().id;
+      if (!editingId) {
+        const teamId = ElksData.realTeamId
+          ? ElksData.realTeamId(currentTeam().id)
+          : (currentTeam().id && currentTeam().id !== "all" && currentTeam().id !== "unassigned"
+            ? currentTeam().id
+            : null);
+        if (teamId) fields.assignedTeamId = teamId;
       }
       if (editingId) {
         ElksData.upsertPlayer(state, { ...fields, id: editingId });

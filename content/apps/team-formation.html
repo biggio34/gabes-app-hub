@@ -395,6 +395,10 @@
 
         function assignedFormationId(player) {
             if (!player || !player.assignedTeamId) return null;
+            const assignedId = ElksData.canonicalTeamId
+                ? ElksData.canonicalTeamId(player.assignedTeamId, teams)
+                : player.assignedTeamId;
+            if (formationTeamIds().has(assignedId)) return assignedId;
             return formationTeamIds().has(player.assignedTeamId) ? player.assignedTeamId : null;
         }
 
@@ -704,7 +708,11 @@
             }
 
             sortedTeams.forEach(team => {
-                const teamPlayersRaw = players.filter(p => p.assignedTeamId === team.id);
+                const teamPlayersRaw = ElksData.playersForTeam
+                    ? ElksData.playersForTeam(sharedState, team.id)
+                    : ElksData.playersOnHubTeam
+                        ? ElksData.playersOnHubTeam(players, team.id)
+                        : players.filter(p => p.assignedTeamId === team.id);
                 const teamPlayers = sortPlayersByBirthdate(teamPlayersRaw);
                 
                 const panel = document.createElement('div');
