@@ -40,7 +40,7 @@ export const hubApps: HubApp[] = [
     file: "practice-planner.html",
     title: "Practice Planner",
     description:
-      "Drill library and practice plans for the team you pick from People.",
+      "Drill library and practice plans with optional parallel stations for the team you pick from People.",
     area: "softball",
   },
   {

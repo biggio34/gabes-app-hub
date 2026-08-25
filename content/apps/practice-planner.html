@@ -47,6 +47,45 @@
         .softball-green {
             color: #166534;
         }
+
+        .lane-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 8px;
+        }
+
+        .lane-card {
+            border: 1px solid #334155;
+            background: #0f172a;
+            border-radius: 14px;
+            padding: 8px;
+            min-width: 0;
+        }
+
+        .lane-card.everyone-else {
+            border-style: dashed;
+            background: #111827;
+        }
+
+        .lane-card.lane-target {
+            border-color: #f87171;
+            box-shadow: 0 0 0 1px #f87171;
+        }
+
+        .pos-chip {
+            font-size: 10px;
+            padding: 2px 7px;
+            border-radius: 999px;
+            border: 1px solid #334155;
+            background: #020617;
+            color: #94a3b8;
+        }
+
+        .pos-chip.on {
+            background: #7f1d1d;
+            border-color: #b91c1c;
+            color: #fecaca;
+        }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-200">
@@ -152,7 +191,7 @@
                 <!-- Populated by renderTemplates() -->
             </div>
             <div class="mt-6 text-xs text-slate-500">
-                Tip: While editing a practice, use "Save as Template" to capture the current drill list + durations + focus.
+                Tip: While editing a practice, use "Save as Template" to capture drills, station lanes, who is in each lane, and split times. Old one-drill templates still load as a single lane.
             </div>
         </div>
     </div>
@@ -383,6 +422,8 @@
                                 <span>Custom</span>
                             </button>
                         </div>
+                        <p class="text-[11px] text-slate-500 mb-1">A block can stay one drill, or split into parallel stations by player and/or position. Untagged girls land in Everyone else.</p>
+                        <div id="lane-target-banner" class="hidden mb-2 text-xs bg-red-950/60 border border-red-800 text-red-200 rounded-xl px-3 py-1.5 flex items-center justify-between gap-2"></div>
 
                         <!-- Timeline -->
                         <div class="mb-2">
@@ -509,6 +550,248 @@
             shared.drills = drills;
             shared.templates = templates;
             ElksData.save(shared);
+        }
+
+        function escapeHtml(str) {
+            return String(str == null ? '' : str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        let plannerRosterCache = [];
+        let pendingLaneAdd = null;
+
+        function refreshPlannerRoster() {
+            if (!window.ElksData) {
+                plannerRosterCache = [];
+                return;
+            }
+            const shared = ElksData.load();
+            plannerRosterCache = ElksData.playersForTeam(shared, currentPlannerTeamId()) || [];
+        }
+
+        function playerDisplayName(player) {
+            if (window.ElksData && ElksData.displayName) return ElksData.displayName(player);
+            return (player && (player.name || [player.firstName, player.lastName].filter(Boolean).join(' '))) || 'Unnamed';
+        }
+
+        function isSplitSegment(segment) {
+            return window.ElksData && ElksData.isSplitSegment
+                ? ElksData.isSplitSegment(segment)
+                : !!(segment && Array.isArray(segment.lanes) && segment.lanes.length);
+        }
+
+        function practiceStationCount(practice) {
+            return ((practice && practice.segments) || []).filter(isSplitSegment).length;
+        }
+
+        function laneSlotSum(lane) {
+            if (window.ElksData && ElksData.laneSlotSum) return ElksData.laneSlotSum(lane);
+            return ((lane && lane.slots) || []).reduce(function (sum, slot) {
+                return sum + (parseInt(slot.duration, 10) || 0);
+            }, 0);
+        }
+
+        function assignLanePlayers(lanes) {
+            if (window.ElksData && ElksData.assignPlayersToLanes) {
+                return ElksData.assignPlayersToLanes(lanes, plannerRosterCache);
+            }
+            return { assigned: (lanes || []).map(function () { return []; }), leftover: plannerRosterCache.slice() };
+        }
+
+        function deepCopySegments(list) {
+            if (window.ElksData && ElksData.cloneSegments) return ElksData.cloneSegments(list || []);
+            return JSON.parse(JSON.stringify(list || []));
+        }
+
+        function newPlannerId(prefix) {
+            return (window.ElksData && ElksData.uid) ? ElksData.uid(prefix) : (prefix + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
+        }
+
+        function positionOptions() {
+            return (window.ElksData && ElksData.LANE_POSITION_OPTIONS) || [
+                { key: 'P', label: 'Pitchers (P)' },
+                { key: 'C', label: 'Catchers (C)' },
+                { key: 'IF', label: 'Infielders' },
+                { key: 'OF', label: 'Outfielders' },
+            ];
+        }
+
+        function updateLaneTargetBanner() {
+            const banner = document.getElementById('lane-target-banner');
+            if (!banner) return;
+            if (!pendingLaneAdd) {
+                banner.classList.add('hidden');
+                banner.innerHTML = '';
+                return;
+            }
+            const seg = segments[pendingLaneAdd.segIndex];
+            const lane = seg && seg.lanes && seg.lanes[pendingLaneAdd.laneIndex];
+            if (!lane) {
+                pendingLaneAdd = null;
+                banner.classList.add('hidden');
+                banner.innerHTML = '';
+                return;
+            }
+            banner.classList.remove('hidden');
+            banner.innerHTML = `
+                <span>Next drill you click goes into <strong>${escapeHtml(lane.name || 'this station')}</strong>.</span>
+                <button type="button" class="text-xs px-2 py-0.5 bg-slate-900 rounded-lg" onclick="clearLaneTarget()">Cancel</button>
+            `;
+        }
+
+        function clearLaneTarget() {
+            pendingLaneAdd = null;
+            updateLaneTargetBanner();
+            renderSegments();
+        }
+
+        function setLaneTarget(segIndex, laneIndex) {
+            pendingLaneAdd = { segIndex: segIndex, laneIndex: laneIndex };
+            updateLaneTargetBanner();
+            renderSegments();
+            const search = document.getElementById('practice-drill-search');
+            if (search) search.focus();
+        }
+
+        function splitSegmentStations(index) {
+            const segment = segments[index];
+            if (!segment) return;
+            if (window.ElksData && ElksData.splitSegmentIntoStations) {
+                ElksData.splitSegmentIntoStations(segment);
+            } else {
+                segment.lanes = segment.lanes || [];
+            }
+            pendingLaneAdd = null;
+            renderSegments();
+            renderTimeline();
+        }
+
+        function mergeSegmentStations(index) {
+            const segment = segments[index];
+            if (!segment || !isSplitSegment(segment)) return;
+            if (!confirm('Merge this block back to one station? Station assignments will be removed.')) return;
+            if (window.ElksData && ElksData.mergeStationsToSingle) {
+                ElksData.mergeStationsToSingle(segment);
+            } else {
+                delete segment.lanes;
+            }
+            pendingLaneAdd = null;
+            renderSegments();
+            renderTimeline();
+        }
+
+        function addStationToSegment(index) {
+            const segment = segments[index];
+            if (!segment) return;
+            if (window.ElksData && ElksData.addStationLane) {
+                ElksData.addStationLane(segment);
+            }
+            renderSegments();
+        }
+
+        function removeStationFromSegment(segIndex, laneIndex) {
+            const segment = segments[segIndex];
+            if (!segment || !segment.lanes || !segment.lanes[laneIndex]) return;
+            if (segment.lanes[laneIndex].everyoneElse) return;
+            segment.lanes.splice(laneIndex, 1);
+            if (window.ElksData && ElksData.ensureEveryoneElseLane) {
+                ElksData.ensureEveryoneElseLane(segment);
+            }
+            if (pendingLaneAdd && pendingLaneAdd.segIndex === segIndex) pendingLaneAdd = null;
+            renderSegments();
+        }
+
+        function updateLaneName(segIndex, laneIndex, value) {
+            const lane = segments[segIndex] && segments[segIndex].lanes && segments[segIndex].lanes[laneIndex];
+            if (!lane) return;
+            lane.name = value;
+        }
+
+        function toggleLanePosition(segIndex, laneIndex, pos) {
+            const lane = segments[segIndex] && segments[segIndex].lanes && segments[segIndex].lanes[laneIndex];
+            if (!lane || lane.everyoneElse) return;
+            if (!Array.isArray(lane.positions)) lane.positions = [];
+            const i = lane.positions.indexOf(pos);
+            if (i >= 0) lane.positions.splice(i, 1);
+            else lane.positions.push(pos);
+            renderSegments();
+        }
+
+        function toggleLanePlayer(segIndex, laneIndex, playerId) {
+            const lane = segments[segIndex] && segments[segIndex].lanes && segments[segIndex].lanes[laneIndex];
+            if (!lane || lane.everyoneElse) return;
+            if (!Array.isArray(lane.playerIds)) lane.playerIds = [];
+            const i = lane.playerIds.indexOf(playerId);
+            if (i >= 0) lane.playerIds.splice(i, 1);
+            else lane.playerIds.push(playerId);
+            renderSegments();
+        }
+
+        function addCustomSlotToLane(segIndex, laneIndex) {
+            const segment = segments[segIndex];
+            const lane = segment && segment.lanes && segment.lanes[laneIndex];
+            if (!lane) return;
+            const used = laneSlotSum(lane);
+            const blockDur = parseInt(segment.duration, 10) || 0;
+            const remaining = blockDur > 0 ? Math.max(0, blockDur - used) : 10;
+            lane.slots = lane.slots || [];
+            lane.slots.push({
+                id: newPlannerId('slot'),
+                name: '',
+                duration: remaining || 10,
+                description: '',
+                category: null,
+                drillId: null,
+            });
+            renderSegments();
+            renderTimeline();
+        }
+
+        function updateSlotField(segIndex, laneIndex, slotIndex, field, value) {
+            const slot = segments[segIndex] && segments[segIndex].lanes && segments[segIndex].lanes[laneIndex] && segments[segIndex].lanes[laneIndex].slots[slotIndex];
+            if (!slot) return;
+            slot[field] = field === 'duration' ? (parseInt(value, 10) || 0) : value;
+            if (field === 'duration') {
+                renderSegments();
+                renderTimeline();
+            }
+        }
+
+        function removeSlotFromLane(segIndex, laneIndex, slotIndex) {
+            const lane = segments[segIndex] && segments[segIndex].lanes && segments[segIndex].lanes[laneIndex];
+            if (!lane || !lane.slots) return;
+            lane.slots.splice(slotIndex, 1);
+            renderSegments();
+            renderTimeline();
+        }
+
+        function namesForPlayers(list) {
+            if (!list || !list.length) return '';
+            return list.map(playerDisplayName).join(', ');
+        }
+
+        function duplicatePractice(index, event) {
+            if (event) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+            }
+            const original = practices[index];
+            if (!original) return;
+            const copy = (window.ElksData && ElksData.clonePracticeAsUpcoming)
+                ? ElksData.clonePracticeAsUpcoming(original)
+                : JSON.parse(JSON.stringify(original));
+            if (!copy.date && window.ElksData && ElksData.upcomingPracticeDate) {
+                copy.date = ElksData.upcomingPracticeDate();
+            }
+            stampPracticeTeam(copy);
+            practices.push(copy);
+            savePractices();
+            renderPractices();
+            editPractice(practices.length - 1);
+            document.getElementById('modal-title').textContent = 'Upcoming copy — tweak and save';
         }
 
         function loadData() {
@@ -891,17 +1174,28 @@
                     `;
                 }
 
+                const stationBlocks = practiceStationCount(practice);
+                const stationNote = stationBlocks
+                    ? ` · ${stationBlocks} station block${stationBlocks === 1 ? '' : 's'}`
+                    : '';
+
                 div.innerHTML = `
                     <div class="flex justify-between items-start">
                         <div>
                             ${dateTimeHTML}
                         </div>
                         <div class="text-xs px-2 py-1 bg-slate-800 rounded-xl text-slate-400">
-                            ${practice.segments ? practice.segments.length : 0} segments
+                            ${practice.segments ? practice.segments.length : 0} segments${stationNote}
                         </div>
                     </div>
-                    <div class="mt-3 font-medium">${practice.focus || 'Practice'}</div>
-                    ${practice.location ? `<div class="text-xs text-slate-400 mt-1">${practice.location}</div>` : ''}
+                    <div class="mt-3 font-medium">${escapeHtml(practice.focus || 'Practice')}</div>
+                    ${practice.location ? `<div class="text-xs text-slate-400 mt-1">${escapeHtml(practice.location)}</div>` : ''}
+                    <div class="mt-4 flex justify-end">
+                        <button type="button" class="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300"
+                                onclick="duplicatePractice(${index}, event)">
+                            <i class="fa-solid fa-copy mr-1"></i>Duplicate
+                        </button>
+                    </div>
                 `;
                 
                 div.onclick = () => editPractice(index);
@@ -972,19 +1266,23 @@
 
                 const segCount = tpl.segments ? tpl.segments.length : 0;
                 const totalDur = tpl.segments ? tpl.segments.reduce((sum, s) => sum + (s.duration || 0), 0) : tpl.duration;
+                const stationBlocks = practiceStationCount(tpl);
+                const stationNote = stationBlocks
+                    ? ` · ${stationBlocks} station block${stationBlocks === 1 ? '' : 's'}`
+                    : '';
 
                 div.innerHTML = `
                     <div class="flex justify-between items-start">
                         <div class="flex-1 min-w-0">
-                            <div class="font-semibold truncate">${tpl.name}</div>
-                            <div class="text-xs text-red-400 mt-0.5">${tpl.focus || 'Practice'} • ${tpl.duration} min planned</div>
+                            <div class="font-semibold truncate">${escapeHtml(tpl.name)}</div>
+                            <div class="text-xs text-red-400 mt-0.5">${escapeHtml(tpl.focus || 'Practice')} • ${tpl.duration} min planned</div>
                         </div>
                         <div class="text-xs px-2 py-1 bg-slate-800 rounded-xl text-slate-400 flex-shrink-0 ml-2">
                             ${segCount} drills
                         </div>
                     </div>
                     <div class="mt-3 text-sm text-slate-400">
-                        ${segCount} segments • ${totalDur} min total
+                        ${segCount} segments • ${totalDur} min total${stationNote}
                     </div>
                     <div class="mt-4 flex gap-2">
                         <button onclick="event.stopImmediatePropagation(); useTemplate(${index})" 
@@ -1012,7 +1310,9 @@
             // Create a fresh practice from the template (instance data)
             currentPractice = null;
             currentPracticeIndex = null;
-            segments = tpl.segments ? JSON.parse(JSON.stringify(tpl.segments)) : [];  // deep copy
+            refreshPlannerRoster();
+            pendingLaneAdd = null;
+            segments = deepCopySegments(tpl.segments || []);
 
             document.getElementById('modal-title').textContent = 'New Practice from Template';
             document.getElementById('practice-date').value = '';
@@ -1046,6 +1346,7 @@
             renderSegments();
             renderTimeline();
             renderPracticeDrillsList();
+            updateLaneTargetBanner();
         }
 
         function deleteTemplate(index) {
@@ -1262,6 +1563,8 @@
             currentPractice = null;
             currentPracticeIndex = null;
             segments = [];
+            pendingLaneAdd = null;
+            refreshPlannerRoster();
 
             document.getElementById('modal-title').textContent = 'New Practice';
             document.getElementById('practice-date').value = '';
@@ -1291,12 +1594,15 @@
             updateTimeZoneIndicator();
             renderTimeline();
             renderPracticeDrillsList();
+            updateLaneTargetBanner();
         }
 
         function editPractice(index) {
             currentPracticeIndex = index;
             currentPractice = practices[index];
-            segments = currentPractice.segments ? [...currentPractice.segments] : [];
+            pendingLaneAdd = null;
+            refreshPlannerRoster();
+            segments = currentPractice.segments ? JSON.parse(JSON.stringify(currentPractice.segments)) : [];
 
             document.getElementById('modal-title').textContent = 'Edit Practice';
             document.getElementById('practice-date').value = currentPractice.date;
@@ -1327,6 +1633,7 @@
 
             renderTimeline();
             renderPracticeDrillsList();
+            updateLaneTargetBanner();
         }
 
         // addSegment kept for potential internal/quick use, but main "Custom" now uses the modal for better input experience
@@ -1341,69 +1648,193 @@
             renderTimeline();
         }
 
+        function attachSegmentDrag(div, i, isOver) {
+            div.addEventListener('dragstart', (e) => {
+                if (e.target.closest('input, button, textarea, select, label')) {
+                    e.preventDefault();
+                    return;
+                }
+                e.dataTransfer.setData('text/plain', String(i));
+                div.style.opacity = '0.5';
+            });
+            div.addEventListener('dragend', () => {
+                div.style.opacity = '1';
+            });
+            div.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                div.style.borderColor = '#f87171';
+            });
+            div.addEventListener('dragleave', () => {
+                div.style.borderColor = isOver ? '#ef4444' : '#475569';
+            });
+            div.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const fromIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+                const toIndex = parseInt(div.dataset.index, 10);
+                if (fromIndex !== toIndex) {
+                    const moved = segments.splice(fromIndex, 1)[0];
+                    segments.splice(toIndex, 0, moved);
+                    if (pendingLaneAdd) {
+                        if (pendingLaneAdd.segIndex === fromIndex) pendingLaneAdd.segIndex = toIndex;
+                        else if (fromIndex < pendingLaneAdd.segIndex && toIndex >= pendingLaneAdd.segIndex) pendingLaneAdd.segIndex -= 1;
+                        else if (fromIndex > pendingLaneAdd.segIndex && toIndex <= pendingLaneAdd.segIndex) pendingLaneAdd.segIndex += 1;
+                    }
+                    renderSegments();
+                    renderTimeline();
+                }
+                div.style.borderColor = isOver ? '#ef4444' : '#475569';
+            });
+        }
+
+        function renderLaneCardHTML(segment, segIndex, lane, laneIndex, assignment) {
+            const isElse = !!lane.everyoneElse;
+            const targeting = pendingLaneAdd && pendingLaneAdd.segIndex === segIndex && pendingLaneAdd.laneIndex === laneIndex;
+            const inLane = (assignment.assigned[laneIndex] || []);
+            const whoText = inLane.length
+                ? namesForPlayers(inLane)
+                : (isElse ? 'Nobody leftover — everyone is in a station' : 'No one assigned yet');
+            const used = laneSlotSum(lane);
+            const blockDur = parseInt(segment.duration, 10) || 0;
+            const timeWarn = blockDur > 0 && used !== blockDur
+                ? `<div class="text-[10px] text-amber-400 mt-1">${used} min in this station / ${blockDur} min block</div>`
+                : '';
+            const posChips = isElse ? '' : positionOptions().map(function (opt) {
+                const on = (lane.positions || []).indexOf(opt.key) >= 0;
+                return `<button type="button" class="pos-chip ${on ? 'on' : ''}" onclick="event.stopImmediatePropagation(); toggleLanePosition(${segIndex}, ${laneIndex}, '${opt.key}')">${escapeHtml(opt.label)}</button>`;
+            }).join('');
+            const playerBoxes = isElse ? '' : (plannerRosterCache.length ? plannerRosterCache.map(function (player) {
+                const checked = (lane.playerIds || []).indexOf(player.id) >= 0 ? 'checked' : '';
+                const pid = String(player.id).replace(/'/g, '');
+                return `<label class="flex items-center gap-1.5 text-[11px] text-slate-300">
+                    <input type="checkbox" ${checked} onchange="toggleLanePlayer(${segIndex}, ${laneIndex}, '${pid}')">
+                    <span class="truncate">${escapeHtml(playerDisplayName(player))}${player.position ? ' · ' + escapeHtml(player.position) : ''}</span>
+                </label>`;
+            }).join('') : `<div class="text-[11px] text-slate-500">No roster for this team yet. Add girls in Team Roster, or assign by position.</div>`);
+
+            let slotCum = 0;
+            const slotsHtml = (lane.slots || []).map(function (slot, si) {
+                const s0 = slotCum;
+                const s1 = slotCum + (parseInt(slot.duration, 10) || 0);
+                slotCum = s1;
+                return `<div class="flex items-center gap-1 mt-1">
+                    <span class="text-[10px] font-mono text-slate-500 w-14 shrink-0">${s0}–${s1}</span>
+                    <input type="text" value="${escapeHtml(slot.name)}" placeholder="Drill name"
+                           class="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-lg px-2 py-0.5 text-xs"
+                           onchange="updateSlotField(${segIndex}, ${laneIndex}, ${si}, 'name', this.value)">
+                    <input type="number" value="${slot.duration || 0}"
+                           class="w-12 bg-slate-950 border border-slate-700 rounded-lg px-1 py-0.5 text-xs text-center"
+                           onchange="updateSlotField(${segIndex}, ${laneIndex}, ${si}, 'duration', this.value)">
+                    <button type="button" class="text-slate-500 hover:text-red-400" title="Remove drill" onclick="removeSlotFromLane(${segIndex}, ${laneIndex}, ${si})">
+                        <i class="fa-solid fa-times text-xs"></i>
+                    </button>
+                </div>`;
+            }).join('') || `<div class="text-[11px] text-slate-500 mt-1 italic">No drills in this station yet</div>`;
+
+            const removeBtn = isElse ? '' : `<button type="button" class="text-slate-500 hover:text-red-400" title="Remove station" onclick="removeStationFromSegment(${segIndex}, ${laneIndex})"><i class="fa-solid fa-trash text-xs"></i></button>`;
+
+            return `<div class="lane-card ${isElse ? 'everyone-else' : ''} ${targeting ? 'lane-target' : ''}">
+                <div class="flex items-start gap-1">
+                    <input type="text" value="${escapeHtml(lane.name || '')}" placeholder="Station name"
+                           class="flex-1 min-w-0 bg-transparent border-b border-slate-700 focus:border-red-500 pb-0.5 text-xs font-semibold"
+                           onchange="updateLaneName(${segIndex}, ${laneIndex}, this.value)" ${isElse ? 'readonly' : ''}>
+                    ${removeBtn}
+                </div>
+                <div class="mt-1 text-[11px] text-slate-300"><span class="text-slate-500">In this station:</span> ${escapeHtml(whoText)}</div>
+                ${isElse ? `<div class="text-[10px] text-slate-500 mt-1">Girls not named and not matching a position land here so nobody vanishes.</div>` : `
+                <div class="text-[10px] text-slate-500 mt-1">Named players beat matching positions.</div>
+                <div class="flex flex-wrap gap-1 mt-1">${posChips}</div>
+                <div class="mt-1 max-h-24 overflow-auto space-y-0.5 pr-1">${playerBoxes}</div>`}
+                <div class="mt-2 border-t border-slate-800 pt-1">
+                    ${slotsHtml}
+                    ${timeWarn}
+                    <div class="flex gap-1 mt-1">
+                        <button type="button" class="text-[10px] px-2 py-0.5 rounded-lg ${targeting ? 'bg-red-800 text-white' : 'bg-slate-800 text-slate-300'}" onclick="setLaneTarget(${segIndex}, ${laneIndex})">+ Drill</button>
+                        <button type="button" class="text-[10px] px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300" onclick="addCustomSlotToLane(${segIndex}, ${laneIndex})">+ Custom</button>
+                    </div>
+                </div>
+            </div>`;
+        }
+
         function renderSegments() {
             const container = document.getElementById('segments-container');
             container.innerHTML = '';
+            updateLaneTargetBanner();
 
             const practiceDuration = parseInt(document.getElementById('practice-duration')?.value) || 0;
-
             let cumulative = 0;
 
             segments.forEach((segment, i) => {
                 const startTime = cumulative;
                 const endTime = cumulative + (segment.duration || 0);
                 const isOver = practiceDuration > 0 && endTime > practiceDuration;
+                const split = isSplitSegment(segment);
 
                 const div = document.createElement('div');
-                div.className = `bg-slate-950 border rounded-2xl p-3 flex gap-3 items-start ${isOver ? 'border-red-500 bg-red-950/20' : 'border-slate-700'}`;
+                div.className = `bg-slate-950 border rounded-2xl p-3 ${isOver ? 'border-red-500 bg-red-950/20' : 'border-slate-700'}`;
                 div.draggable = true;
                 div.dataset.index = i;
-
-                // Drag event listeners
-                div.addEventListener('dragstart', (e) => {
-                    e.dataTransfer.setData('text/plain', i);
-                    div.style.opacity = '0.5';
-                });
-
-                div.addEventListener('dragend', () => {
-                    div.style.opacity = '1';
-                });
-
-                div.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    div.style.borderColor = '#f87171';
-                });
-
-                div.addEventListener('dragleave', () => {
-                    div.style.borderColor = isOver ? '#ef4444' : '#475569';
-                });
-
-                div.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
-                    const toIndex = parseInt(div.dataset.index);
-
-                    if (fromIndex !== toIndex) {
-                        const [moved] = segments.splice(fromIndex, 1);
-                        segments.splice(toIndex, 0, moved);
-                        renderSegments();           // re-render everything
-                        renderTimeline();
-                    }
-                    div.style.borderColor = isOver ? '#ef4444' : '#475569';
-                });
-
-                let categoryBadge = '';
-                if (segment.category) {
-                    categoryBadge = `<span class="text-[10px] px-2 py-0.5 bg-red-900/50 text-red-300 rounded-full ml-2">${segment.category}</span>`;
-                }
+                attachSegmentDrag(div, i, isOver);
 
                 const startMin = Math.floor(startTime);
                 const endMin = Math.floor(endTime);
+                let categoryBadge = '';
+                if (segment.category) {
+                    categoryBadge = `<span class="text-[10px] px-2 py-0.5 bg-red-900/50 text-red-300 rounded-full ml-2">${escapeHtml(segment.category)}</span>`;
+                }
+                const descPreview = segment.description
+                    ? (segment.description.length > 60 ? escapeHtml(segment.description.substring(0, 57) + '...') : escapeHtml(segment.description))
+                    : '<span class="text-slate-500 italic">No notes</span>';
+                const escapedDesc = escapeHtml(segment.description || '');
 
-                const descPreview = segment.description ? (segment.description.length > 60 ? segment.description.substring(0,57) + '...' : segment.description) : '<span class="text-slate-500 italic">No notes</span>';
-                const escapedDesc = (segment.description || '').replace(/"/g, '&quot;');
-
-                div.innerHTML = `
+                if (split) {
+                    const assignment = assignLanePlayers(segment.lanes);
+                    const lanesHtml = segment.lanes.map(function (lane, li) {
+                        return renderLaneCardHTML(segment, i, lane, li, assignment);
+                    }).join('');
+                    div.innerHTML = `
+                        <div class="flex gap-3 items-start w-full">
+                            <div class="cursor-grab text-slate-500 pt-1 select-none">
+                                <i class="fa-solid fa-grip-vertical"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center flex-wrap gap-x-2">
+                                    <span class="text-xs font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">${startMin}–${endMin} min</span>
+                                    <input type="text" placeholder="Block name (e.g. Stations)"
+                                           value="${escapeHtml(segment.name || '')}"
+                                           class="flex-1 bg-transparent border-b border-slate-600 focus:border-red-500 pb-1 text-sm font-medium min-w-[120px]"
+                                           onchange="updateSegment(${i}, 'name', this.value); renderTimeline();">
+                                    <span class="text-[10px] px-2 py-0.5 bg-red-900/40 text-red-200 rounded-full">Parallel stations</span>
+                                </div>
+                                <div class="flex gap-3 mt-2 items-center">
+                                    <div class="w-20">
+                                        <input type="number" value="${segment.duration || 0}"
+                                               class="w-full bg-slate-900 border border-slate-600 rounded-xl px-2 py-1 text-sm"
+                                               onchange="updateSegment(${i}, 'duration', this.value); renderSegments(); renderTimeline();">
+                                    </div>
+                                    <div class="text-[11px] text-slate-400">minutes, all stations at once</div>
+                                </div>
+                                <div class="lane-grid mt-3">${lanesHtml}</div>
+                                <div class="mt-2">
+                                    <button type="button" class="text-xs px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-xl" onclick="addStationToSegment(${i})">
+                                        <i class="fa-solid fa-plus text-xs mr-1"></i>Add station
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="flex flex-col gap-1 mt-1">
+                                <button onclick="mergeSegmentStations(${i}); event.stopImmediatePropagation();" class="text-slate-400 hover:text-amber-400" title="Back to one station">
+                                    <i class="fa-solid fa-compress"></i>
+                                </button>
+                                <button onclick="editSegment(${i}); event.stopImmediatePropagation();" class="text-slate-400 hover:text-blue-400" title="Edit block">
+                                    <i class="fa-solid fa-edit"></i>
+                                </button>
+                                <button onclick="removeSegment(${i}); renderTimeline(); event.stopImmediatePropagation();" class="text-slate-400 hover:text-red-400" title="Remove">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    div.innerHTML = `
                     <div class="flex gap-3 items-start w-full">
                         <div class="cursor-grab text-slate-500 pt-1 select-none">
                             <i class="fa-solid fa-grip-vertical"></i>
@@ -1411,22 +1842,27 @@
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center flex-wrap gap-x-2">
                                 <span class="text-xs font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">${startMin}–${endMin} min</span>
-                                <input type="text" placeholder="Segment name" 
-                                       value="${segment.name}" 
+                                <input type="text" placeholder="Segment name"
+                                       value="${escapeHtml(segment.name || '')}"
                                        class="flex-1 bg-transparent border-b border-slate-600 focus:border-red-500 pb-1 text-sm font-medium min-w-[120px]"
                                        onchange="updateSegment(${i}, 'name', this.value); renderTimeline();">
                                 ${categoryBadge}
                             </div>
-                            
+
                             <div class="flex gap-3 mt-2">
                                 <div class="w-20">
-                                    <input type="number" value="${segment.duration || 0}" 
+                                    <input type="number" value="${segment.duration || 0}"
                                            class="w-full bg-slate-900 border border-slate-600 rounded-xl px-2 py-1 text-sm"
                                            onchange="updateSegment(${i}, 'duration', this.value); renderSegments(); renderTimeline();">
                                 </div>
                                 <div class="flex-1 text-xs text-slate-300 bg-slate-900 border border-slate-600 rounded-xl px-3 py-1 min-h-[28px] flex items-center overflow-hidden" title="${escapedDesc}">
                                     ${descPreview}
                                 </div>
+                            </div>
+                            <div class="mt-2">
+                                <button type="button" class="text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300" onclick="splitSegmentStations(${i})">
+                                    <i class="fa-solid fa-table-columns mr-1"></i>Split into stations
+                                </button>
                             </div>
                         </div>
                         <div class="flex flex-col gap-1 mt-1">
@@ -1439,12 +1875,11 @@
                         </div>
                     </div>
                 `;
+                }
                 container.appendChild(div);
-
                 cumulative = endTime;
             });
 
-            // Also render the timeline
             renderTimeline();
         }
 
@@ -1538,6 +1973,10 @@
 
         function removeSegment(index) {
             segments.splice(index, 1);
+            if (pendingLaneAdd) {
+                if (pendingLaneAdd.segIndex === index) pendingLaneAdd = null;
+                else if (pendingLaneAdd.segIndex > index) pendingLaneAdd.segIndex -= 1;
+            }
             renderSegments();
             renderTimeline();
         }
@@ -1551,12 +1990,15 @@
             }
 
             const practiceData = {
+                id: (currentPracticeIndex !== null && practices[currentPracticeIndex] && practices[currentPracticeIndex].id)
+                    ? practices[currentPracticeIndex].id
+                    : newPlannerId('practice'),
                 date: document.getElementById('practice-date').value || null,
                 time: document.getElementById('practice-time').value || null,
                 duration: duration,
                 focus: document.getElementById('practice-focus').value,
                 location: document.getElementById('practice-location').value,
-                segments: segments
+                segments: JSON.parse(JSON.stringify(segments))
             };
 
             if (currentPracticeIndex !== null) {
@@ -1590,14 +2032,7 @@
                 name: name.trim(),
                 duration: duration,
                 focus: focus,
-                segments: currentSegments.map(s => ({
-                    // Deep copy without practice-specific instance ids if wanted, but keep structure
-                    id: Date.now() + Math.random(),
-                    name: s.name,
-                    duration: s.duration,
-                    description: s.description || '',
-                    category: s.category || null
-                }))
+                segments: deepCopySegments(currentSegments)
             };
 
             templates.push(template);
@@ -1612,8 +2047,50 @@
         }
 
         function closePracticeModal() {
+            pendingLaneAdd = null;
             document.getElementById('practice-modal').classList.remove('flex');
             document.getElementById('practice-modal').classList.add('hidden');
+        }
+
+        function describeWhoInLane(lane, playersInLane) {
+            const named = playersInLane && playersInLane.length
+                ? namesForPlayers(playersInLane)
+                : (lane.everyoneElse ? 'Nobody leftover' : 'No players tagged');
+            const pos = (lane.positions || []).join(', ');
+            if (lane.everyoneElse) return named;
+            if (pos) return named + ' · positions: ' + pos;
+            return named;
+        }
+
+        function appendSegmentText(seg, startMin, timeVal) {
+            const dur = parseInt(seg.duration, 10) || 0;
+            const endMin = startMin + dur;
+            const drillTime = formatDrillTimeRange(startMin, endMin, timeVal);
+            let text = `${drillTime} (${dur} min) - ${seg.name || 'Untitled'}\n`;
+            if (isSplitSegment(seg)) {
+                const assignment = assignLanePlayers(seg.lanes);
+                (seg.lanes || []).forEach(function (lane, li) {
+                    const who = describeWhoInLane(lane, assignment.assigned[li] || []);
+                    text += `  Station: ${lane.name || 'Untitled'} — ${who}\n`;
+                    let slotCum = 0;
+                    (lane.slots || []).forEach(function (slot) {
+                        const slotDur = parseInt(slot.duration, 10) || 0;
+                        const slotStart = startMin + slotCum;
+                        const slotEnd = slotStart + slotDur;
+                        text += `    ${formatDrillTimeRange(slotStart, slotEnd, timeVal)} (${slotDur} min) - ${slot.name || 'Untitled'}\n`;
+                        if (slot.description) text += `      ${slot.description}\n`;
+                        slotCum += slotDur;
+                    });
+                    if (!(lane.slots || []).length) {
+                        text += `    (no drill yet)\n`;
+                    }
+                });
+            } else {
+                if (seg.description) text += `  ${seg.description}\n`;
+                if (seg.category) text += `  [${seg.category}]\n`;
+            }
+            text += `\n`;
+            return text;
         }
 
         // Generate plain text for the current practice being edited
@@ -1637,20 +2114,10 @@
 
             let cumulative = 0;
             if (segments && segments.length > 0) {
-                segments.forEach((seg, i) => {
+                segments.forEach((seg) => {
                     const dur = parseInt(seg.duration) || 0;
-                    const start = cumulative;
-                    const end = cumulative + dur;
-                    const drillTime = formatDrillTimeRange(start, end, timeVal);
-                    text += `${drillTime} (${dur} min) - ${seg.name}\n`;
-                    if (seg.description) {
-                        text += `  ${seg.description}\n`;
-                    }
-                    if (seg.category) {
-                        text += `  [${seg.category}]\n`;
-                    }
-                    text += `\n`;
-                    cumulative = end;
+                    text += appendSegmentText(seg, cumulative, timeVal);
+                    cumulative = cumulative + dur;
                 });
             } else {
                 text += `(No segments added yet)\n\n`;
@@ -1806,6 +2273,50 @@
             let cumulative = 0;
             const totalSegTime = segments.reduce((sum, s) => sum + (parseInt(s.duration) || 0), 0);
 
+            function walkPdfPlan(handler) {
+                let t = 0;
+                (segments || []).forEach(function (seg, idx) {
+                    const dur = parseInt(seg.duration, 10) || 0;
+                    handler({
+                        kind: 'block',
+                        idx: idx,
+                        timeLabel: formatDrillTimeRange(t, t + dur, timeVal),
+                        name: seg.name || 'Untitled Segment',
+                        duration: dur,
+                        description: isSplitSegment(seg) ? '' : (seg.description || ''),
+                        category: isSplitSegment(seg) ? (seg.category || '') : (seg.category || ''),
+                        split: isSplitSegment(seg),
+                    });
+                    if (isSplitSegment(seg)) {
+                        const assignment = assignLanePlayers(seg.lanes);
+                        (seg.lanes || []).forEach(function (lane, li) {
+                            handler({
+                                kind: 'lane',
+                                name: lane.name || 'Station',
+                                who: describeWhoInLane(lane, assignment.assigned[li] || []),
+                            });
+                            let slotCum = 0;
+                            const slots = lane.slots || [];
+                            if (!slots.length) {
+                                handler({ kind: 'slot', timeLabel: '', name: '(no drill yet)', duration: 0, description: '' });
+                            }
+                            slots.forEach(function (slot) {
+                                const slotDur = parseInt(slot.duration, 10) || 0;
+                                handler({
+                                    kind: 'slot',
+                                    timeLabel: formatDrillTimeRange(t + slotCum, t + slotCum + slotDur, timeVal),
+                                    name: slot.name || 'Untitled',
+                                    duration: slotDur,
+                                    description: slot.description || '',
+                                });
+                                slotCum += slotDur;
+                            });
+                        });
+                    }
+                    t += dur;
+                });
+            }
+
             // --- Dry-run simulation at default sizes to decide if we need to scale ---
             let simY = y;
             const defTitleSz = 9;
@@ -1816,20 +2327,19 @@
             const defCatAdv = 8;
             const defAfterAdv = 4;
 
-            if (segments && segments.length > 0) {
-                segments.forEach((seg) => {
-                    simY += defTitleAdv;
-                    if (seg.description) {
-                        doc.setFontSize(defDescSz);
-                        const descLines = doc.splitTextToSize(seg.description, contentWidth - 80);
-                        simY += (descLines.length * defDescAdv) + 1;
-                    }
-                    if (seg.category) {
-                        simY += defCatAdv;
-                    }
-                    simY += defAfterAdv;
-                });
-            }
+            walkPdfPlan(function (row) {
+                simY += defTitleAdv;
+                const extra = row.description || row.who || '';
+                if (extra) {
+                    doc.setFontSize(defDescSz);
+                    const descLines = doc.splitTextToSize(extra, contentWidth - 80);
+                    simY += (descLines.length * defDescAdv) + 1;
+                }
+                if (row.category && row.kind === 'block') {
+                    simY += defCatAdv;
+                }
+                simY += defAfterAdv;
+            });
             const naturalSegmentsH = simY - y;
 
             const pageBottom = pageHeight - 50;
@@ -1860,65 +2370,64 @@
             const bgOff = Math.round(8 * fontScale);
 
             // --- Actual drawing with (possibly reduced) fonts ---
+            let pdfRow = 0;
             if (segments && segments.length > 0) {
-                segments.forEach((seg, idx) => {
-                    const dur = parseInt(seg.duration) || 0;
-                    const start = cumulative;
-                    const end = cumulative + dur;
-
-                    // Alternating subtle background for readability (height also scaled)
-                    if (idx % 2 === 1) {
+                walkPdfPlan(function (row) {
+                    if (pdfRow % 2 === 1 && row.kind === 'block') {
                         doc.setFillColor(248, 248, 248);
                         doc.rect(margin - 3, y - bgOff, contentWidth + 6, bgH, 'F');
                     }
+                    pdfRow += 1;
 
-                    doc.setFontSize(titleFontSize);
-                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(row.kind === 'block' ? titleFontSize : Math.max(5, titleFontSize - 1));
                     doc.setTextColor(0, 0, 0);
+                    const indent = row.kind === 'lane' ? 12 : (row.kind === 'slot' ? 24 : 0);
+                    if (row.kind === 'block') {
+                        doc.setFont('helvetica', 'bold');
+                        doc.text(row.timeLabel, margin, y);
+                    } else if (row.timeLabel) {
+                        doc.setFont('helvetica', 'normal');
+                        doc.text(row.timeLabel, margin + indent, y);
+                    }
 
-                    // Time range (clock time when available)
-                    const timeLabel = formatDrillTimeRange(start, end, timeVal);
-                    doc.setFont('helvetica', 'bold');
-                    doc.text(timeLabel, margin, y);
-
-                    // Name
-                    doc.setFont('helvetica', 'normal');
-                    let displayName = seg.name || 'Untitled Segment';
-                    const maxNameWidth = durationX - nameX - 10;
+                    doc.setFont(row.kind === 'lane' ? 'helvetica' : 'helvetica', row.kind === 'lane' ? 'bold' : 'normal');
+                    let displayName = row.name || '';
+                    if (row.kind === 'lane') displayName = 'Station: ' + displayName;
+                    const maxNameWidth = durationX - nameX - 10 - indent;
                     if (doc.getTextWidth(displayName) > maxNameWidth) {
                         while (doc.getTextWidth(displayName + '...') > maxNameWidth && displayName.length > 3) {
                             displayName = displayName.slice(0, -1);
                         }
                         displayName += '...';
                     }
-                    doc.text(displayName, nameX, y);
+                    doc.text(displayName, nameX + (row.kind === 'block' ? 0 : indent), y);
 
-                    // Duration badge (red, smaller)
-                    doc.setFontSize(durFontSize);
-                    doc.setTextColor(153, 27, 30);
-                    doc.text(`(${dur} min)`, durationX, y);
+                    if (row.kind !== 'lane' && row.duration) {
+                        doc.setFontSize(durFontSize);
+                        doc.setTextColor(153, 27, 30);
+                        doc.text(`(${row.duration} min)`, durationX, y);
+                    }
 
                     y += titleLineAdvance;
 
-                    // Description
-                    if (seg.description) {
+                    const extra = row.description || row.who || '';
+                    if (extra) {
                         doc.setFontSize(descFontSize);
                         doc.setTextColor(70, 70, 70);
-                        const descLines = doc.splitTextToSize(seg.description, contentWidth - 80);
-                        doc.text(descLines, nameX, y);
+                        const descLines = doc.splitTextToSize(extra, contentWidth - 80 - indent);
+                        doc.text(descLines, nameX + indent, y);
                         y += (descLines.length * descLineAdvance) + 1;
                     }
 
-                    // Category
-                    if (seg.category) {
+                    if (row.category && row.kind === 'block' && !row.split) {
                         doc.setFontSize(catFontSize);
                         doc.setTextColor(140, 140, 140);
-                        doc.text(`[${seg.category}]`, nameX, y);
+                        doc.text(`[${row.category}]`, nameX, y);
                         y += catAdvance;
                     }
 
                     y += afterItemAdvance;
-                    cumulative = end;
+                    if (row.kind === 'block') cumulative = cumulative + (row.duration || 0);
                 });
             } else {
                 doc.setFontSize(titleFontSize);
@@ -2025,12 +2534,34 @@
         }
 
         function addDrillAsSegment(drill) {
+            if (pendingLaneAdd) {
+                const seg = segments[pendingLaneAdd.segIndex];
+                const lane = seg && seg.lanes && seg.lanes[pendingLaneAdd.laneIndex];
+                if (lane) {
+                    const used = laneSlotSum(lane);
+                    const blockDur = parseInt(seg.duration, 10) || 0;
+                    const remaining = blockDur > 0 ? Math.max(0, blockDur - used) : 0;
+                    const duration = remaining > 0 ? Math.min(drill.duration || remaining, remaining) : (drill.duration || 10);
+                    lane.slots = lane.slots || [];
+                    lane.slots.push({
+                        id: newPlannerId('slot'),
+                        name: drill.name,
+                        duration: duration,
+                        description: drill.description || '',
+                        category: drill.category || null,
+                        drillId: drill.id
+                    });
+                    renderSegments();
+                    renderTimeline();
+                    return;
+                }
+            }
             segments.push({
                 id: Date.now(),
                 name: drill.name,
                 duration: drill.duration,
                 description: drill.description || '',
-                drillId: drill.id,           // reference to original drill
+                drillId: drill.id,
                 category: drill.category
             });
             renderSegments();
