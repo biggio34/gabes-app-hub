@@ -4,7 +4,9 @@ Private hub for three areas:
 
 - **Financial** — advisory calculators
 - **Softball** — MN Elks 16U practice, lineup, team formation, tryouts
-- **Luna Haus Salon** — salon desk, social sync (Facebook caption → Google Business copy with Book Online), booking
+- **Luna Haus Salon** — salon desk, social sync, booking
+
+Social Sync’s one-click flow (latest Facebook post → Google Business with a Book button) runs on the salon Mac. Double-click `luna-haus-social/start.command`, leave that window open, and open http://127.0.0.1:8787. The live hub page cannot drive Chrome over HTTPS; it will tell you to start the bot, and still lets you paste a caption by hand.
 
 One login. Each person only sees the areas Gabe turns on. Apps stay as they were on [gabes-app-hub.netlify.app](https://gabes-app-hub.netlify.app/); this version sits in front of them with a password.
 
