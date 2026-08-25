@@ -79,7 +79,7 @@ export const hubApps: HubApp[] = [
     file: "luna-haus-social.html",
     title: "Social Sync",
     description:
-      "One-click Facebook → Google Business on this Mac. Run start.command, then Sync now.",
+      "Turn a Luna Haus Facebook post into a Google Business post with Book Online.",
     area: "luna-haus",
   },
   {
