@@ -76,95 +76,6 @@ function playerIdentityKey(player: JsonPlayer) {
   return `${normalized}|${String(player.birthdate || "").trim()}`;
 }
 
-function playerRecordWeight(player: JsonPlayer) {
-  let n = 0;
-  if (player.number) n += 2;
-  if (player.photo) n += 3;
-  if (player.position) n += 1;
-  if (player.assignedTeamId) n += 1;
-  if (player.birthdate) n += 1;
-  if (player.scores && typeof player.scores === "object" && Object.keys(player.scores).length) n += 2;
-  return n;
-}
-
-function mergePlayerPair(preferred: JsonPlayer, other: JsonPlayer): JsonPlayer {
-  const merged: JsonPlayer = {
-    ...other,
-    ...preferred,
-    scores: preferred.scores || other.scores,
-    photo: preferred.photo || other.photo,
-  };
-  merged.assignedTeamId =
-    preferred.assignedTeamId || other.assignedTeamId || merged.assignedTeamId || null;
-  return merged;
-}
-
-function rewritePlayerIdList(ids: unknown, aliases: Record<string, string>) {
-  if (!Array.isArray(ids)) return ids;
-  const seen = new Set<string>();
-  const next: unknown[] = [];
-  ids.forEach((id) => {
-    const raw = String(id || "");
-    const keep = aliases[raw] || raw;
-    if (!keep || seen.has(keep)) return;
-    seen.add(keep);
-    next.push(keep);
-  });
-  return next;
-}
-
-function rewritePlayerIdRefs(payload: Record<string, unknown>, aliases: Record<string, string>) {
-  const keys = Object.keys(aliases);
-  if (!keys.length) return;
-  const walkSegments = (segments: unknown) => {
-    if (!Array.isArray(segments)) return;
-    segments.forEach((segment) => {
-      const lanes = (segment as { lanes?: unknown })?.lanes;
-      if (!Array.isArray(lanes)) return;
-      lanes.forEach((lane) => {
-        const row = lane as { playerIds?: unknown };
-        if (Array.isArray(row.playerIds)) {
-          row.playerIds = rewritePlayerIdList(row.playerIds, aliases);
-        }
-      });
-    });
-  };
-  (["practices", "templates"] as const).forEach((key) => {
-    const list = payload[key];
-    if (!Array.isArray(list)) return;
-    list.forEach((item) => {
-      walkSegments((item as { segments?: unknown })?.segments);
-    });
-  });
-}
-
-function collapseDuplicatePlayers(players: JsonPlayer[]) {
-  const aliases: Record<string, string> = {};
-  const kept: JsonPlayer[] = [];
-  const byKey = new Map<string, JsonPlayer>();
-  const seenIds = new Set<string>();
-  players.forEach((player) => {
-    if (!player?.id) return;
-    const id = String(player.id);
-    if (seenIds.has(id)) return;
-    const key = playerIdentityKey(player);
-    if (key && byKey.has(key)) {
-      const existing = byKey.get(key)!;
-      const preferNew = playerRecordWeight(player) > playerRecordWeight(existing);
-      const winner = preferNew ? mergePlayerPair(player, existing) : mergePlayerPair(existing, player);
-      winner.id = existing.id;
-      if (id !== String(existing.id)) aliases[id] = String(existing.id);
-      Object.assign(existing, winner);
-      existing.id = existing.id;
-      return;
-    }
-    seenIds.add(id);
-    if (key) byKey.set(key, player);
-    kept.push(player);
-  });
-  return { players: kept, aliases };
-}
-
 function mergePlayerLists(jsonPlayers: JsonPlayer[], dbPlayers: JsonPlayer[]) {
   const byId = new Map<string, JsonPlayer>();
   jsonPlayers.forEach((player) => {
@@ -173,28 +84,52 @@ function mergePlayerLists(jsonPlayers: JsonPlayer[], dbPlayers: JsonPlayer[]) {
   dbPlayers.forEach((player) => {
     if (!player?.id) return;
     const current = byId.get(String(player.id));
-    if (!current) {
-      byId.set(String(player.id), player);
+    if (current) {
+      const merged: JsonPlayer = {
+        ...current,
+        ...player,
+        scores: current.scores || player.scores,
+        photo: current.photo || player.photo,
+      };
+      merged.assignedTeamId =
+        current.assignedTeamId || player.assignedTeamId || merged.assignedTeamId || null;
+      byId.set(String(player.id), merged);
       return;
     }
-    const merged: JsonPlayer = {
-      ...current,
-      ...player,
-      scores: current.scores || player.scores,
-      photo: current.photo || player.photo,
-    };
-    merged.assignedTeamId =
-      current.assignedTeamId || player.assignedTeamId || merged.assignedTeamId || null;
-    byId.set(String(player.id), merged);
+    // JSON is the roster. Do not resurrect girls who were deleted from it.
+    if (jsonPlayers.length) {
+      const key = playerIdentityKey(player);
+      if (!key) return;
+      for (const [id, current] of byId) {
+        if (playerIdentityKey(current) !== key) continue;
+        const merged: JsonPlayer = {
+          ...player,
+          ...current,
+          scores: current.scores || player.scores,
+          photo: current.photo || player.photo,
+        };
+        merged.id = id;
+        merged.assignedTeamId =
+          current.assignedTeamId || player.assignedTeamId || merged.assignedTeamId || null;
+        byId.set(id, merged);
+        return;
+      }
+      return;
+    }
+    byId.set(String(player.id), player);
   });
   return [...byId.values()];
 }
 
-function collapsePlayersInPayload(payload: Record<string, unknown>) {
-  const collapsed = collapseDuplicatePlayers(asPlayers(payload.players));
-  payload.players = collapsed.players;
-  rewritePlayerIdRefs(payload, collapsed.aliases);
-  return payload;
+function dropRemovedPlayersFromPayload(payload: Record<string, unknown>) {
+  const removed = new Set(
+    (Array.isArray(payload.removedPlayerKeys) ? payload.removedPlayerKeys : []).map(String),
+  );
+  if (!removed.size) return;
+  payload.players = asPlayers(payload.players).filter((player) => {
+    const key = playerIdentityKey(player);
+    return !key || !removed.has(key);
+  });
 }
 
 async function listSqlitePlayers(clubId: string) {
@@ -332,7 +267,7 @@ export async function readSoftballState(clubId: string, teamId: string) {
     }
     const payload = { ...(remote.payload || {}) };
     payload.players = mergePlayerLists(asPlayers(payload.players), dbPlayers);
-    collapsePlayersInPayload(payload);
+    dropRemovedPlayersFromPayload(payload);
     return { state: payload, updatedAt: remote.updatedAt, stored: "supabase" as const };
   }
 
@@ -342,7 +277,7 @@ export async function readSoftballState(clubId: string, teamId: string) {
   const payload = row ? (JSON.parse(row.payload) as Record<string, unknown>) : {};
   const dbPlayers = await listSqlitePlayers(clubId);
   payload.players = mergePlayerLists(asPlayers(payload.players), dbPlayers);
-  collapsePlayersInPayload(payload);
+  dropRemovedPlayersFromPayload(payload);
   if (!row && !dbPlayers.length) {
     return { state: null as Record<string, unknown> | null, updatedAt: null, stored: "sqlite" as const };
   }
@@ -364,7 +299,7 @@ export async function writeSoftballState(
   }
   const now = new Date().toISOString();
   payload.updatedAt = Date.now();
-  collapsePlayersInPayload(payload);
+  dropRemovedPlayersFromPayload(payload);
 
   if (isSupabaseConfigured()) {
     const supabase = getSupabase();

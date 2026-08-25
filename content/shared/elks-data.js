@@ -694,6 +694,7 @@
     if (!state.practices) state.practices = [];
     if (!state.drills) state.drills = [];
     if (!state.templates) state.templates = [];
+    if (!Array.isArray(state.removedPlayerKeys)) state.removedPlayerKeys = [];
     if (!state.updatedAt) state.updatedAt = 0;
     state.players = state.players.map(normalizePlayer);
 
@@ -989,17 +990,55 @@
     return normalizePlayer(merged);
   }
 
-  function mergePlayerArrays(primary, secondary) {
-    const byId = new Map();
-    (secondary || []).forEach((player) => {
-      if (player && player.id) byId.set(String(player.id), player);
+  function mergeRemovedPlayerKeys() {
+    const seen = new Set();
+    const next = [];
+    Array.prototype.slice.call(arguments).forEach(function (list) {
+      (list || []).forEach(function (key) {
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        next.push(key);
+      });
     });
-    (primary || []).forEach((player) => {
+    return next;
+  }
+
+  function rememberRemovedPlayer(state, player) {
+    if (!state) return;
+    if (!Array.isArray(state.removedPlayerKeys)) state.removedPlayerKeys = [];
+    const key = playerIdentityKey(player);
+    if (!key) return;
+    if (state.removedPlayerKeys.indexOf(key) < 0) state.removedPlayerKeys.push(key);
+  }
+
+  function dropRemovedPlayers(state) {
+    if (!state || !Array.isArray(state.players)) return false;
+    const removed = new Set(state.removedPlayerKeys || []);
+    if (!removed.size) return false;
+    const before = state.players.length;
+    state.players = state.players.filter(function (player) {
+      const key = playerIdentityKey(player);
+      return !key || !removed.has(key);
+    });
+    return state.players.length !== before;
+  }
+
+  function mergePlayerArrays(membership, extras) {
+    const extraById = new Map();
+    const extraByKey = new Map();
+    (extras || []).forEach(function (player) {
       if (!player || !player.id) return;
-      const existing = byId.get(String(player.id));
-      byId.set(String(player.id), existing ? mergePlayerRecord(player, existing) : player);
+      extraById.set(String(player.id), player);
+      const key = playerIdentityKey(player);
+      if (key && !extraByKey.has(key)) extraByKey.set(key, player);
     });
-    return [...byId.values()].map(normalizePlayer);
+    return (membership || [])
+      .filter(Boolean)
+      .map(function (player) {
+        const extra =
+          extraById.get(String(player.id)) || extraByKey.get(playerIdentityKey(player));
+        return extra ? mergePlayerRecord(player, extra) : normalizePlayer(player);
+      });
   }
 
   function rewritePlayerIdList(ids, aliases) {
@@ -1084,7 +1123,11 @@
     const remoteState = ensureDefaults(remote || emptyState());
     const next = Object.assign({}, localState, remoteState);
     next.players = mergePlayerArrays(remoteState.players, localState.players);
-    collapseDuplicatePlayers(next);
+    next.removedPlayerKeys = mergeRemovedPlayerKeys(
+      localState.removedPlayerKeys,
+      remoteState.removedPlayerKeys,
+    );
+    dropRemovedPlayers(next);
     const teamsById = new Map();
     (localState.teams || []).forEach((team) => {
       if (team && team.id) teamsById.set(team.id, team);
@@ -1170,54 +1213,19 @@
     el.appendChild(select);
   }
 
-  const FRANSEN_16U_SEED = [
-    { firstName: 'Annabelle', lastName: 'Ackerman', number: '16' },
-    { firstName: 'Emily', lastName: 'Artmann', number: '4' },
-    { firstName: 'Macie', lastName: 'Backman', number: '7' },
-    { firstName: 'Madison', lastName: 'Burggraff', number: '11' },
-    { firstName: 'Hailee', lastName: 'Clinton', number: '13' },
-    { firstName: 'Savanah', lastName: 'Emmans', number: '45' },
-    { firstName: 'Tenley', lastName: 'Fransen', number: '10' },
-    { firstName: 'Molly', lastName: 'Johnson', number: '27' },
-    { firstName: 'Kiana', lastName: 'Pegues', number: '17' },
-    { firstName: 'Avaiyah', lastName: 'Sandford', number: '9' },
-    { firstName: 'Sidney', lastName: 'Tischner', number: '14' },
-    { firstName: 'MaKayla', lastName: 'Uttke', number: '12' },
-    { firstName: 'Paisyn', lastName: 'Wiley', number: '8' },
-  ];
-
   function restoreFransenRoster(state) {
-    if (!state || state.restoredFransen16u) return false;
-    if (!state.players) state.players = [];
-    let added = 0;
-    FRANSEN_16U_SEED.forEach((fields) => {
-      const name = joinName(fields.firstName, fields.lastName);
-      if (findPlayerByIdentity(state.players, name, '')) return;
-      const player = createPlayer({
-        firstName: fields.firstName,
-        lastName: fields.lastName,
-        name: name,
-        number: fields.number,
-        assignedTeamId: 'team-16u-fransen',
-      });
-      state.players.push(player);
-      added += 1;
-    });
-    state.restoredFransen16u = true;
-    return added > 0;
+    if (!state) return false;
+    // The original 13-name seed already ran on live data. Filling in "missing"
+    // seed names put Ackerman and Tischner back after they were removed.
+    if (!state.restoredFransen16u) state.restoredFransen16u = true;
+    return false;
   }
 
   function pinLoosePlayersToFransen(state) {
-    if (!state || state.pinnedLoosePlayersToFransen16u) return false;
-    let changed = false;
-    (state.players || []).forEach((player) => {
-      if (!player.assignedTeamId) {
-        player.assignedTeamId = 'team-16u-fransen';
-        changed = true;
-      }
-    });
-    state.pinnedLoosePlayersToFransen16u = true;
-    return changed;
+    if (!state) return false;
+    // Same one-time pin: do not send unassigned girls back to 16U Fransen.
+    if (!state.pinnedLoosePlayersToFransen16u) state.pinnedLoosePlayersToFransen16u = true;
+    return false;
   }
 
   function load() {
@@ -1227,13 +1235,9 @@
       state = migrated || emptyState();
     }
     state = ensureDefaults(state);
-    const before = assignmentFingerprint(state);
     state = syncHubTeams(state);
-    const remapped = assignmentFingerprint(state) !== before;
-    const seeded = restoreFransenRoster(state);
-    const pinned = pinLoosePlayersToFransen(state);
-    const collapsed = collapseDuplicatePlayers(state);
-    if (seeded || pinned || remapped || collapsed) saveState(state);
+    dropRemovedPlayers(state);
+    // Never persist on load. Live roster only changes when a user saves.
     return state;
   }
 
@@ -1305,11 +1309,17 @@
       }
     }
     const p = createPlayer(fields);
+    const key = playerIdentityKey(p);
+    if (key && Array.isArray(state.removedPlayerKeys)) {
+      state.removedPlayerKeys = state.removedPlayerKeys.filter(function (item) { return item !== key; });
+    }
     state.players.push(p);
     return p;
   }
 
   function deletePlayer(state, playerId) {
+    const player = (state.players || []).find(function (item) { return item.id === playerId; });
+    if (player) rememberRemovedPlayer(state, player);
     state.players = state.players.filter((p) => p.id !== playerId);
     state.tryouts.forEach((t) => {
       if (t.evaluations && t.evaluations[playerId]) {
@@ -1363,20 +1373,15 @@
       const remotePlayers = (data.state.players || []).length;
       const localPlayers = ((local && local.players) || []).length;
       if (remotePlayers === 0 && localPlayers > 0) {
-        pushToCloud(local);
         return;
       }
-      if (!local || remoteUpdated >= localUpdated || remotePlayers > localPlayers) {
+      if (!local || remoteUpdated >= localUpdated) {
         const next = mergeSharedStates(local, data.state);
-        const remapped = assignmentFingerprint(next) !== assignmentFingerprint(data.state);
-        const seeded = restoreFransenRoster(next) || pinLoosePlayersToFransen(next);
-        const collapsed = collapseDuplicatePlayers(next);
-        saveState(next, seeded || remapped || collapsed ? undefined : { skipCloud: true });
+        dropRemovedPlayers(next);
+        saveState(next, { skipCloud: true });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('elks-data-updated'));
         }
-      } else {
-        pushToCloud(local);
       }
     } catch (e) {
       console.warn('ElksData: cloud pull failed', e);
