@@ -429,7 +429,7 @@
                                 <span>Custom</span>
                             </button>
                         </div>
-                        <p class="text-[11px] text-slate-500 mb-1">A block can stay one drill, or split into parallel stations by player and/or position. Untagged girls land in Everyone else.</p>
+                        <p class="text-[11px] text-slate-500 mb-1">A block can stay one drill, or split into parallel stations by player and/or position. Only girls on this practice's team are listed. Untagged girls on that team land in Everyone else.</p>
                         <div id="lane-target-banner" class="hidden mb-2 text-xs bg-red-950/60 border border-red-800 text-red-200 rounded-xl px-3 py-1.5 flex items-center justify-between gap-2"></div>
 
                         <!-- Timeline -->
@@ -653,6 +653,13 @@
                 }
                 if (hint) hint.classList.add('hidden');
             }
+
+            select.onchange = function () {
+                syncPlannerRosterToPracticeTeam();
+                renderSegments();
+                renderTimeline();
+            };
+            syncPlannerRosterToPracticeTeam();
         }
 
         function selectedPracticeTeamId() {
@@ -683,13 +690,37 @@
         let plannerRosterCache = [];
         let pendingLaneAdd = null;
 
+        function practiceBuilderTeamId() {
+            return selectedPracticeTeamId();
+        }
+
         function refreshPlannerRoster() {
             if (!window.ElksData) {
                 plannerRosterCache = [];
                 return;
             }
             const shared = ElksData.load();
-            plannerRosterCache = ElksData.playersForTeam(shared, currentPlannerTeamId()) || [];
+            const teamId = practiceBuilderTeamId();
+            plannerRosterCache = teamId ? (ElksData.playersForTeam(shared, teamId) || []) : [];
+        }
+
+        function pruneLanePlayersToRoster() {
+            const allowed = new Set(
+                plannerRosterCache
+                    .map(function (player) { return player && player.id; })
+                    .filter(Boolean)
+            );
+            (segments || []).forEach(function (segment) {
+                (segment.lanes || []).forEach(function (lane) {
+                    if (!lane || !Array.isArray(lane.playerIds)) return;
+                    lane.playerIds = lane.playerIds.filter(function (id) { return allowed.has(id); });
+                });
+            });
+        }
+
+        function syncPlannerRosterToPracticeTeam() {
+            refreshPlannerRoster();
+            pruneLanePlayersToRoster();
         }
 
         function playerDisplayName(player) {
@@ -1437,7 +1468,6 @@
             // Create a fresh practice from the template (instance data)
             currentPractice = null;
             currentPracticeIndex = null;
-            refreshPlannerRoster();
             pendingLaneAdd = null;
             segments = deepCopySegments(tpl.segments || []);
 
@@ -1693,7 +1723,6 @@
             currentPracticeIndex = null;
             segments = [];
             pendingLaneAdd = null;
-            refreshPlannerRoster();
 
             document.getElementById('modal-title').textContent = 'New Practice';
             document.getElementById('practice-date').value = '';
@@ -1731,7 +1760,6 @@
             currentPracticeIndex = index;
             currentPractice = practices[index];
             pendingLaneAdd = null;
-            refreshPlannerRoster();
             segments = currentPractice.segments ? JSON.parse(JSON.stringify(currentPractice.segments)) : [];
 
             document.getElementById('modal-title').textContent = 'Edit Practice';
