@@ -47,7 +47,8 @@ export const hubApps: HubApp[] = [
     slug: "lineup",
     file: "lineup.html",
     title: "Lineup Builder",
-    description: "Game lineups from the Team Roster for the team you pick.",
+    description:
+      "Game lineups from the Team Roster, with a playing-time ledger that gates lock.",
     area: "softball",
   },
   {
@@ -121,6 +122,7 @@ export function rewriteAppHtml(html: string) {
     next = next.replaceAll(`href="${from}"`, `href="${to}"`);
   }
   next = next.replaceAll("../shared/elks-data.js", "/shared/elks-data.js");
+  next = next.replaceAll("../shared/playing-time.js", "/shared/playing-time.js");
   next = next.replaceAll("../sample-roster-import.csv", "/shared/sample-roster-import.csv");
   next = next.replaceAll("../index.html", "/");
   return next;

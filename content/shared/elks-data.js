@@ -1,6 +1,8 @@
 /**
  * MN Elks shared roster + tryout + team formation data.
- * Used by: tryout evaluator, team formation, lineup, practice planner
+ * Used by: tryout evaluator, team formation, lineup, practice planner.
+ * Lineup Builder also stores playingTime (innings/positions + coach-only lock reasons)
+ * on this same payload — do not invent a second roster.
  * Storage key: mn-elks-shared-v1
  *
  * Players are canonical and shared. Team assignment lives on the player.
@@ -48,6 +50,7 @@
       practices: [],
       drills: [],
       templates: [],
+      playingTime: { version: 1, games: [], lockReasons: [] },
       updatedAt: 0,
       version: 1,
     };
@@ -672,6 +675,11 @@
     if (!state.practices) state.practices = [];
     if (!state.drills) state.drills = [];
     if (!state.templates) state.templates = [];
+    if (!state.playingTime || typeof state.playingTime !== 'object') {
+      state.playingTime = { version: 1, games: [], lockReasons: [] };
+    }
+    if (!Array.isArray(state.playingTime.games)) state.playingTime.games = [];
+    if (!Array.isArray(state.playingTime.lockReasons)) state.playingTime.lockReasons = [];
     if (!state.updatedAt) state.updatedAt = 0;
     state.players = state.players.map(normalizePlayer);
 
@@ -995,6 +1003,7 @@
     state.practices = next.practices;
     state.drills = next.drills;
     state.templates = next.templates;
+    state.playingTime = next.playingTime;
     state.updatedAt = next.updatedAt;
     state.version = next.version;
     saveState(state);
@@ -1007,6 +1016,8 @@
       number: player.number ? Number(player.number) || player.number : undefined,
       notes: player.evalNotes || '',
       assignedTeamId: player.assignedTeamId || null,
+      position: player.position || '',
+      position2: player.position2 || '',
     };
   }
 
@@ -1020,7 +1031,8 @@
 
   async function pullFromCloud() {
     try {
-      const response = await fetch('/api/softball/state');
+      const parentView = global.PlayingTime && PlayingTime.isParentView && PlayingTime.isParentView();
+      const response = await fetch('/api/softball/state' + (parentView ? '?view=parent' : ''));
       if (!response.ok) return;
       const data = await response.json();
       if (!data || !data.state) return;

@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="../shared/elks-data.js"></script>
+  <script src="../shared/playing-time.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
     
@@ -147,6 +148,7 @@
               <span class="text-red-700 text-xl font-semibold tracking-tight">Lineup</span>
             </div>
             <div id="hub-team-picker" class="text-[10px] text-red-700 -mt-0.5 font-medium"></div>
+            <div id="pt-lock-chip" class="mt-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 inline-block">Unlocked</div>
           </div>
         </div>
 
@@ -181,6 +183,36 @@
             <span class="hidden sm:inline">Games</span>
           </button>
 
+          <button type="button" id="pt-ledger-btn"
+                  class="flex items-center gap-x-1.5 px-3 py-1.5 rounded-2xl border border-stone-300 hover:bg-stone-50 text-sm font-medium"
+                  title="Playing-time ledger">
+            <i class="fa-solid fa-clock"></i>
+            <span class="hidden lg:inline">Ledger</span>
+          </button>
+          <button type="button" id="pt-lock-btn"
+                  class="flex items-center gap-x-1.5 px-3 py-1.5 rounded-2xl bg-red-800 hover:bg-red-900 text-white text-sm font-semibold"
+                  title="Lock this lineup after sit-streak and position checks">
+            <i class="fa-solid fa-lock"></i>
+            <span class="hidden sm:inline">Lock</span>
+          </button>
+          <button type="button" id="pt-parent-btn"
+                  class="flex items-center gap-x-1.5 px-3 py-1.5 rounded-2xl border border-stone-300 hover:bg-stone-50 text-sm font-medium"
+                  title="One-tap last-N games summary for a parent conversation">
+            <i class="fa-solid fa-comments"></i>
+            <span class="hidden lg:inline">Parent summary</span>
+          </button>
+          <button type="button" id="pt-club-btn"
+                  class="hidden inline-flex items-center gap-x-1.5 px-3 py-1.5 rounded-2xl border border-stone-300 hover:bg-stone-50 text-sm font-medium"
+                  title="Club view of teams far off fair playing time">
+            <i class="fa-solid fa-sitemap"></i>
+            <span class="hidden lg:inline">Club</span>
+          </button>
+          <button type="button" id="pt-view-btn"
+                  class="px-3 py-1.5 rounded-2xl border border-stone-300 hover:bg-stone-50 text-xs font-semibold"
+                  title="Switch coach / parent view">
+            Parent view
+          </button>
+
           <button onclick="exportPNG()" 
                   class="flex items-center gap-x-2 px-4 py-2 rounded-2xl bg-red-700 hover:bg-red-800 active:bg-black transition-colors text-white text-sm font-semibold shadow">
             <i class="fa-solid fa-camera mr-1.5"></i>
@@ -199,6 +231,7 @@
     </div>
 
     <div class="p-1 max-w-screen-xl mx-auto">
+      <div id="pt-fairness-banner" class="hidden mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"></div>
       <!-- Quick Actions (Batting Mode moved to top header) -->
       <div class="flex items-center justify-end gap-2 mb-3">
         <button onclick="clearAll()" 
@@ -469,6 +502,63 @@
       <div class="mt-3 text-[10px] text-stone-500 px-1">
         Switch between games for different matchups. The app remembers the batting order, defense, who is out, and mode for each.
       </div>
+    </div>
+  </div>
+
+  <div id="pt-ledger-modal" class="hidden fixed inset-0 bg-black/60 items-end md:items-center justify-center z-50">
+    <div class="bg-white w-full md:w-[560px] md:rounded-3xl md:m-4 rounded-t-3xl p-4 relative max-h-[85vh] overflow-auto">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-lg">Playing-time ledger</h3>
+        <button type="button" onclick="document.getElementById('pt-ledger-modal').classList.add('hidden'); document.getElementById('pt-ledger-modal').classList.remove('flex')" class="text-2xl leading-none text-stone-400 hover:text-stone-600">×</button>
+      </div>
+      <div id="pt-ledger-body"></div>
+    </div>
+  </div>
+
+  <div id="pt-entry-modal" class="hidden fixed inset-0 bg-black/60 items-end md:items-center justify-center z-[55]">
+    <div class="bg-white w-full md:w-[720px] md:rounded-3xl md:m-4 rounded-t-3xl p-4 relative max-h-[90vh] overflow-auto">
+      <div class="flex items-center justify-between mb-3">
+        <h3 id="pt-entry-title" class="font-semibold text-lg">Log innings</h3>
+        <button type="button" onclick="document.getElementById('pt-entry-modal').classList.add('hidden'); document.getElementById('pt-entry-modal').classList.remove('flex')" class="text-2xl leading-none text-stone-400 hover:text-stone-600">×</button>
+      </div>
+      <div id="pt-entry-body"></div>
+    </div>
+  </div>
+
+  <div id="pt-lock-modal" class="hidden fixed inset-0 bg-black/60 items-end md:items-center justify-center z-[60]">
+    <div class="bg-white w-full md:w-[520px] md:rounded-3xl md:m-4 rounded-t-3xl p-4 relative max-h-[85vh] overflow-auto">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-lg">Lock lineup</h3>
+        <button type="button" onclick="document.getElementById('pt-lock-modal').classList.add('hidden'); document.getElementById('pt-lock-modal').classList.remove('flex')" class="text-2xl leading-none text-stone-400 hover:text-stone-600">×</button>
+      </div>
+      <div id="pt-lock-body"></div>
+    </div>
+  </div>
+
+  <div id="pt-parent-modal" class="hidden fixed inset-0 bg-black/60 items-end md:items-center justify-center z-50">
+    <div class="bg-white w-full md:w-[520px] md:rounded-3xl md:m-4 rounded-t-3xl p-4 relative max-h-[85vh] overflow-auto">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-lg">Parent conversation</h3>
+        <button type="button" onclick="document.getElementById('pt-parent-modal').classList.add('hidden'); document.getElementById('pt-parent-modal').classList.remove('flex')" class="text-2xl leading-none text-stone-400 hover:text-stone-600">×</button>
+      </div>
+      <label class="text-xs text-stone-500">Last
+        <select id="pt-parent-n" class="ml-1 border border-stone-300 rounded-lg px-2 py-1 text-sm">
+          <option value="3">3 games</option>
+          <option value="5" selected>5 games</option>
+          <option value="7">7 games</option>
+        </select>
+      </label>
+      <div id="pt-parent-body" class="mt-3"></div>
+    </div>
+  </div>
+
+  <div id="pt-club-modal" class="hidden fixed inset-0 bg-black/60 items-end md:items-center justify-center z-50">
+    <div class="bg-white w-full md:w-[520px] md:rounded-3xl md:m-4 rounded-t-3xl p-4 relative max-h-[85vh] overflow-auto">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-lg">Club outliers</h3>
+        <button type="button" onclick="document.getElementById('pt-club-modal').classList.add('hidden'); document.getElementById('pt-club-modal').classList.remove('flex')" class="text-2xl leading-none text-stone-400 hover:text-stone-600">×</button>
+      </div>
+      <div id="pt-club-body"></div>
     </div>
   </div>
 
@@ -896,6 +986,7 @@
       if (gmodal && !gmodal.classList.contains("hidden")) {
         renderGamesList();
       }
+      if (window.PlayingTime && PlayingTime.refreshChrome) PlayingTime.refreshChrome();
     }
 
     function updateCounts() {
@@ -2791,6 +2882,18 @@
       getState: () => state,
       getGames: () => games || []
     };
+
+    if (window.PlayingTime && PlayingTime.mountLineupLedger) {
+      PlayingTime.mountLineupLedger({
+        getLineup: function () {
+          return { state: state, games: games, currentGameId: currentGameId };
+        },
+        onLocked: function () {
+          saveState();
+          renderAll();
+        }
+      });
+    }
 
     init();
   </script>

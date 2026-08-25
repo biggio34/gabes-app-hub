@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getSupabase, isSupabaseConfigured } from "@/lib/db/supabase";
 import { softballContext } from "@/lib/softball";
+import {
+  preserveCoachPrivate,
+  stripCoachPrivate,
+} from "@/lib/softball-playing-time";
 
 export const runtime = "nodejs";
 
@@ -34,11 +38,16 @@ async function requireSoftball() {
   return { context };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireSoftball();
   if (auth.error) return auth.error;
+  const parentView =
+    new URL(request.url).searchParams.get("view") === "parent";
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ state: null, team: auth.context });
+    return NextResponse.json({
+      state: stripCoachPrivate(null, parentView),
+      team: auth.context,
+    });
   }
   const supabase = getSupabase();
   if (!supabase) {
@@ -72,7 +81,7 @@ export async function GET() {
   }
   const row = data as SoftballRow | null;
   return NextResponse.json({
-    state: row?.payload ?? null,
+    state: stripCoachPrivate(row?.payload ?? null, parentView),
     team: auth.context,
     updatedAt: row?.updated_at ?? null,
   });
@@ -94,13 +103,17 @@ export async function PUT(request: Request) {
   if (!body?.state || typeof body.state !== "object") {
     return NextResponse.json({ error: "Missing softball data." }, { status: 400 });
   }
-  const payload = { ...body.state };
+  const clubRow = await readStateRow(supabase, auth.context.clubId);
+  const legacyRow =
+    auth.context.teamId && auth.context.teamId !== auth.context.clubId
+      ? await readStateRow(supabase, auth.context.teamId)
+      : clubRow;
+  let payload = preserveCoachPrivate(
+    (clubRow.data as SoftballRow | null)?.payload ||
+      (legacyRow.data as SoftballRow | null)?.payload,
+    { ...body.state },
+  );
   if (payloadPlayers(payload).length === 0) {
-    const clubRow = await readStateRow(supabase, auth.context.clubId);
-    const legacyRow =
-      auth.context.teamId && auth.context.teamId !== auth.context.clubId
-        ? await readStateRow(supabase, auth.context.teamId)
-        : clubRow;
     const clubPlayers = payloadPlayers((clubRow.data as SoftballRow | null)?.payload);
     const legacyPlayers = payloadPlayers((legacyRow.data as SoftballRow | null)?.payload);
     const recovered = clubPlayers.length ? clubPlayers : legacyPlayers;
