@@ -408,6 +408,13 @@
                                    class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm">
                         </div>
                     </div>
+                    <div class="mt-3" id="practice-team-wrap">
+                        <label class="section-header block mb-0.5 text-xs" for="practice-team">Team</label>
+                        <select id="practice-team"
+                                class="w-full md:max-w-md bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm"></select>
+                        <p id="practice-team-readonly" class="hidden text-sm text-slate-200 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 md:max-w-md"></p>
+                        <p id="practice-team-hint" class="hidden text-[11px] text-slate-500 mt-1">You can move this practice to another team you are assigned to.</p>
+                    </div>
                 </div>
 
                 <!-- Main two-column area -->
@@ -530,17 +537,130 @@
             return (window.HUB_SOFTBALL && window.HUB_SOFTBALL.teamId) || '';
         }
 
-        function practicesForTeam() {
+        function assignableTeams() {
+            const teams = (typeof HUB_SOFTBALL !== 'undefined' && Array.isArray(HUB_SOFTBALL.teams))
+                ? HUB_SOFTBALL.teams
+                : [];
+            return teams.filter((team) => team && team.id && team.id !== 'all' && team.id !== 'unassigned');
+        }
+
+        function plannerRealTeamFilter() {
             const teamId = currentPlannerTeamId();
+            if (window.ElksData && ElksData.realTeamId) {
+                return ElksData.realTeamId(teamId);
+            }
+            if (!teamId || teamId === 'all' || teamId === 'unassigned') return null;
+            return teamId;
+        }
+
+        function normalizePracticeTeamId(teamId) {
+            if (!teamId || teamId === 'all' || teamId === 'unassigned') return null;
+            if (window.ElksData && ElksData.canonicalTeamId) {
+                return ElksData.canonicalTeamId(teamId) || teamId;
+            }
+            return teamId;
+        }
+
+        function isAssignableTeamId(teamId) {
+            const id = normalizePracticeTeamId(teamId);
+            if (!id) return false;
+            return assignableTeams().some((team) => team.id === id);
+        }
+
+        function defaultPracticeTeamId() {
+            const fromPicker = plannerRealTeamFilter();
+            if (fromPicker && isAssignableTeamId(fromPicker)) {
+                return normalizePracticeTeamId(fromPicker);
+            }
+            const teams = assignableTeams();
+            return teams.length ? teams[0].id : null;
+        }
+
+        function practiceTeamLabel(teamId) {
+            const id = normalizePracticeTeamId(teamId);
+            if (!id) return '';
+            const match = assignableTeams().find((team) => team.id === id);
+            if (match) return match.clubName ? `${match.clubName} · ${match.name}` : match.name;
+            if (window.HUB_SOFTBALL && HUB_SOFTBALL.teamId === id) {
+                const name = HUB_SOFTBALL.teamName || id;
+                const club = HUB_SOFTBALL.clubName;
+                return club ? `${club} · ${name}` : name;
+            }
+            return id;
+        }
+
+        function practicesForTeam() {
+            const realFilter = plannerRealTeamFilter();
+            const allowed = new Set(assignableTeams().map((team) => team.id));
+            const filterId = normalizePracticeTeamId(realFilter);
             return practices
                 .map((practice, index) => ({ practice, index }))
-                .filter(({ practice }) => !teamId || !practice.teamId || practice.teamId === teamId);
+                .filter(({ practice }) => {
+                    const pid = normalizePracticeTeamId(practice.teamId);
+                    if (allowed.size && pid && !allowed.has(pid)) return false;
+                    if (filterId) return !pid || pid === filterId;
+                    return true;
+                });
         }
 
         function stampPracticeTeam(practice) {
-            const teamId = currentPlannerTeamId();
-            if (teamId && !practice.teamId) practice.teamId = teamId;
+            const existing = normalizePracticeTeamId(practice.teamId);
+            if (existing && isAssignableTeamId(existing)) {
+                practice.teamId = existing;
+                return practice;
+            }
+            const teamId = defaultPracticeTeamId();
+            if (teamId) practice.teamId = teamId;
+            else delete practice.teamId;
             return practice;
+        }
+
+        function fillPracticeTeamField(selectedId) {
+            const select = document.getElementById('practice-team');
+            const readonly = document.getElementById('practice-team-readonly');
+            const hint = document.getElementById('practice-team-hint');
+            if (!select) return;
+
+            const teams = assignableTeams();
+            const preferred = normalizePracticeTeamId(selectedId);
+            const chosen = (preferred && teams.some((team) => team.id === preferred))
+                ? preferred
+                : defaultPracticeTeamId();
+
+            select.innerHTML = teams.length
+                ? teams.map((team) => {
+                    const label = team.clubName ? `${team.clubName} · ${team.name}` : team.name;
+                    return `<option value="${escapeHtml(team.id)}">${escapeHtml(label)}</option>`;
+                }).join('')
+                : '<option value="">No team assigned to you</option>';
+            if (chosen) select.value = chosen;
+
+            const multi = teams.length > 1;
+            if (multi) {
+                select.classList.remove('hidden');
+                if (readonly) readonly.classList.add('hidden');
+                if (hint) hint.classList.remove('hidden');
+            } else {
+                select.classList.add('hidden');
+                if (readonly) {
+                    readonly.classList.remove('hidden');
+                    if (!teams.length) {
+                        readonly.textContent = 'No team assigned to you yet';
+                    } else {
+                        const team = teams[0];
+                        readonly.textContent = team.clubName ? `${team.clubName} · ${team.name}` : team.name;
+                    }
+                }
+                if (hint) hint.classList.add('hidden');
+            }
+        }
+
+        function selectedPracticeTeamId() {
+            const select = document.getElementById('practice-team');
+            const raw = select ? select.value : '';
+            const id = normalizePracticeTeamId(raw);
+            if (id && isAssignableTeamId(id)) return id;
+            return defaultPracticeTeamId();
         }
 
         function persistPlannerToShared() {
@@ -1136,10 +1256,14 @@
             const visible = practicesForTeam();
 
             if (visible.length === 0) {
+                const filterLabel = practiceTeamLabel(plannerRealTeamFilter());
+                const emptyCopy = filterLabel
+                    ? `No practices for ${escapeHtml(filterLabel)} yet. Create one for this team.`
+                    : 'No practices yet. Create your first one!';
                 container.innerHTML = `
                     <div class="col-span-full bg-slate-900 border border-slate-700 rounded-3xl p-8 text-center">
                         <i class="fa-solid fa-calendar text-4xl text-slate-600 mb-3"></i>
-                        <p class="text-slate-400">No practices yet. Create your first one!</p>
+                        <p class="text-slate-400">${emptyCopy}</p>
                     </div>
                 `;
                 return;
@@ -1189,6 +1313,9 @@
                         </div>
                     </div>
                     <div class="mt-3 font-medium">${escapeHtml(practice.focus || 'Practice')}</div>
+                    <div class="text-xs text-red-400/90 mt-1">
+                        <i class="fa-solid fa-users mr-1"></i>${escapeHtml(practiceTeamLabel(practice.teamId) || 'Team not set')}
+                    </div>
                     ${practice.location ? `<div class="text-xs text-slate-400 mt-1">${escapeHtml(practice.location)}</div>` : ''}
                     <div class="mt-4 flex justify-end">
                         <button type="button" class="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300"
@@ -1320,6 +1447,7 @@
             document.getElementById('practice-duration').value = tpl.duration || 60;
             document.getElementById('practice-focus').value = tpl.focus || '';
             document.getElementById('practice-location').value = '';
+            fillPracticeTeamField(defaultPracticeTeamId());
 
             document.getElementById('segments-container').innerHTML = '';
 
@@ -1391,7 +1519,8 @@
             visible.forEach(({ practice: p }, i) => {
                 const dateStr = p.date ? new Date(p.date).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : 'No date';
                 const focus = p.focus || 'Untitled Practice';
-                message += `${i + 1}. ${dateStr} — ${focus} (${p.duration} min)\n`;
+                const teamBit = practiceTeamLabel(p.teamId);
+                message += `${i + 1}. ${dateStr} — ${focus} (${p.duration} min)${teamBit ? ' · ' + teamBit : ''}\n`;
             });
             message += `\n${visible.length + 1}. Create a brand new practice with this drill`;
 
@@ -1572,6 +1701,7 @@
             document.getElementById('practice-duration').value = '90';
             document.getElementById('practice-focus').value = '';
             document.getElementById('practice-location').value = '';
+            fillPracticeTeamField(defaultPracticeTeamId());
 
             document.getElementById('segments-container').innerHTML = '';
             document.getElementById('practice-modal').classList.remove('hidden');
@@ -1610,6 +1740,7 @@
             document.getElementById('practice-duration').value = currentPractice.duration || 90;
             document.getElementById('practice-focus').value = currentPractice.focus || '';
             document.getElementById('practice-location').value = currentPractice.location || '';
+            fillPracticeTeamField(currentPractice.teamId);
 
             renderSegments();
             document.getElementById('practice-modal').classList.remove('hidden');
@@ -2001,11 +2132,13 @@
                 segments: JSON.parse(JSON.stringify(segments))
             };
 
+            const teamId = selectedPracticeTeamId();
+            if (teamId) practiceData.teamId = teamId;
+            stampPracticeTeam(practiceData);
+
             if (currentPracticeIndex !== null) {
-                practiceData.teamId = practices[currentPracticeIndex].teamId || currentPlannerTeamId();
                 practices[currentPracticeIndex] = practiceData;
             } else {
-                stampPracticeTeam(practiceData);
                 practices.push(practiceData);
             }
 
