@@ -511,6 +511,28 @@
     return ((p.name || '').trim().toLowerCase() + '|' + (p.birthdate || ''));
   }
 
+  function playerIdentityKey(player) {
+    if (!player) return '';
+    const name = (joinName(player.firstName, player.lastName) || player.name || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+    if (!name || name === 'unnamed') return '';
+    return name + '|' + String(player.birthdate || '').trim();
+  }
+
+  function playerRecordWeight(player) {
+    if (!player) return 0;
+    let n = 0;
+    if (player.number) n += 2;
+    if (player.photo) n += 3;
+    if (player.position) n += 1;
+    if (player.assignedTeamId) n += 1;
+    if (player.birthdate) n += 1;
+    if (player.scores && typeof player.scores === 'object' && Object.keys(player.scores).length) n += 2;
+    return n;
+  }
+
   function findPlayerByIdentity(players, name, birthdate) {
     const key = (name || '').trim().toLowerCase() + '|' + (birthdate || '');
     return players.find((p) => matchPlayerKey(p) === key) || null;
@@ -980,11 +1002,89 @@
     return [...byId.values()].map(normalizePlayer);
   }
 
+  function rewritePlayerIdList(ids, aliases) {
+    if (!Array.isArray(ids)) return ids;
+    const seen = new Set();
+    const next = [];
+    ids.forEach(function (id) {
+      const keep = aliases[id] || id;
+      if (!keep || seen.has(keep)) return;
+      seen.add(keep);
+      next.push(keep);
+    });
+    return next;
+  }
+
+  function rewritePlayerIdRefs(state, aliases) {
+    if (!state || !aliases || !Object.keys(aliases).length) return;
+    function walkSegments(segments) {
+      (segments || []).forEach(function (segment) {
+        ((segment && segment.lanes) || []).forEach(function (lane) {
+          if (lane && Array.isArray(lane.playerIds)) {
+            lane.playerIds = rewritePlayerIdList(lane.playerIds, aliases);
+          }
+        });
+      });
+    }
+    (state.practices || []).forEach(function (practice) {
+      walkSegments(practice && practice.segments);
+    });
+    (state.templates || []).forEach(function (tpl) {
+      walkSegments(tpl && tpl.segments);
+    });
+    (state.tryouts || []).forEach(function (tryout) {
+      if (!tryout || !tryout.evaluations) return;
+      const next = {};
+      Object.keys(tryout.evaluations).forEach(function (id) {
+        const keep = aliases[id] || id;
+        const ev = tryout.evaluations[id];
+        next[keep] = next[keep] ? Object.assign({}, ev, next[keep]) : ev;
+      });
+      tryout.evaluations = next;
+    });
+  }
+
+  function collapseDuplicatePlayers(state) {
+    if (!state || !Array.isArray(state.players) || !state.players.length) return false;
+    const aliases = {};
+    const kept = [];
+    const byKey = new Map();
+    const seenIds = new Set();
+    state.players.forEach(function (player) {
+      if (!player) return;
+      const normalized = normalizePlayer(player);
+      if (normalized.id && seenIds.has(normalized.id)) return;
+      const key = playerIdentityKey(normalized);
+      if (key && byKey.has(key)) {
+        const existing = byKey.get(key);
+        const preferNew = playerRecordWeight(normalized) > playerRecordWeight(existing);
+        const winner = preferNew
+          ? mergePlayerRecord(normalized, existing)
+          : mergePlayerRecord(existing, normalized);
+        winner.id = existing.id;
+        if (normalized.id && normalized.id !== existing.id) {
+          aliases[normalized.id] = existing.id;
+        }
+        Object.assign(existing, winner);
+        existing.id = existing.id;
+        return;
+      }
+      if (normalized.id) seenIds.add(normalized.id);
+      if (key) byKey.set(key, normalized);
+      kept.push(normalized);
+    });
+    if (kept.length === state.players.length && !Object.keys(aliases).length) return false;
+    state.players = kept;
+    rewritePlayerIdRefs(state, aliases);
+    return true;
+  }
+
   function mergeSharedStates(local, remote) {
     const localState = ensureDefaults(local || emptyState());
     const remoteState = ensureDefaults(remote || emptyState());
     const next = Object.assign({}, localState, remoteState);
     next.players = mergePlayerArrays(remoteState.players, localState.players);
+    collapseDuplicatePlayers(next);
     const teamsById = new Map();
     (localState.teams || []).forEach((team) => {
       if (team && team.id) teamsById.set(team.id, team);
@@ -1130,8 +1230,10 @@
     const before = assignmentFingerprint(state);
     state = syncHubTeams(state);
     const remapped = assignmentFingerprint(state) !== before;
-    const changed = restoreFransenRoster(state) || pinLoosePlayersToFransen(state) || remapped;
-    if (changed) saveState(state);
+    const seeded = restoreFransenRoster(state);
+    const pinned = pinLoosePlayersToFransen(state);
+    const collapsed = collapseDuplicatePlayers(state);
+    if (seeded || pinned || remapped || collapsed) saveState(state);
     return state;
   }
 
@@ -1268,7 +1370,8 @@
         const next = mergeSharedStates(local, data.state);
         const remapped = assignmentFingerprint(next) !== assignmentFingerprint(data.state);
         const seeded = restoreFransenRoster(next) || pinLoosePlayersToFransen(next);
-        saveState(next, seeded || remapped ? undefined : { skipCloud: true });
+        const collapsed = collapseDuplicatePlayers(next);
+        saveState(next, seeded || remapped || collapsed ? undefined : { skipCloud: true });
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('elks-data-updated'));
         }

@@ -541,7 +541,13 @@
             const teams = (typeof HUB_SOFTBALL !== 'undefined' && Array.isArray(HUB_SOFTBALL.teams))
                 ? HUB_SOFTBALL.teams
                 : [];
-            return teams.filter((team) => team && team.id && team.id !== 'all' && team.id !== 'unassigned');
+            const seen = new Set();
+            return teams.filter((team) => {
+                if (!team || !team.id || team.id === 'all' || team.id === 'unassigned') return false;
+                if (seen.has(team.id)) return false;
+                seen.add(team.id);
+                return true;
+            });
         }
 
         function plannerRealTeamFilter() {
@@ -701,7 +707,21 @@
             }
             const shared = ElksData.load();
             const teamId = practiceBuilderTeamId();
-            plannerRosterCache = teamId ? (ElksData.playersForTeam(shared, teamId) || []) : [];
+            const list = teamId ? (ElksData.playersForTeam(shared, teamId) || []) : [];
+            const seenIds = new Set();
+            const seenNames = new Set();
+            plannerRosterCache = list.filter(function (player) {
+                if (!player) return false;
+                if (player.id && seenIds.has(player.id)) return false;
+                const name = (player.name || [player.firstName, player.lastName].filter(Boolean).join(' ') || '')
+                    .trim()
+                    .toLowerCase()
+                    .replace(/\s+/g, ' ');
+                if (name && seenNames.has(name)) return false;
+                if (player.id) seenIds.add(player.id);
+                if (name) seenNames.add(name);
+                return true;
+            });
         }
 
         function pruneLanePlayersToRoster() {
