@@ -47,6 +47,3 @@ next-env.d.ts
 /data/users.json
 /data/*.db
 /data/*.db-*
-
-# Social Sync local history
-/luna-haus-social/data.json

@@ -75,14 +75,6 @@ export const hubApps: HubApp[] = [
     area: "luna-haus",
   },
   {
-    slug: "luna-haus-social",
-    file: "luna-haus-social.html",
-    title: "Social Sync",
-    description:
-      "Turn a Luna Haus Facebook post into a Google Business post with Book Online.",
-    area: "luna-haus",
-  },
-  {
     slug: "book-online",
     file: "",
     title: "Book Online",
@@ -110,8 +102,6 @@ export const pathRewrites: Record<string, string> = {
   "/softball-tryout-evaluator": "/apps/tryout-evaluator",
   "/luna-haus-salon/": "/apps/luna-haus-salon",
   "/luna-haus-salon": "/apps/luna-haus-salon",
-  "/luna-haus-social/": "/apps/luna-haus-social",
-  "/luna-haus-social": "/apps/luna-haus-social",
 };
 
 export function rewriteAppHtml(html: string) {

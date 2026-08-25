@@ -20,7 +20,7 @@ export const areaMeta: Record<
   },
   "luna-haus": {
     label: "Luna Haus Salon",
-    blurb: "Salon desk, social, and booking.",
+    blurb: "Salon desk and booking.",
     accent: "rose",
   },
 };

@@ -4,9 +4,7 @@ Private hub for three areas:
 
 - **Financial** — advisory calculators
 - **Softball** — MN Elks 16U practice, lineup, team formation, tryouts
-- **Luna Haus Salon** — salon desk, social sync, booking
-
-Social Sync on the website formats a Google Business post (with Book Online) from a Facebook caption you paste. The old one-click Chrome helper was a program on the salon Mac, not this website.
+- **Luna Haus Salon** — salon desk and booking
 
 One login. Each person only sees the areas Gabe turns on. Apps stay as they were on [gabes-app-hub.netlify.app](https://gabes-app-hub.netlify.app/); this version sits in front of them with a password.
 
