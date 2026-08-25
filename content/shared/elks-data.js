@@ -1289,6 +1289,285 @@
     }, 500);
   }
 
+  const LANE_POSITION_OPTIONS = [
+    { key: 'P', label: 'Pitchers (P)' },
+    { key: 'C', label: 'Catchers (C)' },
+    { key: 'IF', label: 'Infielders (1B / 2B / 3B / SS)' },
+    { key: 'OF', label: 'Outfielders (LF / CF / RF)' },
+    { key: '1B', label: '1B' },
+    { key: '2B', label: '2B' },
+    { key: '3B', label: '3B' },
+    { key: 'SS', label: 'SS' },
+    { key: 'LF', label: 'LF' },
+    { key: 'CF', label: 'CF' },
+    { key: 'RF', label: 'RF' },
+    { key: 'UT', label: 'Utility' },
+    { key: 'DP', label: 'DP' },
+  ];
+
+  const POSITION_EXPAND = {
+    P: ['P'],
+    C: ['C'],
+    IF: ['IF', '1B', '2B', '3B', 'SS'],
+    OF: ['OF', 'LF', 'CF', 'RF'],
+    '1B': ['1B'],
+    '2B': ['2B'],
+    '3B': ['3B'],
+    SS: ['SS'],
+    LF: ['LF'],
+    CF: ['CF'],
+    RF: ['RF'],
+    UT: ['UT'],
+    DP: ['DP'],
+  };
+
+  function expandPosition(pos) {
+    const key = String(pos || '').trim().toUpperCase();
+    return POSITION_EXPAND[key] || (key ? [key] : []);
+  }
+
+  function playerPositionSet(player) {
+    const set = new Set();
+    [player && player.position, player && player.position2].forEach(function (pos) {
+      expandPosition(pos).forEach(function (item) { set.add(item); });
+    });
+    return set;
+  }
+
+  function playerMatchesPositions(player, positions) {
+    if (!player || !positions || !positions.length) return false;
+    const owned = playerPositionSet(player);
+    return positions.some(function (pos) {
+      return expandPosition(pos).some(function (item) { return owned.has(item); });
+    });
+  }
+
+  function cloneSlot(slot) {
+    const src = slot || {};
+    return {
+      id: uid('slot'),
+      name: src.name || '',
+      duration: parseInt(src.duration, 10) || 0,
+      description: src.description || '',
+      category: src.category || null,
+      drillId: src.drillId || null,
+    };
+  }
+
+  function cloneLane(lane) {
+    const src = lane || {};
+    return {
+      id: uid('lane'),
+      name: src.name || '',
+      playerIds: Array.isArray(src.playerIds) ? src.playerIds.slice() : [],
+      positions: Array.isArray(src.positions) ? src.positions.slice() : [],
+      everyoneElse: !!src.everyoneElse,
+      slots: Array.isArray(src.slots) ? src.slots.map(cloneSlot) : [],
+    };
+  }
+
+  function isSplitSegment(segment) {
+    return !!(segment && Array.isArray(segment.lanes) && segment.lanes.length);
+  }
+
+  function cloneSegment(segment) {
+    const src = segment || {};
+    const next = {
+      id: uid('seg'),
+      name: src.name || '',
+      duration: parseInt(src.duration, 10) || 0,
+      description: src.description || '',
+      category: src.category || null,
+      drillId: src.drillId || null,
+    };
+    if (isSplitSegment(src)) {
+      next.lanes = src.lanes.map(cloneLane);
+    }
+    return next;
+  }
+
+  function cloneSegments(segments) {
+    return Array.isArray(segments) ? segments.map(cloneSegment) : [];
+  }
+
+  function upcomingPracticeDate() {
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Chicago',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).formatToParts(new Date());
+      const y = Number((parts.find(function (p) { return p.type === 'year'; }) || {}).value);
+      const m = Number((parts.find(function (p) { return p.type === 'month'; }) || {}).value);
+      const d = Number((parts.find(function (p) { return p.type === 'day'; }) || {}).value);
+      const dt = new Date(y, m - 1, d);
+      dt.setDate(dt.getDate() + 1);
+      return (
+        dt.getFullYear() +
+        '-' +
+        String(dt.getMonth() + 1).padStart(2, '0') +
+        '-' +
+        String(dt.getDate()).padStart(2, '0')
+      );
+    } catch (e) {
+      const dt = new Date();
+      dt.setDate(dt.getDate() + 1);
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const d = String(dt.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + d;
+    }
+  }
+
+  function clonePractice(practice, opts) {
+    const src = practice || {};
+    const options = opts || {};
+    return {
+      id: uid('practice'),
+      date: options.date !== undefined ? options.date : (src.date || null),
+      time: src.time || null,
+      duration: parseInt(src.duration, 10) || 0,
+      focus: src.focus || '',
+      location: src.location || '',
+      teamId: src.teamId || null,
+      segments: cloneSegments(src.segments),
+    };
+  }
+
+  function clonePracticeAsUpcoming(practice) {
+    return clonePractice(practice, { date: upcomingPracticeDate() });
+  }
+
+  function laneSlotSum(lane) {
+    return ((lane && lane.slots) || []).reduce(function (sum, slot) {
+      return sum + (parseInt(slot.duration, 10) || 0);
+    }, 0);
+  }
+
+  function makeEveryoneElseLane() {
+    return {
+      id: uid('lane'),
+      name: 'Everyone else',
+      playerIds: [],
+      positions: [],
+      everyoneElse: true,
+      slots: [],
+    };
+  }
+
+  function ensureEveryoneElseLane(segment) {
+    if (!isSplitSegment(segment)) return segment;
+    const existing = segment.lanes.filter(function (lane) { return lane && lane.everyoneElse; });
+    const others = segment.lanes.filter(function (lane) { return lane && !lane.everyoneElse; });
+    const leftover = existing[0] || makeEveryoneElseLane();
+    leftover.everyoneElse = true;
+    if (!leftover.name) leftover.name = 'Everyone else';
+    if (!Array.isArray(leftover.playerIds)) leftover.playerIds = [];
+    if (!Array.isArray(leftover.positions)) leftover.positions = [];
+    leftover.playerIds = [];
+    leftover.positions = [];
+    if (!Array.isArray(leftover.slots)) leftover.slots = [];
+    segment.lanes = others.concat([leftover]);
+    return segment;
+  }
+
+  function splitSegmentIntoStations(segment) {
+    if (!segment) return segment;
+    if (isSplitSegment(segment)) {
+      return ensureEveryoneElseLane(segment);
+    }
+    const slot = cloneSlot({
+      name: segment.name,
+      duration: segment.duration,
+      description: segment.description,
+      category: segment.category,
+      drillId: segment.drillId,
+    });
+    segment.lanes = [
+      {
+        id: uid('lane'),
+        name: 'Station 1',
+        playerIds: [],
+        positions: [],
+        everyoneElse: false,
+        slots: [slot],
+      },
+    ];
+    return ensureEveryoneElseLane(segment);
+  }
+
+  function mergeStationsToSingle(segment) {
+    if (!isSplitSegment(segment)) return segment;
+    const firstLane = segment.lanes.find(function (lane) { return lane && !lane.everyoneElse; }) || segment.lanes[0];
+    const firstSlot = firstLane && firstLane.slots && firstLane.slots[0];
+    if (firstSlot) {
+      if (!segment.name) segment.name = firstSlot.name || '';
+      if (!segment.description) segment.description = firstSlot.description || '';
+      if (!segment.category && firstSlot.category) segment.category = firstSlot.category;
+      if (!segment.drillId && firstSlot.drillId) segment.drillId = firstSlot.drillId;
+    }
+    delete segment.lanes;
+    return segment;
+  }
+
+  function addStationLane(segment, fields) {
+    splitSegmentIntoStations(segment);
+    const src = fields || {};
+    const others = segment.lanes.filter(function (item) { return !item.everyoneElse; });
+    const leftover = segment.lanes.find(function (item) { return item.everyoneElse; }) || makeEveryoneElseLane();
+    const lane = {
+      id: uid('lane'),
+      name: src.name || ('Station ' + (others.length + 1)),
+      playerIds: Array.isArray(src.playerIds) ? src.playerIds.slice() : [],
+      positions: Array.isArray(src.positions) ? src.positions.slice() : [],
+      everyoneElse: false,
+      slots: Array.isArray(src.slots) ? src.slots.map(cloneSlot) : [],
+    };
+    others.push(lane);
+    segment.lanes = others.concat([leftover]);
+    return lane;
+  }
+
+  function assignPlayersToLanes(lanes, players) {
+    const list = Array.isArray(lanes) ? lanes : [];
+    const roster = Array.isArray(players) ? players : [];
+    const assigned = list.map(function () { return []; });
+    const remaining = new Set(roster.map(function (player) { return player && player.id; }).filter(Boolean));
+
+    list.forEach(function (lane, index) {
+      if (!lane || lane.everyoneElse) return;
+      (lane.playerIds || []).forEach(function (playerId) {
+        if (!remaining.has(playerId)) return;
+        const player = roster.find(function (item) { return item && item.id === playerId; });
+        if (!player) return;
+        assigned[index].push(player);
+        remaining.delete(playerId);
+      });
+    });
+
+    roster.forEach(function (player) {
+      if (!player || !player.id || !remaining.has(player.id)) return;
+      const index = list.findIndex(function (lane) {
+        return lane && !lane.everyoneElse && playerMatchesPositions(player, lane.positions);
+      });
+      if (index < 0) return;
+      assigned[index].push(player);
+      remaining.delete(player.id);
+    });
+
+    let elseIndex = list.findIndex(function (lane) { return lane && lane.everyoneElse; });
+    const leftover = roster.filter(function (player) { return player && player.id && remaining.has(player.id); });
+    if (elseIndex >= 0) {
+      assigned[elseIndex] = leftover.slice();
+    }
+
+    return {
+      assigned: assigned,
+      leftover: leftover,
+    };
+  }
+
   async function pushToCloud(state) {
     try {
       const response = await fetch('/api/softball/state', {
@@ -1368,5 +1647,22 @@
     canonicalTeamId,
     realTeamId,
     mountTeamPicker,
+    LANE_POSITION_OPTIONS,
+    expandPosition,
+    playerMatchesPositions,
+    isSplitSegment,
+    cloneSlot,
+    cloneLane,
+    cloneSegment,
+    cloneSegments,
+    clonePractice,
+    clonePracticeAsUpcoming,
+    upcomingPracticeDate,
+    laneSlotSum,
+    splitSegmentIntoStations,
+    mergeStationsToSingle,
+    addStationLane,
+    ensureEveryoneElseLane,
+    assignPlayersToLanes,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
