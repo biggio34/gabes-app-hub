@@ -444,7 +444,23 @@
     let editingTryoutId = null;
     let editingPhoto = '';
 
-    function persist() { ElksData.save(state); }
+    function persist() {
+      const tryout = getTryout();
+      if (tryout) tryout.updatedAt = Date.now();
+      ElksData.save(state);
+    }
+
+    function ensureTryoutSession() {
+      if (state.tryouts && state.tryouts.length) return;
+      const t = ElksData.createTryout({
+        name: 'MN Elks Tryouts',
+        date: new Date().toISOString().slice(0, 10),
+        ageGroup: '16U',
+      });
+      state.tryouts = state.tryouts || [];
+      state.tryouts.push(t);
+      state.currentTryoutId = t.id;
+    }
 
     function getTryout() { return ElksData.getCurrentTryout(state); }
 
@@ -1091,11 +1107,13 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         state = ElksData.load();
+        ensureTryoutSession();
         renderAll();
       }
     });
     window.addEventListener('focus', () => {
       state = ElksData.load();
+      ensureTryoutSession();
       renderAll();
     });
 
@@ -1107,6 +1125,7 @@
     }
     window.addEventListener('elks-data-updated', () => {
       state = ElksData.load();
+      ensureTryoutSession();
       renderHubPicker();
       renderAll();
     });

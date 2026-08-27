@@ -1,7 +1,10 @@
 /**
- * MN Elks shared roster + tryout + team formation data.
- * Used by: tryout evaluator, team formation, lineup, practice planner
- * Storage key: mn-elks-shared-v1
+ * MN Elks shared roster, tryouts, team formation, lineups, and practice plans.
+ * Used by: tryout evaluator, team formation, lineup, practice planner, roster
+ *
+ * The hub database is the source of truth. Leftover browser keys are read once
+ * to migrate, then cleared. Team picker (session) and team-formation layout
+ * stay in the browser as view preferences only.
  *
  * Players are canonical and shared. Team assignment lives on the player.
  * Tryout evaluations live per tryout session AND are denormalized onto the
@@ -48,6 +51,7 @@
       practices: [],
       drills: [],
       templates: [],
+      lineups: {},
       updatedAt: 0,
       version: 1,
     };
@@ -561,10 +565,19 @@
 
   let cloudTimer = null;
   let pendingCloudState = null;
+  let memoryState = null;
+
+  function clearSharedCache() {
+    try {
+      const key = storageKey();
+      localStorage.removeItem(key);
+      if (key !== SHARED_KEY) localStorage.removeItem(SHARED_KEY);
+    } catch (e) {}
+  }
 
   function recordUpdatedAt(item) {
     if (!item) return 0;
-    const raw = item.updatedAt;
+    const raw = item.updatedAt != null ? item.updatedAt : item.lastUpdated;
     if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
     const asNum = Number(raw);
     if (Number.isFinite(asNum) && asNum > 0) return asNum;
@@ -593,6 +606,40 @@
     return [...byId.values()].concat(noId);
   }
 
+  function mergeLineupMaps(left, right) {
+    const localMap = left && typeof left === 'object' && !Array.isArray(left) ? left : {};
+    const remoteMap = right && typeof right === 'object' && !Array.isArray(right) ? right : {};
+    const next = {};
+    const keys = new Set(Object.keys(localMap).concat(Object.keys(remoteMap)));
+    keys.forEach(function (teamId) {
+      const local = localMap[teamId] || {};
+      const remote = remoteMap[teamId] || {};
+      next[teamId] = {
+        version: 2,
+        games: mergeRecordListsById(local.games, remote.games),
+        currentGameId: remote.currentGameId || local.currentGameId || null,
+        teamName: remote.teamName || local.teamName || '',
+        lastUpdated: Math.max(recordUpdatedAt(local), recordUpdatedAt(remote)),
+      };
+    });
+    return next;
+  }
+
+  function lineupMapsDiffer(left, right) {
+    const localMap = left && typeof left === 'object' && !Array.isArray(left) ? left : {};
+    const remoteMap = right && typeof right === 'object' && !Array.isArray(right) ? right : {};
+    const keys = new Set(Object.keys(localMap).concat(Object.keys(remoteMap)));
+    let differ = keys.size !== Object.keys(localMap).length || keys.size !== Object.keys(remoteMap).length;
+    if (differ) return true;
+    keys.forEach(function (teamId) {
+      const local = localMap[teamId] || {};
+      const remote = remoteMap[teamId] || {};
+      if (recordListsDiffer(local.games, remote.games)) differ = true;
+      if ((local.currentGameId || '') !== (remote.currentGameId || '')) differ = true;
+    });
+    return differ;
+  }
+
   function recordListSignature(list) {
     return (list || []).map(function (item) {
       if (!item) return '';
@@ -615,9 +662,9 @@
       if (!skipCloud && !(opts && opts.keepUpdatedAt)) {
         state.updatedAt = Date.now();
       }
-      localStorage.setItem(storageKey(), JSON.stringify(state));
+      memoryState = state;
       if (!skipCloud) {
-        scheduleCloudSave(state, { immediate: !!(opts && opts.immediate) });
+        scheduleCloudSave(state, { immediate: !opts || opts.immediate !== false });
       }
     } catch (e) {
       console.warn('ElksData: failed to save', e);
@@ -747,22 +794,15 @@
     if (!state.practices) state.practices = [];
     if (!state.drills) state.drills = [];
     if (!state.templates) state.templates = [];
+    if (!state.lineups || typeof state.lineups !== 'object' || Array.isArray(state.lineups)) state.lineups = {};
     if (!Array.isArray(state.removedPlayerKeys)) state.removedPlayerKeys = [];
     if (!state.updatedAt) state.updatedAt = 0;
     state.players = state.players.map(normalizePlayer);
 
-    if (state.tryouts.length === 0) {
-      const t = createTryout({
-        name: 'MN Elks Tryouts',
-        date: new Date().toISOString().slice(0, 10),
-        ageGroup: '16U',
-      });
-      state.tryouts.push(t);
-      state.currentTryoutId = t.id;
-    }
-    if (!state.currentTryoutId || !state.tryouts.find((t) => t.id === state.currentTryoutId)) {
+    if (state.tryouts.length && (!state.currentTryoutId || !state.tryouts.find((t) => t.id === state.currentTryoutId))) {
       state.currentTryoutId = state.tryouts[0].id;
     }
+    if (!state.tryouts.length) state.currentTryoutId = null;
     return state;
   }
 
@@ -1190,13 +1230,16 @@
       teamsById.set(team.id, Object.assign({}, teamsById.get(team.id) || {}, team));
     });
     next.teams = [...teamsById.values()];
-    if (!(remoteState.tryouts && remoteState.tryouts.length) && localState.tryouts.length) {
-      next.tryouts = localState.tryouts;
+    next.tryouts = mergeRecordListsById(localState.tryouts, remoteState.tryouts);
+    if (remoteState.currentTryoutId && next.tryouts.some(function (tryout) { return tryout && tryout.id === remoteState.currentTryoutId; })) {
+      next.currentTryoutId = remoteState.currentTryoutId;
+    } else if (localState.currentTryoutId && next.tryouts.some(function (tryout) { return tryout && tryout.id === localState.currentTryoutId; })) {
       next.currentTryoutId = localState.currentTryoutId;
     }
     next.practices = mergeRecordListsById(localState.practices, remoteState.practices);
     next.drills = mergeRecordListsById(localState.drills, remoteState.drills);
     next.templates = mergeRecordListsById(localState.templates, remoteState.templates);
+    next.lineups = mergeLineupMaps(localState.lineups, remoteState.lineups);
     return syncHubTeams(ensureDefaults(next));
   }
 
@@ -1276,6 +1319,12 @@
   }
 
   function load() {
+    if (memoryState) {
+      memoryState = ensureDefaults(memoryState);
+      memoryState = syncHubTeams(memoryState);
+      dropRemovedPlayers(memoryState);
+      return memoryState;
+    }
     let state = loadRaw();
     if (!state) {
       const migrated = migrateFromLegacy();
@@ -1284,6 +1333,7 @@
     state = ensureDefaults(state);
     state = syncHubTeams(state);
     dropRemovedPlayers(state);
+    memoryState = state;
     // Never persist on load. Live roster only changes when a user saves.
     return state;
   }
@@ -1385,6 +1435,7 @@
     state.practices = next.practices;
     state.drills = next.drills;
     state.templates = next.templates;
+    state.lineups = next.lineups;
     state.updatedAt = next.updatedAt;
     state.version = next.version;
     saveState(state);
@@ -1421,7 +1472,7 @@
       const data = await response.json();
       if (!data || !data.state) return;
       const remote = data.state;
-      const local = loadRaw();
+      const local = memoryState || loadRaw();
       const remoteUpdated = Number(remote.updatedAt || 0);
       const localUpdated = Number((local && local.updatedAt) || 0);
       const remotePlayers = (remote.players || []).length;
@@ -1432,12 +1483,18 @@
         const practices = mergeRecordListsById(local.practices, remote.practices);
         const drills = mergeRecordListsById(local.drills, remote.drills);
         const templates = mergeRecordListsById(local.templates, remote.templates);
+        const tryouts = mergeRecordListsById(local.tryouts, remote.tryouts);
+        const lineups = mergeLineupMaps(local.lineups, remote.lineups);
         const addedPlans = recordListsDiffer(local.practices, practices)
           || recordListsDiffer(local.drills, drills)
-          || recordListsDiffer(local.templates, templates);
+          || recordListsDiffer(local.templates, templates)
+          || recordListsDiffer(local.tryouts, tryouts)
+          || lineupMapsDiffer(local.lineups, lineups);
         local.practices = practices;
         local.drills = drills;
         local.templates = templates;
+        local.tryouts = tryouts;
+        local.lineups = lineups;
         if (addedPlans) {
           saveState(local, { immediate: true });
           emitDataUpdated();
@@ -1453,17 +1510,22 @@
         next.practices = mergeRecordListsById(local.practices, remote.practices);
         next.drills = mergeRecordListsById(local.drills, remote.drills);
         next.templates = mergeRecordListsById(local.templates, remote.templates);
+        next.tryouts = mergeRecordListsById(local.tryouts, remote.tryouts);
+        next.lineups = mergeLineupMaps(local.lineups, remote.lineups);
       }
       dropRemovedPlayers(next);
 
       const hasLocalOnlyRecords = recordListsDiffer(next.practices, remote.practices)
         || recordListsDiffer(next.drills, remote.drills)
-        || recordListsDiffer(next.templates, remote.templates);
+        || recordListsDiffer(next.templates, remote.templates)
+        || recordListsDiffer(next.tryouts, remote.tryouts)
+        || lineupMapsDiffer(next.lineups, remote.lineups);
 
       if (hasLocalOnlyRecords) {
         saveState(next, { immediate: true });
       } else {
         saveState(next, { skipCloud: true, keepUpdatedAt: true });
+        clearSharedCache();
       }
       emitDataUpdated();
     } catch (e) {
@@ -1794,6 +1856,7 @@
         console.warn('ElksData: cloud push failed', data.error);
         return;
       }
+      clearSharedCache();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('elks-save-ok', { detail: data.stored || 'database' }));
       }
@@ -1846,6 +1909,7 @@
     lineupPlayers,
     connectCloud,
     mergeRecordListsById,
+    mergeLineupMaps,
     flushCloudSave,
     applySelectedHubTeam,
     currentHubTeam,

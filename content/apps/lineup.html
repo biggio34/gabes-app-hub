@@ -635,33 +635,91 @@
       };
     }
 
-    function lineupStorageKey() {
+    function lineupTeamKey() {
       const teamId = currentLineupTeam().id;
-      return teamId ? "mn-elks-lineup-v1:" + teamId : "mn-elks-lineup-v1";
+      return teamId || "all";
     }
 
-    function readSavedLineup() {
-      const key = lineupStorageKey();
-      let saved = localStorage.getItem(key);
-      if (!saved && key !== "mn-elks-lineup-v1") {
-        const teamId = key.slice("mn-elks-lineup-v1:".length);
-        if (teamId === "team-16u-fransen") {
-          saved = localStorage.getItem("mn-elks-lineup-v1");
-        }
-      }
-      return saved;
-    }
-
-    function saveState() {
-      saveCurrentGameToList();
-      const data = {
+    function lineupRecord() {
+      return {
         version: 2,
         games: games,
         currentGameId: currentGameId,
         teamName: state.teamName,
         lastUpdated: Date.now()
       };
-      localStorage.setItem(lineupStorageKey(), JSON.stringify(data));
+    }
+
+    function readLegacyLineup() {
+      try {
+        const teamId = lineupTeamKey();
+        const key = teamId ? "mn-elks-lineup-v1:" + teamId : "mn-elks-lineup-v1";
+        let saved = localStorage.getItem(key);
+        if (!saved && key !== "mn-elks-lineup-v1") {
+          const storedTeamId = key.slice("mn-elks-lineup-v1:".length);
+          if (storedTeamId === "team-16u-fransen") {
+            saved = localStorage.getItem("mn-elks-lineup-v1");
+          }
+        }
+        return saved ? JSON.parse(saved) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function clearLegacyLineupKeys() {
+      try {
+        const teamId = lineupTeamKey();
+        localStorage.removeItem("mn-elks-lineup-v1:" + teamId);
+        localStorage.removeItem("mn-elks-lineup-v1");
+      } catch (e) {}
+    }
+
+    function applyLineupRecord(parsed) {
+      if (!parsed) return false;
+      if (parsed.version === 2 && Array.isArray(parsed.games)) {
+        if (Array.isArray(parsed.roster)) importSharedPlayers(parsed.roster);
+        games = parsed.games || [];
+        currentGameId = parsed.currentGameId || null;
+        state.teamName = parsed.teamName || state.teamName;
+        if (currentGameId && games.some(g => g.id === currentGameId)) {
+          loadGameIntoState(currentGameId);
+        } else if (games.length > 0) {
+          loadGameIntoState(games[0].id);
+        } else {
+          createInitialGameFromCurrentState();
+        }
+        return true;
+      }
+      const old = parsed;
+      if (Array.isArray(old.players)) importSharedPlayers(old.players);
+      state.teamName = old.teamName || state.teamName;
+      const migId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('g' + Date.now());
+      const migratedGame = {
+        id: migId,
+        name: old.gameInfo || "Migrated Lineup",
+        battingMode: old.battingMode || "roster",
+        battingOrder: Array.isArray(old.battingOrder) ? [...old.battingOrder] : [],
+        defensivePositions: old.defensivePositions || {},
+        unavailableIds: Array.isArray(old.unavailableIds) ? [...old.unavailableIds] : [],
+        lastUpdated: old.lastUpdated || Date.now()
+      };
+      POSITIONS.forEach(pos => {
+        if (!(pos in migratedGame.defensivePositions)) migratedGame.defensivePositions[pos] = null;
+      });
+      games = [migratedGame];
+      currentGameId = migId;
+      loadGameIntoState(migId);
+      return true;
+    }
+
+    function saveState() {
+      saveCurrentGameToList();
+      if (!window.ElksData) return;
+      const shared = ElksData.load();
+      shared.lineups = shared.lineups && typeof shared.lineups === "object" ? shared.lineups : {};
+      shared.lineups[lineupTeamKey()] = lineupRecord();
+      ElksData.save(shared);
     }
 
     function applyHubTeamName() {
@@ -715,57 +773,30 @@
     }
 
     function loadState() {
-      const saved = readSavedLineup();
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed.version === 2 && Array.isArray(parsed.games)) {
-            // Multi-game format. Players always come from the shared Team Roster.
-            if (Array.isArray(parsed.roster)) importSharedPlayers(parsed.roster);
-            games = parsed.games || [];
-            currentGameId = parsed.currentGameId || null;
-            state.teamName = parsed.teamName || state.teamName;
-
-            if (currentGameId && games.some(g => g.id === currentGameId)) {
-              loadGameIntoState(currentGameId);
-            } else if (games.length > 0) {
-              loadGameIntoState(games[0].id);
-            } else {
-              createInitialGameFromCurrentState();
-            }
-          } else {
-            // Legacy single-state v1 — migrate to a game
-            const old = parsed;
-            if (Array.isArray(old.players)) importSharedPlayers(old.players);
-            state.teamName = old.teamName || state.teamName;
-
-            const migId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('g' + Date.now());
-            const migratedGame = {
-              id: migId,
-              name: old.gameInfo || "Migrated Lineup",
-              battingMode: old.battingMode || "roster",
-              battingOrder: Array.isArray(old.battingOrder) ? [...old.battingOrder] : [],
-              defensivePositions: old.defensivePositions || {},
-              unavailableIds: Array.isArray(old.unavailableIds) ? [...old.unavailableIds] : [],
-              lastUpdated: old.lastUpdated || Date.now()
-            };
-            POSITIONS.forEach(pos => {
-              if (!(pos in migratedGame.defensivePositions)) migratedGame.defensivePositions[pos] = null;
-            });
-            games = [migratedGame];
-            currentGameId = migId;
-            loadGameIntoState(migId);
-          }
-        } catch (e) {
-          console.warn("Failed to load saved state, starting fresh", e);
-          createInitialGameFromCurrentState();
-        }
-      } else {
-        // Brand new
-        createInitialGameFromCurrentState();
+      applyHubTeamName();
+      const shared = window.ElksData ? ElksData.load() : null;
+      const fromShared = shared && shared.lineups && shared.lineups[lineupTeamKey()];
+      if (fromShared && Array.isArray(fromShared.games) && fromShared.games.length) {
+        applyLineupRecord(fromShared);
+        syncRosterFromShared();
+        clearLegacyLineupKeys();
+        return;
       }
+      const legacy = readLegacyLineup();
+      if (legacy) {
+        applyLineupRecord(legacy);
+        syncRosterFromShared();
+        saveState();
+        clearLegacyLineupKeys();
+        return;
+      }
+      if (fromShared) {
+        applyLineupRecord(fromShared);
+        syncRosterFromShared();
+        return;
+      }
+      createInitialGameFromCurrentState();
       syncRosterFromShared();
-      saveState();
     }
 
     function createNewGame() {
@@ -2775,8 +2806,7 @@
         ElksData.connectCloud();
       }
       window.addEventListener("elks-data-updated", () => {
-        syncRosterFromShared();
-        saveState();
+        loadState();
         renderAll();
       });
       window.addEventListener("hub-team-changed", () => {

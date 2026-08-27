@@ -284,7 +284,7 @@ export async function readSoftballState(clubId: string, teamId: string) {
   return { state: payload, updatedAt: row?.updatedAt ?? null, stored: "sqlite" as const };
 }
 
-type JsonRecord = Record<string, unknown> & { id?: string; updatedAt?: unknown };
+type JsonRecord = Record<string, unknown> & { id?: string; updatedAt?: unknown; lastUpdated?: unknown };
 
 function asRecords(value: unknown) {
   return Array.isArray(value) ? (value as JsonRecord[]) : [];
@@ -292,7 +292,7 @@ function asRecords(value: unknown) {
 
 function recordUpdatedAt(item: JsonRecord | null | undefined) {
   if (!item) return 0;
-  const raw = item.updatedAt;
+  const raw = item.updatedAt != null ? item.updatedAt : item.lastUpdated;
   if (typeof raw === "number" && Number.isFinite(raw)) return raw;
   const asNum = Number(raw);
   if (Number.isFinite(asNum) && asNum > 0) return asNum;
@@ -339,6 +339,51 @@ export function filterPracticesForViewer(
   });
 }
 
+export function mergeLineupMaps(current: unknown, incoming: unknown) {
+  const left =
+    current && typeof current === "object" && !Array.isArray(current)
+      ? (current as Record<string, Record<string, unknown>>)
+      : {};
+  const right =
+    incoming && typeof incoming === "object" && !Array.isArray(incoming)
+      ? (incoming as Record<string, Record<string, unknown>>)
+      : {};
+  const next: Record<string, Record<string, unknown>> = {};
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const teamId of keys) {
+    const local = left[teamId] || {};
+    const remote = right[teamId] || {};
+    next[teamId] = {
+      version: 2,
+      games: mergeRecordListsById(local.games, remote.games),
+      currentGameId: remote.currentGameId || local.currentGameId || null,
+      teamName: remote.teamName || local.teamName || "",
+      lastUpdated: Math.max(
+        recordUpdatedAt(local as JsonRecord),
+        recordUpdatedAt(remote as JsonRecord),
+      ),
+    };
+  }
+  return next;
+}
+
+export function filterLineupsForViewer(
+  lineups: unknown,
+  viewer: { role: string; teams: { id: string }[] },
+) {
+  if (!lineups || typeof lineups !== "object" || Array.isArray(lineups)) return {};
+  const map = lineups as Record<string, unknown>;
+  if (viewer.role === "owner") return map;
+  const allowed = new Set(viewer.teams.map((team) => team.id));
+  const next: Record<string, unknown> = {};
+  for (const [teamId, record] of Object.entries(map)) {
+    if (!teamId || teamId === "all" || teamId === "unassigned" || allowed.has(teamId)) {
+      next[teamId] = record;
+    }
+  }
+  return next;
+}
+
 export async function writeSoftballState(
   clubId: string,
   teamId: string,
@@ -355,6 +400,11 @@ export async function writeSoftballState(
   payload.practices = mergeRecordListsById(current.state?.practices, payload.practices);
   payload.drills = mergeRecordListsById(current.state?.drills, payload.drills);
   payload.templates = mergeRecordListsById(current.state?.templates, payload.templates);
+  payload.tryouts = mergeRecordListsById(current.state?.tryouts, payload.tryouts);
+  payload.lineups = mergeLineupMaps(current.state?.lineups, payload.lineups);
+  if (payload.currentTryoutId == null && current.state?.currentTryoutId) {
+    payload.currentTryoutId = current.state.currentTryoutId;
+  }
   const now = new Date().toISOString();
   payload.updatedAt = Date.now();
   dropRemovedPlayersFromPayload(payload);

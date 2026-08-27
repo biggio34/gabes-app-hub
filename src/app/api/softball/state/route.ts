@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { softballContext } from "@/lib/softball";
-import { filterPracticesForViewer, readSoftballState, writeSoftballState } from "@/lib/softball-store";
+import { filterLineupsForViewer, filterPracticesForViewer, readSoftballState, writeSoftballState } from "@/lib/softball-store";
 
 export const runtime = "nodejs";
 
@@ -26,6 +26,7 @@ export async function GET() {
       ? {
           ...result.state,
           practices: filterPracticesForViewer(result.state.practices, auth.context),
+          lineups: filterLineupsForViewer(result.state.lineups, auth.context),
         }
       : result.state;
     return NextResponse.json({

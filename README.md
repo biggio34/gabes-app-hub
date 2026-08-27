@@ -47,7 +47,7 @@ Default softball org: **MN Elks** (club) and **16U Fransen** (team). You can add
 
 Softball **Team Roster** is the one player list. Tryouts, Team Formation, Lineup, and Practice Planner all read and write that same list — Lineup no longer keeps a second roster. Manual adds and CSV imports save to the hub database (`players` locally, `hub_players` on Supabase) plus the softball state blob. Re-run `supabase/hub.sql` so `hub_players` exists. After that, also run `supabase/softball-state.sql` if you have not already.
 
-Practice plans save to that same club softball blob, merged by practice id, so a plan created on a phone shows up for every signed-in user assigned to that team. Opening the planner does not overwrite the database. Team members only receive plans for teams they can access; the server still keeps other teams’ plans when they save.
+Softball data lives in that club blob in the database, not in the browser: roster, tryout scores, team assignments, practice plans, drills, templates, and game lineups. Each device loads from `/api/softball/state` and saves back there. Opening an app does not overwrite the cloud. Records merge by id so one phone cannot drop another device’s plans or games. Leftover `localStorage` copies are migrated once, then removed. The team picker and Team Formation’s list/grid layout stay in the browser as view preferences only.
 
 On Netlify, add `GMAIL_USER` and `GMAIL_APP_PASSWORD`, then deploy again. Create the app password at [Google App Passwords](https://myaccount.google.com/apppasswords) after 2-Step Verification is on. Do not put that password in this repo.
 

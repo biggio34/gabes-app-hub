@@ -695,6 +695,44 @@
             ElksData.save(shared, { immediate: true });
         }
 
+        function consumeLegacyPlannerStorage() {
+            const merge = (window.ElksData && ElksData.mergeRecordListsById) || function (left, right) {
+                return (right && right.length) ? right : left;
+            };
+            let found = false;
+            function take(key) {
+                try {
+                    const raw = localStorage.getItem(key);
+                    if (!raw) return null;
+                    const parsed = JSON.parse(raw);
+                    return Array.isArray(parsed) ? parsed : null;
+                } catch (e) {
+                    return null;
+                }
+            }
+            const extraPractices = take('elks_practices');
+            if (extraPractices && extraPractices.length) {
+                practices = merge(extraPractices, practices);
+                found = true;
+            }
+            const extraDrills = take('elks_drills');
+            if (extraDrills && extraDrills.length) {
+                drills = merge(extraDrills, drills);
+                found = true;
+            }
+            const extraTemplates = take('elks_templates');
+            if (extraTemplates && extraTemplates.length) {
+                templates = merge(extraTemplates, templates);
+                found = true;
+            }
+            try {
+                localStorage.removeItem('elks_practices');
+                localStorage.removeItem('elks_drills');
+                localStorage.removeItem('elks_templates');
+            } catch (e) {}
+            if (found) persistPlannerToShared();
+        }
+
         function escapeHtml(str) {
             return String(str == null ? '' : str)
                 .replace(/&/g, '&amp;')
@@ -985,31 +1023,8 @@
                 if (Array.isArray(shared.drills)) drills = merge(drills, shared.drills);
                 if (Array.isArray(shared.templates)) templates = merge(templates, shared.templates);
             }
-
-            const savedPractices = localStorage.getItem('elks_practices');
-            if (savedPractices) {
-                try {
-                    const extra = JSON.parse(savedPractices);
-                    if (Array.isArray(extra) && extra.length) {
-                        practices = (window.ElksData && ElksData.mergeRecordListsById)
-                            ? ElksData.mergeRecordListsById(extra, practices)
-                            : (practices.length ? practices : extra);
-                    }
-                } catch (e) {}
-            }
-
-            const savedDrills = localStorage.getItem('elks_drills');
-            if (savedDrills && (!drills || !drills.length)) {
-                drills = JSON.parse(savedDrills);
-            } else if (!drills || !drills.length) {
-                drills = getDefaultDrills();
-                localStorage.setItem('elks_drills', JSON.stringify(drills));
-            }
-
-            const savedTemplates = localStorage.getItem('elks_templates');
-            if (savedTemplates && (!templates || !templates.length)) {
-                templates = JSON.parse(savedTemplates);
-            }
+            consumeLegacyPlannerStorage();
+            if (!drills || !drills.length) drills = getDefaultDrills();
             applyPlannerHub();
         }
 
@@ -1285,12 +1300,14 @@
         }
 
         function savePractices() {
-            localStorage.setItem('elks_practices', JSON.stringify(practices));
             persistPlannerToShared();
         }
 
         function saveTemplates() {
-            localStorage.setItem('elks_templates', JSON.stringify(templates));
+            persistPlannerToShared();
+        }
+
+        function saveDrills() {
             persistPlannerToShared();
         }
 
@@ -1690,7 +1707,7 @@
                     custom: true
                 };
                 drills.push(newDrill);
-                localStorage.setItem('elks_drills', JSON.stringify(drills));
+                saveDrills();
                 // If the drill library view is currently visible, refresh it
                 const drillsView = document.getElementById('view-drills');
                 if (!drillsView.classList.contains('hidden')) {
@@ -2715,7 +2732,7 @@
             };
 
             drills.push(newDrill);
-            localStorage.setItem('elks_drills', JSON.stringify(drills));
+            saveDrills();
 
             closeAddDrillModal();
             renderDrills();
@@ -2725,7 +2742,7 @@
             if (!confirm("Delete this drill from your library?")) return;
 
             drills = drills.filter(d => d.id !== drillId);
-            localStorage.setItem('elks_drills', JSON.stringify(drills));
+            saveDrills();
             renderDrills();
         }
 
@@ -2733,7 +2750,7 @@
             if (!confirm("Reset the entire drill library back to the default 16U set? This will remove any custom drills you added.")) return;
 
             drills = getDefaultDrills();
-            localStorage.setItem('elks_drills', JSON.stringify(drills));
+            saveDrills();
             renderDrills();
         }
 
@@ -2892,20 +2909,6 @@
 
         // Enhanced loadData that prefers Supabase when available
         async function loadData() {
-            // Try Supabase first for templates if configured and team selected
-            if (supabaseClient && currentTeamId) {
-                try {
-                    const { data: savedTemplates } = await supabaseClient
-                        .from('practice_templates')
-                        .select('*')
-                        .eq('team_id', currentTeamId);
-                    if (savedTemplates) templates = savedTemplates;
-                    console.log('[Planner] Templates loaded from Supabase');
-                } catch (e) {
-                    console.warn('[Planner] Supabase templates load failed, falling back to localStorage', e);
-                }
-            }
-
             if (window.ElksData) {
                 const shared = ElksData.load();
                 const merge = ElksData.mergeRecordListsById || function (left, right) {
@@ -2919,65 +2922,13 @@
                     templates = merge(templates, shared.templates);
                 }
             }
-
-            // Fallback / additional localStorage load (for practices/drills + offline)
-            const savedPractices = localStorage.getItem('elks_practices');
-            if (savedPractices) {
-                try {
-                    const extra = JSON.parse(savedPractices);
-                    if (Array.isArray(extra) && extra.length) {
-                        practices = (window.ElksData && ElksData.mergeRecordListsById)
-                            ? ElksData.mergeRecordListsById(extra, practices)
-                            : (practices.length ? practices : extra);
-                    }
-                } catch (e) {}
-            }
-
-            const savedDrills = localStorage.getItem('elks_drills');
-            if (savedDrills && (!drills || !drills.length)) {
-                drills = JSON.parse(savedDrills);
-            } else if (!drills || !drills.length) {
-                drills = getDefaultDrills();
-                localStorage.setItem('elks_drills', JSON.stringify(drills));
-            }
-
-            const savedTemplatesLocal = localStorage.getItem('elks_templates');
-            if (savedTemplatesLocal && templates.length === 0) {
-                templates = JSON.parse(savedTemplatesLocal);
-            }
+            consumeLegacyPlannerStorage();
+            if (!drills || !drills.length) drills = getDefaultDrills();
             applyPlannerHub();
         }
 
-        // Enhanced save for templates
         async function saveTemplates() {
-            // Always save to localStorage as fallback
-            localStorage.setItem('elks_templates', JSON.stringify(templates));
             persistPlannerToShared();
-
-            // Also save to Supabase if configured + team selected
-            if (supabaseClient && currentTeamId && templates.length > 0) {
-                try {
-                    // Upsert the templates for this team (simple approach: delete + insert for demo)
-                    await supabaseClient
-                        .from('practice_templates')
-                        .delete()
-                        .eq('team_id', currentTeamId);
-
-                    const templatesWithTeam = templates.map(t => ({
-                        ...t,
-                        team_id: currentTeamId
-                    }));
-
-                    const { error } = await supabaseClient
-                        .from('practice_templates')
-                        .insert(templatesWithTeam);
-
-                    if (error) throw error;
-                    console.log('[Planner] Templates synced to Supabase');
-                } catch (e) {
-                    console.warn('[Planner] Failed to sync templates to Supabase (will use localStorage)', e);
-                }
-            }
         }
 
         // Call Supabase init early
