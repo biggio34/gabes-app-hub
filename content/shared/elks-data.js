@@ -585,13 +585,25 @@
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
+  function noIdRecordKey(item) {
+    try {
+      return JSON.stringify(item);
+    } catch (e) {
+      return '';
+    }
+  }
+
   function mergeRecordListsById(left, right) {
     const byId = new Map();
     const noId = [];
+    const seenNoId = new Set();
     function ingest(list) {
       (list || []).forEach(function (item) {
         if (!item || typeof item !== 'object') return;
         if (!item.id) {
+          const key = noIdRecordKey(item);
+          if (key && seenNoId.has(key)) return;
+          if (key) seenNoId.add(key);
           noId.push(item);
           return;
         }
@@ -792,6 +804,7 @@
     if (!state.teams) state.teams = [];
     if (!state.tryouts) state.tryouts = [];
     if (!state.practices) state.practices = [];
+    dropUnassignedPractices(state);
     if (!state.drills) state.drills = [];
     if (!state.templates) state.templates = [];
     if (!state.lineups || typeof state.lineups !== 'object' || Array.isArray(state.lineups)) state.lineups = {};
@@ -816,6 +829,25 @@
 
   function isUnassignedId(teamId) {
     return teamId === 'unassigned';
+  }
+
+  function practiceAssignedTeamId(practice) {
+    const id = practice && practice.teamId != null ? String(practice.teamId).trim() : '';
+    if (!id || id === 'all' || id === 'unassigned') return '';
+    return id;
+  }
+
+  function dropUnassignedPractices(stateOrList) {
+    if (Array.isArray(stateOrList)) {
+      return stateOrList.filter(function (practice) {
+        return !!practiceAssignedTeamId(practice);
+      });
+    }
+    if (!stateOrList || !Array.isArray(stateOrList.practices)) return false;
+    const next = dropUnassignedPractices(stateOrList.practices);
+    if (next.length === stateOrList.practices.length) return false;
+    stateOrList.practices = next;
+    return true;
   }
 
   function realTeamId(teamId) {
@@ -1480,21 +1512,16 @@
 
       if (remotePlayers === 0 && localPlayers > 0) {
         if (!local) return;
-        const practices = mergeRecordListsById(local.practices, remote.practices);
-        const drills = mergeRecordListsById(local.drills, remote.drills);
-        const templates = mergeRecordListsById(local.templates, remote.templates);
-        const tryouts = mergeRecordListsById(local.tryouts, remote.tryouts);
-        const lineups = mergeLineupMaps(local.lineups, remote.lineups);
-        const addedPlans = recordListsDiffer(local.practices, practices)
-          || recordListsDiffer(local.drills, drills)
-          || recordListsDiffer(local.templates, templates)
-          || recordListsDiffer(local.tryouts, tryouts)
-          || lineupMapsDiffer(local.lineups, lineups);
-        local.practices = practices;
-        local.drills = drills;
-        local.templates = templates;
-        local.tryouts = tryouts;
-        local.lineups = lineups;
+        local.practices = dropUnassignedPractices(mergeRecordListsById(local.practices, remote.practices));
+        local.drills = mergeRecordListsById(local.drills, remote.drills);
+        local.templates = mergeRecordListsById(local.templates, remote.templates);
+        local.tryouts = mergeRecordListsById(local.tryouts, remote.tryouts);
+        local.lineups = mergeLineupMaps(local.lineups, remote.lineups);
+        const addedPlans = recordListsDiffer(local.practices, remote.practices)
+          || recordListsDiffer(local.drills, remote.drills)
+          || recordListsDiffer(local.templates, remote.templates)
+          || recordListsDiffer(local.tryouts, remote.tryouts)
+          || lineupMapsDiffer(local.lineups, remote.lineups);
         if (addedPlans) {
           saveState(local, { immediate: true });
           emitDataUpdated();
@@ -1513,6 +1540,7 @@
         next.tryouts = mergeRecordListsById(local.tryouts, remote.tryouts);
         next.lineups = mergeLineupMaps(local.lineups, remote.lineups);
       }
+      dropUnassignedPractices(next);
       dropRemovedPlayers(next);
 
       const hasLocalOnlyRecords = recordListsDiffer(next.practices, remote.practices)
@@ -1909,6 +1937,8 @@
     lineupPlayers,
     connectCloud,
     mergeRecordListsById,
+    dropUnassignedPractices,
+    practiceAssignedTeamId,
     mergeLineupMaps,
     flushCloudSave,
     applySelectedHubTeam,
