@@ -596,6 +596,8 @@
         }
 
         function practicesForTeam() {
+            const teamId = currentPlannerTeamId();
+            if (teamId === 'unassigned') return [];
             const realFilter = plannerRealTeamFilter();
             const allowed = new Set(assignableTeams().map((team) => team.id));
             const filterId = normalizePracticeTeamId(realFilter);
