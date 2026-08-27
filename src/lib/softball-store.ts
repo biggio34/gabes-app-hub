@@ -284,6 +284,61 @@ export async function readSoftballState(clubId: string, teamId: string) {
   return { state: payload, updatedAt: row?.updatedAt ?? null, stored: "sqlite" as const };
 }
 
+type JsonRecord = Record<string, unknown> & { id?: string; updatedAt?: unknown };
+
+function asRecords(value: unknown) {
+  return Array.isArray(value) ? (value as JsonRecord[]) : [];
+}
+
+function recordUpdatedAt(item: JsonRecord | null | undefined) {
+  if (!item) return 0;
+  const raw = item.updatedAt;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  const asNum = Number(raw);
+  if (Number.isFinite(asNum) && asNum > 0) return asNum;
+  if (typeof raw === "string") {
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+export function mergeRecordListsById(current: unknown, incoming: unknown) {
+  const byId = new Map<string, JsonRecord>();
+  const noId: JsonRecord[] = [];
+  const ingest = (list: JsonRecord[]) => {
+    for (const item of list) {
+      if (!item || typeof item !== "object") continue;
+      const id = item.id != null ? String(item.id) : "";
+      if (!id) {
+        noId.push(item);
+        continue;
+      }
+      const existing = byId.get(id);
+      if (!existing || recordUpdatedAt(item) >= recordUpdatedAt(existing)) {
+        byId.set(id, item);
+      }
+    }
+  };
+  ingest(asRecords(current));
+  ingest(asRecords(incoming));
+  return [...byId.values(), ...noId];
+}
+
+export function filterPracticesForViewer(
+  practices: unknown,
+  viewer: { role: string; teams: { id: string }[] },
+) {
+  const list = asRecords(practices);
+  if (viewer.role === "owner") return list;
+  const allowed = new Set(viewer.teams.map((team) => team.id));
+  return list.filter((item) => {
+    const teamId = String(item.teamId || "").trim();
+    if (!teamId || teamId === "all" || teamId === "unassigned") return true;
+    return allowed.has(teamId);
+  });
+}
+
 export async function writeSoftballState(
   clubId: string,
   teamId: string,
@@ -297,6 +352,9 @@ export async function writeSoftballState(
       payload.teams = current.state.teams;
     }
   }
+  payload.practices = mergeRecordListsById(current.state?.practices, payload.practices);
+  payload.drills = mergeRecordListsById(current.state?.drills, payload.drills);
+  payload.templates = mergeRecordListsById(current.state?.templates, payload.templates);
   const now = new Date().toISOString();
   payload.updatedAt = Date.now();
   dropRemovedPlayersFromPayload(payload);

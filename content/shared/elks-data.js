@@ -560,12 +560,65 @@
   }
 
   let cloudTimer = null;
+  let pendingCloudState = null;
+
+  function recordUpdatedAt(item) {
+    if (!item) return 0;
+    const raw = item.updatedAt;
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    const asNum = Number(raw);
+    if (Number.isFinite(asNum) && asNum > 0) return asNum;
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function mergeRecordListsById(left, right) {
+    const byId = new Map();
+    const noId = [];
+    function ingest(list) {
+      (list || []).forEach(function (item) {
+        if (!item || typeof item !== 'object') return;
+        if (!item.id) {
+          noId.push(item);
+          return;
+        }
+        const existing = byId.get(item.id);
+        if (!existing || recordUpdatedAt(item) >= recordUpdatedAt(existing)) {
+          byId.set(item.id, item);
+        }
+      });
+    }
+    ingest(left);
+    ingest(right);
+    return [...byId.values()].concat(noId);
+  }
+
+  function recordListSignature(list) {
+    return (list || []).map(function (item) {
+      if (!item) return '';
+      if (item.id) return String(item.id) + ':' + recordUpdatedAt(item);
+      try {
+        return JSON.stringify(item);
+      } catch (e) {
+        return '';
+      }
+    }).sort().join('|');
+  }
+
+  function recordListsDiffer(left, right) {
+    return recordListSignature(left) !== recordListSignature(right);
+  }
 
   function saveState(state, opts) {
     try {
-      state.updatedAt = Date.now();
+      const skipCloud = opts && opts.skipCloud;
+      if (!skipCloud && !(opts && opts.keepUpdatedAt)) {
+        state.updatedAt = Date.now();
+      }
       localStorage.setItem(storageKey(), JSON.stringify(state));
-      if (!opts || !opts.skipCloud) scheduleCloudSave(state);
+      if (!skipCloud) {
+        scheduleCloudSave(state, { immediate: !!(opts && opts.immediate) });
+      }
     } catch (e) {
       console.warn('ElksData: failed to save', e);
     }
@@ -1141,15 +1194,9 @@
       next.tryouts = localState.tryouts;
       next.currentTryoutId = localState.currentTryoutId;
     }
-    if (!(remoteState.practices && remoteState.practices.length) && (localState.practices || []).length) {
-      next.practices = localState.practices;
-    }
-    if (!(remoteState.drills && remoteState.drills.length) && (localState.drills || []).length) {
-      next.drills = localState.drills;
-    }
-    if (!(remoteState.templates && remoteState.templates.length) && (localState.templates || []).length) {
-      next.templates = localState.templates;
-    }
+    next.practices = mergeRecordListsById(localState.practices, remoteState.practices);
+    next.drills = mergeRecordListsById(localState.drills, remoteState.drills);
+    next.templates = mergeRecordListsById(localState.templates, remoteState.templates);
     return syncHubTeams(ensureDefaults(next));
   }
 
@@ -1361,40 +1408,92 @@
     pullFromCloud();
   }
 
+  function emitDataUpdated() {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('elks-data-updated'));
+    }
+  }
+
   async function pullFromCloud() {
     try {
       const response = await fetch('/api/softball/state');
       if (!response.ok) return;
       const data = await response.json();
       if (!data || !data.state) return;
+      const remote = data.state;
       const local = loadRaw();
-      const remoteUpdated = Number(data.state.updatedAt || 0);
+      const remoteUpdated = Number(remote.updatedAt || 0);
       const localUpdated = Number((local && local.updatedAt) || 0);
-      const remotePlayers = (data.state.players || []).length;
+      const remotePlayers = (remote.players || []).length;
       const localPlayers = ((local && local.players) || []).length;
+
       if (remotePlayers === 0 && localPlayers > 0) {
+        if (!local) return;
+        const practices = mergeRecordListsById(local.practices, remote.practices);
+        const drills = mergeRecordListsById(local.drills, remote.drills);
+        const templates = mergeRecordListsById(local.templates, remote.templates);
+        const addedPlans = recordListsDiffer(local.practices, practices)
+          || recordListsDiffer(local.drills, drills)
+          || recordListsDiffer(local.templates, templates);
+        local.practices = practices;
+        local.drills = drills;
+        local.templates = templates;
+        if (addedPlans) {
+          saveState(local, { immediate: true });
+          emitDataUpdated();
+        }
         return;
       }
+
+      let next;
       if (!local || remoteUpdated >= localUpdated) {
-        const next = mergeSharedStates(local, data.state);
-        dropRemovedPlayers(next);
-        saveState(next, { skipCloud: true });
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('elks-data-updated'));
-        }
+        next = mergeSharedStates(local, remote);
+      } else {
+        next = ensureDefaults(local);
+        next.practices = mergeRecordListsById(local.practices, remote.practices);
+        next.drills = mergeRecordListsById(local.drills, remote.drills);
+        next.templates = mergeRecordListsById(local.templates, remote.templates);
       }
+      dropRemovedPlayers(next);
+
+      const hasLocalOnlyRecords = recordListsDiffer(next.practices, remote.practices)
+        || recordListsDiffer(next.drills, remote.drills)
+        || recordListsDiffer(next.templates, remote.templates);
+
+      if (hasLocalOnlyRecords) {
+        saveState(next, { immediate: true });
+      } else {
+        saveState(next, { skipCloud: true, keepUpdatedAt: true });
+      }
+      emitDataUpdated();
     } catch (e) {
       console.warn('ElksData: cloud pull failed', e);
     }
   }
 
-  function scheduleCloudSave(state) {
+  function scheduleCloudSave(state, opts) {
     if (typeof fetch !== 'function') return;
+    pendingCloudState = JSON.parse(JSON.stringify(state));
+    if (opts && opts.immediate) {
+      flushCloudSave();
+      return;
+    }
     clearTimeout(cloudTimer);
-    const snapshot = JSON.parse(JSON.stringify(state));
     cloudTimer = setTimeout(function () {
-      pushToCloud(snapshot);
+      cloudTimer = null;
+      flushCloudSave();
     }, 500);
+  }
+
+  function flushCloudSave() {
+    if (cloudTimer) {
+      clearTimeout(cloudTimer);
+      cloudTimer = null;
+    }
+    if (!pendingCloudState) return;
+    const snapshot = pendingCloudState;
+    pendingCloudState = null;
+    pushToCloud(snapshot);
   }
 
   const LANE_POSITION_OPTIONS = [
@@ -1539,6 +1638,7 @@
       focus: src.focus || '',
       location: src.location || '',
       teamId: src.teamId || null,
+      updatedAt: Date.now(),
       segments: cloneSegments(src.segments),
     };
   }
@@ -1682,6 +1782,7 @@
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ state: state }),
+        keepalive: true,
       });
       const data = await response.json().catch(function () { return {}; });
       if (!response.ok) {
@@ -1744,6 +1845,8 @@
     toLineupPlayer,
     lineupPlayers,
     connectCloud,
+    mergeRecordListsById,
+    flushCloudSave,
     applySelectedHubTeam,
     currentHubTeam,
     setCurrentHubTeam,
@@ -1773,4 +1876,15 @@
     ensureEveryoneElseLane,
     assignPlayersToLanes,
   };
+
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('pagehide', function () {
+      flushCloudSave();
+    });
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') flushCloudSave();
+      });
+    }
+  }
 })(typeof window !== 'undefined' ? window : globalThis);

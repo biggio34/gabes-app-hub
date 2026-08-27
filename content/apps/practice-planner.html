@@ -610,14 +610,18 @@
         }
 
         function stampPracticeTeam(practice) {
+            if (!practice.id) {
+                practice.id = newPlannerId('practice');
+            }
             const existing = normalizePracticeTeamId(practice.teamId);
             if (existing && isAssignableTeamId(existing)) {
                 practice.teamId = existing;
-                return practice;
+            } else {
+                const teamId = defaultPracticeTeamId();
+                if (teamId) practice.teamId = teamId;
+                else delete practice.teamId;
             }
-            const teamId = defaultPracticeTeamId();
-            if (teamId) practice.teamId = teamId;
-            else delete practice.teamId;
+            practice.updatedAt = Date.now();
             return practice;
         }
 
@@ -679,10 +683,16 @@
         function persistPlannerToShared() {
             if (!window.ElksData) return;
             const shared = ElksData.load();
-            shared.practices = practices;
-            shared.drills = drills;
-            shared.templates = templates;
-            ElksData.save(shared);
+            const merge = ElksData.mergeRecordListsById || function (left, right) {
+                return (right && right.length) ? right : left;
+            };
+            shared.practices = merge(shared.practices, practices);
+            shared.drills = merge(shared.drills, drills);
+            shared.templates = merge(shared.templates, templates);
+            practices = shared.practices || [];
+            drills = shared.drills || [];
+            templates = shared.templates || [];
+            ElksData.save(shared, { immediate: true });
         }
 
         function escapeHtml(str) {
@@ -968,13 +978,25 @@
         function loadData() {
             if (window.ElksData) {
                 const shared = ElksData.load();
-                if (shared.practices && shared.practices.length) practices = shared.practices;
-                if (shared.drills && shared.drills.length) drills = shared.drills;
-                if (shared.templates && shared.templates.length) templates = shared.templates;
+                const merge = ElksData.mergeRecordListsById || function (left, right) {
+                    return (right && right.length) ? right : left;
+                };
+                if (Array.isArray(shared.practices)) practices = merge(practices, shared.practices);
+                if (Array.isArray(shared.drills)) drills = merge(drills, shared.drills);
+                if (Array.isArray(shared.templates)) templates = merge(templates, shared.templates);
             }
 
             const savedPractices = localStorage.getItem('elks_practices');
-            if ((!practices || !practices.length) && savedPractices) practices = JSON.parse(savedPractices);
+            if (savedPractices) {
+                try {
+                    const extra = JSON.parse(savedPractices);
+                    if (Array.isArray(extra) && extra.length) {
+                        practices = (window.ElksData && ElksData.mergeRecordListsById)
+                            ? ElksData.mergeRecordListsById(extra, practices)
+                            : (practices.length ? practices : extra);
+                    }
+                } catch (e) {}
+            }
 
             const savedDrills = localStorage.getItem('elks_drills');
             if (savedDrills && (!drills || !drills.length)) {
@@ -988,7 +1010,6 @@
             if (savedTemplates && (!templates || !templates.length)) {
                 templates = JSON.parse(savedTemplates);
             }
-            persistPlannerToShared();
             applyPlannerHub();
         }
 
@@ -1609,6 +1630,7 @@
                     category: drill.category,
                     drillId: drill.id
                 });
+                target.updatedAt = Date.now();
             } else {
                 return;
             }
@@ -2183,6 +2205,7 @@
             const teamId = selectedPracticeTeamId();
             if (teamId) practiceData.teamId = teamId;
             stampPracticeTeam(practiceData);
+            practiceData.updatedAt = Date.now();
 
             if (currentPracticeIndex !== null) {
                 practices[currentPracticeIndex] = practiceData;
@@ -2809,8 +2832,9 @@
             if (window.ElksData && window.ElksData.connectCloud) {
                 ElksData.connectCloud();
             }
-            window.addEventListener('elks-data-updated', () => {
-                loadData();
+            window.addEventListener('elks-data-updated', async () => {
+                await loadData();
+                renderPractices();
             });
             window.addEventListener('hub-team-changed', () => {
                 applyPlannerHub();
@@ -2884,16 +2908,30 @@
 
             if (window.ElksData) {
                 const shared = ElksData.load();
-                if (shared.practices && shared.practices.length) practices = shared.practices;
-                if (shared.drills && shared.drills.length) drills = shared.drills;
-                if (shared.templates && shared.templates.length && templates.length === 0) {
+                const merge = ElksData.mergeRecordListsById || function (left, right) {
+                    return (right && right.length) ? right : left;
+                };
+                if (Array.isArray(shared.practices)) practices = merge(practices, shared.practices);
+                if (Array.isArray(shared.drills)) drills = merge(drills, shared.drills);
+                if (Array.isArray(shared.templates) && templates.length === 0) {
                     templates = shared.templates;
+                } else if (Array.isArray(shared.templates)) {
+                    templates = merge(templates, shared.templates);
                 }
             }
 
             // Fallback / additional localStorage load (for practices/drills + offline)
             const savedPractices = localStorage.getItem('elks_practices');
-            if ((!practices || !practices.length) && savedPractices) practices = JSON.parse(savedPractices);
+            if (savedPractices) {
+                try {
+                    const extra = JSON.parse(savedPractices);
+                    if (Array.isArray(extra) && extra.length) {
+                        practices = (window.ElksData && ElksData.mergeRecordListsById)
+                            ? ElksData.mergeRecordListsById(extra, practices)
+                            : (practices.length ? practices : extra);
+                    }
+                } catch (e) {}
+            }
 
             const savedDrills = localStorage.getItem('elks_drills');
             if (savedDrills && (!drills || !drills.length)) {
@@ -2907,7 +2945,6 @@
             if (savedTemplatesLocal && templates.length === 0) {
                 templates = JSON.parse(savedTemplatesLocal);
             }
-            persistPlannerToShared();
             applyPlannerHub();
         }
 

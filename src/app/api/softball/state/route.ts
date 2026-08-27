@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { softballContext } from "@/lib/softball";
-import { readSoftballState, writeSoftballState } from "@/lib/softball-store";
+import { filterPracticesForViewer, readSoftballState, writeSoftballState } from "@/lib/softball-store";
 
 export const runtime = "nodejs";
 
@@ -22,8 +22,14 @@ export async function GET() {
   if (auth.error) return auth.error;
   try {
     const result = await readSoftballState(auth.context.clubId, auth.context.teamId);
+    const state = result.state
+      ? {
+          ...result.state,
+          practices: filterPracticesForViewer(result.state.practices, auth.context),
+        }
+      : result.state;
     return NextResponse.json({
-      state: result.state,
+      state,
       team: auth.context,
       updatedAt: result.updatedAt,
       stored: result.stored,
