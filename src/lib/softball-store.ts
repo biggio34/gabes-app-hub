@@ -303,14 +303,26 @@ function recordUpdatedAt(item: JsonRecord | null | undefined) {
   return 0;
 }
 
+function noIdRecordKey(item: JsonRecord) {
+  try {
+    return JSON.stringify(item);
+  } catch {
+    return "";
+  }
+}
+
 export function mergeRecordListsById(current: unknown, incoming: unknown) {
   const byId = new Map<string, JsonRecord>();
   const noId: JsonRecord[] = [];
+  const seenNoId = new Set<string>();
   const ingest = (list: JsonRecord[]) => {
     for (const item of list) {
       if (!item || typeof item !== "object") continue;
       const id = item.id != null ? String(item.id) : "";
       if (!id) {
+        const key = noIdRecordKey(item);
+        if (key && seenNoId.has(key)) continue;
+        if (key) seenNoId.add(key);
         noId.push(item);
         continue;
       }
@@ -325,18 +337,24 @@ export function mergeRecordListsById(current: unknown, incoming: unknown) {
   return [...byId.values(), ...noId];
 }
 
+export function practiceAssignedTeamId(practice: JsonRecord | null | undefined) {
+  const teamId = practice?.teamId != null ? String(practice.teamId).trim() : "";
+  if (!teamId || teamId === "all" || teamId === "unassigned") return "";
+  return teamId;
+}
+
+export function dropUnassignedPractices(practices: unknown) {
+  return asRecords(practices).filter((item) => !!practiceAssignedTeamId(item));
+}
+
 export function filterPracticesForViewer(
   practices: unknown,
   viewer: { role: string; teams: { id: string }[] },
 ) {
-  const list = asRecords(practices);
+  const list = dropUnassignedPractices(practices);
   if (viewer.role === "owner") return list;
   const allowed = new Set(viewer.teams.map((team) => team.id));
-  return list.filter((item) => {
-    const teamId = String(item.teamId || "").trim();
-    if (!teamId || teamId === "all" || teamId === "unassigned") return true;
-    return allowed.has(teamId);
-  });
+  return list.filter((item) => allowed.has(practiceAssignedTeamId(item)));
 }
 
 export function mergeLineupMaps(current: unknown, incoming: unknown) {
@@ -397,7 +415,9 @@ export async function writeSoftballState(
       payload.teams = current.state.teams;
     }
   }
-  payload.practices = mergeRecordListsById(current.state?.practices, payload.practices);
+  payload.practices = dropUnassignedPractices(
+    mergeRecordListsById(current.state?.practices, payload.practices),
+  );
   payload.drills = mergeRecordListsById(current.state?.drills, payload.drills);
   payload.templates = mergeRecordListsById(current.state?.templates, payload.templates);
   payload.tryouts = mergeRecordListsById(current.state?.tryouts, payload.tryouts);

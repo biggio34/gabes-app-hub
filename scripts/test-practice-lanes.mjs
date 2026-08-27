@@ -108,4 +108,27 @@ assert(copiedOld[0].name === "Live BP", "old template name round-trips");
 const merged = ElksData.mergeStationsToSingle(ElksData.cloneSegment(block));
 assert(!ElksData.isSplitSegment(merged), "merge removes lanes");
 
+const kept = { id: "practice_keep", teamId: "team-16u-fransen", focus: "Defense", date: "2026-08-20" };
+const orphan = { focus: "Defense", date: "2026-08-20" };
+const allTeams = { id: "practice_all", teamId: "all", focus: "Scrimmage" };
+const unassigned = { id: "practice_none", teamId: "unassigned", focus: "BP" };
+assert(ElksData.practiceAssignedTeamId(kept) === "team-16u-fransen", "assigned practice keeps team");
+assert(ElksData.practiceAssignedTeamId(orphan) === "", "missing team is unassigned");
+assert(ElksData.practiceAssignedTeamId(allTeams) === "", "all is not a team");
+assert(ElksData.practiceAssignedTeamId(unassigned) === "", "unassigned marker is not a team");
+
+const dropped = ElksData.dropUnassignedPractices([kept, orphan, allTeams, unassigned]);
+assert(dropped.length === 1, "only team-assigned practices remain");
+assert(dropped[0].id === "practice_keep", "kept the assigned practice");
+
+const state = ElksData.ensureDefaults({
+  practices: [kept, orphan, { ...orphan }],
+});
+assert(state.practices.length === 1, "ensureDefaults drops unassigned duplicates");
+assert(state.practices[0].id === "practice_keep", "ensureDefaults keeps the assigned plan");
+
+const once = { focus: "Hitting", date: "2026-08-01" };
+const noIdMerged = ElksData.mergeRecordListsById([once], [once, once]);
+assert(noIdMerged.length === 1, "identical no-id records do not multiply");
+
 console.log("practice lane tests passed");

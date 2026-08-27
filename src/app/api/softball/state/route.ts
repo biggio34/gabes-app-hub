@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { softballContext } from "@/lib/softball";
-import { filterLineupsForViewer, filterPracticesForViewer, readSoftballState, writeSoftballState } from "@/lib/softball-store";
+import { filterLineupsForViewer, filterPracticesForViewer, dropUnassignedPractices, readSoftballState, writeSoftballState } from "@/lib/softball-store";
 
 export const runtime = "nodejs";
 
@@ -22,13 +22,27 @@ export async function GET() {
   if (auth.error) return auth.error;
   try {
     const result = await readSoftballState(auth.context.clubId, auth.context.teamId);
-    const state = result.state
-      ? {
-          ...result.state,
-          practices: filterPracticesForViewer(result.state.practices, auth.context),
-          lineups: filterLineupsForViewer(result.state.lineups, auth.context),
+    let state = result.state;
+    if (state) {
+      const practices = Array.isArray(state.practices) ? state.practices : [];
+      const assigned = dropUnassignedPractices(practices);
+      if (assigned.length !== practices.length) {
+        try {
+          await writeSoftballState(auth.context.clubId, auth.context.teamId, {
+            ...state,
+            practices: assigned,
+          });
+        } catch {
+          // Still hide them in this response if the database write fails.
         }
-      : result.state;
+        state = { ...state, practices: assigned };
+      }
+      state = {
+        ...state,
+        practices: filterPracticesForViewer(state.practices, auth.context),
+        lineups: filterLineupsForViewer(state.lineups, auth.context),
+      };
+    }
     return NextResponse.json({
       state,
       team: auth.context,

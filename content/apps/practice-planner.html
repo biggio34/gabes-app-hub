@@ -596,6 +596,8 @@
         }
 
         function practicesForTeam() {
+            const teamId = currentPlannerTeamId();
+            if (teamId === 'unassigned') return [];
             const realFilter = plannerRealTeamFilter();
             const allowed = new Set(assignableTeams().map((team) => team.id));
             const filterId = normalizePracticeTeamId(realFilter);
@@ -603,8 +605,9 @@
                 .map((practice, index) => ({ practice, index }))
                 .filter(({ practice }) => {
                     const pid = normalizePracticeTeamId(practice.teamId);
-                    if (allowed.size && pid && !allowed.has(pid)) return false;
-                    if (filterId) return !pid || pid === filterId;
+                    if (!pid) return false;
+                    if (allowed.size && !allowed.has(pid)) return false;
+                    if (filterId) return pid === filterId;
                     return true;
                 });
         }
@@ -686,7 +689,10 @@
             const merge = ElksData.mergeRecordListsById || function (left, right) {
                 return (right && right.length) ? right : left;
             };
-            shared.practices = merge(shared.practices, practices);
+            const drop = ElksData.dropUnassignedPractices || function (list) {
+                return (list || []).filter((practice) => normalizePracticeTeamId(practice && practice.teamId));
+            };
+            shared.practices = drop(merge(shared.practices, practices));
             shared.drills = merge(shared.drills, drills);
             shared.templates = merge(shared.templates, templates);
             practices = shared.practices || [];
@@ -712,7 +718,10 @@
             }
             const extraPractices = take('elks_practices');
             if (extraPractices && extraPractices.length) {
-                practices = merge(extraPractices, practices);
+                const drop = (window.ElksData && ElksData.dropUnassignedPractices) || function (list) {
+                    return (list || []).filter((practice) => normalizePracticeTeamId(practice && practice.teamId));
+                };
+                practices = drop(merge(extraPractices, practices));
                 found = true;
             }
             const extraDrills = take('elks_drills');
@@ -1016,12 +1025,12 @@
         function loadData() {
             if (window.ElksData) {
                 const shared = ElksData.load();
-                const merge = ElksData.mergeRecordListsById || function (left, right) {
-                    return (right && right.length) ? right : left;
+                const drop = ElksData.dropUnassignedPractices || function (list) {
+                    return (list || []).filter((practice) => normalizePracticeTeamId(practice && practice.teamId));
                 };
-                if (Array.isArray(shared.practices)) practices = merge(practices, shared.practices);
-                if (Array.isArray(shared.drills)) drills = merge(drills, shared.drills);
-                if (Array.isArray(shared.templates)) templates = merge(templates, shared.templates);
+                if (Array.isArray(shared.practices)) practices = drop(shared.practices);
+                if (Array.isArray(shared.drills)) drills = shared.drills;
+                if (Array.isArray(shared.templates)) templates = shared.templates;
             }
             consumeLegacyPlannerStorage();
             if (!drills || !drills.length) drills = getDefaultDrills();
@@ -2911,16 +2920,12 @@
         async function loadData() {
             if (window.ElksData) {
                 const shared = ElksData.load();
-                const merge = ElksData.mergeRecordListsById || function (left, right) {
-                    return (right && right.length) ? right : left;
+                const drop = ElksData.dropUnassignedPractices || function (list) {
+                    return (list || []).filter((practice) => normalizePracticeTeamId(practice && practice.teamId));
                 };
-                if (Array.isArray(shared.practices)) practices = merge(practices, shared.practices);
-                if (Array.isArray(shared.drills)) drills = merge(drills, shared.drills);
-                if (Array.isArray(shared.templates) && templates.length === 0) {
-                    templates = shared.templates;
-                } else if (Array.isArray(shared.templates)) {
-                    templates = merge(templates, shared.templates);
-                }
+                if (Array.isArray(shared.practices)) practices = drop(shared.practices);
+                if (Array.isArray(shared.drills)) drills = shared.drills;
+                if (Array.isArray(shared.templates)) templates = shared.templates;
             }
             consumeLegacyPlannerStorage();
             if (!drills || !drills.length) drills = getDefaultDrills();
