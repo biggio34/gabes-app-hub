@@ -101,6 +101,34 @@ export function parseYearMonth(yearValue: unknown, monthValue: unknown) {
   return { year, month };
 }
 
+export function productKey(item: {
+  brand: string;
+  product: string;
+  size: string;
+  shade: string;
+}) {
+  return [item.brand, item.product, item.size, item.shade]
+    .map((value) => value.trim().toLowerCase())
+    .join("\u0000");
+}
+
+export function findPendingDuplicate(
+  items: SalonOrderItem[],
+  candidate: { brand: string; product: string; size: string; shade: string },
+  exceptId?: string,
+) {
+  if (!candidate.product.trim()) return null;
+  const key = productKey(candidate);
+  return (
+    items.find(
+      (item) =>
+        item.status === "pending" &&
+        item.id !== exceptId &&
+        productKey(item) === key,
+    ) ?? null
+  );
+}
+
 export function itemVendor(item: Pick<SalonOrderItem, "actualVendor" | "preferredVendor">) {
   return item.actualVendor.trim() || item.preferredVendor.trim() || "No vendor";
 }

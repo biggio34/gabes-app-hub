@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  findPendingDuplicate,
   itemVendor,
   monthLabel,
   nextYearMonth,
@@ -86,6 +87,7 @@ export function SupplyOrdersClient({
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
+  const [vendorFilter, setVendorFilter] = useState("all");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [orderName, setOrderName] = useState("");
@@ -101,7 +103,7 @@ export function SupplyOrdersClient({
   });
   const [bulkOrderPrompt, setBulkOrderPrompt] = useState<{
     vendor: string;
-    fromStatus: OrderStatus;
+    fromStatus?: OrderStatus;
   } | null>(null);
   const [bulkOrderNumber, setBulkOrderNumber] = useState("");
 
@@ -125,19 +127,40 @@ export function SupplyOrdersClient({
     void load(initialYear, initialMonth);
   }, [initialYear, initialMonth]);
 
+  const vendorCounts = useMemo(() => {
+    const items =
+      filter === "all"
+        ? (view?.items ?? [])
+        : (view?.items ?? []).filter((item) => item.status === filter);
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      const vendor = itemVendor(item);
+      counts.set(vendor, (counts.get(vendor) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [view, filter]);
+
   const counts = useMemo(() => {
+    const source =
+      vendorFilter === "all"
+        ? (view?.items ?? [])
+        : (view?.items ?? []).filter((item) => itemVendor(item) === vendorFilter);
     const next = Object.fromEntries(ORDER_STATUSES.map((status) => [status, 0])) as Record<
       OrderStatus,
       number
     >;
-    for (const item of view?.items ?? []) next[item.status] += 1;
+    for (const item of source) next[item.status] += 1;
     return next;
-  }, [view]);
+  }, [view, vendorFilter]);
 
   const visibleItems = useMemo(() => {
-    const items = view?.items ?? [];
-    return filter === "all" ? items : items.filter((item) => item.status === filter);
-  }, [view, filter]);
+    let items = view?.items ?? [];
+    if (filter !== "all") items = items.filter((item) => item.status === filter);
+    if (vendorFilter !== "all") {
+      items = items.filter((item) => itemVendor(item) === vendorFilter);
+    }
+    return items;
+  }, [view, filter, vendorFilter]);
 
   const grouped = useMemo(() => {
     const byStatus = ORDER_STATUSES.map((status) => {
@@ -154,7 +177,15 @@ export function SupplyOrdersClient({
     return byStatus;
   }, [visibleItems]);
 
+  const duplicatePending = useMemo(() => {
+    if (!view || !form.product.trim()) return null;
+    return findPendingDuplicate(view.items, form);
+  }, [view, form]);
+
   function goToMonth(year: number, month: number) {
+    setVendorFilter("all");
+    setBulkOrderPrompt(null);
+    setBulkOrderNumber("");
     const today = view?.today;
     if (today && year === today.year && month === today.month) {
       router.push("/salon/orders");
@@ -172,6 +203,19 @@ export function SupplyOrdersClient({
   async function addRequest(event: React.FormEvent) {
     event.preventDefault();
     if (!view) return;
+    const duplicate = findPendingDuplicate(view.items, form);
+    if (duplicate) {
+      const label = [form.brand, form.product, form.size, form.shade]
+        .filter(Boolean)
+        .join(" · ");
+      if (
+        !confirm(
+          `${label} is already Pending this month (qty ${duplicate.qty}). Add another anyway?`,
+        )
+      ) {
+        return;
+      }
+    }
     setBusy(true);
     setError("");
     setNotice("");
@@ -265,7 +309,7 @@ export function SupplyOrdersClient({
   async function bulkStatus(
     vendor: string,
     status: OrderStatus,
-    fromStatus: OrderStatus,
+    fromStatus?: OrderStatus,
     vendorOrderNumber?: string,
   ) {
     if (!view) return;
@@ -538,6 +582,18 @@ export function SupplyOrdersClient({
               }
             />
           </label>
+          {duplicatePending ? (
+            <p className="rounded-2xl border border-amber-700/60 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
+              {[duplicatePending.brand, duplicatePending.product, duplicatePending.size, duplicatePending.shade]
+                .filter(Boolean)
+                .join(" · ")}{" "}
+              is already Pending this month (qty {duplicatePending.qty}
+              {duplicatePending.requestedByName
+                ? `, asked by ${duplicatePending.requestedByName}`
+                : ""}
+              ). You can still add another if you need it.
+            </p>
+          ) : null}
           <button
             type="submit"
             disabled={busy}
@@ -580,28 +636,139 @@ export function SupplyOrdersClient({
           </button>
         ) : null}
 
-        <div className="flex flex-wrap gap-2">
-          <FilterChip
-            active={filter === "all"}
-            label={`All ${view.items.length}`}
-            onClick={() => setFilter("all")}
-          />
-          {ORDER_STATUSES.map((status) => (
+        <div className="grid gap-3">
+          <div className="flex flex-wrap gap-2">
             <FilterChip
-              key={status}
-              active={filter === status}
-              label={`${statusLabel[status]} ${counts[status]}`}
-              onClick={() => setFilter(status)}
+              active={filter === "all"}
+              label={`All ${
+                vendorFilter === "all"
+                  ? view.items.length
+                  : view.items.filter((item) => itemVendor(item) === vendorFilter).length
+              }`}
+              onClick={() => setFilter("all")}
             />
-          ))}
+            {ORDER_STATUSES.map((status) => (
+              <FilterChip
+                key={status}
+                active={filter === status}
+                label={`${statusLabel[status]} ${counts[status]}`}
+                onClick={() => setFilter(status)}
+              />
+            ))}
+          </div>
+          <label className="grid max-w-sm gap-1.5 text-sm">
+            Vendor
+            <select
+              className={field}
+              value={vendorFilter}
+              onChange={(event) => {
+                setVendorFilter(event.target.value);
+                setBulkOrderPrompt(null);
+              }}
+            >
+              <option value="all">All vendors</option>
+              {vendorFilter !== "all" &&
+              !vendorCounts.some(([vendor]) => vendor === vendorFilter) ? (
+                <option value={vendorFilter}>{vendorFilter} (0)</option>
+              ) : null}
+              {vendorCounts.map(([vendor, count]) => (
+                <option key={vendor} value={vendor}>
+                  {vendor} ({count})
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
+
+        {vendorFilter !== "all" && visibleItems.length > 0 ? (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm">
+                {visibleItems.length} {vendorFilter} item
+                {visibleItems.length === 1 ? "" : "s"}
+                {filter === "all" ? "" : ` in ${statusLabel[filter]}`}
+              </p>
+              <label className="flex items-center gap-2 text-sm text-slate-400">
+                Set all to
+                <select
+                  className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-rose-500"
+                  defaultValue=""
+                  onChange={(event) => {
+                    const value = event.target.value as OrderStatus | "";
+                    event.target.value = "";
+                    if (!value) return;
+                    const fromStatus = filter === "all" ? undefined : filter;
+                    if (value === "ordered") {
+                      setBulkOrderPrompt({ vendor: vendorFilter, fromStatus });
+                      setBulkOrderNumber("");
+                      return;
+                    }
+                    void bulkStatus(vendorFilter, value, fromStatus);
+                  }}
+                >
+                  <option value="">Choose…</option>
+                  {ORDER_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {statusLabel[status]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {bulkOrderPrompt &&
+            bulkOrderPrompt.vendor === vendorFilter &&
+            bulkOrderPrompt.fromStatus === (filter === "all" ? undefined : filter) ? (
+              <form
+                className="mt-3 grid gap-2 rounded-2xl border border-rose-800 bg-rose-950/40 p-3 sm:grid-cols-[1fr_auto_auto]"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void bulkStatus(
+                    vendorFilter,
+                    "ordered",
+                    filter === "all" ? undefined : filter,
+                    bulkOrderNumber,
+                  );
+                }}
+              >
+                <label className="grid gap-1 text-sm">
+                  Vendor order # for these items
+                  <input
+                    autoFocus
+                    className={field}
+                    value={bulkOrderNumber}
+                    placeholder="Optional"
+                    onChange={(event) => setBulkOrderNumber(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="self-end rounded-xl bg-rose-700 px-3 py-2 text-sm font-semibold hover:bg-rose-600"
+                >
+                  Mark as Ordered
+                </button>
+                <button
+                  type="button"
+                  className="self-end rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+                  onClick={() => {
+                    setBulkOrderPrompt(null);
+                    setBulkOrderNumber("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : null}
+          </div>
+        ) : null}
 
         {error ? <p className="text-sm text-red-400">{error}</p> : null}
         {notice ? <p className="text-sm text-emerald-400">{notice}</p> : null}
 
         {visibleItems.length === 0 ? (
           <p className="rounded-3xl border border-slate-800 bg-slate-900 px-6 py-12 text-center text-slate-400">
-            No requests this month yet. Add one above.
+            {view.items.length === 0
+              ? "No requests this month yet. Add one above."
+              : "No requests match these filters."}
           </p>
         ) : (
           grouped.map((group) => (
