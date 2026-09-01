@@ -81,7 +81,7 @@ export default async function HubHome() {
               ) : null}
               <div className="grid gap-4 md:grid-cols-2">
                 {apps.map((app) => {
-                  const href = app.external ? app.href! : `/apps/${app.slug}`;
+                  const href = app.href || `/apps/${app.slug}`;
                   return (
                     <a
                       key={app.slug}

@@ -1,4 +1,4 @@
-import { primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const clubs = sqliteTable("clubs", {
   id: text("id").primaryKey(),
@@ -75,6 +75,32 @@ export const players = sqliteTable("players", {
   birthdate: text("birthdate").notNull(),
   originalTeam: text("original_team").notNull(),
   extra: text("extra").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const salonOrders = sqliteTable("salon_orders", {
+  id: text("id").primaryKey(),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(),
+  name: text("name").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const salonOrderItems = sqliteTable("salon_order_items", {
+  id: text("id").primaryKey(),
+  orderId: text("order_id").notNull(),
+  preferredVendor: text("preferred_vendor").notNull(),
+  brand: text("brand").notNull(),
+  product: text("product").notNull(),
+  size: text("size").notNull(),
+  shade: text("shade").notNull(),
+  qty: integer("qty").notNull(),
+  note: text("note").notNull(),
+  actualVendor: text("actual_vendor").notNull(),
+  status: text("status").notNull(),
+  requestedByUserId: text("requested_by_user_id").notNull(),
+  requestedByName: text("requested_by_name").notNull(),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
