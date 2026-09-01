@@ -15,6 +15,7 @@ export async function POST(request: Request) {
     product?: string;
     size?: string;
     shade?: string;
+    sku?: string;
     qty?: unknown;
     note?: string;
   } | null;
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
       product: body?.product,
       size: body?.size,
       shade: body?.shade,
+      sku: body?.sku,
       qty: body?.qty,
       note: body?.note,
       requestedByUserId: session.id,
@@ -51,9 +53,11 @@ export async function PATCH(request: Request) {
     product?: string;
     size?: string;
     shade?: string;
+    sku?: string;
     qty?: unknown;
     note?: string;
     actualVendor?: string;
+    vendorOrderNumber?: string;
     status?: string;
   } | null;
   if (!body?.id) {

@@ -96,8 +96,14 @@ export function SupplyOrdersClient({
     size: "",
     shade: "",
     qty: "1",
+    sku: "",
     note: "",
   });
+  const [bulkOrderPrompt, setBulkOrderPrompt] = useState<{
+    vendor: string;
+    fromStatus: OrderStatus;
+  } | null>(null);
+  const [bulkOrderNumber, setBulkOrderNumber] = useState("");
 
   async function load(year?: string, month?: string) {
     const params = new URLSearchParams();
@@ -189,6 +195,7 @@ export function SupplyOrdersClient({
         size: "",
         shade: "",
         qty: "1",
+        sku: "",
         note: "",
       }));
       await load(String(view.year), String(view.month));
@@ -255,7 +262,12 @@ export function SupplyOrdersClient({
     }
   }
 
-  async function bulkStatus(vendor: string, status: OrderStatus, fromStatus: OrderStatus) {
+  async function bulkStatus(
+    vendor: string,
+    status: OrderStatus,
+    fromStatus: OrderStatus,
+    vendorOrderNumber?: string,
+  ) {
     if (!view) return;
     setError("");
     try {
@@ -270,10 +282,13 @@ export function SupplyOrdersClient({
             vendor,
             status,
             fromStatus,
+            vendorOrderNumber,
           }),
         }),
         "Could not update those items.",
       );
+      setBulkOrderPrompt(null);
+      setBulkOrderNumber("");
       await load(String(view.year), String(view.month));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update those items.");
@@ -430,7 +445,7 @@ export function SupplyOrdersClient({
           <div>
             <h2 className="font-semibold">Add a request</h2>
             <p className="text-sm text-slate-400">
-              Product and qty are required. Size, shade, and note are optional.
+              Product and qty are required. Size, shade, SKU, and note are optional.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -501,6 +516,17 @@ export function SupplyOrdersClient({
                 }
               />
             </label>
+            <label className="grid gap-1.5 text-sm">
+              SKU / item #
+              <input
+                list="sku-options"
+                className={field}
+                value={form.sku}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, sku: event.target.value }))
+                }
+              />
+            </label>
           </div>
           <label className="grid gap-1.5 text-sm">
             Note
@@ -531,6 +557,11 @@ export function SupplyOrdersClient({
           </datalist>
           <datalist id="product-options">
             {suggestions.products.map((value) => (
+              <option key={value} value={value} />
+            ))}
+          </datalist>
+          <datalist id="sku-options">
+            {(suggestions.skus ?? []).map((value) => (
               <option key={value} value={value} />
             ))}
           </datalist>
@@ -598,7 +629,13 @@ export function SupplyOrdersClient({
                         onChange={(event) => {
                           const value = event.target.value as OrderStatus | "";
                           event.target.value = "";
-                          if (value) void bulkStatus(vendor, value, group.status);
+                          if (!value) return;
+                          if (group.status === "in_cart" && value === "ordered") {
+                            setBulkOrderPrompt({ vendor, fromStatus: group.status });
+                            setBulkOrderNumber("");
+                            return;
+                          }
+                          void bulkStatus(vendor, value, group.status);
                         }}
                       >
                         <option value="">Choose…</option>
@@ -610,6 +647,49 @@ export function SupplyOrdersClient({
                       </select>
                     </label>
                   </div>
+                  {bulkOrderPrompt &&
+                  bulkOrderPrompt.vendor === vendor &&
+                  bulkOrderPrompt.fromStatus === group.status ? (
+                    <form
+                      className="mb-3 grid gap-2 rounded-2xl border border-rose-800 bg-rose-950/40 p-3 sm:grid-cols-[1fr_auto_auto]"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void bulkStatus(
+                          vendor,
+                          "ordered",
+                          group.status,
+                          bulkOrderNumber,
+                        );
+                      }}
+                    >
+                      <label className="grid gap-1 text-sm">
+                        Vendor order # for these items
+                        <input
+                          autoFocus
+                          className={field}
+                          value={bulkOrderNumber}
+                          placeholder="Optional"
+                          onChange={(event) => setBulkOrderNumber(event.target.value)}
+                        />
+                      </label>
+                      <button
+                        type="submit"
+                        className="self-end rounded-xl bg-rose-700 px-3 py-2 text-sm font-semibold hover:bg-rose-600"
+                      >
+                        Mark as Ordered
+                      </button>
+                      <button
+                        type="button"
+                        className="self-end rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+                        onClick={() => {
+                          setBulkOrderPrompt(null);
+                          setBulkOrderNumber("");
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </form>
+                  ) : null}
                   <ul className="grid gap-3">
                     {items.map((item) => (
                       <ItemCard
@@ -679,8 +759,10 @@ function ItemCard({
     size: item.size,
     shade: item.shade,
     qty: String(item.qty),
+    sku: item.sku,
     note: item.note,
     actualVendor: item.actualVendor,
+    vendorOrderNumber: item.vendorOrderNumber,
   });
 
   function saveDetails() {
@@ -691,8 +773,10 @@ function ItemCard({
       size: draft.size,
       shade: draft.shade,
       qty: Number(draft.qty),
+      sku: draft.sku,
       note: draft.note,
       actualVendor: draft.actualVendor,
+      vendorOrderNumber: draft.vendorOrderNumber,
     });
     onEdit();
   }
@@ -709,10 +793,12 @@ function ItemCard({
             Qty {item.qty}
             {item.size ? ` · ${item.size}` : ""}
             {item.shade ? ` · ${item.shade}` : ""}
+            {item.sku ? ` · SKU ${item.sku}` : ""}
           </p>
           <p className="mt-1 text-xs text-slate-500">
             Asked by {item.requestedByName}
             {item.preferredVendor ? ` · Preferred ${item.preferredVendor}` : ""}
+            {item.vendorOrderNumber ? ` · Order # ${item.vendorOrderNumber}` : ""}
           </p>
           {item.note ? <p className="mt-1 text-sm text-slate-300">{item.note}</p> : null}
         </div>
@@ -739,6 +825,37 @@ function ItemCard({
         <label className="grid gap-1.5 text-sm">
           Status
           <StatusSelect value={item.status} onChange={(status) => onPatch({ status })} />
+        </label>
+        <label className="grid gap-1.5 text-sm">
+          SKU / item #
+          <input
+            list="sku-options"
+            className={field}
+            value={draft.sku}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, sku: event.target.value }))
+            }
+            onBlur={() => {
+              if (draft.sku.trim() !== item.sku) {
+                onPatch({ sku: draft.sku });
+              }
+            }}
+          />
+        </label>
+        <label className="grid gap-1.5 text-sm">
+          Vendor order #
+          <input
+            className={field}
+            value={draft.vendorOrderNumber}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, vendorOrderNumber: event.target.value }))
+            }
+            onBlur={() => {
+              if (draft.vendorOrderNumber.trim() !== item.vendorOrderNumber) {
+                onPatch({ vendorOrderNumber: draft.vendorOrderNumber });
+              }
+            }}
+          />
         </label>
       </div>
 

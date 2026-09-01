@@ -87,14 +87,18 @@ const SCHEMA_SQL = [
     size TEXT NOT NULL DEFAULT '',
     shade TEXT NOT NULL DEFAULT '',
     qty INTEGER NOT NULL DEFAULT 1,
+    sku TEXT NOT NULL DEFAULT '',
     note TEXT NOT NULL DEFAULT '',
     actual_vendor TEXT NOT NULL DEFAULT '',
+    vendor_order_number TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL,
     requested_by_user_id TEXT NOT NULL,
     requested_by_name TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
+  `ALTER TABLE salon_order_items ADD COLUMN sku TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE salon_order_items ADD COLUMN vendor_order_number TEXT NOT NULL DEFAULT ''`,
 ];
 
 type HubDb = LibSQLDatabase<typeof schema>;
@@ -150,7 +154,12 @@ export async function readyDb() {
 async function initialize() {
   const client = getClient();
   for (const statement of SCHEMA_SQL) {
-    await client.execute(statement);
+    try {
+      await client.execute(statement);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (!/duplicate column/i.test(message)) throw err;
+    }
   }
 
   const clubCount = await client.execute("SELECT COUNT(*) AS n FROM clubs");

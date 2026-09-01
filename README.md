@@ -45,7 +45,7 @@ Optional env:
 
 Default softball org: **MN Elks** (club) and **16U Fransen** (team). You can add more clubs and teams on the People page. Those teams show in Team Roster, Lineup, Team Formation, Tryouts, and Practice Planner.
 
-Salon **Supply Orders** lives under Luna Haus. Anyone with Luna Haus access can add and update requests. Only the owner can delete. Locally that is SQLite; on the live site run `supabase/salon-orders.sql` so `hub_salon_orders` and `hub_salon_order_items` exist.
+Salon **Supply Orders** lives under Luna Haus. Anyone with Luna Haus access can add and update requests. Only the owner can delete. Locally that is SQLite; on the live site run `supabase/salon-orders.sql` so `hub_salon_orders` and `hub_salon_order_items` exist, including `sku` and `vendor_order_number`.
 
 Softball **Team Roster** is the one player list. Tryouts, Team Formation, Lineup, and Practice Planner all read and write that same list — Lineup no longer keeps a second roster. Manual adds and CSV imports save to the hub database (`players` locally, `hub_players` on Supabase) plus the softball state blob. Re-run `supabase/hub.sql` so `hub_players` exists. After that, also run `supabase/softball-state.sql` if you have not already.
 

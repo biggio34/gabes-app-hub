@@ -64,8 +64,10 @@ function mapSqliteItem(row: typeof salonOrderItems.$inferSelect): SalonOrderItem
     size: row.size,
     shade: row.shade,
     qty: row.qty,
+    sku: row.sku,
     note: row.note,
     actualVendor: row.actualVendor,
+    vendorOrderNumber: row.vendorOrderNumber,
     status: row.status as OrderStatus,
     requestedByUserId: row.requestedByUserId,
     requestedByName: row.requestedByName,
@@ -157,8 +159,10 @@ async function saveItemSqlite(item: SalonOrderItem) {
       size: item.size,
       shade: item.shade,
       qty: item.qty,
+      sku: item.sku,
       note: item.note,
       actualVendor: item.actualVendor,
+      vendorOrderNumber: item.vendorOrderNumber,
       status: item.status,
       updatedAt: item.updatedAt,
     })
@@ -239,6 +243,7 @@ export async function getSuggestions(): Promise<SalonSuggestions> {
     ]),
     brands: uniqueSorted(items.map((item) => item.brand)),
     products: uniqueSorted(items.map((item) => item.product)),
+    skus: uniqueSorted(items.map((item) => item.sku)),
   };
 }
 
@@ -279,6 +284,7 @@ export async function addItem(input: {
   product?: string;
   size?: string;
   shade?: string;
+  sku?: string;
   qty?: unknown;
   note?: string;
   requestedByUserId: string;
@@ -297,8 +303,10 @@ export async function addItem(input: {
     size: cleanText(input.size),
     shade: cleanText(input.shade),
     qty: parseQty(input.qty ?? 1),
+    sku: cleanText(input.sku),
     note: cleanText(input.note),
     actualVendor: "",
+    vendorOrderNumber: "",
     status: "pending",
     requestedByUserId: input.requestedByUserId,
     requestedByName: input.requestedByName,
@@ -318,9 +326,11 @@ export async function updateItem(
     product?: string;
     size?: string;
     shade?: string;
+    sku?: string;
     qty?: unknown;
     note?: string;
     actualVendor?: string;
+    vendorOrderNumber?: string;
     status?: string;
   },
 ) {
@@ -339,10 +349,14 @@ export async function updateItem(
   }
   if (patch.size !== undefined) current.size = cleanText(patch.size);
   if (patch.shade !== undefined) current.shade = cleanText(patch.shade);
+  if (patch.sku !== undefined) current.sku = cleanText(patch.sku);
   if (patch.qty !== undefined) current.qty = parseQty(patch.qty);
   if (patch.note !== undefined) current.note = cleanText(patch.note);
   if (patch.actualVendor !== undefined) {
     current.actualVendor = cleanText(patch.actualVendor);
+  }
+  if (patch.vendorOrderNumber !== undefined) {
+    current.vendorOrderNumber = cleanText(patch.vendorOrderNumber);
   }
   if (patch.status !== undefined) {
     if (!isOrderStatus(patch.status)) throw new Error("That status is not valid.");
@@ -369,6 +383,7 @@ export async function bulkUpdateStatus(input: {
   vendor: string;
   status: string;
   fromStatus?: string;
+  vendorOrderNumber?: string;
 }) {
   if (!isOrderStatus(input.status)) throw new Error("That status is not valid.");
   const vendor = input.vendor.trim();
@@ -394,6 +409,9 @@ export async function bulkUpdateStatus(input: {
       !item.actualVendor.trim()
     ) {
       item.actualVendor = vendor === "No vendor" ? "" : vendor;
+    }
+    if (input.vendorOrderNumber !== undefined) {
+      item.vendorOrderNumber = cleanText(input.vendorOrderNumber);
     }
     item.updatedAt = now;
     if (isSupabaseConfigured()) await supabaseSalon.saveItem(item);

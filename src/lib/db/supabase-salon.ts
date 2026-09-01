@@ -18,8 +18,10 @@ type ItemRow = {
   size: string;
   shade: string;
   qty: number;
+  sku: string;
   note: string;
   actual_vendor: string;
+  vendor_order_number: string;
   status: string;
   requested_by_user_id: string;
   requested_by_name: string;
@@ -47,8 +49,10 @@ function mapItem(row: ItemRow): SalonOrderItem {
     size: row.size ?? "",
     shade: row.shade ?? "",
     qty: Number(row.qty) || 1,
+    sku: row.sku ?? "",
     note: row.note ?? "",
     actualVendor: row.actual_vendor ?? "",
+    vendorOrderNumber: row.vendor_order_number ?? "",
     status: row.status as SalonOrderItem["status"],
     requestedByUserId: row.requested_by_user_id,
     requestedByName: row.requested_by_name,
@@ -65,9 +69,9 @@ function client() {
 
 function salonError(fallback: string) {
   return (result: { data: unknown; error: { message: string } | null }) => {
-    if (result.error && /does not exist|schema cache/i.test(result.error.message)) {
+    if (result.error && /does not exist|schema cache|vendor_order_number|column.*sku/i.test(result.error.message)) {
       throw new Error(
-        "The salon order tables are not in Supabase yet. Run supabase/salon-orders.sql in the SQL editor.",
+        "The salon order tables need an update in Supabase. Run supabase/salon-orders.sql in the SQL editor.",
       );
     }
     return throwIfError(result, fallback);
@@ -153,8 +157,10 @@ export async function insertItem(item: SalonOrderItem) {
       size: item.size,
       shade: item.shade,
       qty: item.qty,
+      sku: item.sku,
       note: item.note,
       actual_vendor: item.actualVendor,
+      vendor_order_number: item.vendorOrderNumber,
       status: item.status,
       requested_by_user_id: item.requestedByUserId,
       requested_by_name: item.requestedByName,
@@ -176,8 +182,10 @@ export async function saveItem(item: SalonOrderItem) {
         size: item.size,
         shade: item.shade,
         qty: item.qty,
+        sku: item.sku,
         note: item.note,
         actual_vendor: item.actualVendor,
+        vendor_order_number: item.vendorOrderNumber,
         status: item.status,
         updated_at: item.updatedAt,
       })
