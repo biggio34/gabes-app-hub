@@ -205,7 +205,9 @@ export function SupplyOrdersClient({
     if (!view) return;
     const duplicate = findPendingDuplicate(view.items, form);
     if (duplicate) {
-      const label = [form.brand, form.product, form.size].filter(Boolean).join(" · ");
+      const label = [form.brand, form.product, form.size, form.shade]
+        .filter(Boolean)
+        .join(" · ");
       if (
         !confirm(
           `${label} is already Pending this month (qty ${duplicate.qty}). Add another anyway?`,
@@ -582,7 +584,7 @@ export function SupplyOrdersClient({
           </label>
           {duplicatePending ? (
             <p className="rounded-2xl border border-amber-700/60 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
-              {[duplicatePending.brand, duplicatePending.product, duplicatePending.size]
+              {[duplicatePending.brand, duplicatePending.product, duplicatePending.size, duplicatePending.shade]
                 .filter(Boolean)
                 .join(" · ")}{" "}
               is already Pending this month (qty {duplicatePending.qty}
