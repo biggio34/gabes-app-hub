@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  findPendingDuplicate,
   itemVendor,
   monthLabel,
   nextYearMonth,
@@ -176,6 +177,11 @@ export function SupplyOrdersClient({
     return byStatus;
   }, [visibleItems]);
 
+  const duplicatePending = useMemo(() => {
+    if (!view || !form.product.trim()) return null;
+    return findPendingDuplicate(view.items, form);
+  }, [view, form]);
+
   function goToMonth(year: number, month: number) {
     setVendorFilter("all");
     setBulkOrderPrompt(null);
@@ -197,6 +203,17 @@ export function SupplyOrdersClient({
   async function addRequest(event: React.FormEvent) {
     event.preventDefault();
     if (!view) return;
+    const duplicate = findPendingDuplicate(view.items, form);
+    if (duplicate) {
+      const label = [form.brand, form.product, form.size].filter(Boolean).join(" · ");
+      if (
+        !confirm(
+          `${label} is already Pending this month (qty ${duplicate.qty}). Add another anyway?`,
+        )
+      ) {
+        return;
+      }
+    }
     setBusy(true);
     setError("");
     setNotice("");
@@ -563,6 +580,18 @@ export function SupplyOrdersClient({
               }
             />
           </label>
+          {duplicatePending ? (
+            <p className="rounded-2xl border border-amber-700/60 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
+              {[duplicatePending.brand, duplicatePending.product, duplicatePending.size]
+                .filter(Boolean)
+                .join(" · ")}{" "}
+              is already Pending this month (qty {duplicatePending.qty}
+              {duplicatePending.requestedByName
+                ? `, asked by ${duplicatePending.requestedByName}`
+                : ""}
+              ). You can still add another if you need it.
+            </p>
+          ) : null}
           <button
             type="submit"
             disabled={busy}
