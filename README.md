@@ -45,6 +45,8 @@ Optional env:
 
 Default softball org: **MN Elks** (club) and **16U Fransen** (team). You can add more clubs and teams on the People page. Those teams show in Team Roster, Lineup, Team Formation, Tryouts, and Practice Planner.
 
+Salon **Supply Orders** lives under Luna Haus. Anyone with Luna Haus access can add and update requests. Only the owner can delete. Locally that is SQLite; on the live site run `supabase/salon-orders.sql` so `hub_salon_orders` and `hub_salon_order_items` exist.
+
 Softball **Team Roster** is the one player list. Tryouts, Team Formation, Lineup, and Practice Planner all read and write that same list — Lineup no longer keeps a second roster. Manual adds and CSV imports save to the hub database (`players` locally, `hub_players` on Supabase) plus the softball state blob. Re-run `supabase/hub.sql` so `hub_players` exists. After that, also run `supabase/softball-state.sql` if you have not already.
 
 Softball data lives in that club blob in the database, not in the browser: roster, tryout scores, team assignments, practice plans, drills, templates, and game lineups. Each device loads from `/api/softball/state` and saves back there. Opening an app does not overwrite the cloud. Records merge by id so one phone cannot drop another device’s plans or games. Leftover `localStorage` copies are migrated once, then removed. The team picker and Team Formation’s list/grid layout stay in the browser as view preferences only.

@@ -67,6 +67,15 @@ export const hubApps: HubApp[] = [
     area: "softball",
   },
   {
+    slug: "supply-orders",
+    file: "",
+    title: "Supply Orders",
+    description:
+      "Request inventory and track it from pending to received, including out of stock.",
+    area: "luna-haus",
+    href: "/salon/orders",
+  },
+  {
     slug: "luna-haus-salon",
     file: "luna-haus-salon.html",
     title: "Salon Desk",

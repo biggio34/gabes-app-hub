@@ -15,7 +15,7 @@ export async function GET(
   }
 
   const { slug } = await context.params;
-  const app = hubApps.find((item) => item.slug === slug && !item.external);
+  const app = hubApps.find((item) => item.slug === slug && !item.external && item.file);
   if (!app) {
     return new NextResponse("App not found", { status: 404 });
   }

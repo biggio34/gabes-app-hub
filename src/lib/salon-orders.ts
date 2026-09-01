@@ -1,0 +1,429 @@
+import { and, eq } from "drizzle-orm";
+import { readyDb } from "./db/client";
+import { salonOrderItems, salonOrders } from "./db/schema";
+import { isSupabaseConfigured } from "./db/supabase";
+import * as supabaseSalon from "./db/supabase-salon";
+import {
+  appendMoveNote,
+  currentYearMonth,
+  isOrderStatus,
+  itemVendor,
+  monthLabel,
+  nextYearMonth,
+  type OrderStatus,
+  type SalonOrder,
+  type SalonOrderItem,
+  type SalonSuggestions,
+} from "./salon-order-model";
+
+export {
+  appendMoveNote,
+  currentYearMonth,
+  isOrderStatus,
+  itemVendor,
+  monthLabel,
+  MOVE_NOTE,
+  nextYearMonth,
+  ORDER_STATUSES,
+  parseYearMonth,
+  prevYearMonth,
+  statusLabel,
+} from "./salon-order-model";
+export type {
+  OrderStatus,
+  SalonOrder,
+  SalonOrderItem,
+  SalonSuggestions,
+} from "./salon-order-model";
+
+function orderIdFor(year: number, month: number) {
+  return `order-${year}-${String(month).padStart(2, "0")}`;
+}
+
+function itemId() {
+  return `item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function mapSqliteOrder(row: typeof salonOrders.$inferSelect): SalonOrder {
+  return {
+    id: row.id,
+    year: row.year,
+    month: row.month,
+    name: row.name,
+    createdAt: row.createdAt,
+  };
+}
+
+function mapSqliteItem(row: typeof salonOrderItems.$inferSelect): SalonOrderItem {
+  return {
+    id: row.id,
+    orderId: row.orderId,
+    preferredVendor: row.preferredVendor,
+    brand: row.brand,
+    product: row.product,
+    size: row.size,
+    shade: row.shade,
+    qty: row.qty,
+    note: row.note,
+    actualVendor: row.actualVendor,
+    status: row.status as OrderStatus,
+    requestedByUserId: row.requestedByUserId,
+    requestedByName: row.requestedByName,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function uniqueSorted(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
+
+async function listOrdersSqlite() {
+  const db = await readyDb();
+  const rows = await db.select().from(salonOrders);
+  return rows.map(mapSqliteOrder).sort((a, b) => a.year - b.year || a.month - b.month);
+}
+
+async function getOrderByYearMonthSqlite(year: number, month: number) {
+  const db = await readyDb();
+  const rows = await db
+    .select()
+    .from(salonOrders)
+    .where(and(eq(salonOrders.year, year), eq(salonOrders.month, month)));
+  return rows[0] ? mapSqliteOrder(rows[0]) : null;
+}
+
+async function getOrderByIdSqlite(id: string) {
+  const db = await readyDb();
+  const rows = await db.select().from(salonOrders).where(eq(salonOrders.id, id));
+  return rows[0] ? mapSqliteOrder(rows[0]) : null;
+}
+
+async function insertOrderSqlite(order: SalonOrder) {
+  const db = await readyDb();
+  await db.insert(salonOrders).values({
+    id: order.id,
+    year: order.year,
+    month: order.month,
+    name: order.name,
+    createdAt: order.createdAt,
+  });
+}
+
+async function updateOrderNameSqlite(id: string, name: string) {
+  const db = await readyDb();
+  await db.update(salonOrders).set({ name }).where(eq(salonOrders.id, id));
+}
+
+async function listItemsSqlite(orderId: string) {
+  const db = await readyDb();
+  const rows = await db
+    .select()
+    .from(salonOrderItems)
+    .where(eq(salonOrderItems.orderId, orderId));
+  return rows
+    .map(mapSqliteItem)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+async function listAllItemsSqlite() {
+  const db = await readyDb();
+  const rows = await db.select().from(salonOrderItems);
+  return rows.map(mapSqliteItem);
+}
+
+async function getItemByIdSqlite(id: string) {
+  const db = await readyDb();
+  const rows = await db.select().from(salonOrderItems).where(eq(salonOrderItems.id, id));
+  return rows[0] ? mapSqliteItem(rows[0]) : null;
+}
+
+async function insertItemSqlite(item: SalonOrderItem) {
+  const db = await readyDb();
+  await db.insert(salonOrderItems).values(item);
+}
+
+async function saveItemSqlite(item: SalonOrderItem) {
+  const db = await readyDb();
+  await db
+    .update(salonOrderItems)
+    .set({
+      orderId: item.orderId,
+      preferredVendor: item.preferredVendor,
+      brand: item.brand,
+      product: item.product,
+      size: item.size,
+      shade: item.shade,
+      qty: item.qty,
+      note: item.note,
+      actualVendor: item.actualVendor,
+      status: item.status,
+      updatedAt: item.updatedAt,
+    })
+    .where(eq(salonOrderItems.id, item.id));
+}
+
+async function removeItemSqlite(id: string) {
+  const db = await readyDb();
+  await db.delete(salonOrderItems).where(eq(salonOrderItems.id, id));
+}
+
+export async function listOrders() {
+  return isSupabaseConfigured() ? supabaseSalon.listOrders() : listOrdersSqlite();
+}
+
+export async function getOrderByYearMonth(year: number, month: number) {
+  return isSupabaseConfigured()
+    ? supabaseSalon.getOrderByYearMonth(year, month)
+    : getOrderByYearMonthSqlite(year, month);
+}
+
+async function getOrderById(id: string) {
+  return isSupabaseConfigured() ? supabaseSalon.getOrderById(id) : getOrderByIdSqlite(id);
+}
+
+export async function getOrCreateOrder(year: number, month: number, name?: string) {
+  const existing = await getOrderByYearMonth(year, month);
+  if (existing) {
+    if (name && name.trim() && name.trim() !== existing.name) {
+      await renameOrder(existing.id, name.trim());
+      return { ...(await getOrderById(existing.id))!, items: await listItems(existing.id) };
+    }
+    return { ...existing, items: await listItems(existing.id) };
+  }
+  const order: SalonOrder = {
+    id: orderIdFor(year, month),
+    year,
+    month,
+    name: name?.trim() || monthLabel(year, month),
+    createdAt: new Date().toISOString(),
+  };
+  try {
+    if (isSupabaseConfigured()) await supabaseSalon.insertOrder(order);
+    else await insertOrderSqlite(order);
+  } catch (err) {
+    const raced = await getOrderByYearMonth(year, month);
+    if (!raced) throw err;
+    return { ...raced, items: await listItems(raced.id) };
+  }
+  return { ...order, items: [] as SalonOrderItem[] };
+}
+
+export async function renameOrder(id: string, name: string) {
+  const next = name.trim();
+  if (!next) throw new Error("Order name is required.");
+  if (isSupabaseConfigured()) await supabaseSalon.updateOrderName(id, next);
+  else await updateOrderNameSqlite(id, next);
+}
+
+export async function listItems(orderId: string) {
+  return isSupabaseConfigured()
+    ? supabaseSalon.listItems(orderId)
+    : listItemsSqlite(orderId);
+}
+
+async function listAllItems() {
+  return isSupabaseConfigured()
+    ? supabaseSalon.listAllItems()
+    : listAllItemsSqlite();
+}
+
+export async function getSuggestions(): Promise<SalonSuggestions> {
+  const items = await listAllItems();
+  return {
+    vendors: uniqueSorted([
+      ...items.map((item) => item.preferredVendor),
+      ...items.map((item) => item.actualVendor),
+    ]),
+    brands: uniqueSorted(items.map((item) => item.brand)),
+    products: uniqueSorted(items.map((item) => item.product)),
+  };
+}
+
+export async function getMonthView(year: number, month: number) {
+  const [order, months, suggestions] = await Promise.all([
+    getOrderByYearMonth(year, month),
+    listOrders(),
+    getSuggestions(),
+  ]);
+  return {
+    year,
+    month,
+    today: currentYearMonth(),
+    order,
+    items: order ? await listItems(order.id) : [],
+    months,
+    suggestions,
+  };
+}
+
+function cleanText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function parseQty(value: unknown) {
+  const qty = Number(value);
+  if (!Number.isInteger(qty) || qty < 1) {
+    throw new Error("Qty must be a whole number of 1 or more.");
+  }
+  return qty;
+}
+
+export async function addItem(input: {
+  year: number;
+  month: number;
+  preferredVendor?: string;
+  brand?: string;
+  product?: string;
+  size?: string;
+  shade?: string;
+  qty?: unknown;
+  note?: string;
+  requestedByUserId: string;
+  requestedByName: string;
+}) {
+  const product = cleanText(input.product);
+  if (!product) throw new Error("Product is required.");
+  const order = await getOrCreateOrder(input.year, input.month);
+  const now = new Date().toISOString();
+  const item: SalonOrderItem = {
+    id: itemId(),
+    orderId: order.id,
+    preferredVendor: cleanText(input.preferredVendor),
+    brand: cleanText(input.brand),
+    product,
+    size: cleanText(input.size),
+    shade: cleanText(input.shade),
+    qty: parseQty(input.qty ?? 1),
+    note: cleanText(input.note),
+    actualVendor: "",
+    status: "pending",
+    requestedByUserId: input.requestedByUserId,
+    requestedByName: input.requestedByName,
+    createdAt: now,
+    updatedAt: now,
+  };
+  if (isSupabaseConfigured()) await supabaseSalon.insertItem(item);
+  else await insertItemSqlite(item);
+  return item;
+}
+
+export async function updateItem(
+  id: string,
+  patch: {
+    preferredVendor?: string;
+    brand?: string;
+    product?: string;
+    size?: string;
+    shade?: string;
+    qty?: unknown;
+    note?: string;
+    actualVendor?: string;
+    status?: string;
+  },
+) {
+  const current = isSupabaseConfigured()
+    ? await supabaseSalon.getItemById(id)
+    : await getItemByIdSqlite(id);
+  if (!current) throw new Error("Request not found.");
+  if (patch.preferredVendor !== undefined) {
+    current.preferredVendor = cleanText(patch.preferredVendor);
+  }
+  if (patch.brand !== undefined) current.brand = cleanText(patch.brand);
+  if (patch.product !== undefined) {
+    const product = cleanText(patch.product);
+    if (!product) throw new Error("Product is required.");
+    current.product = product;
+  }
+  if (patch.size !== undefined) current.size = cleanText(patch.size);
+  if (patch.shade !== undefined) current.shade = cleanText(patch.shade);
+  if (patch.qty !== undefined) current.qty = parseQty(patch.qty);
+  if (patch.note !== undefined) current.note = cleanText(patch.note);
+  if (patch.actualVendor !== undefined) {
+    current.actualVendor = cleanText(patch.actualVendor);
+  }
+  if (patch.status !== undefined) {
+    if (!isOrderStatus(patch.status)) throw new Error("That status is not valid.");
+    current.status = patch.status;
+  }
+  current.updatedAt = new Date().toISOString();
+  if (isSupabaseConfigured()) await supabaseSalon.saveItem(current);
+  else await saveItemSqlite(current);
+  return current;
+}
+
+export async function deleteItem(id: string) {
+  const current = isSupabaseConfigured()
+    ? await supabaseSalon.getItemById(id)
+    : await getItemByIdSqlite(id);
+  if (!current) throw new Error("Request not found.");
+  if (isSupabaseConfigured()) await supabaseSalon.removeItem(id);
+  else await removeItemSqlite(id);
+}
+
+export async function bulkUpdateStatus(input: {
+  year: number;
+  month: number;
+  vendor: string;
+  status: string;
+  fromStatus?: string;
+}) {
+  if (!isOrderStatus(input.status)) throw new Error("That status is not valid.");
+  const vendor = input.vendor.trim();
+  if (!vendor) throw new Error("Vendor is required.");
+  const fromStatus =
+    input.fromStatus && isOrderStatus(input.fromStatus) ? input.fromStatus : null;
+  const order = await getOrderByYearMonth(input.year, input.month);
+  if (!order) throw new Error("There is nothing to update this month.");
+  const items = await listItems(order.id);
+  const matched = items.filter((item) => {
+    if (itemVendor(item).toLowerCase() !== vendor.toLowerCase()) return false;
+    if (fromStatus && item.status !== fromStatus) return false;
+    return true;
+  });
+  if (matched.length === 0) {
+    throw new Error("No items match that vendor.");
+  }
+  const now = new Date().toISOString();
+  for (const item of matched) {
+    item.status = input.status;
+    if (
+      (input.status === "in_cart" || input.status === "ordered" || input.status === "received") &&
+      !item.actualVendor.trim()
+    ) {
+      item.actualVendor = vendor === "No vendor" ? "" : vendor;
+    }
+    item.updatedAt = now;
+    if (isSupabaseConfigured()) await supabaseSalon.saveItem(item);
+    else await saveItemSqlite(item);
+  }
+  return matched.length;
+}
+
+export async function moveOutOfStockToNextMonth(year: number, month: number) {
+  const order = await getOrderByYearMonth(year, month);
+  if (!order) throw new Error("There is nothing out of stock this month.");
+  const items = (await listItems(order.id)).filter((item) => item.status === "out_of_stock");
+  if (items.length === 0) {
+    throw new Error("There is nothing out of stock this month.");
+  }
+  const next = nextYearMonth(year, month);
+  const nextOrder = await getOrCreateOrder(next.year, next.month);
+  const now = new Date().toISOString();
+  for (const item of items) {
+    item.orderId = nextOrder.id;
+    item.status = "pending";
+    item.note = appendMoveNote(item.note);
+    item.updatedAt = now;
+    if (isSupabaseConfigured()) await supabaseSalon.saveItem(item);
+    else await saveItemSqlite(item);
+  }
+  return {
+    moved: items.length,
+    nextYear: next.year,
+    nextMonth: next.month,
+    nextName: nextOrder.name,
+  };
+}

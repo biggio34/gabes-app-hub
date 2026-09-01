@@ -70,6 +70,31 @@ const SCHEMA_SQL = [
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS salon_orders (
+    id TEXT PRIMARY KEY,
+    year INTEGER NOT NULL,
+    month INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(year, month)
+  )`,
+  `CREATE TABLE IF NOT EXISTS salon_order_items (
+    id TEXT PRIMARY KEY,
+    order_id TEXT NOT NULL REFERENCES salon_orders(id) ON DELETE CASCADE,
+    preferred_vendor TEXT NOT NULL DEFAULT '',
+    brand TEXT NOT NULL DEFAULT '',
+    product TEXT NOT NULL,
+    size TEXT NOT NULL DEFAULT '',
+    shade TEXT NOT NULL DEFAULT '',
+    qty INTEGER NOT NULL DEFAULT 1,
+    note TEXT NOT NULL DEFAULT '',
+    actual_vendor TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    requested_by_user_id TEXT NOT NULL,
+    requested_by_name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
 ];
 
 type HubDb = LibSQLDatabase<typeof schema>;
