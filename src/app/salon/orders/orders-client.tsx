@@ -965,18 +965,7 @@ function LeftoverMenu({
             key={choice}
             type="button"
             disabled={disabled}
-            onClick={() => {
-              if (choice === "rolled") {
-                if (
-                  !confirm(
-                    `Roll leftover qty ${remainder} to ${nextMonthLabel} as Pending? This month’s row stays for history.`,
-                  )
-                ) {
-                  return;
-                }
-              }
-              onChoose(choice);
-            }}
+            onClick={() => onChoose(choice)}
             className={`rounded-xl px-3 py-2 text-xs font-semibold disabled:opacity-60 ${
               leftover === choice
                 ? "bg-rose-700 text-white"
