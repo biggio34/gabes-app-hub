@@ -2,18 +2,39 @@ export const ORDER_STATUSES = [
   "pending",
   "in_cart",
   "ordered",
+  "partial",
   "received",
   "out_of_stock",
 ] as const;
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+export const SETTABLE_STATUSES = [
+  "pending",
+  "in_cart",
+  "ordered",
+  "out_of_stock",
+] as const;
+
+export type SettableStatus = (typeof SETTABLE_STATUSES)[number];
+
+export const LEFTOVERS = ["", "wait", "oos", "rolled"] as const;
+
+export type Leftover = (typeof LEFTOVERS)[number];
+
 export const statusLabel: Record<OrderStatus, string> = {
   pending: "Pending",
   in_cart: "Added to cart",
   ordered: "Ordered",
+  partial: "Partial",
   received: "Received",
   out_of_stock: "Out of stock",
+};
+
+export const leftoverLabel: Record<Exclude<Leftover, "">, string> = {
+  wait: "Wait",
+  oos: "Out of stock",
+  rolled: "Roll to next month",
 };
 
 export const MOVE_NOTE = "Last months out of stock";
@@ -35,6 +56,9 @@ export type SalonOrderItem = {
   size: string;
   shade: string;
   qty: number;
+  orderedQty: number;
+  receivedQty: number;
+  leftover: Leftover;
   sku: string;
   note: string;
   actualVendor: string;
@@ -57,6 +81,56 @@ const SALON_TZ = "America/Chicago";
 
 export function isOrderStatus(value: string): value is OrderStatus {
   return (ORDER_STATUSES as readonly string[]).includes(value);
+}
+
+export function isSettableStatus(value: string): value is SettableStatus {
+  return (SETTABLE_STATUSES as readonly string[]).includes(value);
+}
+
+export function isLeftover(value: string): value is Leftover {
+  return (LEFTOVERS as readonly string[]).includes(value);
+}
+
+export function remainderQty(item: {
+  qty: number;
+  orderedQty: number;
+  receivedQty: number;
+}) {
+  if (item.receivedQty > 0) return Math.max(0, item.qty - item.receivedQty);
+  return Math.max(0, item.qty - item.orderedQty);
+}
+
+export function isUnorderedOutOfStock(item: {
+  orderedQty: number;
+  receivedQty: number;
+  leftover: Leftover;
+  status?: OrderStatus;
+}) {
+  if (item.orderedQty > 0 || item.receivedQty > 0) return false;
+  return item.leftover === "oos" || item.status === "out_of_stock";
+}
+
+export function deriveStatus(item: {
+  qty: number;
+  orderedQty: number;
+  receivedQty: number;
+  leftover: Leftover;
+  shopping?: "pending" | "in_cart";
+}): OrderStatus {
+  // Received is only the original ask. Rolling leftover or marking the
+  // missing qty OOS must not flip this month to Received.
+  if (item.receivedQty >= item.qty && item.qty > 0) return "received";
+  if (item.receivedQty > 0) return "partial";
+  if (item.orderedQty > 0) return "ordered";
+  // Line-level Out of stock is only when nothing went in. Leftover OOS on
+  // a missing 1 after Ordered 1 of 2 stays on this month as leftover.
+  if (item.leftover === "oos" || item.leftover === "rolled") return "out_of_stock";
+  if (item.shopping === "in_cart") return "in_cart";
+  return "pending";
+}
+
+export function shoppingStage(status: OrderStatus): "pending" | "in_cart" {
+  return status === "in_cart" ? "in_cart" : "pending";
 }
 
 export function monthLabel(year: number, month: number) {
