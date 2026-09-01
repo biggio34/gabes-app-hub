@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     vendor?: string;
     status?: string;
     fromStatus?: string;
+    vendorOrderNumber?: string;
   } | null;
   try {
     const parsed = parseYearMonth(body?.year, body?.month);
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
         vendor: body.vendor ?? "",
         status: body.status,
         fromStatus: body.fromStatus,
+        vendorOrderNumber: body.vendorOrderNumber,
       });
       return NextResponse.json({ updated });
     }

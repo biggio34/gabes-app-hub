@@ -19,8 +19,10 @@ create table if not exists hub_salon_order_items (
   size text not null default '',
   shade text not null default '',
   qty integer not null default 1,
+  sku text not null default '',
   note text not null default '',
   actual_vendor text not null default '',
+  vendor_order_number text not null default '',
   status text not null,
   requested_by_user_id text not null,
   requested_by_name text not null,
@@ -30,3 +32,6 @@ create table if not exists hub_salon_order_items (
 
 alter table hub_salon_orders enable row level security;
 alter table hub_salon_order_items enable row level security;
+
+alter table hub_salon_order_items add column if not exists sku text not null default '';
+alter table hub_salon_order_items add column if not exists vendor_order_number text not null default '';

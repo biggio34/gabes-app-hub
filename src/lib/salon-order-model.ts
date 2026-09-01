@@ -35,8 +35,10 @@ export type SalonOrderItem = {
   size: string;
   shade: string;
   qty: number;
+  sku: string;
   note: string;
   actualVendor: string;
+  vendorOrderNumber: string;
   status: OrderStatus;
   requestedByUserId: string;
   requestedByName: string;
@@ -48,6 +50,7 @@ export type SalonSuggestions = {
   vendors: string[];
   brands: string[];
   products: string[];
+  skus: string[];
 };
 
 const SALON_TZ = "America/Chicago";
