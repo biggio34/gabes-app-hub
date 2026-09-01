@@ -100,6 +100,16 @@ export function remainderQty(item: {
   return Math.max(0, item.qty - item.orderedQty);
 }
 
+export function isUnorderedOutOfStock(item: {
+  orderedQty: number;
+  receivedQty: number;
+  leftover: Leftover;
+  status?: OrderStatus;
+}) {
+  if (item.orderedQty > 0 || item.receivedQty > 0) return false;
+  return item.leftover === "oos" || item.status === "out_of_stock";
+}
+
 export function deriveStatus(item: {
   qty: number;
   orderedQty: number;
@@ -107,11 +117,13 @@ export function deriveStatus(item: {
   leftover: Leftover;
   shopping?: "pending" | "in_cart";
 }): OrderStatus {
-  // Received is only the original ask. Rolling leftover to next month
-  // must not flip this month to Received.
+  // Received is only the original ask. Rolling leftover or marking the
+  // missing qty OOS must not flip this month to Received.
   if (item.receivedQty >= item.qty && item.qty > 0) return "received";
   if (item.receivedQty > 0) return "partial";
   if (item.orderedQty > 0) return "ordered";
+  // Line-level Out of stock is only when nothing went in. Leftover OOS on
+  // a missing 1 after Ordered 1 of 2 stays on this month as leftover.
   if (item.leftover === "oos" || item.leftover === "rolled") return "out_of_stock";
   if (item.shopping === "in_cart") return "in_cart";
   return "pending";

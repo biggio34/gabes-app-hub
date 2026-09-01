@@ -366,7 +366,7 @@ export function SupplyOrdersClient({
     const next = nextYearMonth(view.year, view.month);
     if (
       !confirm(
-        `Roll leftover from out of stock items to ${monthLabel(next.year, next.month)} as Pending? This month’s rows stay for history.`,
+        `Roll leftover from unordered out of stock items to ${monthLabel(next.year, next.month)} as Pending? Lines that already have a partial order stay this month until you roll that row.`,
       )
     ) {
       return;
@@ -652,9 +652,9 @@ export function SupplyOrdersClient({
             onClick={() => void moveOutOfStock()}
             className="rounded-2xl border border-rose-800 bg-rose-950/50 px-4 py-3 text-left text-sm hover:border-rose-600 disabled:opacity-60"
           >
-            Roll leftover from {outOfStockCount} out of stock item
+            Roll leftover from {outOfStockCount} unordered out of stock item
             {outOfStockCount === 1 ? "" : "s"} to {monthLabel(next.year, next.month)} as
-            Pending. This month’s rows stay.
+            Pending. Partial leftovers stay on this month until you roll that row.
           </button>
         ) : null}
 
@@ -955,6 +955,10 @@ function LeftoverMenu({
         Leftover qty {remainder}
         {leftover ? ` · ${leftoverLabel[leftover]}` : ""}
       </p>
+      <p className="text-xs text-slate-500">
+        Wait or out of stock keeps the missing qty on this month (still waiting on
+        the vendor). Roll copies it to {nextMonthLabel} as Pending.
+      </p>
       <div className="flex flex-wrap gap-2">
         {choices.map((choice) => (
           <button
@@ -1078,6 +1082,14 @@ function ItemCard({
     if (status === "ordered") {
       markOrdered();
       return;
+    }
+    if (status === "out_of_stock") {
+      const orderedQty = goingInQty();
+      if (orderedQty !== null && orderedQty < item.qty) {
+        setLocalError("");
+        onPatch({ leftover: "oos", orderedQty });
+        return;
+      }
     }
     setLocalError("");
     onPatch({ status });

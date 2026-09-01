@@ -13,6 +13,7 @@ import {
   itemVendor,
   monthLabel,
   nextYearMonth,
+  isUnorderedOutOfStock,
   remainderQty,
   shoppingStage,
   type Leftover,
@@ -40,6 +41,7 @@ export {
   remainderQty,
   SETTABLE_STATUSES,
   statusLabel,
+  isUnorderedOutOfStock,
 } from "./salon-order-model";
 export type {
   Leftover,
@@ -583,7 +585,7 @@ export async function moveOutOfStockToNextMonth(year: number, month: number) {
   if (!order) throw new Error("There is nothing out of stock this month.");
   const items = (await listItems(order.id)).filter((item) => {
     if (item.leftover === "rolled") return false;
-    return item.status === "out_of_stock" || item.leftover === "oos";
+    return isUnorderedOutOfStock(item);
   });
   if (items.length === 0) {
     throw new Error("There is nothing out of stock this month.");
