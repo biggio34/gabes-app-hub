@@ -6,10 +6,16 @@ import * as supabaseSalon from "./db/supabase-salon";
 import {
   appendMoveNote,
   currentYearMonth,
+  deriveStatus,
+  isLeftover,
   isOrderStatus,
+  isSettableStatus,
   itemVendor,
   monthLabel,
   nextYearMonth,
+  remainderQty,
+  shoppingStage,
+  type Leftover,
   type OrderStatus,
   type SalonOrder,
   type SalonOrderItem,
@@ -19,17 +25,24 @@ import {
 export {
   appendMoveNote,
   currentYearMonth,
+  deriveStatus,
+  isLeftover,
   isOrderStatus,
+  isSettableStatus,
   itemVendor,
+  leftoverLabel,
   monthLabel,
   MOVE_NOTE,
   nextYearMonth,
   ORDER_STATUSES,
   parseYearMonth,
   prevYearMonth,
+  remainderQty,
+  SETTABLE_STATUSES,
   statusLabel,
 } from "./salon-order-model";
 export type {
+  Leftover,
   OrderStatus,
   SalonOrder,
   SalonOrderItem,
@@ -64,6 +77,9 @@ function mapSqliteItem(row: typeof salonOrderItems.$inferSelect): SalonOrderItem
     size: row.size,
     shade: row.shade,
     qty: row.qty,
+    orderedQty: row.orderedQty ?? 0,
+    receivedQty: row.receivedQty ?? 0,
+    leftover: (row.leftover ?? "") as Leftover,
     sku: row.sku,
     note: row.note,
     actualVendor: row.actualVendor,
@@ -159,6 +175,9 @@ async function saveItemSqlite(item: SalonOrderItem) {
       size: item.size,
       shade: item.shade,
       qty: item.qty,
+      orderedQty: item.orderedQty,
+      receivedQty: item.receivedQty,
+      leftover: item.leftover,
       sku: item.sku,
       note: item.note,
       actualVendor: item.actualVendor,
@@ -276,6 +295,71 @@ function parseQty(value: unknown) {
   return qty;
 }
 
+function parseCount(value: unknown, label: string, min = 0) {
+  const qty = Number(value);
+  if (!Number.isInteger(qty) || qty < min) {
+    throw new Error(`${label} must be a whole number of ${min} or more.`);
+  }
+  return qty;
+}
+
+function refreshStatus(item: SalonOrderItem, shopping?: "pending" | "in_cart") {
+  item.status = deriveStatus({
+    qty: item.qty,
+    orderedQty: item.orderedQty,
+    receivedQty: item.receivedQty,
+    leftover: item.leftover,
+    shopping: shopping ?? shoppingStage(item.status),
+  });
+}
+
+async function persistItem(item: SalonOrderItem) {
+  if (isSupabaseConfigured()) await supabaseSalon.saveItem(item);
+  else await saveItemSqlite(item);
+}
+
+async function persistNewItem(item: SalonOrderItem) {
+  if (isSupabaseConfigured()) await supabaseSalon.insertItem(item);
+  else await insertItemSqlite(item);
+}
+
+async function rollRemainder(item: SalonOrderItem) {
+  if (item.leftover === "rolled") return;
+  const remainder = remainderQty(item);
+  if (remainder < 1) {
+    throw new Error("There is no leftover to roll to next month.");
+  }
+  const order = await getOrderById(item.orderId);
+  if (!order) throw new Error("Request not found.");
+  const next = nextYearMonth(order.year, order.month);
+  const nextOrder = await getOrCreateOrder(next.year, next.month);
+  const now = new Date().toISOString();
+  const rolled: SalonOrderItem = {
+    id: itemId(),
+    orderId: nextOrder.id,
+    preferredVendor: item.preferredVendor,
+    brand: item.brand,
+    product: item.product,
+    size: item.size,
+    shade: item.shade,
+    qty: remainder,
+    orderedQty: 0,
+    receivedQty: 0,
+    leftover: "",
+    sku: item.sku,
+    note: appendMoveNote(item.note),
+    actualVendor: "",
+    vendorOrderNumber: "",
+    status: "pending",
+    requestedByUserId: item.requestedByUserId,
+    requestedByName: item.requestedByName,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await persistNewItem(rolled);
+  item.leftover = "rolled";
+}
+
 export async function addItem(input: {
   year: number;
   month: number;
@@ -303,6 +387,9 @@ export async function addItem(input: {
     size: cleanText(input.size),
     shade: cleanText(input.shade),
     qty: parseQty(input.qty ?? 1),
+    orderedQty: 0,
+    receivedQty: 0,
+    leftover: "",
     sku: cleanText(input.sku),
     note: cleanText(input.note),
     actualVendor: "",
@@ -328,6 +415,9 @@ export async function updateItem(
     shade?: string;
     sku?: string;
     qty?: unknown;
+    orderedQty?: unknown;
+    receivedQty?: unknown;
+    leftover?: string;
     note?: string;
     actualVendor?: string;
     vendorOrderNumber?: string;
@@ -350,7 +440,12 @@ export async function updateItem(
   if (patch.size !== undefined) current.size = cleanText(patch.size);
   if (patch.shade !== undefined) current.shade = cleanText(patch.shade);
   if (patch.sku !== undefined) current.sku = cleanText(patch.sku);
-  if (patch.qty !== undefined) current.qty = parseQty(patch.qty);
+  if (patch.qty !== undefined) {
+    if (current.orderedQty > 0) {
+      throw new Error("Requested qty stays the original ask after it is ordered.");
+    }
+    current.qty = parseQty(patch.qty);
+  }
   if (patch.note !== undefined) current.note = cleanText(patch.note);
   if (patch.actualVendor !== undefined) {
     current.actualVendor = cleanText(patch.actualVendor);
@@ -358,13 +453,55 @@ export async function updateItem(
   if (patch.vendorOrderNumber !== undefined) {
     current.vendorOrderNumber = cleanText(patch.vendorOrderNumber);
   }
-  if (patch.status !== undefined) {
-    if (!isOrderStatus(patch.status)) throw new Error("That status is not valid.");
-    current.status = patch.status;
+
+  if (patch.orderedQty !== undefined) {
+    const orderedQty = parseCount(patch.orderedQty, "Ordered qty", 1);
+    current.orderedQty = orderedQty;
   }
+
+  if (patch.status !== undefined) {
+    if (patch.status === "partial" || patch.status === "received") {
+      throw new Error("Received and Partial are set from received qty, not from the status menu.");
+    }
+    if (!isSettableStatus(patch.status)) throw new Error("That status is not valid.");
+    if (patch.status === "pending" && current.orderedQty > 0) {
+      throw new Error("Can't send this back to Pending after it was ordered.");
+    }
+    if (patch.status === "in_cart" && current.orderedQty > 0) {
+      throw new Error("This line is already ordered.");
+    }
+    if (patch.status === "ordered" && current.orderedQty < 1) {
+      current.orderedQty = current.qty;
+    }
+    if (patch.status === "out_of_stock" && current.leftover !== "rolled") {
+      current.leftover = "oos";
+    }
+  }
+
+  if (patch.receivedQty !== undefined) {
+    if (current.orderedQty < 1) {
+      throw new Error("Received qty is only for after a line is ordered.");
+    }
+    current.receivedQty = parseCount(patch.receivedQty, "Received qty", 0);
+  }
+
+  if (patch.leftover !== undefined) {
+    if (!isLeftover(patch.leftover)) throw new Error("That leftover choice is not valid.");
+    if (patch.leftover === "rolled") {
+      await rollRemainder(current);
+    } else if (current.leftover === "rolled") {
+      throw new Error("Leftover already rolled to next month.");
+    } else {
+      current.leftover = patch.leftover;
+    }
+  }
+
+  let shopping: "pending" | "in_cart" | undefined;
+  if (patch.status === "in_cart") shopping = "in_cart";
+  else if (patch.status === "pending") shopping = "pending";
+  refreshStatus(current, shopping);
   current.updatedAt = new Date().toISOString();
-  if (isSupabaseConfigured()) await supabaseSalon.saveItem(current);
-  else await saveItemSqlite(current);
+  await persistItem(current);
   return current;
 }
 
@@ -385,7 +522,13 @@ export async function bulkUpdateStatus(input: {
   fromStatus?: string;
   vendorOrderNumber?: string;
 }) {
-  if (!isOrderStatus(input.status)) throw new Error("That status is not valid.");
+  if (!isSettableStatus(input.status)) {
+    throw new Error(
+      input.status === "partial" || input.status === "received"
+        ? "Received and Partial are set from received qty, not from Set all."
+        : "That status is not valid.",
+    );
+  }
   const vendor = input.vendor.trim();
   if (!vendor) throw new Error("Vendor is required.");
   const fromStatus =
@@ -402,10 +545,18 @@ export async function bulkUpdateStatus(input: {
     throw new Error("No items match that vendor.");
   }
   const now = new Date().toISOString();
+  let updated = 0;
   for (const item of matched) {
-    item.status = input.status;
+    if (input.status === "pending" && item.orderedQty > 0) continue;
+    if (input.status === "in_cart" && item.orderedQty > 0) continue;
+    if (input.status === "ordered" && item.orderedQty < 1) {
+      item.orderedQty = item.qty;
+    }
+    if (input.status === "out_of_stock" && item.leftover !== "rolled") {
+      item.leftover = "oos";
+    }
     if (
-      (input.status === "in_cart" || input.status === "ordered" || input.status === "received") &&
+      (input.status === "in_cart" || input.status === "ordered") &&
       !item.actualVendor.trim()
     ) {
       item.actualVendor = vendor === "No vendor" ? "" : vendor;
@@ -413,33 +564,47 @@ export async function bulkUpdateStatus(input: {
     if (input.vendorOrderNumber !== undefined) {
       item.vendorOrderNumber = cleanText(input.vendorOrderNumber);
     }
+    refreshStatus(
+      item,
+      input.status === "in_cart" || input.status === "pending" ? input.status : undefined,
+    );
     item.updatedAt = now;
-    if (isSupabaseConfigured()) await supabaseSalon.saveItem(item);
-    else await saveItemSqlite(item);
+    await persistItem(item);
+    updated += 1;
   }
-  return matched.length;
+  if (updated === 0) {
+    throw new Error("Those items are already ordered, so they can't go back.");
+  }
+  return updated;
 }
 
 export async function moveOutOfStockToNextMonth(year: number, month: number) {
   const order = await getOrderByYearMonth(year, month);
   if (!order) throw new Error("There is nothing out of stock this month.");
-  const items = (await listItems(order.id)).filter((item) => item.status === "out_of_stock");
+  const items = (await listItems(order.id)).filter((item) => {
+    if (item.leftover === "rolled") return false;
+    return item.status === "out_of_stock" || item.leftover === "oos";
+  });
   if (items.length === 0) {
     throw new Error("There is nothing out of stock this month.");
   }
   const next = nextYearMonth(year, month);
   const nextOrder = await getOrCreateOrder(next.year, next.month);
   const now = new Date().toISOString();
+  let moved = 0;
   for (const item of items) {
-    item.orderId = nextOrder.id;
-    item.status = "pending";
-    item.note = appendMoveNote(item.note);
+    if (remainderQty(item) < 1) continue;
+    await rollRemainder(item);
+    refreshStatus(item);
     item.updatedAt = now;
-    if (isSupabaseConfigured()) await supabaseSalon.saveItem(item);
-    else await saveItemSqlite(item);
+    await persistItem(item);
+    moved += 1;
+  }
+  if (moved === 0) {
+    throw new Error("There is nothing out of stock this month.");
   }
   return {
-    moved: items.length,
+    moved,
     nextYear: next.year,
     nextMonth: next.month,
     nextName: nextOrder.name,

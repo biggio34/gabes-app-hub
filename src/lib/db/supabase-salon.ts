@@ -1,5 +1,5 @@
 import { getSupabase, throwIfError } from "./supabase";
-import type { SalonOrder, SalonOrderItem } from "@/lib/salon-order-model";
+import type { Leftover, SalonOrder, SalonOrderItem } from "@/lib/salon-order-model";
 
 type OrderRow = {
   id: string;
@@ -18,6 +18,9 @@ type ItemRow = {
   size: string;
   shade: string;
   qty: number;
+  ordered_qty?: number | null;
+  received_qty?: number | null;
+  leftover?: string | null;
   sku: string;
   note: string;
   actual_vendor: string;
@@ -49,6 +52,9 @@ function mapItem(row: ItemRow): SalonOrderItem {
     size: row.size ?? "",
     shade: row.shade ?? "",
     qty: Number(row.qty) || 1,
+    orderedQty: Number(row.ordered_qty) || 0,
+    receivedQty: Number(row.received_qty) || 0,
+    leftover: (row.leftover ?? "") as Leftover,
     sku: row.sku ?? "",
     note: row.note ?? "",
     actualVendor: row.actual_vendor ?? "",
@@ -69,7 +75,7 @@ function client() {
 
 function salonError(fallback: string) {
   return (result: { data: unknown; error: { message: string } | null }) => {
-    if (result.error && /does not exist|schema cache|vendor_order_number|column.*sku/i.test(result.error.message)) {
+    if (result.error && /does not exist|schema cache|vendor_order_number|column.*sku|ordered_qty|received_qty|leftover/i.test(result.error.message)) {
       throw new Error(
         "The salon order tables need an update in Supabase. Run supabase/salon-orders.sql in the SQL editor.",
       );
@@ -157,6 +163,9 @@ export async function insertItem(item: SalonOrderItem) {
       size: item.size,
       shade: item.shade,
       qty: item.qty,
+      ordered_qty: item.orderedQty,
+      received_qty: item.receivedQty,
+      leftover: item.leftover,
       sku: item.sku,
       note: item.note,
       actual_vendor: item.actualVendor,
@@ -182,6 +191,9 @@ export async function saveItem(item: SalonOrderItem) {
         size: item.size,
         shade: item.shade,
         qty: item.qty,
+        ordered_qty: item.orderedQty,
+        received_qty: item.receivedQty,
+        leftover: item.leftover,
         sku: item.sku,
         note: item.note,
         actual_vendor: item.actualVendor,

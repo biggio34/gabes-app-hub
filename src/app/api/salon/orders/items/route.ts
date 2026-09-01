@@ -58,6 +58,9 @@ export async function PATCH(request: Request) {
     note?: string;
     actualVendor?: string;
     vendorOrderNumber?: string;
+    orderedQty?: unknown;
+    receivedQty?: unknown;
+    leftover?: string;
     status?: string;
   } | null;
   if (!body?.id) {

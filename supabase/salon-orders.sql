@@ -19,6 +19,9 @@ create table if not exists hub_salon_order_items (
   size text not null default '',
   shade text not null default '',
   qty integer not null default 1,
+  ordered_qty integer not null default 0,
+  received_qty integer not null default 0,
+  leftover text not null default '',
   sku text not null default '',
   note text not null default '',
   actual_vendor text not null default '',
@@ -35,3 +38,16 @@ alter table hub_salon_order_items enable row level security;
 
 alter table hub_salon_order_items add column if not exists sku text not null default '';
 alter table hub_salon_order_items add column if not exists vendor_order_number text not null default '';
+alter table hub_salon_order_items add column if not exists ordered_qty integer not null default 0;
+alter table hub_salon_order_items add column if not exists received_qty integer not null default 0;
+alter table hub_salon_order_items add column if not exists leftover text not null default '';
+
+update hub_salon_order_items
+  set ordered_qty = qty, received_qty = qty
+  where status = 'received' and received_qty = 0;
+update hub_salon_order_items
+  set ordered_qty = qty
+  where status = 'ordered' and ordered_qty = 0;
+update hub_salon_order_items
+  set leftover = 'oos'
+  where status = 'out_of_stock' and leftover = '';

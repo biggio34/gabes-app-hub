@@ -5,16 +5,22 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   findPendingDuplicate,
+  isSettableStatus,
   itemVendor,
+  leftoverLabel,
   monthLabel,
   nextYearMonth,
   ORDER_STATUSES,
   prevYearMonth,
+  remainderQty,
+  SETTABLE_STATUSES,
   statusLabel,
+  type Leftover,
   type OrderStatus,
   type SalonOrder,
   type SalonOrderItem,
   type SalonSuggestions,
+  type SettableStatus,
 } from "@/lib/salon-order-model";
 
 type View = {
@@ -35,16 +41,32 @@ const statusClass: Record<OrderStatus, string> = {
   pending: "border-amber-500/30 bg-amber-500/15 text-amber-200",
   in_cart: "border-sky-500/30 bg-sky-500/15 text-sky-200",
   ordered: "border-violet-500/30 bg-violet-500/15 text-violet-200",
+  partial: "border-orange-500/30 bg-orange-500/15 text-orange-200",
   received: "border-emerald-500/30 bg-emerald-500/15 text-emerald-200",
   out_of_stock: "border-rose-500/30 bg-rose-500/15 text-rose-200",
 };
 
-function StatusBadge({ status }: { status: OrderStatus }) {
+function StatusBadge({
+  status,
+  receivedQty,
+  requestedQty,
+}: {
+  status: OrderStatus;
+  receivedQty?: number;
+  requestedQty?: number;
+}) {
+  const count =
+    (status === "partial" || status === "received") &&
+    receivedQty !== undefined &&
+    requestedQty !== undefined
+      ? ` ${receivedQty} / ${requestedQty}`
+      : "";
   return (
     <span
       className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusClass[status]}`}
     >
       {statusLabel[status]}
+      {count}
     </span>
   );
 }
@@ -54,8 +76,8 @@ function StatusSelect({
   onChange,
   disabled,
 }: {
-  value: OrderStatus;
-  onChange: (status: OrderStatus) => void;
+  value: SettableStatus;
+  onChange: (status: SettableStatus) => void;
   disabled?: boolean;
 }) {
   return (
@@ -63,9 +85,9 @@ function StatusSelect({
       className={field}
       value={value}
       disabled={disabled}
-      onChange={(event) => onChange(event.target.value as OrderStatus)}
+      onChange={(event) => onChange(event.target.value as SettableStatus)}
     >
-      {ORDER_STATUSES.map((status) => (
+      {SETTABLE_STATUSES.map((status) => (
         <option key={status} value={status}>
           {statusLabel[status]}
         </option>
@@ -308,7 +330,7 @@ export function SupplyOrdersClient({
 
   async function bulkStatus(
     vendor: string,
-    status: OrderStatus,
+    status: SettableStatus,
     fromStatus?: OrderStatus,
     vendorOrderNumber?: string,
   ) {
@@ -344,7 +366,7 @@ export function SupplyOrdersClient({
     const next = nextYearMonth(view.year, view.month);
     if (
       !confirm(
-        `Move out of stock items to ${monthLabel(next.year, next.month)} as Pending?`,
+        `Roll leftover from out of stock items to ${monthLabel(next.year, next.month)} as Pending? This month’s rows stay for history.`,
       )
     ) {
       return;
@@ -366,7 +388,7 @@ export function SupplyOrdersClient({
         "Could not move those items.",
       )) as { moved?: number; nextYear?: number; nextMonth?: number };
       setNotice(
-        `Moved ${data.moved} item${data.moved === 1 ? "" : "s"} to ${monthLabel(next.year, next.month)}.`,
+        `Rolled leftover from ${data.moved} item${data.moved === 1 ? "" : "s"} to ${monthLabel(next.year, next.month)}. This month’s rows stayed.`,
       );
       goToMonth(data.nextYear ?? next.year, data.nextMonth ?? next.month);
     } catch (err) {
@@ -630,9 +652,9 @@ export function SupplyOrdersClient({
             onClick={() => void moveOutOfStock()}
             className="rounded-2xl border border-rose-800 bg-rose-950/50 px-4 py-3 text-left text-sm hover:border-rose-600 disabled:opacity-60"
           >
-            Move {outOfStockCount} out of stock item
+            Roll leftover from {outOfStockCount} out of stock item
             {outOfStockCount === 1 ? "" : "s"} to {monthLabel(next.year, next.month)} as
-            Pending
+            Pending. This month’s rows stay.
           </button>
         ) : null}
 
@@ -694,7 +716,7 @@ export function SupplyOrdersClient({
                   className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-rose-500"
                   defaultValue=""
                   onChange={(event) => {
-                    const value = event.target.value as OrderStatus | "";
+                    const value = event.target.value as SettableStatus | "";
                     event.target.value = "";
                     if (!value) return;
                     const fromStatus = filter === "all" ? undefined : filter;
@@ -707,7 +729,7 @@ export function SupplyOrdersClient({
                   }}
                 >
                   <option value="">Choose…</option>
-                  {ORDER_STATUSES.map((status) => (
+                  {SETTABLE_STATUSES.map((status) => (
                     <option key={status} value={status}>
                       {statusLabel[status]}
                     </option>
@@ -794,7 +816,7 @@ export function SupplyOrdersClient({
                         className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-rose-500"
                         defaultValue=""
                         onChange={(event) => {
-                          const value = event.target.value as OrderStatus | "";
+                          const value = event.target.value as SettableStatus | "";
                           event.target.value = "";
                           if (!value) return;
                           if (group.status === "in_cart" && value === "ordered") {
@@ -806,7 +828,7 @@ export function SupplyOrdersClient({
                         }}
                       >
                         <option value="">Choose…</option>
-                        {ORDER_STATUSES.map((status) => (
+                        {SETTABLE_STATUSES.map((status) => (
                           <option key={status} value={status}>
                             {statusLabel[status]}
                           </option>
@@ -864,6 +886,7 @@ export function SupplyOrdersClient({
                         item={item}
                         editing={editingId === item.id}
                         isOwner={view.isOwner}
+                        nextMonthLabel={monthLabel(next.year, next.month)}
                         onEdit={() =>
                           setEditingId((current) => (current === item.id ? null : item.id))
                         }
@@ -904,10 +927,71 @@ function FilterChip({
   );
 }
 
+function LeftoverMenu({
+  leftover,
+  remainder,
+  nextMonthLabel,
+  disabled,
+  onChoose,
+}: {
+  leftover: Leftover;
+  remainder: number;
+  nextMonthLabel: string;
+  disabled?: boolean;
+  onChoose: (leftover: Exclude<Leftover, "">) => void;
+}) {
+  if (remainder < 1) return null;
+  if (leftover === "rolled") {
+    return (
+      <p className="text-sm text-slate-400">
+        Leftover rolled to {nextMonthLabel}. This month stays as history.
+      </p>
+    );
+  }
+  const choices = ["wait", "oos", "rolled"] as const;
+  return (
+    <div className="grid gap-1.5 sm:col-span-2">
+      <p className="text-sm">
+        Leftover qty {remainder}
+        {leftover ? ` · ${leftoverLabel[leftover]}` : ""}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {choices.map((choice) => (
+          <button
+            key={choice}
+            type="button"
+            disabled={disabled}
+            onClick={() => {
+              if (choice === "rolled") {
+                if (
+                  !confirm(
+                    `Roll leftover qty ${remainder} to ${nextMonthLabel} as Pending? This month’s row stays for history.`,
+                  )
+                ) {
+                  return;
+                }
+              }
+              onChoose(choice);
+            }}
+            className={`rounded-xl px-3 py-2 text-xs font-semibold disabled:opacity-60 ${
+              leftover === choice
+                ? "bg-rose-700 text-white"
+                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+            }`}
+          >
+            {leftoverLabel[choice]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ItemCard({
   item,
   editing,
   isOwner,
+  nextMonthLabel,
   onEdit,
   onPatch,
   onDelete,
@@ -915,10 +999,13 @@ function ItemCard({
   item: SalonOrderItem;
   editing: boolean;
   isOwner: boolean;
+  nextMonthLabel: string;
   onEdit: () => void;
   onPatch: (patch: Record<string, unknown>) => void;
   onDelete: () => void;
 }) {
+  const hasOrdered = item.orderedQty > 0;
+  const remainder = remainderQty(item);
   const [draft, setDraft] = useState({
     preferredVendor: item.preferredVendor,
     brand: item.brand,
@@ -931,22 +1018,98 @@ function ItemCard({
     actualVendor: item.actualVendor,
     vendorOrderNumber: item.vendorOrderNumber,
   });
+  const [orderedDraft, setOrderedDraft] = useState(
+    String(item.orderedQty > 0 ? item.orderedQty : item.qty),
+  );
+  const [receivedDraft, setReceivedDraft] = useState(String(item.receivedQty));
+  const [localError, setLocalError] = useState("");
 
   function saveDetails() {
-    onPatch({
+    const patch: Record<string, unknown> = {
       preferredVendor: draft.preferredVendor,
       brand: draft.brand,
       product: draft.product,
       size: draft.size,
       shade: draft.shade,
-      qty: Number(draft.qty),
       sku: draft.sku,
       note: draft.note,
       actualVendor: draft.actualVendor,
       vendorOrderNumber: draft.vendorOrderNumber,
-    });
+    };
+    if (!hasOrdered) patch.qty = Number(draft.qty);
+    onPatch(patch);
     onEdit();
   }
+
+  function goingInQty() {
+    const orderedQty = Number(orderedDraft);
+    if (!Number.isInteger(orderedQty) || orderedQty < 1) return null;
+    return orderedQty;
+  }
+
+  const leftoverRemainder = hasOrdered
+    ? remainder
+    : (() => {
+        const goingIn = goingInQty();
+        if (goingIn !== null && goingIn < item.qty) return item.qty - goingIn;
+        if (item.leftover) return item.qty;
+        return 0;
+      })();
+
+  function markOrdered() {
+    const orderedQty = goingInQty();
+    if (orderedQty === null) {
+      setLocalError("Ordered qty is the amount that actually went in.");
+      return;
+    }
+    if (orderedQty < item.qty && item.leftover !== "wait" && item.leftover !== "oos" && item.leftover !== "rolled") {
+      setLocalError("Choose wait, out of stock, or roll for the leftover before marking Ordered.");
+      return;
+    }
+    setLocalError("");
+    const patch: Record<string, unknown> = { status: "ordered", orderedQty };
+    if (orderedQty < item.qty && (item.leftover === "wait" || item.leftover === "oos" || item.leftover === "rolled")) {
+      patch.leftover = item.leftover;
+    }
+    onPatch(patch);
+  }
+
+  function handleStatus(status: SettableStatus) {
+    if (status === "ordered") {
+      markOrdered();
+      return;
+    }
+    setLocalError("");
+    onPatch({ status });
+  }
+
+  function applyLeftover(leftover: Exclude<Leftover, "">) {
+    const patch: Record<string, unknown> = { leftover };
+    if (!hasOrdered) {
+      const orderedQty = goingInQty();
+      if (orderedQty !== null && orderedQty < item.qty) {
+        patch.orderedQty = orderedQty;
+      }
+    }
+    setLocalError("");
+    onPatch(patch);
+  }
+
+  function saveReceived() {
+    const receivedQty = Number(receivedDraft);
+    if (!Number.isInteger(receivedQty) || receivedQty < 0) {
+      setLocalError("Received qty must be a whole number of 0 or more.");
+      return;
+    }
+    setLocalError("");
+    onPatch({ receivedQty });
+  }
+
+  const qtyLine = hasOrdered
+    ? `Requested ${item.qty} · Ordered ${item.orderedQty}${
+        item.receivedQty > 0 ? ` · Received ${item.receivedQty} / ${item.qty}` : ""
+      }`
+    : `Qty ${item.qty}`;
 
   return (
     <li className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
@@ -957,7 +1120,7 @@ function ItemCard({
             {item.product}
           </p>
           <p className="text-sm text-slate-400">
-            Qty {item.qty}
+            {qtyLine}
             {item.size ? ` · ${item.size}` : ""}
             {item.shade ? ` · ${item.shade}` : ""}
             {item.sku ? ` · SKU ${item.sku}` : ""}
@@ -969,7 +1132,11 @@ function ItemCard({
           </p>
           {item.note ? <p className="mt-1 text-sm text-slate-300">{item.note}</p> : null}
         </div>
-        <StatusBadge status={item.status} />
+        <StatusBadge
+          status={item.status}
+          receivedQty={item.receivedQty}
+          requestedQty={item.qty}
+        />
       </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -989,10 +1156,22 @@ function ItemCard({
             }}
           />
         </label>
-        <label className="grid gap-1.5 text-sm">
-          Status
-          <StatusSelect value={item.status} onChange={(status) => onPatch({ status })} />
-        </label>
+        {hasOrdered ? (
+          <p className="grid gap-1.5 text-sm">
+            Status
+            <span className="text-slate-400">
+              Set by ordered and received qty. Received only when a box lands.
+            </span>
+          </p>
+        ) : (
+          <label className="grid gap-1.5 text-sm">
+            Status
+            <StatusSelect
+              value={isSettableStatus(item.status) ? item.status : "pending"}
+              onChange={handleStatus}
+            />
+          </label>
+        )}
         <label className="grid gap-1.5 text-sm">
           SKU / item #
           <input
@@ -1024,7 +1203,50 @@ function ItemCard({
             }}
           />
         </label>
+        {hasOrdered ? null : (
+          <label className="grid gap-1.5 text-sm">
+            Qty going in this order
+            <input
+              min={1}
+              type="number"
+              className={field}
+              value={orderedDraft}
+              onChange={(event) => setOrderedDraft(event.target.value)}
+            />
+          </label>
+        )}
+        {hasOrdered ? (
+          <label className="grid gap-1.5 text-sm">
+            Received qty
+            <input
+              min={0}
+              type="number"
+              className={field}
+              value={receivedDraft}
+              onChange={(event) => setReceivedDraft(event.target.value)}
+              onBlur={() => {
+                if (Number(receivedDraft) !== item.receivedQty) saveReceived();
+              }}
+            />
+          </label>
+        ) : null}
+        <LeftoverMenu
+          leftover={item.leftover}
+          remainder={leftoverRemainder}
+          nextMonthLabel={nextMonthLabel}
+          onChoose={applyLeftover}
+        />
       </div>
+      {hasOrdered ? null : (
+        <button
+          type="button"
+          className="mt-3 rounded-xl bg-rose-700 px-3 py-2 text-xs font-semibold hover:bg-rose-600"
+          onClick={markOrdered}
+        >
+          Mark as Ordered
+        </button>
+      )}
+      {localError ? <p className="mt-2 text-sm text-red-400">{localError}</p> : null}
 
       {editing ? (
         <div className="mt-3 grid gap-3 border-t border-slate-800 pt-3 sm:grid-cols-2">
@@ -1082,12 +1304,13 @@ function ItemCard({
             />
           </label>
           <label className="grid gap-1.5 text-sm">
-            Qty
+            Requested qty
             <input
               min={1}
               type="number"
               className={field}
               value={draft.qty}
+              disabled={hasOrdered}
               onChange={(event) =>
                 setDraft((current) => ({ ...current, qty: event.target.value }))
               }

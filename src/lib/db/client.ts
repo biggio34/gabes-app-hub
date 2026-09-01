@@ -87,6 +87,9 @@ const SCHEMA_SQL = [
     size TEXT NOT NULL DEFAULT '',
     shade TEXT NOT NULL DEFAULT '',
     qty INTEGER NOT NULL DEFAULT 1,
+    ordered_qty INTEGER NOT NULL DEFAULT 0,
+    received_qty INTEGER NOT NULL DEFAULT 0,
+    leftover TEXT NOT NULL DEFAULT '',
     sku TEXT NOT NULL DEFAULT '',
     note TEXT NOT NULL DEFAULT '',
     actual_vendor TEXT NOT NULL DEFAULT '',
@@ -99,6 +102,12 @@ const SCHEMA_SQL = [
   )`,
   `ALTER TABLE salon_order_items ADD COLUMN sku TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE salon_order_items ADD COLUMN vendor_order_number TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE salon_order_items ADD COLUMN ordered_qty INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE salon_order_items ADD COLUMN received_qty INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE salon_order_items ADD COLUMN leftover TEXT NOT NULL DEFAULT ''`,
+  `UPDATE salon_order_items SET ordered_qty = qty, received_qty = qty WHERE status = 'received' AND received_qty = 0`,
+  `UPDATE salon_order_items SET ordered_qty = qty WHERE status = 'ordered' AND ordered_qty = 0`,
+  `UPDATE salon_order_items SET leftover = 'oos' WHERE status = 'out_of_stock' AND leftover = ''`,
 ];
 
 type HubDb = LibSQLDatabase<typeof schema>;
