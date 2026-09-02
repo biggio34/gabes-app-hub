@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   findPendingDuplicate,
   isSettableStatus,
@@ -33,6 +33,28 @@ type View = {
   suggestions: SalonSuggestions;
   isOwner: boolean;
 };
+
+type ListLayout = "cards" | "table";
+
+const LAYOUT_STORAGE_KEY = "luna-haus-supply-orders-layout";
+
+function readStoredLayout(): ListLayout {
+  try {
+    return window.localStorage.getItem(LAYOUT_STORAGE_KEY) === "table"
+      ? "table"
+      : "cards";
+  } catch {
+    return "cards";
+  }
+}
+
+function writeStoredLayout(layout: ListLayout) {
+  try {
+    window.localStorage.setItem(LAYOUT_STORAGE_KEY, layout);
+  } catch {
+    // Ignore quota / private-mode failures; the toggle still works this visit.
+  }
+}
 
 const field =
   "w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-rose-500";
@@ -110,6 +132,8 @@ export function SupplyOrdersClient({
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
   const [vendorFilter, setVendorFilter] = useState("all");
+  const [listLayout, setListLayout] = useState<ListLayout>("cards");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [orderName, setOrderName] = useState("");
@@ -148,6 +172,16 @@ export function SupplyOrdersClient({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch month on mount and when the URL month changes
     void load(initialYear, initialMonth);
   }, [initialYear, initialMonth]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restore Cards/Table after mount to avoid hydration mismatch
+    setListLayout(readStoredLayout());
+  }, []);
+
+  function chooseLayout(next: ListLayout) {
+    setListLayout(next);
+    writeStoredLayout(next);
+  }
 
   const vendorCounts = useMemo(() => {
     const items =
@@ -415,7 +449,11 @@ export function SupplyOrdersClient({
 
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-200">
-      <div className="mx-auto grid w-full max-w-5xl gap-6 px-4 py-8 sm:px-6">
+      <div
+        className={`mx-auto grid w-full gap-6 px-4 py-8 sm:px-6 ${
+          listLayout === "table" ? "max-w-6xl" : "max-w-5xl"
+        }`}
+      >
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <Link href="/" className="text-sm text-slate-400 hover:text-rose-300">
@@ -659,24 +697,56 @@ export function SupplyOrdersClient({
         ) : null}
 
         <div className="grid gap-3">
-          <div className="flex flex-wrap gap-2">
-            <FilterChip
-              active={filter === "all"}
-              label={`All ${
-                vendorFilter === "all"
-                  ? view.items.length
-                  : view.items.filter((item) => itemVendor(item) === vendorFilter).length
-              }`}
-              onClick={() => setFilter("all")}
-            />
-            {ORDER_STATUSES.map((status) => (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
               <FilterChip
-                key={status}
-                active={filter === status}
-                label={`${statusLabel[status]} ${counts[status]}`}
-                onClick={() => setFilter(status)}
+                active={filter === "all"}
+                label={`All ${
+                  vendorFilter === "all"
+                    ? view.items.length
+                    : view.items.filter((item) => itemVendor(item) === vendorFilter).length
+                }`}
+                onClick={() => setFilter("all")}
               />
-            ))}
+              {ORDER_STATUSES.map((status) => (
+                <FilterChip
+                  key={status}
+                  active={filter === status}
+                  label={`${statusLabel[status]} ${counts[status]}`}
+                  onClick={() => setFilter(status)}
+                />
+              ))}
+            </div>
+            <div
+              className="flex rounded-full bg-slate-800 p-0.5"
+              role="group"
+              aria-label="List layout"
+            >
+              <button
+                type="button"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                  listLayout === "cards"
+                    ? "bg-rose-700 text-white"
+                    : "text-slate-300 hover:bg-slate-700"
+                }`}
+                aria-pressed={listLayout === "cards"}
+                onClick={() => chooseLayout("cards")}
+              >
+                Cards
+              </button>
+              <button
+                type="button"
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                  listLayout === "table"
+                    ? "bg-rose-700 text-white"
+                    : "text-slate-300 hover:bg-slate-700"
+                }`}
+                aria-pressed={listLayout === "table"}
+                onClick={() => chooseLayout("table")}
+              >
+                Table
+              </button>
+            </div>
           </div>
           <label className="grid max-w-sm gap-1.5 text-sm">
             Vendor
@@ -792,6 +862,24 @@ export function SupplyOrdersClient({
               ? "No requests this month yet. Add one above."
               : "No requests match these filters."}
           </p>
+        ) : listLayout === "table" ? (
+          <CompactItemsTable
+            items={grouped.flatMap((group) =>
+              group.vendors.flatMap(([, items]) => items),
+            )}
+            expandedId={expandedId}
+            editingId={editingId}
+            isOwner={view.isOwner}
+            nextMonthLabel={monthLabel(next.year, next.month)}
+            onToggle={(id) =>
+              setExpandedId((current) => (current === id ? null : id))
+            }
+            onEdit={(id) =>
+              setEditingId((current) => (current === id ? null : id))
+            }
+            onPatch={(id, patch) => void patchItem(id, patch)}
+            onDelete={(id) => void removeItem(id)}
+          />
         ) : (
           grouped.map((group) => (
             <section key={group.status} className="grid gap-3">
@@ -927,6 +1015,160 @@ function FilterChip({
   );
 }
 
+function CellText({
+  value,
+  emphasize,
+}: {
+  value: string;
+  emphasize?: boolean;
+}) {
+  if (!value.trim()) {
+    return <span className="text-slate-600">—</span>;
+  }
+  return (
+    <span className={emphasize ? "font-medium text-slate-100" : undefined}>{value}</span>
+  );
+}
+
+function CompactItemsTable({
+  items,
+  expandedId,
+  editingId,
+  isOwner,
+  nextMonthLabel,
+  onToggle,
+  onEdit,
+  onPatch,
+  onDelete,
+}: {
+  items: SalonOrderItem[];
+  expandedId: string | null;
+  editingId: string | null;
+  isOwner: boolean;
+  nextMonthLabel: string;
+  onToggle: (id: string) => void;
+  onEdit: (id: string) => void;
+  onPatch: (id: string, patch: Record<string, unknown>) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900">
+      <table className="w-full min-w-[56rem] border-collapse text-left text-sm">
+        <caption className="sr-only">
+          Compact supply order list. Shade is on each row. Open a row for leftover
+          and receive.
+        </caption>
+        <thead className="bg-slate-950/80 text-xs tracking-wide text-slate-400 uppercase">
+          <tr>
+            <th className="w-8 px-2 py-2.5" scope="col">
+              <span className="sr-only">Open</span>
+            </th>
+            <th className="px-2 py-2.5 font-semibold" scope="col">
+              Vendor
+            </th>
+            <th className="px-2 py-2.5 font-semibold" scope="col">
+              Brand
+            </th>
+            <th className="px-2 py-2.5 font-semibold" scope="col">
+              Product
+            </th>
+            <th className="px-2 py-2.5 font-semibold" scope="col">
+              Size
+            </th>
+            <th className="px-2 py-2.5 font-semibold" scope="col">
+              Shade
+            </th>
+            <th className="px-2 py-2.5 font-semibold" scope="col">
+              SKU
+            </th>
+            <th className="px-2 py-2.5 font-semibold" scope="col">
+              Qty
+            </th>
+            <th className="px-2 py-2.5 font-semibold" scope="col">
+              Status
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => {
+            const open = expandedId === item.id;
+            return (
+              <Fragment key={`${item.id}-${item.updatedAt}`}>
+                <tr
+                  className={`cursor-pointer border-t border-slate-800 hover:bg-slate-800/50 ${
+                    open ? "bg-slate-800/40" : ""
+                  }`}
+                  onClick={() => onToggle(item.id)}
+                >
+                  <td className="px-2 py-2 text-slate-400">
+                    <button
+                      type="button"
+                      className="rounded px-1 text-xs"
+                      aria-expanded={open}
+                      aria-label={`${open ? "Hide" : "Show"} leftover and receive for ${item.product}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onToggle(item.id);
+                      }}
+                    >
+                      {open ? "▾" : "▸"}
+                    </button>
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">{itemVendor(item)}</td>
+                  <td className="px-2 py-2">
+                    <CellText value={item.brand} />
+                  </td>
+                  <td className="px-2 py-2">{item.product}</td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <CellText value={item.size} />
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <CellText value={item.shade} emphasize />
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <CellText value={item.sku} />
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap tabular-nums">{item.qty}</td>
+                  <td className="px-2 py-2">
+                    <StatusBadge
+                      status={item.status}
+                      receivedQty={item.receivedQty}
+                      requestedQty={item.qty}
+                    />
+                  </td>
+                </tr>
+                {open ? (
+                  <tr className="border-t border-slate-800 bg-slate-950">
+                    <td
+                      colSpan={9}
+                      className="px-3 py-3"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <p className="mb-2 text-xs text-slate-500">
+                        Leftover and receive stay on this row. Size and shade stay
+                        visible above for scanning.
+                      </p>
+                      <ItemFulfillment
+                        item={item}
+                        editing={editingId === item.id}
+                        isOwner={isOwner}
+                        nextMonthLabel={nextMonthLabel}
+                        onEdit={() => onEdit(item.id)}
+                        onPatch={(patch) => onPatch(item.id, patch)}
+                        onDelete={() => onDelete(item.id)}
+                      />
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function LeftoverMenu({
   leftover,
   remainder,
@@ -981,6 +1223,70 @@ function LeftoverMenu({
 }
 
 function ItemCard({
+  item,
+  editing,
+  isOwner,
+  nextMonthLabel,
+  onEdit,
+  onPatch,
+  onDelete,
+}: {
+  item: SalonOrderItem;
+  editing: boolean;
+  isOwner: boolean;
+  nextMonthLabel: string;
+  onEdit: () => void;
+  onPatch: (patch: Record<string, unknown>) => void;
+  onDelete: () => void;
+}) {
+  const hasOrdered = item.orderedQty > 0;
+  const qtyLine = hasOrdered
+    ? `Requested ${item.qty} · Ordered ${item.orderedQty}${
+        item.receivedQty > 0 ? ` · Received ${item.receivedQty} / ${item.qty}` : ""
+      }`
+    : `Qty ${item.qty}`;
+
+  return (
+    <li className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-medium">
+            {item.brand ? `${item.brand} · ` : ""}
+            {item.product}
+          </p>
+          <p className="text-sm text-slate-400">
+            {qtyLine}
+            {item.size ? ` · ${item.size}` : ""}
+            {item.shade ? ` · ${item.shade}` : ""}
+            {item.sku ? ` · SKU ${item.sku}` : ""}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Asked by {item.requestedByName}
+            {item.preferredVendor ? ` · Preferred ${item.preferredVendor}` : ""}
+            {item.vendorOrderNumber ? ` · Order # ${item.vendorOrderNumber}` : ""}
+          </p>
+          {item.note ? <p className="mt-1 text-sm text-slate-300">{item.note}</p> : null}
+        </div>
+        <StatusBadge
+          status={item.status}
+          receivedQty={item.receivedQty}
+          requestedQty={item.qty}
+        />
+      </div>
+      <ItemFulfillment
+        item={item}
+        editing={editing}
+        isOwner={isOwner}
+        nextMonthLabel={nextMonthLabel}
+        onEdit={onEdit}
+        onPatch={onPatch}
+        onDelete={onDelete}
+      />
+    </li>
+  );
+}
+
+function ItemFulfillment({
   item,
   editing,
   isOwner,
@@ -1106,40 +1412,8 @@ function ItemCard({
     onPatch({ receivedQty });
   }
 
-  const qtyLine = hasOrdered
-    ? `Requested ${item.qty} · Ordered ${item.orderedQty}${
-        item.receivedQty > 0 ? ` · Received ${item.receivedQty} / ${item.qty}` : ""
-      }`
-    : `Qty ${item.qty}`;
-
   return (
-    <li className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="font-medium">
-            {item.brand ? `${item.brand} · ` : ""}
-            {item.product}
-          </p>
-          <p className="text-sm text-slate-400">
-            {qtyLine}
-            {item.size ? ` · ${item.size}` : ""}
-            {item.shade ? ` · ${item.shade}` : ""}
-            {item.sku ? ` · SKU ${item.sku}` : ""}
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            Asked by {item.requestedByName}
-            {item.preferredVendor ? ` · Preferred ${item.preferredVendor}` : ""}
-            {item.vendorOrderNumber ? ` · Order # ${item.vendorOrderNumber}` : ""}
-          </p>
-          {item.note ? <p className="mt-1 text-sm text-slate-300">{item.note}</p> : null}
-        </div>
-        <StatusBadge
-          status={item.status}
-          receivedQty={item.receivedQty}
-          requestedQty={item.qty}
-        />
-      </div>
-
+    <div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="grid gap-1.5 text-sm">
           Actual vendor
@@ -1364,6 +1638,6 @@ function ItemCard({
           ) : null}
         </div>
       )}
-    </li>
+    </div>
   );
 }
