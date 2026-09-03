@@ -536,9 +536,13 @@
           const strengths = season.card && season.card.strengths
             ? `<p class="text-[11px] text-slate-500">Strengths: ${escapeHtml(season.card.strengths)}</p>`
             : "";
+          const teams = (window.HUB_SOFTBALL && window.HUB_SOFTBALL.teams) || state.teams || [];
+          const named = season.teamName
+            || (teams.find((item) => item.id === season.teamId) || {}).name
+            || "Unassigned";
           return `
             <div class="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
-              <p class="font-medium">${escapeHtml(String(season.year))} · ${escapeHtml(season.teamName || "Unassigned")}${season.number ? " · #" + escapeHtml(String(season.number)) : ""}</p>
+              <p class="font-medium">${escapeHtml(String(season.year))} · ${escapeHtml(named)}${season.number ? " · #" + escapeHtml(String(season.number)) : ""}</p>
               <p class="text-xs text-slate-500">${escapeHtml(pos || "No positions")}${decision ? " · " + escapeHtml(decision) : ""}</p>
               ${strengths}
               ${notesLine}

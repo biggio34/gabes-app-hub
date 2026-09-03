@@ -274,8 +274,10 @@
       id: (existing && existing.id) || (patch && patch.id) || ('season_' + year),
       year: year,
       seasonKey: key,
-      teamId: patch && patch.teamId !== undefined ? patch.teamId : (existing && existing.teamId) || null,
-      teamName: patch && patch.teamName !== undefined ? String(patch.teamName || '') : (existing && existing.teamName) || '',
+      teamId: patch && patch.teamId ? patch.teamId : (existing && existing.teamId) || null,
+      teamName: patch && String(patch.teamName || '').trim()
+        ? String(patch.teamName)
+        : (existing && existing.teamName) || '',
       number: patch && patch.number !== undefined ? String(patch.number || '') : (existing && existing.number) || '',
       position: patch && patch.position !== undefined ? String(patch.position || '') : (existing && existing.position) || '',
       position2: patch && patch.position2 !== undefined ? String(patch.position2 || '') : (existing && existing.position2) || '',

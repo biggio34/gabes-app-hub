@@ -277,8 +277,11 @@ export function upsertSeasonChapter(
     id: existing?.id || patch.id || seasonId(year),
     year,
     seasonKey: key,
-    teamId: patch.teamId !== undefined ? patch.teamId : existing?.teamId || null,
-    teamName: patch.teamName !== undefined ? asString(patch.teamName) : existing?.teamName || "",
+    teamId: patch.teamId !== undefined && patch.teamId ? patch.teamId : existing?.teamId || null,
+    teamName:
+      patch.teamName !== undefined && asString(patch.teamName).trim()
+        ? asString(patch.teamName)
+        : existing?.teamName || "",
     number: patch.number !== undefined ? asString(patch.number) : existing?.number || "",
     position: patch.position !== undefined ? asString(patch.position) : existing?.position || "",
     position2: patch.position2 !== undefined ? asString(patch.position2) : existing?.position2 || "",

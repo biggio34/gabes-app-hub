@@ -121,6 +121,14 @@ describe("tryout publish", () => {
     assert.equal(seasons.find((s) => s.year === 2025)?.number, "10");
     assert.equal(seasons.find((s) => s.year === 2026)?.number, "4");
     assert.equal(seasons.find((s) => s.year === 2026)?.recommendation, "offer");
+    const afterWrite = applyIdentityOnWrite(result.state, result.state, {
+      canEditCoachNotes: true,
+      year: 2026,
+    });
+    const written = afterWrite.players?.[0];
+    const writtenSeasons = written?.seasons as { year: number; teamName: string; number: string }[];
+    assert.equal(writtenSeasons.find((s) => s.year === 2026)?.teamName, "16U Fransen");
+    assert.equal(writtenSeasons.find((s) => s.year === 2025)?.number, "10");
     assert.deepEqual(result.assignedPlayerIds, ["p_same"]);
     assert.equal(state.tryouts[0].evaluations.p_same.recommendation, "offer");
     assert.equal((result.state.tryouts?.[0] as { evaluations?: { p_same?: { recommendation?: string } } }).evaluations?.p_same?.recommendation, "offer");
