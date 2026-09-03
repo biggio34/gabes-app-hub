@@ -140,7 +140,7 @@
 
     <div id="shared-banner" class="mt-3 text-[11px] text-slate-500 bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2 flex items-center gap-2">
       <i class="fa-solid fa-link text-emerald-500"></i>
-      <span>Players come from <a class="text-slate-300 underline" href="/apps/roster">Team Roster</a> on the same People ids. Offer/Waitlist/Pass stay on this tryout. Owner Publish writes Offers onto that roster and sets this season’s number.</span>
+      <span>Players come from <a class="text-slate-300 underline" href="/apps/roster">Team Roster</a>.</span>
     </div>
 
     <div id="summary-strip" class="mt-4 grid grid-cols-4 gap-2"></div>
@@ -219,9 +219,6 @@
         <h3 class="title-font text-lg">Publish to Team Roster</h3>
         <button onclick="closePublishModal()" class="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <p class="text-xs text-slate-400 mb-3">
-        Offer / Waitlist / Pass stay on this tryout as the paper trail. Publish writes Offers onto Team Roster using the same People ids — it does not create new players. Jersey number is set here for this season; a girl can be #10 last year and #4 this year.
-      </p>
       <div class="space-y-3">
         <div>
           <label class="section-header block mb-1.5">Publish onto team</label>
@@ -364,7 +361,7 @@
 
         <div class="grid grid-cols-4 gap-2">
           <div>
-            <label class="section-header block mb-1.5"># <span class="normal-case tracking-normal text-slate-600 font-normal">kept if set; roster number at publish wins</span></label>
+            <label class="section-header block mb-1.5">#</label>
             <input id="p-number" type="text" inputmode="numeric" placeholder="00"
                    class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2 py-2.5 text-center font-semibold focus:outline-none focus:border-red-500">
           </div>
@@ -697,19 +694,19 @@
       const waitlist = players.filter((p) => p.recommendation === 'waitlist').length;
       const pass = players.filter((p) => p.recommendation === 'pass').length;
       document.getElementById('publish-summary').textContent =
-        `${offers.length} Offer · ${waitlist} Waitlist · ${pass} Pass. Waitlist and Pass stay as decisions; only Offers get this season’s team and number.`;
+        `${offers.length} Offer · ${waitlist} Waitlist · ${pass} Pass`;
       document.getElementById('publish-offers').innerHTML = offers.length
         ? offers.map((p) => `
             <label class="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-2xl px-3 py-2.5">
               <span class="flex-1 min-w-0">
                 <span class="font-medium truncate block">${escapeHtml(ElksData.displayName(p))}</span>
-                <span class="text-[11px] text-slate-500">${escapeHtml([p.position, p.position2].filter(Boolean).join(' / ') || 'No position')} · same id ${escapeHtml(p.id)}</span>
+                <span class="text-[11px] text-slate-500">${escapeHtml([p.position, p.position2].filter(Boolean).join(' / ') || '')}</span>
               </span>
               <input data-publish-jersey="${escapeHtml(p.id)}" inputmode="numeric" value="${escapeHtml(String(p.number || ''))}" placeholder="#"
                      class="w-16 bg-slate-900 border border-slate-700 rounded-xl px-2 py-2 text-center font-semibold">
             </label>
           `).join('')
-        : '<p class="text-sm text-slate-500">No Offers on this tryout yet. Mark Offer first. Publish still keeps Waitlist/Pass on the paper trail.</p>';
+        : '<p class="text-sm text-slate-500">No Offers yet.</p>';
       document.getElementById('publish-error').classList.add('hidden');
       document.getElementById('publish-modal').classList.remove('hidden');
     }
@@ -750,7 +747,7 @@
         if (ElksData.connectCloud) ElksData.connectCloud();
         closePublishModal();
         const assigned = (data.assignedPlayerIds || []).length;
-        alert(`Published ${assigned} Offer${assigned === 1 ? '' : 's'} onto ${data.teamName || 'the roster'} for ${data.year}. Same People ids. Waitlist/Pass stayed as decisions.`);
+        alert(`Published ${assigned} Offer${assigned === 1 ? '' : 's'} to ${data.teamName || 'the roster'}.`);
       } catch (err) {
         errorEl.textContent = err instanceof Error ? err.message : 'Could not publish.';
         errorEl.classList.remove('hidden');

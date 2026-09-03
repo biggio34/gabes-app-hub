@@ -41,9 +41,6 @@
       <p id="count-label" class="text-sm text-slate-500 shrink-0"></p>
     </header>
 
-    <p class="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
-      This is the shared player list. Each girl keeps one People id across years — opening her shows the card and season history (2025 Fransen → 2026 Fransen) without a new record. Primary and secondary position stay on her and are set on the card. Jersey number lives on the season: this year’s number is on the roster, past numbers stay in history. Lineup, tryouts, and team formation use these same ids.
-    </p>
     <p id="save-status" class="hidden text-xs text-slate-500"></p>
 
     <form id="player-form" class="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-5">
@@ -58,7 +55,7 @@
           <input id="last-name" required class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
         <label class="grid gap-1.5 text-sm">
-          Number (this season)
+          Number
           <input id="number" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
         <label class="grid gap-1.5 text-sm">
@@ -120,7 +117,6 @@
         <div class="min-w-0">
           <h3 id="card-name" class="title-font text-lg font-semibold"></h3>
           <p id="card-meta" class="text-xs text-slate-500 mt-0.5"></p>
-          <p id="card-id" class="text-[11px] text-slate-600 mt-1 font-mono"></p>
         </div>
         <button type="button" id="card-close" class="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center shrink-0" aria-label="Close">✕</button>
       </div>
@@ -136,7 +132,6 @@
               <select id="card-position2" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500"></select>
             </label>
           </div>
-          <p class="text-[11px] text-slate-500 -mt-1">Hers. Positions stay on this player when the year rolls. Jersey number is per season.</p>
           <label class="grid gap-1.5 text-sm">
             Strengths
             <input id="card-strengths" maxlength="140" placeholder="One line"
@@ -148,8 +143,8 @@
                    class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
           </label>
           <label id="card-notes-wrap" class="grid gap-1.5 text-sm">
-            Notes <span class="text-[11px] font-normal text-slate-500">coach-only · parents never see these</span>
-            <textarea id="card-notes" rows="3" placeholder="Free text for coaches"
+            Notes
+            <textarea id="card-notes" rows="3" placeholder=""
                       class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500 resize-none"></textarea>
           </label>
           <div class="grid gap-3 sm:grid-cols-2">
@@ -171,12 +166,10 @@
         </form>
         <div>
           <p class="text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase mb-2">Season history</p>
-          <p class="text-[11px] text-slate-500 mb-2">Jersey number is per season (#10 in 2025, #4 in 2026). Primary and secondary position stay on this player.</p>
           <div id="card-history" class="grid gap-2"></div>
         </div>
         <form id="prior-season-form" class="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950 p-4">
           <p class="text-sm font-semibold">Add a prior season</p>
-          <p class="text-[11px] text-slate-500">Records another chapter on this same id. Does not create a new player or change her positions. Only that year’s number and team go on the chapter.</p>
           <div class="grid gap-3 sm:grid-cols-2">
             <label class="grid gap-1.5 text-sm">
               Year
@@ -191,7 +184,7 @@
               <select id="prior-team" class="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 outline-none focus:border-red-500"></select>
             </label>
           </div>
-          <button type="submit" class="w-fit rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">Add season chapter</button>
+          <button type="submit" class="w-fit rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">Add season</button>
         </form>
       </div>
     </div>
@@ -313,7 +306,7 @@
       players.forEach((player) => {
         const li = document.createElement("li");
         li.className = "rounded-3xl border border-slate-800 bg-slate-900 p-5";
-        const number = player.number ? "#" + player.number + " this season" : "No number this season";
+        const number = player.number ? "#" + player.number : "No number";
         const positions = [player.position, player.position2].filter(Boolean).join(" / ") || "No position";
         const teamName = ElksData.teamNameForPlayer
           ? ElksData.teamNameForPlayer(player, state.teams || [])
@@ -507,11 +500,10 @@
         : "";
       document.getElementById("card-name").textContent = ElksData.displayName(player);
       document.getElementById("card-meta").textContent = [
-        player.number ? "#" + player.number + " this season" : "No number this season",
+        player.number ? "#" + player.number : "",
         teamName,
         [player.position, player.position2].filter(Boolean).join(" / "),
       ].filter(Boolean).join(" · ");
-      document.getElementById("card-id").textContent = "People id " + player.id;
       fillPositionSelect(document.getElementById("card-position"), player.position);
       fillPositionSelect(document.getElementById("card-position2"), player.position2);
       document.getElementById("card-strengths").value = card.strengths || "";
@@ -524,7 +516,7 @@
       const history = document.getElementById("card-history");
       const seasons = ElksData.playerSeasons ? ElksData.playerSeasons(player) : (player.seasons || []);
       if (!seasons.length) {
-        history.innerHTML = '<p class="text-sm text-slate-500">No season chapters yet. This year’s roster number and team become the current chapter when you save.</p>';
+        history.innerHTML = "";
       } else {
         history.innerHTML = seasons.map((season) => {
           const decision = recLabel(season.recommendation);
@@ -541,7 +533,7 @@
           return `
             <div class="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
               <p class="font-medium">${escapeHtml(String(season.year))} · ${escapeHtml(named)}${season.number ? " · #" + escapeHtml(String(season.number)) : ""}</p>
-              <p class="text-xs text-slate-500">${decision ? escapeHtml(decision) : "No tryout decision"}</p>
+              ${decision ? `<p class="text-xs text-slate-500">${escapeHtml(decision)}</p>` : ""}
               ${strengths}
               ${notesLine}
             </div>
