@@ -42,7 +42,7 @@
     </header>
 
     <p class="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
-      This is the shared player list. Lineup, tryouts, and team formation use these same girls. Pick Any / all players to see everyone, Not assigned for girls with no team yet, or one team.
+      This is the shared player list. Each girl keeps one People id across years — opening her shows the card and season history (2025 Fransen → 2026 Fransen) without a new record. Jersey number lives on the season, not the person: this year’s number is on the roster, past numbers stay in history. Lineup, tryouts, and team formation use these same ids.
     </p>
     <p id="save-status" class="hidden text-xs text-slate-500"></p>
 
@@ -58,12 +58,29 @@
           <input id="last-name" required class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
         <label class="grid gap-1.5 text-sm">
-          Number
+          Number (this season)
           <input id="number" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
         <label class="grid gap-1.5 text-sm">
-          Position
+          Primary position
           <select id="position" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+            <option value="">Any / unset</option>
+            <option>P</option>
+            <option>C</option>
+            <option>1B</option>
+            <option>2B</option>
+            <option>3B</option>
+            <option>SS</option>
+            <option>LF</option>
+            <option>CF</option>
+            <option>RF</option>
+            <option>UT</option>
+            <option>DP</option>
+          </select>
+        </label>
+        <label class="grid gap-1.5 text-sm sm:col-span-2">
+          Secondary position
+          <select id="position2" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
             <option value="">Any / unset</option>
             <option>P</option>
             <option>C</option>
@@ -97,10 +114,96 @@
     <ul id="player-list" class="grid gap-3"></ul>
   </div>
 
+  <div id="player-card-modal" class="fixed inset-0 z-50 hidden" style="background:rgba(2,6,23,0.82)">
+    <div class="absolute bottom-0 inset-x-0 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-w-lg sm:w-full max-h-[92vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-t-3xl sm:rounded-3xl p-5">
+      <div class="flex items-start justify-between gap-3 mb-4">
+        <div class="min-w-0">
+          <h3 id="card-name" class="title-font text-lg font-semibold"></h3>
+          <p id="card-meta" class="text-xs text-slate-500 mt-0.5"></p>
+          <p id="card-id" class="text-[11px] text-slate-600 mt-1 font-mono"></p>
+        </div>
+        <button type="button" id="card-close" class="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center shrink-0" aria-label="Close">✕</button>
+      </div>
+      <div class="grid gap-3">
+        <div class="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
+          <p class="text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Positions (from roster)</p>
+          <p id="card-positions" class="mt-1 text-sm text-slate-200"></p>
+          <p class="mt-1 text-[11px] text-slate-500">Edit primary / secondary on the roster form. Do not retype them here.</p>
+        </div>
+        <form id="card-form" class="grid gap-3">
+          <label class="grid gap-1.5 text-sm">
+            Strengths
+            <input id="card-strengths" maxlength="140" placeholder="One line"
+                   class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          </label>
+          <label class="grid gap-1.5 text-sm">
+            Development focus
+            <input id="card-focus" maxlength="140" placeholder="What we’re working on this month"
+                   class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          </label>
+          <label id="card-notes-wrap" class="grid gap-1.5 text-sm">
+            Notes <span class="text-[11px] font-normal text-slate-500">coach-only · parents never see these</span>
+            <textarea id="card-notes" rows="3" placeholder="Free text for coaches"
+                      class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500 resize-none"></textarea>
+          </label>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="grid gap-1.5 text-sm">
+              Injury / availability
+              <select id="card-injury" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+                <option value="">Unset</option>
+                <option value="available">Available</option>
+                <option value="limited">Limited</option>
+                <option value="out">Out</option>
+              </select>
+            </label>
+            <label class="grid gap-1.5 text-sm">
+              Last parent conference
+              <input id="card-conference" type="date" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+            </label>
+          </div>
+          <button type="submit" class="w-fit rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold hover:bg-red-600">Save card</button>
+        </form>
+        <div>
+          <p class="text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase mb-2">Season history</p>
+          <p class="text-[11px] text-slate-500 mb-2">Jersey number is per season. Same person can be #10 in 2025 and #4 in 2026.</p>
+          <div id="card-history" class="grid gap-2"></div>
+        </div>
+        <form id="prior-season-form" class="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950 p-4">
+          <p class="text-sm font-semibold">Add a prior season</p>
+          <p class="text-[11px] text-slate-500">Records another chapter on this same id. Does not create a new player or change this year’s roster number.</p>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="grid gap-1.5 text-sm">
+              Year
+              <input id="prior-year" type="number" min="1990" max="2100" class="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 outline-none focus:border-red-500">
+            </label>
+            <label class="grid gap-1.5 text-sm">
+              Number that year
+              <input id="prior-number" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 outline-none focus:border-red-500">
+            </label>
+            <label class="grid gap-1.5 text-sm sm:col-span-2">
+              Team
+              <select id="prior-team" class="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 outline-none focus:border-red-500"></select>
+            </label>
+            <label class="grid gap-1.5 text-sm">
+              Primary
+              <select id="prior-position" class="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 outline-none focus:border-red-500"></select>
+            </label>
+            <label class="grid gap-1.5 text-sm">
+              Secondary
+              <select id="prior-position2" class="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 outline-none focus:border-red-500"></select>
+            </label>
+          </div>
+          <button type="submit" class="w-fit rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">Add season chapter</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <script>
     const POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "UT", "DP"];
     let state = null;
     let editingId = null;
+    let cardPlayerId = null;
 
     function currentTeam() {
       if (window.ElksData && window.ElksData.currentHubTeam) {
@@ -212,23 +315,39 @@
       players.forEach((player) => {
         const li = document.createElement("li");
         li.className = "rounded-3xl border border-slate-800 bg-slate-900 p-5";
-        const number = player.number ? "#" + player.number : "No number";
-        const position = player.position || "No position";
+        const number = player.number ? "#" + player.number + " this season" : "No number this season";
+        const positions = [player.position, player.position2].filter(Boolean).join(" / ") || "No position";
         const teamName = ElksData.teamNameForPlayer
           ? ElksData.teamNameForPlayer(player, state.teams || [])
           : "";
+        const injury = player.card && player.card.injuryStatus
+          ? player.card.injuryStatus === "out"
+            ? "Out"
+            : player.card.injuryStatus === "limited"
+              ? "Limited"
+              : "Available"
+          : "";
+        const years = (ElksData.playerSeasons ? ElksData.playerSeasons(player) : (player.seasons || []))
+          .map((season) => season.year)
+          .filter(Boolean);
+        const history = years.length ? years.join(" → ") : "";
         li.innerHTML = `
           <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
+            <button type="button" data-open class="text-left min-w-0">
               <p class="font-semibold">${escapeHtml(ElksData.displayName(player))}</p>
-              <p class="text-xs text-slate-500">${escapeHtml(number)} · ${escapeHtml(position)}${teamName ? " · " + escapeHtml(teamName) : ""}</p>
-            </div>
+              <p class="text-xs text-slate-500">${escapeHtml(number)} · ${escapeHtml(positions)}${teamName ? " · " + escapeHtml(teamName) : ""}${injury ? " · " + escapeHtml(injury) : ""}</p>
+              ${history ? `<p class="text-[11px] text-slate-500 mt-1">${escapeHtml(history)}</p>` : ""}
+            </button>
             <div class="flex items-center gap-3">
+              <button type="button" data-open class="text-xs text-slate-400 hover:text-red-400">Open</button>
               <button type="button" data-edit class="text-xs text-slate-400 hover:text-red-400">Edit</button>
               <button type="button" data-remove class="text-xs text-slate-400 hover:text-red-400">Remove</button>
             </div>
           </div>
         `;
+        li.querySelectorAll("[data-open]").forEach((button) => {
+          button.onclick = () => openPlayerCard(player.id);
+        });
         li.querySelector("[data-edit]").onclick = () => startEdit(player.id);
         li.querySelector("[data-remove]").onclick = () => removePlayer(player.id);
         list.appendChild(li);
@@ -244,6 +363,7 @@
       document.getElementById("last-name").value = player.lastName || "";
       document.getElementById("number").value = player.number || "";
       document.getElementById("position").value = POSITIONS.includes(player.position) ? player.position : "";
+      document.getElementById("position2").value = POSITIONS.includes(player.position2) ? player.position2 : "";
       document.getElementById("cancel-edit").classList.remove("hidden");
       document.getElementById("first-name").focus();
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -258,6 +378,7 @@
       ElksData.deletePlayer(state, id);
       persist();
       if (editingId === id) resetForm();
+      if (cardPlayerId === id) closePlayerCard();
       render();
     }
 
@@ -267,6 +388,7 @@
       const lastName = document.getElementById("last-name").value.trim();
       const number = document.getElementById("number").value.trim();
       const position = document.getElementById("position").value;
+      const position2 = document.getElementById("position2").value;
       if (!firstName || !lastName) {
         showError("First and last name are required.");
         return;
@@ -277,6 +399,7 @@
         name: ElksData.joinName(firstName, lastName),
         number,
         position,
+        position2,
       };
       if (!editingId) {
         const teamId = ElksData.realTeamId
@@ -355,6 +478,145 @@
       } finally {
         if (saveButton) saveButton.disabled = false;
       }
+    });
+
+    function fillPositionSelect(select, selected) {
+      select.innerHTML = '<option value="">Any / unset</option>' + POSITIONS.map((pos) =>
+        `<option ${pos === selected ? "selected" : ""}>${pos}</option>`
+      ).join("");
+    }
+
+    function fillTeamSelect(select, selected) {
+      const teams = (window.HUB_SOFTBALL && window.HUB_SOFTBALL.teams) || state.teams || [];
+      select.innerHTML = '<option value="">Unassigned</option>' + teams.map((team) =>
+        `<option value="${escapeHtml(team.id)}" ${team.id === selected ? "selected" : ""}>${escapeHtml(team.name)}</option>`
+      ).join("");
+    }
+
+    function recLabel(key) {
+      const rec = ElksData.recMeta && ElksData.recMeta(key);
+      return rec ? rec.label : "";
+    }
+
+    function openPlayerCard(id) {
+      const player = state.players.find((item) => item.id === id);
+      if (!player) return;
+      cardPlayerId = id;
+      const modal = document.getElementById("player-card-modal");
+      const card = ElksData.normalizeCard ? ElksData.normalizeCard(player.card) : (player.card || {});
+      const teamName = ElksData.teamNameForPlayer
+        ? ElksData.teamNameForPlayer(player, state.teams || [])
+        : "";
+      const positions = [player.position, player.position2].filter(Boolean).join(" / ") || "No position set on roster";
+      document.getElementById("card-name").textContent = ElksData.displayName(player);
+      document.getElementById("card-meta").textContent = [
+        player.number ? "#" + player.number + " this season" : "No number this season",
+        teamName,
+      ].filter(Boolean).join(" · ");
+      document.getElementById("card-id").textContent = "People id " + player.id;
+      document.getElementById("card-positions").textContent = positions;
+      document.getElementById("card-strengths").value = card.strengths || "";
+      document.getElementById("card-focus").value = card.developmentFocus || "";
+      document.getElementById("card-notes").value = card.notes || "";
+      document.getElementById("card-injury").value = card.injuryStatus || "";
+      document.getElementById("card-conference").value = card.lastParentConference || "";
+      const canSee = ElksData.canSeeCoachNotes ? ElksData.canSeeCoachNotes() : false;
+      document.getElementById("card-notes-wrap").classList.toggle("hidden", !canSee);
+      const history = document.getElementById("card-history");
+      const seasons = ElksData.playerSeasons ? ElksData.playerSeasons(player) : (player.seasons || []);
+      if (!seasons.length) {
+        history.innerHTML = '<p class="text-sm text-slate-500">No season chapters yet. This year’s roster number and team become the current chapter when you save.</p>';
+      } else {
+        history.innerHTML = seasons.map((season) => {
+          const decision = recLabel(season.recommendation);
+          const pos = [season.position, season.position2].filter(Boolean).join(" / ");
+          const notesLine = canSee && season.card && season.card.notes
+            ? `<p class="text-[11px] text-slate-500 mt-1">Notes: ${escapeHtml(season.card.notes)}</p>`
+            : "";
+          const strengths = season.card && season.card.strengths
+            ? `<p class="text-[11px] text-slate-500">Strengths: ${escapeHtml(season.card.strengths)}</p>`
+            : "";
+          return `
+            <div class="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
+              <p class="font-medium">${escapeHtml(String(season.year))} · ${escapeHtml(season.teamName || "Unassigned")}${season.number ? " · #" + escapeHtml(String(season.number)) : ""}</p>
+              <p class="text-xs text-slate-500">${escapeHtml(pos || "No positions")}${decision ? " · " + escapeHtml(decision) : ""}</p>
+              ${strengths}
+              ${notesLine}
+            </div>
+          `;
+        }).join("");
+      }
+      const yearNow = ElksData.seasonYearForState ? ElksData.seasonYearForState(state) : new Date().getFullYear();
+      document.getElementById("prior-year").value = yearNow - 1;
+      document.getElementById("prior-number").value = "";
+      fillTeamSelect(document.getElementById("prior-team"), "");
+      fillPositionSelect(document.getElementById("prior-position"), player.position);
+      fillPositionSelect(document.getElementById("prior-position2"), player.position2);
+      modal.classList.remove("hidden");
+    }
+
+    function closePlayerCard() {
+      cardPlayerId = null;
+      document.getElementById("player-card-modal").classList.add("hidden");
+    }
+
+    document.getElementById("card-close").addEventListener("click", closePlayerCard);
+    document.getElementById("player-card-modal").addEventListener("click", (event) => {
+      if (event.target.id === "player-card-modal") closePlayerCard();
+    });
+
+    document.getElementById("card-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const player = state.players.find((item) => item.id === cardPlayerId);
+      if (!player) return;
+      const patch = {
+        strengths: document.getElementById("card-strengths").value.trim(),
+        developmentFocus: document.getElementById("card-focus").value.trim(),
+        injuryStatus: document.getElementById("card-injury").value,
+        lastParentConference: document.getElementById("card-conference").value,
+      };
+      if (ElksData.canSeeCoachNotes && ElksData.canSeeCoachNotes()) {
+        patch.notes = document.getElementById("card-notes").value;
+      }
+      if (ElksData.updatePlayerCard) ElksData.updatePlayerCard(player, patch);
+      else player.card = Object.assign({}, player.card || {}, patch);
+      if (ElksData.touchCurrentSeason) {
+        ElksData.touchCurrentSeason(player, {
+          year: ElksData.seasonYearForState ? ElksData.seasonYearForState(state) : new Date().getFullYear(),
+          teamName: ElksData.teamNameForPlayer(player, state.teams || []),
+        });
+      }
+      persist();
+      render();
+      openPlayerCard(player.id);
+    });
+
+    document.getElementById("prior-season-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const player = state.players.find((item) => item.id === cardPlayerId);
+      if (!player) return;
+      const year = Number(document.getElementById("prior-year").value);
+      const yearNow = ElksData.seasonYearForState ? ElksData.seasonYearForState(state) : new Date().getFullYear();
+      if (!Number.isFinite(year) || year < 1990) return;
+      const teamId = document.getElementById("prior-team").value || null;
+      const teams = (window.HUB_SOFTBALL && window.HUB_SOFTBALL.teams) || state.teams || [];
+      const team = teams.find((item) => item.id === teamId);
+      const patch = {
+        year,
+        teamId,
+        teamName: team ? team.name : "",
+        number: document.getElementById("prior-number").value.trim(),
+        position: document.getElementById("prior-position").value,
+        position2: document.getElementById("prior-position2").value,
+        source: "prior",
+      };
+      if (ElksData.addPriorSeason) ElksData.addPriorSeason(player, patch, yearNow);
+      else {
+        player.seasons = (player.seasons || []).filter((item) => Number(item.year) !== year).concat([patch]);
+      }
+      persist();
+      render();
+      openPlayerCard(player.id);
     });
 
     function escapeHtml(value) {

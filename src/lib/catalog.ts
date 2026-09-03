@@ -32,7 +32,7 @@ export const hubApps: HubApp[] = [
     file: "roster.html",
     title: "Team Roster",
     description:
-      "Add, edit, and remove players, and change the team name. Lineup, tryouts, and the other softball tools use this list.",
+      "Shared People/player list. Open a girl for her card and season history on one id that never resets. Jersey number is per season.",
     area: "softball",
   },
   {
@@ -63,7 +63,7 @@ export const hubApps: HubApp[] = [
     file: "tryout-evaluator.html",
     title: "Tryout Evaluator",
     description:
-      "Score tryouts. Players land on the same roster as Lineup and Team Formation.",
+      "Score tryouts. Offer/Waitlist/Pass stay as decisions. Owner Publish writes Offers onto Team Roster on the same People ids.",
     area: "softball",
   },
   {

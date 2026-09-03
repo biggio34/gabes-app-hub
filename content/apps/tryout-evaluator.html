@@ -131,12 +131,16 @@
                 class="px-3 py-2.5 border border-red-900 text-red-400 hover:bg-red-950 rounded-xl text-sm font-semibold shrink-0">
           <i class="fa-solid fa-trash"></i>
         </button>
+        <button id="publish-tryout-btn" onclick="openPublishModal()" title="Publish to Team Roster"
+                class="hidden px-3 py-2.5 bg-emerald-800 hover:bg-emerald-700 border border-emerald-700 rounded-xl text-sm font-semibold shrink-0">
+          Publish
+        </button>
       </div>
     </header>
 
     <div id="shared-banner" class="mt-3 text-[11px] text-slate-500 bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2 flex items-center gap-2">
       <i class="fa-solid fa-link text-emerald-500"></i>
-      <span>Players come from <a class="text-slate-300 underline" href="/apps/roster">Team Roster</a>. Scores also sync with Team Formation.</span>
+      <span>Players come from <a class="text-slate-300 underline" href="/apps/roster">Team Roster</a> on the same People ids. Offer/Waitlist/Pass stay on this tryout. Owner Publish writes Offers onto that roster and sets this season’s number.</span>
     </div>
 
     <div id="summary-strip" class="mt-4 grid grid-cols-4 gap-2"></div>
@@ -209,6 +213,30 @@
     </div>
   </div>
 
+  <div id="publish-modal" class="fixed inset-0 z-50 hidden modal-backdrop" onclick="if(event.target===this)closePublishModal()">
+    <div class="absolute bottom-0 inset-x-0 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-w-lg sm:w-full bg-slate-900 border border-slate-700 rounded-t-3xl sm:rounded-3xl p-5 sheet overflow-y-auto">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="title-font text-lg">Publish to Team Roster</h3>
+        <button onclick="closePublishModal()" class="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <p class="text-xs text-slate-400 mb-3">
+        Offer / Waitlist / Pass stay on this tryout as the paper trail. Publish writes Offers onto Team Roster using the same People ids — it does not create new players. Jersey number is set here for this season; a girl can be #10 last year and #4 this year.
+      </p>
+      <div class="space-y-3">
+        <div>
+          <label class="section-header block mb-1.5">Publish onto team</label>
+          <select id="publish-team" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-red-500"></select>
+        </div>
+        <div id="publish-summary" class="text-xs text-slate-400"></div>
+        <div id="publish-offers" class="space-y-2"></div>
+        <p id="publish-error" class="hidden text-sm text-red-400"></p>
+        <button id="publish-confirm" onclick="confirmPublish()" class="w-full py-3 bg-emerald-800 hover:bg-emerald-700 rounded-2xl font-semibold">
+          Publish Offers
+        </button>
+      </div>
+    </div>
+  </div>
+
   <input type="file" id="csv-import" accept=".csv,text/csv" class="hidden" onchange="importCSV(event)">
 
   <!-- Menu -->
@@ -233,6 +261,9 @@
            class="w-full text-left px-4 py-3 rounded-2xl bg-slate-800 flex items-center gap-3">
           <i class="fa-solid fa-file-csv w-5 text-emerald-400"></i><span>Download sample import file</span>
         </a>
+        <button id="menu-publish-btn" onclick="closeMenu(); openPublishModal()" class="hidden w-full text-left px-4 py-3 rounded-2xl bg-emerald-950 border border-emerald-800 text-emerald-200 flex items-center gap-3">
+          <i class="fa-solid fa-upload w-5"></i><span>Publish to Team Roster</span>
+        </button>
         <button onclick="closeMenu(); exportCSV()" class="w-full text-left px-4 py-3 rounded-2xl bg-slate-800 flex items-center gap-3">
           <i class="fa-solid fa-download w-5 text-slate-400"></i><span>Export evaluations (CSV)</span>
         </button>
@@ -333,7 +364,7 @@
 
         <div class="grid grid-cols-4 gap-2">
           <div>
-            <label class="section-header block mb-1.5">#</label>
+            <label class="section-header block mb-1.5"># <span class="normal-case tracking-normal text-slate-600 font-normal">kept if set; roster number at publish wins</span></label>
             <input id="p-number" type="text" inputmode="numeric" placeholder="00"
                    class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2 py-2.5 text-center font-semibold focus:outline-none focus:border-red-500">
           </div>
@@ -632,10 +663,107 @@
       }).join('');
     }
 
+    function isOwner() {
+      return !!(window.HUB_SOFTBALL && window.HUB_SOFTBALL.role === 'owner');
+    }
+
+    function updatePublishVisibility() {
+      const show = isOwner();
+      const headerBtn = document.getElementById('publish-tryout-btn');
+      const menuBtn = document.getElementById('menu-publish-btn');
+      if (headerBtn) headerBtn.classList.toggle('hidden', !show);
+      if (menuBtn) menuBtn.classList.toggle('hidden', !show);
+    }
+
+    function openPublishModal() {
+      if (!isOwner()) {
+        alert('Only the owner can publish a tryout to the roster.');
+        return;
+      }
+      const tryout = getTryout();
+      if (!tryout) {
+        alert('Create a tryout first.');
+        return;
+      }
+      const teams = (window.HUB_SOFTBALL && window.HUB_SOFTBALL.teams) || state.teams || [];
+      const select = document.getElementById('publish-team');
+      const current = ElksData.currentHubTeam ? ElksData.currentHubTeam() : {};
+      select.innerHTML = teams.map((team) => {
+        const selected = team.id === current.id || team.id === (window.HUB_SOFTBALL && window.HUB_SOFTBALL.teamId);
+        return `<option value="${escapeHtml(team.id)}" ${selected ? 'selected' : ''}>${escapeHtml(team.name)}</option>`;
+      }).join('');
+      const players = viewPlayers();
+      const offers = players.filter((p) => p.recommendation === 'offer');
+      const waitlist = players.filter((p) => p.recommendation === 'waitlist').length;
+      const pass = players.filter((p) => p.recommendation === 'pass').length;
+      document.getElementById('publish-summary').textContent =
+        `${offers.length} Offer · ${waitlist} Waitlist · ${pass} Pass. Waitlist and Pass stay as decisions; only Offers get this season’s team and number.`;
+      document.getElementById('publish-offers').innerHTML = offers.length
+        ? offers.map((p) => `
+            <label class="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-2xl px-3 py-2.5">
+              <span class="flex-1 min-w-0">
+                <span class="font-medium truncate block">${escapeHtml(ElksData.displayName(p))}</span>
+                <span class="text-[11px] text-slate-500">${escapeHtml([p.position, p.position2].filter(Boolean).join(' / ') || 'No position')} · same id ${escapeHtml(p.id)}</span>
+              </span>
+              <input data-publish-jersey="${escapeHtml(p.id)}" inputmode="numeric" value="${escapeHtml(String(p.number || ''))}" placeholder="#"
+                     class="w-16 bg-slate-900 border border-slate-700 rounded-xl px-2 py-2 text-center font-semibold">
+            </label>
+          `).join('')
+        : '<p class="text-sm text-slate-500">No Offers on this tryout yet. Mark Offer first. Publish still keeps Waitlist/Pass on the paper trail.</p>';
+      document.getElementById('publish-error').classList.add('hidden');
+      document.getElementById('publish-modal').classList.remove('hidden');
+    }
+
+    function closePublishModal() {
+      document.getElementById('publish-modal').classList.add('hidden');
+    }
+
+    async function confirmPublish() {
+      if (!isOwner()) return;
+      const tryout = getTryout();
+      const teamId = document.getElementById('publish-team').value;
+      const errorEl = document.getElementById('publish-error');
+      const button = document.getElementById('publish-confirm');
+      if (!tryout || !teamId) {
+        errorEl.textContent = 'Pick a team to publish onto.';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      const jerseys = {};
+      document.querySelectorAll('[data-publish-jersey]').forEach((input) => {
+        jerseys[input.getAttribute('data-publish-jersey')] = input.value.trim();
+      });
+      button.disabled = true;
+      errorEl.classList.add('hidden');
+      try {
+        const response = await fetch('/api/softball/publish', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            tryoutId: tryout.id,
+            teamId,
+            jerseys,
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Could not publish.');
+        if (ElksData.connectCloud) ElksData.connectCloud();
+        closePublishModal();
+        const assigned = (data.assignedPlayerIds || []).length;
+        alert(`Published ${assigned} Offer${assigned === 1 ? '' : 's'} onto ${data.teamName || 'the roster'} for ${data.year}. Same People ids. Waitlist/Pass stayed as decisions.`);
+      } catch (err) {
+        errorEl.textContent = err instanceof Error ? err.message : 'Could not publish.';
+        errorEl.classList.remove('hidden');
+      } finally {
+        button.disabled = false;
+      }
+    }
+
     function renderAll() {
       renderTryoutSelect();
       renderSummary();
       renderPlayers();
+      updatePublishVisibility();
     }
 
     function openTryoutModal(edit = false) {

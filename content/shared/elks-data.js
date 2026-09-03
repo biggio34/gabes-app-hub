@@ -48,6 +48,7 @@
       teams: [],
       tryouts: [],
       currentTryoutId: null,
+      currentSeasonYear: new Date().getFullYear(),
       practices: [],
       drills: [],
       templates: [],
@@ -124,7 +125,7 @@
       name: name, // always kept in sync for search / legacy callers
       birthdate: p.birthdate || '',
       originalTeam: p.originalTeam || '',
-      number: p.number != null ? String(p.number) : '',
+      number: p.number != null ? String(p.number) : '', // this year's roster number only
       position: p.position || '',
       position2: p.position2 || '',
       photo: typeof p.photo === 'string' ? p.photo : '', // compressed data URL
@@ -134,8 +135,207 @@
       evalNotes: p.evalNotes || p.notes || '',
       evalUpdatedAt: p.evalUpdatedAt || p.updatedAt || null,
       evalTryoutId: p.evalTryoutId || null,
+      card: normalizeCard(p.card),
+      seasons: normalizeSeasons(p.seasons),
       createdAt: p.createdAt || Date.now(),
     };
+  }
+
+  function emptyCard() {
+    return {
+      strengths: '',
+      developmentFocus: '',
+      notes: '',
+      injuryStatus: '',
+      lastParentConference: '',
+    };
+  }
+
+  function normalizeInjuryStatus(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === 'available' || raw === 'limited' || raw === 'out') return raw;
+    return '';
+  }
+
+  function normalizeCard(raw) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    return {
+      strengths: String(src.strengths || '').trim(),
+      developmentFocus: String(src.developmentFocus || src.development_focus || '').trim(),
+      notes: src.notes != null ? String(src.notes) : '',
+      injuryStatus: normalizeInjuryStatus(src.injuryStatus || src.injury_status),
+      lastParentConference: String(src.lastParentConference || src.last_parent_conference || '').trim(),
+    };
+  }
+
+  function mergeCards(preferred, other) {
+    const left = normalizeCard(preferred);
+    const right = normalizeCard(other);
+    return {
+      strengths: left.strengths || right.strengths,
+      developmentFocus: left.developmentFocus || right.developmentFocus,
+      notes: left.notes || right.notes,
+      injuryStatus: left.injuryStatus || right.injuryStatus,
+      lastParentConference: left.lastParentConference || right.lastParentConference,
+    };
+  }
+
+  function currentSeasonYear() {
+    try {
+      const hubYear = global.HUB_SOFTBALL && global.HUB_SOFTBALL.currentSeasonYear;
+      if (hubYear) return Number(hubYear);
+    } catch (e) {}
+    return new Date().getFullYear();
+  }
+
+  function seasonYearForState(state, fallbackDate) {
+    if (state && Number.isFinite(Number(state.currentSeasonYear))) return Number(state.currentSeasonYear);
+    const raw = String(fallbackDate || '');
+    const match = raw.match(/^(\d{4})/);
+    if (match) return Number(match[1]);
+    return currentSeasonYear();
+  }
+
+  function normalizeSeason(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const year = Number(raw.year);
+    if (!Number.isFinite(year) || year < 1990 || year > 2100) return null;
+    const source = raw.source;
+    return {
+      id: raw.id || ('season_' + year),
+      year: year,
+      seasonKey: String(raw.seasonKey || year),
+      teamId: raw.teamId || null,
+      teamName: raw.teamName || '',
+      number: raw.number != null ? String(raw.number) : '',
+      position: raw.position || '',
+      position2: raw.position2 || '',
+      tryoutId: raw.tryoutId || null,
+      tryoutName: raw.tryoutName || '',
+      recommendation: raw.recommendation || null,
+      scores: raw.scores && typeof raw.scores === 'object' ? { ...raw.scores } : {},
+      evalNotes: raw.evalNotes || '',
+      card: normalizeCard(raw.card),
+      publishedAt: raw.publishedAt || null,
+      publishedBy: raw.publishedBy || null,
+      source: source === 'publish' || source === 'prior' || source === 'roster' ? source : 'roster',
+    };
+  }
+
+  function normalizeSeasons(raw) {
+    if (!Array.isArray(raw)) return [];
+    const byKey = new Map();
+    raw.forEach(function (item) {
+      const season = normalizeSeason(item);
+      if (!season) return;
+      byKey.set(season.seasonKey, season);
+    });
+    return Array.from(byKey.values()).sort(function (a, b) { return b.year - a.year; });
+  }
+
+  function mergeSeasonLists(current, incoming) {
+    const byKey = new Map();
+    normalizeSeasons(current).forEach(function (season) { byKey.set(season.seasonKey, season); });
+    normalizeSeasons(incoming).forEach(function (season) {
+      const existing = byKey.get(season.seasonKey);
+      if (!existing) {
+        byKey.set(season.seasonKey, season);
+        return;
+      }
+      byKey.set(season.seasonKey, {
+        ...existing,
+        ...season,
+        id: existing.id || season.id,
+        number: season.number !== '' ? season.number : existing.number,
+        position: season.position || existing.position,
+        position2: season.position2 || existing.position2,
+        teamId: season.teamId || existing.teamId,
+        teamName: season.teamName || existing.teamName,
+        tryoutId: season.tryoutId || existing.tryoutId,
+        tryoutName: season.tryoutName || existing.tryoutName,
+        recommendation: season.recommendation || existing.recommendation,
+        scores: season.scores && Object.keys(season.scores).length ? season.scores : existing.scores,
+        evalNotes: season.evalNotes || existing.evalNotes,
+        card: mergeCards(season.card, existing.card),
+        publishedAt: season.publishedAt || existing.publishedAt,
+        publishedBy: season.publishedBy || existing.publishedBy,
+        source: season.source || existing.source,
+      });
+    });
+    return Array.from(byKey.values()).sort(function (a, b) { return b.year - a.year; });
+  }
+
+  function upsertSeasonChapter(seasons, patch) {
+    const year = Number(patch && patch.year);
+    if (!Number.isFinite(year)) return normalizeSeasons(seasons);
+    const key = (patch && patch.seasonKey) || String(year);
+    const existing = normalizeSeasons(seasons).find(function (item) { return item.seasonKey === key; });
+    const next = {
+      id: (existing && existing.id) || (patch && patch.id) || ('season_' + year),
+      year: year,
+      seasonKey: key,
+      teamId: patch && patch.teamId !== undefined ? patch.teamId : (existing && existing.teamId) || null,
+      teamName: patch && patch.teamName !== undefined ? String(patch.teamName || '') : (existing && existing.teamName) || '',
+      number: patch && patch.number !== undefined ? String(patch.number || '') : (existing && existing.number) || '',
+      position: patch && patch.position !== undefined ? String(patch.position || '') : (existing && existing.position) || '',
+      position2: patch && patch.position2 !== undefined ? String(patch.position2 || '') : (existing && existing.position2) || '',
+      tryoutId: patch && patch.tryoutId !== undefined ? patch.tryoutId : (existing && existing.tryoutId) || null,
+      tryoutName: patch && patch.tryoutName !== undefined ? String(patch.tryoutName || '') : (existing && existing.tryoutName) || '',
+      recommendation: patch && patch.recommendation !== undefined ? patch.recommendation : (existing && existing.recommendation) || null,
+      scores: patch && patch.scores ? { ...patch.scores } : (existing && existing.scores) || {},
+      evalNotes: patch && patch.evalNotes !== undefined ? String(patch.evalNotes || '') : (existing && existing.evalNotes) || '',
+      card: normalizeCard((patch && patch.card) || (existing && existing.card)),
+      publishedAt: patch && patch.publishedAt !== undefined ? patch.publishedAt : (existing && existing.publishedAt) || null,
+      publishedBy: patch && patch.publishedBy !== undefined ? patch.publishedBy : (existing && existing.publishedBy) || null,
+      source: (patch && patch.source) || (existing && existing.source) || 'roster',
+    };
+    return mergeSeasonLists(normalizeSeasons(seasons).filter(function (item) { return item.seasonKey !== key; }), [next]);
+  }
+
+  function touchCurrentSeason(player, opts) {
+    const options = opts || {};
+    const year = options.year || currentSeasonYear();
+    const seasons = upsertSeasonChapter(player.seasons, {
+      year: year,
+      teamId: player.assignedTeamId || null,
+      teamName: options.teamName || '',
+      number: player.number != null ? String(player.number) : '',
+      position: player.position || '',
+      position2: player.position2 || '',
+      card: player.card,
+      source: options.source || 'roster',
+    });
+    player.seasons = seasons;
+    player.card = normalizeCard(player.card);
+    return player;
+  }
+
+  function updatePlayerCard(player, patch) {
+    player.card = { ...normalizeCard(player.card), ...normalizeCard(patch) };
+    return player;
+  }
+
+  function addPriorSeason(player, patch, currentYear) {
+    const yearNow = currentYear || currentSeasonYear();
+    player.seasons = upsertSeasonChapter(player.seasons, Object.assign({ source: 'prior' }, patch || {}));
+    if (patch && Number(patch.year) === yearNow && patch.number !== undefined) {
+      player.number = String(patch.number || '');
+    }
+    return player;
+  }
+
+  function playerSeasons(player) {
+    return normalizeSeasons(player && player.seasons);
+  }
+
+  function canSeeCoachNotes() {
+    try {
+      const hub = global.HUB_SOFTBALL || {};
+      if (hub.canSeeCoachNotes != null) return !!hub.canSeeCoachNotes;
+      return hub.role === 'owner';
+    } catch (e) {
+      return false;
+    }
   }
 
   /**
@@ -810,6 +1010,7 @@
     if (!state.lineups || typeof state.lineups !== 'object' || Array.isArray(state.lineups)) state.lineups = {};
     if (!Array.isArray(state.removedPlayerKeys)) state.removedPlayerKeys = [];
     if (!state.updatedAt) state.updatedAt = 0;
+    if (!state.currentSeasonYear) state.currentSeasonYear = currentSeasonYear();
     state.players = state.players.map(normalizePlayer);
 
     if (state.tryouts.length && (!state.currentTryoutId || !state.tryouts.find((t) => t.id === state.currentTryoutId))) {
@@ -1112,6 +1313,8 @@
       (otherScores && Object.keys(otherScores).length && otherScores) ||
       {};
     merged.photo = (preferred && preferred.photo) || (other && other.photo) || '';
+    merged.card = mergeCards(preferred && preferred.card, other && other.card);
+    merged.seasons = mergeSeasonLists(other && other.seasons, preferred && preferred.seasons);
     return normalizePlayer(merged);
   }
 
@@ -1430,10 +1633,15 @@
   }
 
   function upsertPlayer(state, fields) {
+    const year = seasonYearForState(state);
     if (fields.id) {
       const existing = state.players.find((p) => p.id === fields.id);
       if (existing) {
         Object.assign(existing, normalizePlayer({ ...existing, ...fields, id: existing.id }));
+        touchCurrentSeason(existing, {
+          year: year,
+          teamName: teamNameForPlayer(existing, state.teams || []),
+        });
         return existing;
       }
     }
@@ -1442,6 +1650,10 @@
     if (key && Array.isArray(state.removedPlayerKeys)) {
       state.removedPlayerKeys = state.removedPlayerKeys.filter(function (item) { return item !== key; });
     }
+    touchCurrentSeason(p, {
+      year: year,
+      teamName: teamNameForPlayer(p, (state && state.teams) || []),
+    });
     state.players.push(p);
     return p;
   }
@@ -1931,6 +2143,18 @@
     savePlayerEvaluation,
     upsertPlayer,
     deletePlayer,
+    emptyCard,
+    normalizeCard,
+    normalizeSeasons,
+    mergeSeasonLists,
+    upsertSeasonChapter,
+    touchCurrentSeason,
+    updatePlayerCard,
+    addPriorSeason,
+    playerSeasons,
+    seasonYearForState,
+    currentSeasonYear,
+    canSeeCoachNotes,
     findPlayerByIdentity,
     clearAll,
     toLineupPlayer,

@@ -76,7 +76,8 @@ export default async function HubHome() {
                 <p className="mb-3 text-sm text-slate-400">
                   Teams you add on People show in Roster, Lineup, Team
                   Formation, Tryouts, and Practice Planner. Start with Team
-                  Roster for the team you want to work on.
+                  Roster — one People id per girl, card plus season history,
+                  jersey number per year.
                 </p>
               ) : null}
               <div className="grid gap-4 md:grid-cols-2">

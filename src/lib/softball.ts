@@ -1,6 +1,7 @@
 import { canAccessArea } from "@/lib/auth";
 import { listOrgs } from "@/lib/clubs";
 import { DEFAULT_CLUB_ID, DEFAULT_TEAM_ID } from "@/lib/models";
+import { canSeeCoachNotes } from "@/lib/player-identity";
 import { findUserById } from "@/lib/users";
 import type { SessionUser } from "@/lib/auth";
 
@@ -52,6 +53,7 @@ export async function softballContext(session: SessionUser) {
   return {
     canAccess: canAccessArea(session, "softball"),
     role: session.role,
+    canSeeCoachNotes: canSeeCoachNotes(session.role),
     clubId: club?.id || DEFAULT_CLUB_ID,
     clubName: club?.name || "MN Elks",
     teamId: team?.id || DEFAULT_TEAM_ID,

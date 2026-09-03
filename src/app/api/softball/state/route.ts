@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { stripCoachOnlyNotes } from "@/lib/player-identity";
 import { softballContext } from "@/lib/softball";
 import { filterLineupsForViewer, filterPracticesForViewer, dropUnassignedPractices, readSoftballState, writeSoftballState } from "@/lib/softball-store";
 
@@ -28,10 +29,15 @@ export async function GET() {
       const assigned = dropUnassignedPractices(practices);
       if (assigned.length !== practices.length) {
         try {
-          await writeSoftballState(auth.context.clubId, auth.context.teamId, {
-            ...state,
-            practices: assigned,
-          });
+          await writeSoftballState(
+            auth.context.clubId,
+            auth.context.teamId,
+            {
+              ...state,
+              practices: assigned,
+            },
+            { canEditCoachNotes: auth.context.canSeeCoachNotes },
+          );
         } catch {
           // Still hide them in this response if the database write fails.
         }
@@ -42,6 +48,9 @@ export async function GET() {
         practices: filterPracticesForViewer(state.practices, auth.context),
         lineups: filterLineupsForViewer(state.lineups, auth.context),
       };
+      if (!auth.context.canSeeCoachNotes) {
+        state = stripCoachOnlyNotes(state);
+      }
     }
     return NextResponse.json({
       state,
@@ -75,6 +84,7 @@ export async function PUT(request: Request) {
       auth.context.clubId,
       auth.context.teamId,
       body.state,
+      { canEditCoachNotes: auth.context.canSeeCoachNotes },
     );
     return NextResponse.json(result);
   } catch (err) {

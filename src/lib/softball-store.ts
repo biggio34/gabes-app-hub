@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { isSupabaseConfigured, getSupabase } from "@/lib/db/supabase";
 import { readyDb } from "@/lib/db/client";
 import { players, softballState } from "@/lib/db/schema";
+import { applyIdentityOnWrite, mergePlayerIdentity, personIdentityKey } from "@/lib/player-identity";
 
 type JsonPlayer = Record<string, unknown> & { id?: string };
 
@@ -68,12 +69,7 @@ function rowToPlayer(row: {
 }
 
 function playerIdentityKey(player: JsonPlayer) {
-  const first = String(player.firstName || "").trim();
-  const last = String(player.lastName || "").trim();
-  const name = `${first} ${last}`.trim() || String(player.name || "").trim();
-  const normalized = name.toLowerCase().replace(/\s+/g, " ");
-  if (!normalized || normalized === "unnamed") return "";
-  return `${normalized}|${String(player.birthdate || "").trim()}`;
+  return personIdentityKey(player);
 }
 
 function mergePlayerLists(jsonPlayers: JsonPlayer[], dbPlayers: JsonPlayer[]) {
@@ -85,14 +81,8 @@ function mergePlayerLists(jsonPlayers: JsonPlayer[], dbPlayers: JsonPlayer[]) {
     if (!player?.id) return;
     const current = byId.get(String(player.id));
     if (current) {
-      const merged: JsonPlayer = {
-        ...current,
-        ...player,
-        scores: current.scores || player.scores,
-        photo: current.photo || player.photo,
-      };
-      merged.assignedTeamId =
-        current.assignedTeamId || player.assignedTeamId || merged.assignedTeamId || null;
+      const merged = mergePlayerIdentity(current, player);
+      merged.photo = current.photo || player.photo || merged.photo;
       byId.set(String(player.id), merged);
       return;
     }
@@ -102,15 +92,9 @@ function mergePlayerLists(jsonPlayers: JsonPlayer[], dbPlayers: JsonPlayer[]) {
       if (!key) return;
       for (const [id, current] of byId) {
         if (playerIdentityKey(current) !== key) continue;
-        const merged: JsonPlayer = {
-          ...player,
-          ...current,
-          scores: current.scores || player.scores,
-          photo: current.photo || player.photo,
-        };
+        const merged = mergePlayerIdentity(current, player);
         merged.id = id;
-        merged.assignedTeamId =
-          current.assignedTeamId || player.assignedTeamId || merged.assignedTeamId || null;
+        merged.photo = current.photo || player.photo || merged.photo;
         byId.set(id, merged);
         return;
       }
@@ -406,6 +390,7 @@ export async function writeSoftballState(
   clubId: string,
   teamId: string,
   incoming: Record<string, unknown>,
+  opts?: { canEditCoachNotes?: boolean },
 ) {
   const payload = { ...incoming };
   const current = await readSoftballState(clubId, teamId);
@@ -427,6 +412,13 @@ export async function writeSoftballState(
   }
   const now = new Date().toISOString();
   payload.updatedAt = Date.now();
+  dropRemovedPlayersFromPayload(payload);
+  Object.assign(
+    payload,
+    applyIdentityOnWrite(current.state, payload, {
+      canEditCoachNotes: opts?.canEditCoachNotes === true,
+    }),
+  );
   dropRemovedPlayersFromPayload(payload);
 
   if (isSupabaseConfigured()) {

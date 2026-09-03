@@ -29,6 +29,7 @@ export async function GET(
     const softball = await softballContext(session);
     const boot = JSON.stringify({
       role: softball.role,
+      canSeeCoachNotes: softball.canSeeCoachNotes,
       clubId: softball.clubId,
       clubName: softball.clubName,
       teamId: softball.teamId,
