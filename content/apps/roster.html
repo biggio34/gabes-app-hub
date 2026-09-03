@@ -581,8 +581,8 @@
         });
       }
       persist();
+      closePlayerCard();
       render();
-      openPlayerCard(player.id);
     });
 
     document.getElementById("prior-season-form").addEventListener("submit", (event) => {
