@@ -2,7 +2,14 @@ import { eq } from "drizzle-orm";
 import { isSupabaseConfigured, getSupabase } from "@/lib/db/supabase";
 import { readyDb } from "@/lib/db/client";
 import { players, softballState } from "@/lib/db/schema";
-import { applyIdentityOnWrite, mergePlayerIdentity, personIdentityKey } from "@/lib/player-identity";
+import {
+  applyIdentityOnWrite,
+  mergePlayerIdentity,
+  normalizeCard,
+  normalizeSeasons,
+  personIdentityKey,
+} from "@/lib/player-identity";
+import { isoTimestamp, isMissingSchemaError, missingPlayerColumn } from "@/lib/softball-write-helpers";
 
 type JsonPlayer = Record<string, unknown> & { id?: string };
 
@@ -47,6 +54,8 @@ function rowToPlayer(row: {
   originalTeam: string;
   extra: unknown;
   createdAt: string;
+  card?: unknown;
+  seasons?: unknown;
 }): JsonPlayer {
   const extra =
     typeof row.extra === "string"
@@ -54,6 +63,8 @@ function rowToPlayer(row: {
       : ((row.extra || {}) as Record<string, unknown>);
   return {
     ...extra,
+    card: extra.card ?? row.card,
+    seasons: extra.seasons ?? row.seasons,
     id: row.id,
     firstName: row.firstName,
     lastName: row.lastName,
@@ -127,7 +138,7 @@ async function listSupabasePlayers(clubId: string) {
   if (!supabase) return [];
   const result = await supabase.from("hub_players").select("*").eq("club_id", clubId);
   if (result.error) {
-    if (/does not exist|schema cache/i.test(result.error.message)) return [];
+    if (isMissingSchemaError(result.error.message)) return [];
     throw new Error(result.error.message);
   }
   return (result.data || []).map((row) =>
@@ -144,6 +155,8 @@ async function listSupabasePlayers(clubId: string) {
       originalTeam: String(row.original_team || ""),
       extra: row.extra,
       createdAt: String(row.created_at || new Date().toISOString()),
+      card: row.card,
+      seasons: row.seasons,
     }),
   );
 }
@@ -173,7 +186,7 @@ async function upsertSqlitePlayers(clubId: string, list: JsonPlayer[]) {
       birthdate: String(player.birthdate || ""),
       originalTeam: String(player.originalTeam || ""),
       extra: JSON.stringify(extraFromPlayer(player)),
-      createdAt: String(player.createdAt || now),
+      createdAt: isoTimestamp(player.createdAt, now),
       updatedAt: now,
     };
     await db.delete(players).where(eq(players.id, record.id));
@@ -196,7 +209,7 @@ async function upsertSupabasePlayers(clubId: string, list: JsonPlayer[]) {
     }
   }
   if (!list.length) return;
-  const rows = list
+  let rows: Record<string, unknown>[] = list
     .filter((player) => player?.id)
     .map((player) => ({
       id: String(player.id),
@@ -211,12 +224,28 @@ async function upsertSupabasePlayers(clubId: string, list: JsonPlayer[]) {
       birthdate: String(player.birthdate || ""),
       original_team: String(player.originalTeam || ""),
       extra: extraFromPlayer(player),
-      created_at: String(player.createdAt || now),
+      card: normalizeCard(player.card),
+      seasons: normalizeSeasons(player.seasons),
+      created_at: isoTimestamp(player.createdAt, now),
       updated_at: now,
     }));
-  const result = await supabase.from("hub_players").upsert(rows);
-  if (result.error && !/does not exist|schema cache/i.test(result.error.message)) {
-    throw new Error(result.error.message);
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const result = await supabase.from("hub_players").upsert(rows);
+    if (!result.error) return;
+    const message = result.error.message || "";
+    if (isMissingSchemaError(message)) {
+      const column = missingPlayerColumn(message);
+      if (column && rows.some((row) => Object.prototype.hasOwnProperty.call(row, column))) {
+        rows = rows.map((row) => {
+          const next = { ...row };
+          delete next[column];
+          return next;
+        });
+        continue;
+      }
+      return;
+    }
+    throw new Error(message);
   }
 }
 
@@ -234,7 +263,7 @@ async function readSupabasePayload(clubId: string, teamId: string) {
   if (result.error) {
     throw new Error(
       /does not exist|schema cache/i.test(result.error.message)
-        ? "Run supabase/hub.sql in the SQL editor so softball data can save."
+        ? "Run supabase/hub.sql and supabase/hub-players-identity.sql in the SQL editor so softball data can save."
         : result.error.message,
     );
   }
@@ -413,12 +442,16 @@ export async function writeSoftballState(
   const now = new Date().toISOString();
   payload.updatedAt = Date.now();
   dropRemovedPlayersFromPayload(payload);
-  Object.assign(
-    payload,
-    applyIdentityOnWrite(current.state, payload, {
-      canEditCoachNotes: opts?.canEditCoachNotes === true,
-    }),
-  );
+  try {
+    Object.assign(
+      payload,
+      applyIdentityOnWrite(current.state, payload, {
+        canEditCoachNotes: opts?.canEditCoachNotes === true,
+      }),
+    );
+  } catch {
+    // Roster fields including card notes must still save if identity processing fails.
+  }
   dropRemovedPlayersFromPayload(payload);
 
   if (isSupabaseConfigured()) {
@@ -432,7 +465,7 @@ export async function writeSoftballState(
     if (result.error) {
       throw new Error(
         /does not exist|schema cache/i.test(result.error.message)
-          ? "Run supabase/hub.sql in the SQL editor so softball data can save."
+          ? "Run supabase/hub.sql and supabase/hub-players-identity.sql in the SQL editor so softball data can save."
           : result.error.message,
       );
     }

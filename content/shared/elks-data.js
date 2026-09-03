@@ -2105,11 +2105,13 @@
 
   async function pushToCloud(state) {
     try {
+      const body = JSON.stringify({ state: state });
       const response = await fetch('/api/softball/state', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ state: state }),
-        keepalive: true,
+        body: body,
+        // keepalive is capped at ~64KB in Chrome and throws on a real roster.
+        keepalive: body.length < 55000,
       });
       const data = await response.json().catch(function () { return {}; });
       if (!response.ok) {

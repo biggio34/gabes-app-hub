@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0 --port 43147",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test src/lib/player-identity.test.ts"
+    "test": "node --experimental-strip-types --test src/lib/player-identity.test.ts src/lib/softball-store.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

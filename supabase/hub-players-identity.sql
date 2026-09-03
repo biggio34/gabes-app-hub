@@ -1,62 +1,6 @@
--- Gabe's Apps hub tables.
--- Safe to run on the existing lineup project. These names do not touch
--- lineups or practice_templates.
-
-create table if not exists hub_clubs (
-  id text primary key,
-  name text not null,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists hub_teams (
-  id text primary key,
-  club_id text not null references hub_clubs(id) on delete cascade,
-  name text not null,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists hub_users (
-  id text primary key,
-  username text not null unique,
-  name text not null,
-  email text,
-  password_hash text not null,
-  role text not null,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists hub_user_areas (
-  user_id text not null references hub_users(id) on delete cascade,
-  area text not null,
-  primary key (user_id, area)
-);
-
-create table if not exists hub_user_clubs (
-  user_id text not null references hub_users(id) on delete cascade,
-  club_id text not null references hub_clubs(id) on delete cascade,
-  primary key (user_id, club_id)
-);
-
-create table if not exists hub_user_teams (
-  user_id text not null references hub_users(id) on delete cascade,
-  team_id text not null references hub_teams(id) on delete cascade,
-  primary key (user_id, team_id)
-);
-
-alter table hub_clubs enable row level security;
-alter table hub_teams enable row level security;
-alter table hub_users enable row level security;
-alter table hub_user_areas enable row level security;
-alter table hub_user_clubs enable row level security;
-alter table hub_user_teams enable row level security;
-
-insert into hub_clubs (id, name)
-values ('club-mn-elks', 'MN Elks')
-on conflict (id) do nothing;
-
-insert into hub_teams (id, club_id, name)
-values ('team-16u-fransen', 'club-mn-elks', '16U Fransen')
-on conflict (id) do nothing;
+-- Player cards + season history on hub_players.
+-- Run this in the Supabase SQL editor on preview and live.
+-- Safe to re-run. Does not drop data. Do not assume these columns already exist.
 
 create table if not exists hub_softball_state (
   team_id text primary key,
@@ -85,10 +29,6 @@ create table if not exists hub_players (
   updated_at timestamptz not null default now()
 );
 
-alter table hub_players enable row level security;
-
--- Existing preview/live tables were created without card/seasons.
--- Re-running this file is safe; CREATE TABLE IF NOT EXISTS will not add columns.
 alter table hub_players add column if not exists assigned_team_id text;
 alter table hub_players add column if not exists first_name text not null default '';
 alter table hub_players add column if not exists last_name text not null default '';
@@ -103,3 +43,5 @@ alter table hub_players add column if not exists card jsonb not null default '{}
 alter table hub_players add column if not exists seasons jsonb not null default '[]'::jsonb;
 alter table hub_players add column if not exists created_at timestamptz not null default now();
 alter table hub_players add column if not exists updated_at timestamptz not null default now();
+
+alter table hub_players enable row level security;

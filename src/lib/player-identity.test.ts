@@ -266,4 +266,32 @@ describe("merge + write", () => {
     assert.equal(seasons.find((s) => s.year === 2026)?.number, "4");
     assert.equal((ava?.card as { notes: string }).notes, "keep");
   });
+
+  it("accepts coach card fields on write and does not clone the rest of the blob", () => {
+    const photo = `data:image/jpeg;base64,${"A".repeat(20000)}`;
+    const lineups = { "team-16u-fransen": { games: [], currentGameId: null } };
+    const incoming = {
+      players: [
+        player({
+          photo,
+          card: { notes: "keep this", strengths: "range" },
+        }),
+      ],
+      lineups,
+    };
+    const written = applyIdentityOnWrite(null, incoming, { canEditCoachNotes: true, year: 2026 });
+    assert.equal((written.players?.[0].card as { notes: string }).notes, "keep this");
+    assert.equal(written.lineups, lineups);
+    assert.equal(written.players?.[0].photo, photo);
+  });
+
+  it("does not throw when the incoming roster is messy", () => {
+    const written = applyIdentityOnWrite(
+      { players: [null as unknown as JsonPlayer, player()] },
+      { players: [null, "bad", player({ card: { notes: "ok" } })] as unknown as JsonPlayer[] },
+      { canEditCoachNotes: true, year: 2026 },
+    );
+    assert.equal(written.players?.length, 1);
+    assert.equal(written.players?.[0].id, "p_same");
+  });
 });

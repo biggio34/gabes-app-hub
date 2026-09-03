@@ -408,13 +408,17 @@ function cloneState<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function asPlayerList(value: unknown): JsonPlayer[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is JsonPlayer => !!item && typeof item === "object");
+}
+
 function stripCardNotes(card: PlayerCard): PlayerCard {
   return { ...card, notes: COACH_NOTE_PLACEHOLDER };
 }
 
 export function stripCoachOnlyNotes<T extends SoftballIdentityState>(state: T): T {
-  const next = cloneState(state);
-  next.players = (next.players || []).map((player) => {
+  const players = asPlayerList(state.players).map((player) => {
     const card = normalizeCard(player.card);
     const seasons = normalizeSeasons(player.seasons).map((season) => ({
       ...season,
@@ -422,7 +426,7 @@ export function stripCoachOnlyNotes<T extends SoftballIdentityState>(state: T): 
     }));
     return { ...player, card: stripCardNotes(card), seasons };
   });
-  return next;
+  return { ...state, players };
 }
 
 export function preserveCoachOnlyNotes(
@@ -430,14 +434,12 @@ export function preserveCoachOnlyNotes(
   incoming: SoftballIdentityState,
   opts?: { canEditCoachNotes?: boolean },
 ): SoftballIdentityState {
-  const next = cloneState(incoming);
   const currentById = new Map(
-    (current?.players || []).filter((player) => durablePlayerId(player)).map((player) => [
-      durablePlayerId(player),
-      player,
-    ]),
+    asPlayerList(current?.players)
+      .filter((player) => durablePlayerId(player))
+      .map((player) => [durablePlayerId(player), player]),
   );
-  next.players = (next.players || []).map((player) => {
+  const players = asPlayerList(incoming.players).map((player) => {
     const existing = currentById.get(durablePlayerId(player));
     const incomingCard = normalizeCard(player.card);
     const existingCard = normalizeCard(existing?.card);
@@ -463,10 +465,10 @@ export function preserveCoachOnlyNotes(
       seasons,
     };
   });
-  return next;
+  return { ...incoming, players };
 }
 
-export function applyIdentityOnWrite(
+function applyIdentityOnWriteInner(
   current: SoftballIdentityState | null | undefined,
   incoming: SoftballIdentityState,
   opts?: { canEditCoachNotes?: boolean; year?: number },
@@ -474,19 +476,36 @@ export function applyIdentityOnWrite(
   const year = opts?.year || seasonYearForState(incoming) || seasonYearForState(current);
   const preserved = preserveCoachOnlyNotes(current, incoming, opts);
   const currentById = new Map(
-    (current?.players || []).filter((player) => durablePlayerId(player)).map((player) => [
-      durablePlayerId(player),
-      player,
-    ]),
+    asPlayerList(current?.players)
+      .filter((player) => durablePlayerId(player))
+      .map((player) => [durablePlayerId(player), player]),
   );
-  preserved.players = (preserved.players || []).map((player) => {
+  const players = asPlayerList(preserved.players).map((player) => {
     const existing = currentById.get(durablePlayerId(player));
-    const merged = existing ? mergePlayerIdentity(player, existing) : { ...player, card: normalizeCard(player.card), seasons: normalizeSeasons(player.seasons) };
+    const merged = existing
+      ? mergePlayerIdentity(player, existing)
+      : { ...player, card: normalizeCard(player.card), seasons: normalizeSeasons(player.seasons) };
     const teamName = teamNameFromState(preserved, merged.assignedTeamId ? String(merged.assignedTeamId) : null);
     return touchCurrentSeason(merged, { year, teamName });
   });
-  if (preserved.currentSeasonYear == null) preserved.currentSeasonYear = year;
-  return preserved;
+  return {
+    ...preserved,
+    players,
+    currentSeasonYear: preserved.currentSeasonYear == null ? year : preserved.currentSeasonYear,
+  };
+}
+
+/** Identity must never block a roster save. Coach card fields are accepted, not rejected. */
+export function applyIdentityOnWrite(
+  current: SoftballIdentityState | null | undefined,
+  incoming: SoftballIdentityState,
+  opts?: { canEditCoachNotes?: boolean; year?: number },
+): SoftballIdentityState {
+  try {
+    return applyIdentityOnWriteInner(current, incoming, opts);
+  } catch {
+    return incoming;
+  }
 }
 
 export type PublishResult = {

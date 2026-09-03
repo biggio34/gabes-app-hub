@@ -33,7 +33,7 @@ export function throwIfError<T>(
     const message = result.error.message || fallback;
     if (/does not exist|schema cache/i.test(message)) {
       throw new Error(
-        "The hub tables are not in Supabase yet. Run supabase/hub.sql in the SQL editor.",
+        "The hub tables are not in Supabase yet. Run supabase/hub.sql and supabase/hub-players-identity.sql in the SQL editor.",
       );
     }
     throw new Error(message);
