@@ -320,7 +320,8 @@ export function teamNameFromState(
 
 /**
  * Keep this year's chapter in sync with the live roster row.
- * Other years are left alone, including their jersey numbers.
+ * Jersey number lives on the chapter. Positions live on the player
+ * and are not written here, so they stick when she rolls to next year.
  */
 export function touchCurrentSeason(
   player: JsonPlayer,
@@ -338,8 +339,6 @@ export function touchCurrentSeason(
     teamId,
     teamName: opts.teamName || "",
     number: asString(player.number),
-    position: asString(player.position),
-    position2: asString(player.position2),
     card: normalizeCard(player.card),
     source: opts.source || "roster",
   });
@@ -351,13 +350,39 @@ export function updatePlayerCard(player: JsonPlayer, patch: Partial<PlayerCard>)
   return { ...player, card };
 }
 
+/** Positions stay on the person. Number is this year's roster / chapter only. */
+export function applyCurrentSeasonRosterFields(
+  player: JsonPlayer,
+  fields: { number?: string; position?: string; position2?: string },
+  opts: { year: number; teamName?: string },
+): JsonPlayer {
+  const next: JsonPlayer = { ...player, card: normalizeCard(player.card) };
+  if (fields.number !== undefined) next.number = asString(fields.number);
+  if (fields.position !== undefined) next.position = asString(fields.position);
+  if (fields.position2 !== undefined) next.position2 = asString(fields.position2);
+  return touchCurrentSeason(next, opts);
+}
+
 export function addPriorSeason(
   player: JsonPlayer,
   patch: Partial<SeasonChapter> & { year: number },
   currentYear = currentSeasonYear(),
 ): JsonPlayer {
   const seasons = upsertSeasonChapter(normalizeSeasons(player.seasons), {
-    ...patch,
+    year: patch.year,
+    seasonKey: patch.seasonKey,
+    id: patch.id,
+    teamId: patch.teamId,
+    teamName: patch.teamName,
+    number: patch.number,
+    tryoutId: patch.tryoutId,
+    tryoutName: patch.tryoutName,
+    recommendation: patch.recommendation,
+    scores: patch.scores,
+    evalNotes: patch.evalNotes,
+    card: patch.card,
+    publishedAt: patch.publishedAt,
+    publishedBy: patch.publishedBy,
     source: patch.source || "prior",
   });
   const next: JsonPlayer = { ...player, seasons, card: normalizeCard(player.card) };
@@ -520,8 +545,6 @@ export function publishTryoutToRoster(
       teamId: rec === "offer" ? input.teamId : player.assignedTeamId ? String(player.assignedTeamId) : null,
       teamName: rec === "offer" ? input.teamName : teamNameFromState(next, player.assignedTeamId ? String(player.assignedTeamId) : null),
       number: rec === "offer" ? thisSeasonNumber : asString(player.number),
-      position: asString(player.position),
-      position2: asString(player.position2),
       tryoutId: String(tryout.id),
       tryoutName: asString(tryout.name),
       recommendation: rec || null,

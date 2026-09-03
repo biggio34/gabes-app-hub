@@ -302,8 +302,6 @@
       teamId: player.assignedTeamId || null,
       teamName: options.teamName || '',
       number: player.number != null ? String(player.number) : '',
-      position: player.position || '',
-      position2: player.position2 || '',
       card: player.card,
       source: options.source || 'roster',
     });
@@ -317,11 +315,36 @@
     return player;
   }
 
+  function applyCurrentSeasonRosterFields(player, fields, opts) {
+    const nextFields = fields || {};
+    if (nextFields.number !== undefined) player.number = String(nextFields.number || '');
+    if (nextFields.position !== undefined) player.position = String(nextFields.position || '');
+    if (nextFields.position2 !== undefined) player.position2 = String(nextFields.position2 || '');
+    return touchCurrentSeason(player, opts || {});
+  }
+
   function addPriorSeason(player, patch, currentYear) {
     const yearNow = currentYear || currentSeasonYear();
-    player.seasons = upsertSeasonChapter(player.seasons, Object.assign({ source: 'prior' }, patch || {}));
-    if (patch && Number(patch.year) === yearNow && patch.number !== undefined) {
-      player.number = String(patch.number || '');
+    const src = patch || {};
+    player.seasons = upsertSeasonChapter(player.seasons, {
+      year: src.year,
+      seasonKey: src.seasonKey,
+      id: src.id,
+      teamId: src.teamId,
+      teamName: src.teamName,
+      number: src.number,
+      tryoutId: src.tryoutId,
+      tryoutName: src.tryoutName,
+      recommendation: src.recommendation,
+      scores: src.scores,
+      evalNotes: src.evalNotes,
+      card: src.card,
+      publishedAt: src.publishedAt,
+      publishedBy: src.publishedBy,
+      source: src.source || 'prior',
+    });
+    if (src && Number(src.year) === yearNow && src.number !== undefined) {
+      player.number = String(src.number || '');
     }
     return player;
   }
@@ -2152,6 +2175,7 @@
     upsertSeasonChapter,
     touchCurrentSeason,
     updatePlayerCard,
+    applyCurrentSeasonRosterFields,
     addPriorSeason,
     playerSeasons,
     seasonYearForState,

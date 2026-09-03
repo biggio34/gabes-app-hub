@@ -42,7 +42,7 @@
     </header>
 
     <p class="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
-      This is the shared player list. Each girl keeps one People id across years — opening her shows the card and season history (2025 Fransen → 2026 Fransen) without a new record. Jersey number lives on the season, not the person: this year’s number is on the roster, past numbers stay in history. Lineup, tryouts, and team formation use these same ids.
+      This is the shared player list. Each girl keeps one People id across years — opening her shows the card and season history (2025 Fransen → 2026 Fransen) without a new record. Primary and secondary position stay on her and are set on the card. Jersey number lives on the season: this year’s number is on the roster, past numbers stay in history. Lineup, tryouts, and team formation use these same ids.
     </p>
     <p id="save-status" class="hidden text-xs text-slate-500"></p>
 
@@ -125,12 +125,18 @@
         <button type="button" id="card-close" class="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center shrink-0" aria-label="Close">✕</button>
       </div>
       <div class="grid gap-3">
-        <div class="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
-          <p class="text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Positions (from roster)</p>
-          <p id="card-positions" class="mt-1 text-sm text-slate-200"></p>
-          <p class="mt-1 text-[11px] text-slate-500">Edit primary / secondary on the roster form. Do not retype them here.</p>
-        </div>
         <form id="card-form" class="grid gap-3">
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="grid gap-1.5 text-sm">
+              Primary position
+              <select id="card-position" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500"></select>
+            </label>
+            <label class="grid gap-1.5 text-sm">
+              Secondary position
+              <select id="card-position2" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500"></select>
+            </label>
+          </div>
+          <p class="text-[11px] text-slate-500 -mt-1">Hers. Positions stay on this player when the year rolls. Jersey number is per season.</p>
           <label class="grid gap-1.5 text-sm">
             Strengths
             <input id="card-strengths" maxlength="140" placeholder="One line"
@@ -165,12 +171,12 @@
         </form>
         <div>
           <p class="text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase mb-2">Season history</p>
-          <p class="text-[11px] text-slate-500 mb-2">Jersey number is per season. Same person can be #10 in 2025 and #4 in 2026.</p>
+          <p class="text-[11px] text-slate-500 mb-2">Jersey number is per season (#10 in 2025, #4 in 2026). Primary and secondary position stay on this player.</p>
           <div id="card-history" class="grid gap-2"></div>
         </div>
         <form id="prior-season-form" class="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950 p-4">
           <p class="text-sm font-semibold">Add a prior season</p>
-          <p class="text-[11px] text-slate-500">Records another chapter on this same id. Does not create a new player or change this year’s roster number.</p>
+          <p class="text-[11px] text-slate-500">Records another chapter on this same id. Does not create a new player or change her positions. Only that year’s number and team go on the chapter.</p>
           <div class="grid gap-3 sm:grid-cols-2">
             <label class="grid gap-1.5 text-sm">
               Year
@@ -183,14 +189,6 @@
             <label class="grid gap-1.5 text-sm sm:col-span-2">
               Team
               <select id="prior-team" class="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 outline-none focus:border-red-500"></select>
-            </label>
-            <label class="grid gap-1.5 text-sm">
-              Primary
-              <select id="prior-position" class="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 outline-none focus:border-red-500"></select>
-            </label>
-            <label class="grid gap-1.5 text-sm">
-              Secondary
-              <select id="prior-position2" class="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 outline-none focus:border-red-500"></select>
             </label>
           </div>
           <button type="submit" class="w-fit rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">Add season chapter</button>
@@ -507,14 +505,15 @@
       const teamName = ElksData.teamNameForPlayer
         ? ElksData.teamNameForPlayer(player, state.teams || [])
         : "";
-      const positions = [player.position, player.position2].filter(Boolean).join(" / ") || "No position set on roster";
       document.getElementById("card-name").textContent = ElksData.displayName(player);
       document.getElementById("card-meta").textContent = [
         player.number ? "#" + player.number + " this season" : "No number this season",
         teamName,
+        [player.position, player.position2].filter(Boolean).join(" / "),
       ].filter(Boolean).join(" · ");
       document.getElementById("card-id").textContent = "People id " + player.id;
-      document.getElementById("card-positions").textContent = positions;
+      fillPositionSelect(document.getElementById("card-position"), player.position);
+      fillPositionSelect(document.getElementById("card-position2"), player.position2);
       document.getElementById("card-strengths").value = card.strengths || "";
       document.getElementById("card-focus").value = card.developmentFocus || "";
       document.getElementById("card-notes").value = card.notes || "";
@@ -529,7 +528,6 @@
       } else {
         history.innerHTML = seasons.map((season) => {
           const decision = recLabel(season.recommendation);
-          const pos = [season.position, season.position2].filter(Boolean).join(" / ");
           const notesLine = canSee && season.card && season.card.notes
             ? `<p class="text-[11px] text-slate-500 mt-1">Notes: ${escapeHtml(season.card.notes)}</p>`
             : "";
@@ -543,7 +541,7 @@
           return `
             <div class="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">
               <p class="font-medium">${escapeHtml(String(season.year))} · ${escapeHtml(named)}${season.number ? " · #" + escapeHtml(String(season.number)) : ""}</p>
-              <p class="text-xs text-slate-500">${escapeHtml(pos || "No positions")}${decision ? " · " + escapeHtml(decision) : ""}</p>
+              <p class="text-xs text-slate-500">${decision ? escapeHtml(decision) : "No tryout decision"}</p>
               ${strengths}
               ${notesLine}
             </div>
@@ -554,8 +552,6 @@
       document.getElementById("prior-year").value = yearNow - 1;
       document.getElementById("prior-number").value = "";
       fillTeamSelect(document.getElementById("prior-team"), "");
-      fillPositionSelect(document.getElementById("prior-position"), player.position);
-      fillPositionSelect(document.getElementById("prior-position2"), player.position2);
       modal.classList.remove("hidden");
     }
 
@@ -584,6 +580,8 @@
       }
       if (ElksData.updatePlayerCard) ElksData.updatePlayerCard(player, patch);
       else player.card = Object.assign({}, player.card || {}, patch);
+      player.position = document.getElementById("card-position").value;
+      player.position2 = document.getElementById("card-position2").value;
       if (ElksData.touchCurrentSeason) {
         ElksData.touchCurrentSeason(player, {
           year: ElksData.seasonYearForState ? ElksData.seasonYearForState(state) : new Date().getFullYear(),
@@ -610,8 +608,6 @@
         teamId,
         teamName: team ? team.name : "",
         number: document.getElementById("prior-number").value.trim(),
-        position: document.getElementById("prior-position").value,
-        position2: document.getElementById("prior-position2").value,
         source: "prior",
       };
       if (ElksData.addPriorSeason) ElksData.addPriorSeason(player, patch, yearNow);

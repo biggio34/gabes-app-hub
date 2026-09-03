@@ -32,7 +32,7 @@ export const hubApps: HubApp[] = [
     file: "roster.html",
     title: "Team Roster",
     description:
-      "Shared People/player list. Open a girl for her card and season history on one id that never resets. Jersey number is per season.",
+      "Shared People/player list. Open a girl for her card and season history on one id that never resets. Positions stay on the player. Jersey number is per season.",
     area: "softball",
   },
   {

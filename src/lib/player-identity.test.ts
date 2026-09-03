@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   addPriorSeason,
+  applyCurrentSeasonRosterFields,
   applyIdentityOnWrite,
   canSeeCoachNotes,
   mergePlayerIdentity,
@@ -71,6 +72,30 @@ describe("durable People/player id", () => {
     const y25 = (ava.seasons as { year: number; number: string }[]).find((s) => s.year === 2025);
     assert.equal(y25?.number, "10");
     assert.equal(ava.id, "p_same");
+  });
+
+  it("keeps positions on the person when the jersey number changes years", () => {
+    let ava = player({ number: "10", position: "SS", position2: "2B" });
+    ava = addPriorSeason(ava, {
+      year: 2025,
+      number: "10",
+      position: "C",
+      position2: "1B",
+      teamName: "16U Fransen",
+    }, 2026);
+    ava = applyCurrentSeasonRosterFields(
+      ava,
+      { number: "4" },
+      { year: 2026, teamName: "16U Fransen" },
+    );
+    assert.equal(ava.id, "p_same");
+    assert.equal(ava.position, "SS");
+    assert.equal(ava.position2, "2B");
+    assert.equal(ava.number, "4");
+    const seasons = ava.seasons as { year: number; number: string; position?: string }[];
+    assert.equal(seasons.find((s) => s.year === 2025)?.number, "10");
+    assert.equal(seasons.find((s) => s.year === 2026)?.number, "4");
+    assert.notEqual(seasons.find((s) => s.year === 2025)?.position, "C");
   });
 });
 
