@@ -186,8 +186,6 @@
           <div id="kind-btns" class="flex flex-wrap gap-1.5">
             <button type="button" data-kind="offense" class="kind-btn rounded-full px-3 py-1.5 text-xs font-semibold">Offense</button>
             <button type="button" data-kind="defense" class="kind-btn rounded-full px-3 py-1.5 text-xs font-semibold">Defense</button>
-            <button type="button" data-kind="pitch" class="kind-btn rounded-full px-3 py-1.5 text-xs font-semibold">Pitch</button>
-            <button type="button" data-kind="location" class="kind-btn rounded-full px-3 py-1.5 text-xs font-semibold">Location</button>
           </div>
         </div>
         <div class="grid gap-1.5 text-sm sm:col-span-2">
@@ -832,7 +830,11 @@
       if (!book.theme) book.theme = defaultTheme();
       book.theme = themeOf();
       book.sheet = sheetOf();
-      if (!book.bandKind) book.bandKind = "offense";
+      let kindReset = false;
+      if (book.bandKind !== "offense" && book.bandKind !== "defense") {
+        book.bandKind = "offense";
+        kindReset = true;
+      }
       const layout = layoutOf(book);
       book.grids = layout.grids;
       book.rows = layout.rows;
@@ -848,7 +850,11 @@
         if (item.locked == null) item.locked = false;
       });
       const version = activeVersion();
-      if (version && !version.locked && version.cells && version.cells.length !== cellCount(layout)) {
+      if (
+        version &&
+        !version.locked &&
+        (kindReset || (version.cells && version.cells.length !== cellCount(layout)))
+      ) {
         refillActive();
       }
     }
@@ -1420,7 +1426,8 @@
       const btn = event.target.closest("[data-kind]");
       if (!btn) return;
       const kind = btn.getAttribute("data-kind");
-      if (!kind || kind === book.bandKind) return;
+      if (kind !== "offense" && kind !== "defense") return;
+      if (kind === book.bandKind) return;
       book.bandKind = kind;
       refillActive();
       render();

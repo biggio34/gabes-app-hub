@@ -72,7 +72,7 @@ export const hubApps: HubApp[] = [
     file: "wrist-coach.html",
     title: "Wrist Coach",
     description:
-      "Your pitch and play-call wristband. Edit the library, shuffle versions, print a wrist card and a coach key.",
+      "Your play-call wristband. Edit the library, shuffle versions, print a wrist card and a coach key.",
     area: "softball",
     requiresFeature: "wrist-coach",
   },
