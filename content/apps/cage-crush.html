@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Cage Crush</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Space+Grotesk:wght@600;700&display=swap");
+    body { font-family: Inter, system-ui, sans-serif; touch-action: manipulation; }
+    .title-font { font-family: "Space Grotesk", Inter, sans-serif; letter-spacing: -0.03em; }
+    #stage {
+      width: 100%;
+      max-width: 920px;
+      height: min(62vh, 520px);
+      display: block;
+      border-radius: 1.25rem;
+      background: #07111f;
+    }
+    .swing-btn {
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .swing-btn:active { transform: scale(0.97); }
+  </style>
+</head>
+<body class="min-h-dvh bg-slate-950 text-slate-100">
+  <div class="mx-auto grid w-full max-w-5xl gap-4 px-4 py-6 sm:px-6">
+    <header class="flex items-start justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <a href="/" class="text-sm text-slate-400 hover:text-red-400 shrink-0">← Hub</a>
+        <div class="flex size-12 items-center justify-center rounded-2xl bg-red-700 shrink-0">
+          <i class="fa-solid fa-baseball-bat-ball text-white text-lg"></i>
+        </div>
+        <div class="min-w-0">
+          <h1 class="title-font text-2xl font-semibold">Cage Crush</h1>
+          <p id="player-line" class="text-sm text-slate-400">Softball arcade</p>
+        </div>
+      </div>
+      <div class="text-right shrink-0">
+        <p class="text-[11px] font-semibold tracking-[0.14em] text-slate-500 uppercase">High score</p>
+        <p id="high-score" class="title-font text-2xl text-red-400">0</p>
+      </div>
+    </header>
+
+    <section class="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-3 sm:p-5">
+      <div class="flex flex-wrap items-center justify-between gap-2 px-1">
+        <div class="flex flex-wrap gap-4 text-sm">
+          <p>Score <span id="score" class="font-semibold text-white">0</span></p>
+          <p>Outs <span id="outs" class="font-semibold text-white">0 / 5</span></p>
+          <p>Streak <span id="streak" class="font-semibold text-amber-300">0</span></p>
+        </div>
+        <p id="pitch-call" class="text-sm font-semibold text-red-300">Tap Play</p>
+      </div>
+      <div class="flex justify-center">
+        <canvas id="stage" width="920" height="520"></canvas>
+      </div>
+      <div class="grid gap-2 sm:grid-cols-[1fr_auto_1fr] items-center">
+        <p id="result-line" class="text-sm text-slate-400 sm:text-left text-center">Time the swing as the ball crosses the plate.</p>
+        <button type="button" id="swing" class="swing-btn rounded-2xl bg-red-700 px-10 py-4 text-lg font-extrabold tracking-wide hover:bg-red-600">
+          SWING
+        </button>
+        <div class="flex justify-center sm:justify-end">
+          <button type="button" id="play" class="rounded-2xl bg-slate-800 px-5 py-3 text-sm font-semibold hover:bg-slate-700">
+            Play
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("stage");
+    const ctx = canvas.getContext("2d");
+    const PITCHES = [
+      { id: "fb", name: "FASTBALL", speed: 1, rise: 0 },
+      { id: "ch", name: "CHANGE", speed: 0.66, rise: 0.04 },
+      { id: "rs", name: "RISE", speed: 0.9, rise: -0.2 },
+      { id: "dr", name: "DROP", speed: 0.86, rise: 0.26 },
+      { id: "sc", name: "SCREW", speed: 0.88, rise: 0.05 }
+    ];
+    const OUTS_LIMIT = 5;
+    const hub = window.HUB_SOFTBALL || {};
+    const scoreKey = "cage-crush:" + (hub.userId || "local");
+
+    let gameId = 0;
+    const state = {
+      running: false,
+      phase: "idle",
+      score: 0,
+      outs: 0,
+      streak: 0,
+      high: 0,
+      pitch: null,
+      t: 0,
+      last: 0,
+      shake: 0,
+      flash: 0,
+      flight: null,
+      sparks: [],
+      call: "Tap Play",
+      result: "Time the swing as the ball crosses the plate."
+    };
+
+    function loadHigh() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(scoreKey) || "{}");
+        state.high = Number(raw.high) || 0;
+      } catch (err) {
+        state.high = 0;
+      }
+    }
+
+    function saveHigh() {
+      localStorage.setItem(scoreKey, JSON.stringify({ high: state.high, at: Date.now() }));
+    }
+
+    function hud() {
+      document.getElementById("score").textContent = String(state.score);
+      document.getElementById("outs").textContent = state.outs + " / " + OUTS_LIMIT;
+      document.getElementById("streak").textContent = String(state.streak);
+      document.getElementById("high-score").textContent = String(state.high);
+      document.getElementById("pitch-call").textContent = state.call;
+      document.getElementById("result-line").textContent = state.result;
+      document.getElementById("play").textContent = state.running ? "New game" : "Play";
+      const name = hub.userName || hub.teamName || "Softball arcade";
+      document.getElementById("player-line").textContent = name;
+    }
+
+    function beep(freq, dur, type, gain) {
+      try {
+        const ac = beep.ac || (beep.ac = new AudioContext());
+        const osc = ac.createOscillator();
+        const g = ac.createGain();
+        osc.type = type || "square";
+        osc.frequency.value = freq;
+        g.gain.value = gain || 0.04;
+        osc.connect(g);
+        g.connect(ac.destination);
+        osc.start();
+        osc.stop(ac.currentTime + (dur || 0.08));
+      } catch (err) { /* silent */ }
+    }
+
+    function pickPitch() {
+      return PITCHES[Math.floor(Math.random() * PITCHES.length)];
+    }
+
+    function startGame() {
+      gameId += 1;
+      state.running = true;
+      state.score = 0;
+      state.outs = 0;
+      state.streak = 0;
+      state.shake = 0;
+      state.sparks = [];
+      state.result = "Here it comes.";
+      nextPitch();
+      hud();
+    }
+
+    function nextPitch() {
+      if (state.outs >= OUTS_LIMIT) {
+        endGame();
+        return;
+      }
+      state.pitch = pickPitch();
+      state.t = 0;
+      state.phase = "pitch";
+      state.flight = null;
+      state.call = state.pitch.name;
+      state.result = "Swing when it crosses the plate.";
+      hud();
+      beep(220, 0.06, "triangle", 0.03);
+    }
+
+    function qualityFromT(t) {
+      return Math.max(0, 1 - Math.abs(t - 0.82) / 0.2);
+    }
+
+    function gradeContact(quality, pitch) {
+      const juice = quality + (pitch.id === "fb" || pitch.id === "rs" ? 0.04 : 0);
+      if (juice < 0.18) return { kind: "miss", label: "WHIFF", pts: 0, out: true, dist: 0 };
+      if (juice < 0.34) return { kind: "foul", label: "FOUL", pts: 0, out: false, dist: 40 + juice * 40 };
+      if (juice < 0.48) return { kind: "out", label: "WEAK OUT", pts: 0, out: true, dist: 70 + juice * 50 };
+      if (juice < 0.62) return { kind: "single", label: "SINGLE", pts: 2 + state.streak, out: false, dist: 120 + juice * 40 };
+      if (juice < 0.76) return { kind: "double", label: "DOUBLE", pts: 4 + state.streak * 2, out: false, dist: 180 + juice * 40 };
+      if (juice < 0.9) return { kind: "triple", label: "GAP TRIPLE", pts: 7 + state.streak * 2, out: false, dist: 230 + juice * 30 };
+      const bonus = Math.round(20 + juice * 30);
+      return { kind: "homer", label: "GONE", pts: 12 + bonus + state.streak * 3, out: false, dist: 280 + juice * 40 };
+    }
+
+    function swing() {
+      if (!state.running || state.phase !== "pitch") return;
+      const quality = qualityFromT(state.t);
+      const hit = gradeContact(quality, state.pitch);
+      applyResult(hit);
+    }
+
+    function applyResult(hit) {
+      state.phase = "result";
+      state.flash = hit.kind === "homer" ? 18 : 8;
+      state.shake = hit.kind === "homer" ? 14 : hit.kind === "miss" ? 4 : 7;
+      state.score += hit.pts;
+      if (hit.out) {
+        state.outs += 1;
+        state.streak = 0;
+        beep(90, 0.12, "sawtooth", 0.05);
+      } else if (hit.kind === "foul") {
+        beep(160, 0.05, "square", 0.03);
+      } else {
+        state.streak += 1;
+        beep(hit.kind === "homer" ? 520 : 340, 0.1, "square", 0.05);
+        if (hit.kind === "homer") beep(720, 0.16, "triangle", 0.04);
+      }
+      if (state.score > state.high) {
+        state.high = state.score;
+        saveHigh();
+      }
+      state.result = hit.label + (hit.pts ? "  +" + hit.pts : "");
+      state.call = hit.label;
+      state.flight = {
+        kind: hit.kind,
+        dist: hit.dist,
+        u: 0,
+        angle: hit.kind === "foul" ? -0.9 : -0.55 + Math.random() * 0.18
+      };
+      burst(hit.kind);
+      hud();
+      const id = gameId;
+      setTimeout(function () {
+        if (id !== gameId || !state.running) return;
+        if (state.outs >= OUTS_LIMIT) endGame();
+        else nextPitch();
+      }, hit.kind === "homer" ? 1300 : 850);
+    }
+
+    function endGame() {
+      state.running = false;
+      state.phase = "over";
+      state.call = "FINAL";
+      state.result = "Final  " + state.score + (state.score >= state.high ? "  ·  new high" : "");
+      hud();
+      beep(180, 0.2, "triangle", 0.05);
+    }
+
+    function burst(kind) {
+      const n = kind === "homer" ? 28 : kind === "miss" ? 6 : 14;
+      for (let i = 0; i < n; i += 1) {
+        state.sparks.push({
+          x: 0.72,
+          y: 0.62,
+          vx: (Math.random() - 0.35) * 0.012,
+          vy: (Math.random() - 0.7) * 0.012,
+          life: 18 + Math.random() * 12,
+          color: kind === "homer" ? "#fbbf24" : kind === "miss" ? "#94a3b8" : "#fff"
+        });
+      }
+    }
+
+    function ballPos(t, pitch) {
+      const x = 0.18 + t * 0.56;
+      const y = 0.46 + Math.sin(t * Math.PI) * pitch.rise + (1 - t) * 0.02;
+      return { x: x, y: y };
+    }
+
+    function drawField(w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, "#07111f");
+      g.addColorStop(0.55, "#122033");
+      g.addColorStop(1, "#14532d");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "#9a3412";
+      ctx.beginPath();
+      ctx.ellipse(w * 0.72, h * 0.78, w * 0.22, h * 0.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#7f1d1d";
+      ctx.fillRect(w * 0.69, h * 0.72, w * 0.08, h * 0.03);
+      ctx.fillStyle = "#1e293b";
+      ctx.beginPath();
+      ctx.ellipse(w * 0.2, h * 0.62, w * 0.07, h * 0.03, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.18, h * 0.62);
+      ctx.lineTo(w * 0.7, h * 0.74);
+      ctx.stroke();
+    }
+
+    function drawPitcher(w, h, t) {
+      const x = w * 0.2;
+      const y = h * 0.52;
+      ctx.fillStyle = "#e2e8f0";
+      ctx.beginPath();
+      ctx.arc(x, y - 28, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#b91c1c";
+      ctx.fillRect(x - 7, y - 20, 14, 22);
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(x - 6, y + 2, 5, 16);
+      ctx.fillRect(x + 1, y + 2, 5, 16);
+      ctx.save();
+      ctx.translate(x + 8, y - 10);
+      ctx.rotate(state.phase === "pitch" ? -0.8 + t * 1.6 : 0.2);
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillRect(0, -2, 18, 4);
+      ctx.restore();
+    }
+
+    function drawBatter(w, h, swinging) {
+      const x = w * 0.78;
+      const y = h * 0.58;
+      ctx.fillStyle = "#f8fafc";
+      ctx.beginPath();
+      ctx.arc(x, y - 30, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#b91c1c";
+      ctx.fillRect(x - 8, y - 22, 16, 24);
+      ctx.fillStyle = "#111827";
+      ctx.fillRect(x - 7, y + 2, 6, 18);
+      ctx.fillRect(x + 1, y + 2, 6, 18);
+      ctx.save();
+      ctx.translate(x - 4, y - 8);
+      ctx.rotate(swinging ? 1.15 : -0.85);
+      ctx.fillStyle = "#cbd5e1";
+      ctx.fillRect(-2, -36, 5, 40);
+      ctx.fillStyle = "#7f1d1d";
+      ctx.fillRect(-3, -42, 7, 8);
+      ctx.restore();
+    }
+
+    function drawBall(w, h) {
+      if (state.phase === "pitch" && state.pitch) {
+        const p = ballPos(state.t, state.pitch);
+        const r = 5 + state.t * 5;
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(p.x * w, p.y * h, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#b91c1c";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(p.x * w, p.y * h, r * 0.7, 0.4, 2.2);
+        ctx.stroke();
+      }
+      if (state.flight) {
+        const u = state.flight.u;
+        const x = w * (0.72 + Math.cos(state.flight.angle) * (state.flight.dist / 420) * u);
+        const y = h * (0.62 + Math.sin(state.flight.angle) * (state.flight.dist / 280) * u + u * u * 0.18);
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawSparks(w, h) {
+      state.sparks = state.sparks.filter(function (s) { return s.life > 0; });
+      state.sparks.forEach(function (s) {
+        s.x += s.vx;
+        s.y += s.vy;
+        s.life -= 1;
+        ctx.globalAlpha = Math.max(0, s.life / 24);
+        ctx.fillStyle = s.color;
+        ctx.fillRect(s.x * w, s.y * h, 3, 3);
+        ctx.globalAlpha = 1;
+      });
+    }
+
+    function drawOverlay(w, h) {
+      if (state.phase === "idle") {
+        ctx.fillStyle = "rgba(2,6,23,0.45)";
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = "#fff";
+        ctx.font = "700 36px Space Grotesk, Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("CAGE CRUSH", w / 2, h / 2 - 10);
+        ctx.font = "600 16px Inter, sans-serif";
+        ctx.fillStyle = "#fda4af";
+        ctx.fillText("Play, then swing through the zone", w / 2, h / 2 + 22);
+      }
+      if (state.phase === "over") {
+        ctx.fillStyle = "rgba(2,6,23,0.5)";
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = "#fff";
+        ctx.font = "700 34px Space Grotesk, Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("FINAL  " + state.score, w / 2, h / 2);
+        ctx.font = "600 15px Inter, sans-serif";
+        ctx.fillStyle = "#fbbf24";
+        ctx.fillText("High  " + state.high, w / 2, h / 2 + 28);
+      }
+    }
+
+    function frame(now) {
+      const dt = Math.min(32, now - (state.last || now));
+      state.last = now;
+      if (state.phase === "pitch") {
+        state.t += (dt / 1000) * (0.95 * (state.pitch ? state.pitch.speed : 1));
+        if (state.t >= 1.05) applyResult({ kind: "miss", label: "TAKE", pts: 0, out: true, dist: 0 });
+      }
+      if (state.flight) state.flight.u = Math.min(1, state.flight.u + dt / 700);
+      if (state.shake > 0) state.shake -= 1;
+      if (state.flash > 0) state.flash -= 1;
+
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.save();
+      if (state.shake) ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
+      drawField(w, h);
+      drawPitcher(w, h, state.t);
+      drawBatter(w, h, state.phase === "result");
+      drawBall(w, h);
+      drawSparks(w, h);
+      if (state.flash) {
+        ctx.fillStyle = "rgba(254,243,199," + (state.flash / 28) + ")";
+        ctx.fillRect(0, 0, w, h);
+      }
+      ctx.restore();
+      drawOverlay(w, h);
+      requestAnimationFrame(frame);
+    }
+
+    document.getElementById("play").addEventListener("click", startGame);
+    document.getElementById("swing").addEventListener("click", function (event) {
+      event.preventDefault();
+      swing();
+    });
+    canvas.addEventListener("pointerdown", function (event) {
+      event.preventDefault();
+      if (state.phase === "idle" || state.phase === "over") startGame();
+      else swing();
+    });
+    window.addEventListener("keydown", function (event) {
+      if (event.code === "Space" || event.code === "Enter") {
+        event.preventDefault();
+        if (state.phase === "idle" || state.phase === "over") startGame();
+        else swing();
+      }
+    });
+
+    loadHigh();
+    hud();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

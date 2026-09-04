@@ -77,6 +77,14 @@ export const hubApps: HubApp[] = [
     requiresFeature: "wrist-coach",
   },
   {
+    slug: "cage-crush",
+    file: "cage-crush.html",
+    title: "Cage Crush",
+    description:
+      "Softball batting arcade. Time the swing, crush the pitch, chase your high score.",
+    area: "softball",
+  },
+  {
     slug: "supply-orders",
     file: "",
     title: "Supply Orders",
@@ -121,6 +129,8 @@ export const pathRewrites: Record<string, string> = {
   "/softball-tryout-evaluator": "/apps/tryout-evaluator",
   "/wrist-coach/": "/apps/wrist-coach",
   "/wrist-coach": "/apps/wrist-coach",
+  "/cage-crush/": "/apps/cage-crush",
+  "/cage-crush": "/apps/cage-crush",
   "/luna-haus-salon/": "/apps/luna-haus-salon",
   "/luna-haus-salon": "/apps/luna-haus-salon",
 };
