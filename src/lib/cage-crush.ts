@@ -199,3 +199,16 @@ export function swingWhy(
   if (abs <= 0.07) return "Almost perfect · a hair " + side;
   return "A little " + side;
 }
+
+export function airBallHitsFielder(
+  ball: { x: number; y: number; lift: number; r: number },
+  fielder: { x: number; y: number; scale: number },
+) {
+  if (ball.lift < 6) return false;
+  const cx = fielder.x;
+  const cy = fielder.y - 16 * fielder.scale;
+  const reach = 18 * fielder.scale + ball.r;
+  const dx = ball.x - cx;
+  const dy = ball.y - cy;
+  return dx * dx + dy * dy <= reach * reach;
+}

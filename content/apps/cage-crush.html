@@ -109,6 +109,7 @@
       shake: 0,
       flash: 0,
       flight: null,
+      playTimer: 0,
       sparks: [],
       call: "Tap Play",
       result: "Time the swing as the ball crosses the plate.",
@@ -245,6 +246,7 @@
       state.shake = 0;
       state.sparks = [];
       state.feedback = "";
+      clearTimeout(state.playTimer);
       state.result = "Here it comes.";
       nextPitch();
       hud();
@@ -281,6 +283,7 @@
       if (hit.kind === "miss") {
         return (abs > 0.16 ? "Way " + side : side.charAt(0).toUpperCase() + side.slice(1)) + " on the " + name;
       }
+      if (hit.label === "CAUGHT") return "Caught in the air by " + (hit.fielder || "a fielder");
       if (hit.kind === "foul" || hit.kind === "out") {
         return "Weak contact · " + (abs <= 0.07 ? "just off" : "a little " + side);
       }
@@ -333,19 +336,28 @@
       state.flight = {
         kind: hit.kind,
         dist: hit.dist,
+        pts: hit.pts,
+        wasOut: !!hit.out,
         u: 0,
+        caught: false,
+        catchAt: null,
         side: hit.kind === "foul"
           ? (Math.random() < 0.5 ? -1.2 : 1.2)
           : (Math.random() - 0.5) * 0.7
       };
       burst(hit.kind);
       hud();
+      scheduleNext(hit.kind === "homer" ? 1600 : 1300);
+    }
+
+    function scheduleNext(ms) {
+      clearTimeout(state.playTimer);
       const id = gameId;
-      setTimeout(function () {
+      state.playTimer = setTimeout(function () {
         if (id !== gameId || !state.running) return;
         if (state.outs >= OUTS_LIMIT) endGame();
         else nextPitch();
-      }, hit.kind === "homer" ? 1600 : 1300);
+      }, ms);
     }
 
     function endGame() {
@@ -384,6 +396,77 @@
         x: p.homeX + ((p.rightX - p.homeX) * s) * t,
         y: p.homeY + (p.fenceBottom - p.homeY) * t
       };
+    }
+
+    const FIELDERS = [
+      { id: "1b", name: "1B", t: 0.50, side: 0.90, num: "3", skin: "#e0b089" },
+      { id: "2b", name: "2B", t: 0.60, side: 0.30, num: "4", skin: "#c68642" },
+      { id: "ss", name: "SS", t: 0.58, side: -0.30, num: "6", skin: "#d4a574" },
+      { id: "3b", name: "3B", t: 0.50, side: -0.90, num: "5", skin: "#8d5524" },
+      { id: "lf", name: "LF", t: 0.86, side: -0.68, num: "7", skin: "#f1c27d" },
+      { id: "cf", name: "CF", t: 0.88, side: 0, num: "9", skin: "#c68642" },
+      { id: "rf", name: "RF", t: 0.86, side: 0.68, num: "2", skin: "#d9a57a" },
+      { id: "p", name: "P", t: 0.38, side: 0, num: "1", skin: "#d9a57a" }
+    ];
+
+    function fielderScale(t) {
+      return 0.34 + (1 - t) * 0.72;
+    }
+
+    function fielderSpot(w, h, spec) {
+      const p = along(w, h, spec.t, spec.side);
+      return { x: p.x, y: p.y, scale: fielderScale(spec.t), spec: spec };
+    }
+
+    function flightBall(w, h) {
+      if (!state.flight || state.flight.kind === "miss") return null;
+      if (state.flight.caught && state.flight.catchAt) return state.flight.catchAt;
+      const reach = Math.max(0.2, state.flight.dist / 220);
+      const t = Math.min(1.2, state.flight.u * reach);
+      const p = along(w, h, Math.min(1.05, t), state.flight.side);
+      const lift = Math.sin(Math.min(1, t) * Math.PI) * (state.flight.kind === "homer" ? 70 : 28);
+      const r = Math.max(3, 8 - t * 5);
+      return { x: p.x, y: p.y - lift, lift: lift, r: r, t: t };
+    }
+
+    function airBallHitsFielder(ball, fielder) {
+      if (ball.lift < 6) return false;
+      const cx = fielder.x;
+      const cy = fielder.y - 16 * fielder.scale;
+      const reach = 18 * fielder.scale + ball.r;
+      const dx = ball.x - cx;
+      const dy = ball.y - cy;
+      return dx * dx + dy * dy <= reach * reach;
+    }
+
+    function checkCatch(w, h) {
+      if (!state.flight || state.flight.caught) return;
+      if (state.flight.kind === "miss") return;
+      const ball = flightBall(w, h);
+      if (!ball) return;
+      if (state.flight.kind === "homer" && ball.t > 0.9 && ball.lift > 40) return;
+      for (let i = 0; i < FIELDERS.length; i += 1) {
+        const spot = fielderSpot(w, h, FIELDERS[i]);
+        if (!airBallHitsFielder(ball, spot)) continue;
+        catchFly(FIELDERS[i], ball);
+        return;
+      }
+    }
+
+    function catchFly(fielder, ball) {
+      if (!state.flight || state.flight.caught) return;
+      state.flight.caught = true;
+      state.flight.catchAt = { x: ball.x, y: ball.y, lift: ball.lift, r: ball.r, t: ball.t };
+      if (state.flight.pts) state.score = Math.max(0, state.score - state.flight.pts);
+      if (!state.flight.wasOut) state.outs += 1;
+      state.streak = 0;
+      state.call = "CAUGHT";
+      state.feedback = "Caught in the air by " + fielder.name;
+      state.result = "CAUGHT  ·  " + fielder.name + " in the air";
+      state.flash = 8;
+      beep(110, 0.14, "sawtooth", 0.05);
+      hud();
+      scheduleNext(1200);
     }
 
     function fairPath(ctx, w, h, tEnd) {
@@ -602,180 +685,224 @@
       ctx.stroke();
     }
 
-    function drawPitcher(w, h, t) {
-      const mound = along(w, h, park(w, h).moundT, 0);
-      const x = mound.x;
-      const y = mound.y + 4;
-      const wind = state.phase === "pitch" ? t : 0;
-      const skin = "#d9a57a";
+    function paintSoftball(x, y, r) {
+      const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.15, x, y, r);
+      g.addColorStop(0, "#ffe566");
+      g.addColorStop(0.55, "#facc15");
+      g.addColorStop(1, "#ca8a04");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#b91c1c";
+      ctx.lineWidth = Math.max(1, r * 0.11);
+      ctx.beginPath();
+      ctx.arc(x - r * 0.08, y, r * 0.62, 0.25, 2.4);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x + r * 0.08, y, r * 0.62, 3.4, 5.55);
+      ctx.stroke();
+    }
+
+    function drawPerson(x, y, scale, opt) {
+      const s = scale;
+      const skin = opt.skin || "#d4a574";
       const jersey = "#c81e1e";
       const pants = "#eef2f7";
-      oval(x, y + 20, 18, 5, "rgba(0,0,0,0.22)");
-      stick(x - 3, y + 2, x - 7, y + 18, 5.5, pants);
-      stick(x + 3, y + 2, x + 5 + wind * 5, y + 18, 5.5, pants);
-      stick(x - 7, y + 18, x - 8, y + 22, 3.4, "#1f2937");
-      stick(x + 5 + wind * 5, y + 18, x + 7 + wind * 5, y + 22, 3.4, "#1f2937");
-      oval(x, y - 6, 9, 12, jersey);
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(x - 8, y - 1, 16, 2);
-      oval(x, y - 22, 6.4, 7.2, skin);
-      ctx.fillStyle = "#111827";
-      ctx.beginPath();
-      ctx.ellipse(x, y - 26, 7.2, 4.2, 0, Math.PI, 0);
-      ctx.fill();
-      ctx.fillRect(x - 7.4, y - 26, 14.8, 3);
-      ctx.fillStyle = "#2a1a12";
-      ctx.fillRect(x - 3.2, y - 21, 1.3, 1.3);
-      ctx.fillRect(x + 1.8, y - 21, 1.3, 1.3);
-      stick(x - 8, y - 10, x - 14, y - 2, 3.2, skin);
-      oval(x - 16, y, 5.5, 4.2, "#8b5a2b");
+      const crouch = opt.crouch || 0;
+      const wind = opt.wind || 0;
+      const hipY = -6 * s + crouch * 10 * s;
+      const shY = -26 * s + crouch * 11 * s;
+      const headY = -40 * s + crouch * 9 * s;
       ctx.save();
-      ctx.translate(x + 8, y - 10);
-      ctx.rotate(-0.85 + wind * 1.7);
-      stick(0, 0, 13, 1, 3.2, skin);
-      oval(13, 1, 2.4, 2.4, "#fff");
+      ctx.translate(x, y);
+      oval(0, 6 * s, 13 * s, 4 * s, "rgba(0,0,0,0.26)");
+      const leftFoot = -7 * s - wind * 2 * s;
+      const rightFoot = 7 * s + wind * 4 * s;
+      stick(-3 * s, hipY, leftFoot, 4 * s, 5.2 * s, pants);
+      stick(3 * s, hipY, rightFoot, 4 * s, 5.2 * s, pants);
+      stick(leftFoot, 4 * s, leftFoot - 1 * s, 8 * s, 3 * s, "#f8fafc");
+      stick(rightFoot, 4 * s, rightFoot + 1 * s, 8 * s, 3 * s, "#f8fafc");
+      ctx.strokeStyle = "#c81e1e";
+      ctx.lineWidth = Math.max(1, 1.1 * s);
+      ctx.beginPath();
+      ctx.moveTo(leftFoot - 3 * s, 6.5 * s);
+      ctx.lineTo(leftFoot + 2 * s, 6.5 * s);
+      ctx.moveTo(rightFoot - 2 * s, 6.5 * s);
+      ctx.lineTo(rightFoot + 3 * s, 6.5 * s);
+      ctx.stroke();
+      oval(leftFoot - 1 * s, 10 * s, 4.2 * s, 2 * s, "#111827");
+      oval(rightFoot + 1 * s, 10 * s, 4.2 * s, 2 * s, "#111827");
+      oval(0, hipY, 8 * s, 5 * s, pants);
+      ctx.fillStyle = jersey;
+      ctx.beginPath();
+      ctx.moveTo(-10 * s, shY + 3 * s);
+      ctx.lineTo(10 * s, shY + 3 * s);
+      ctx.lineTo(7.5 * s, hipY + 1 * s);
+      ctx.lineTo(-7.5 * s, hipY + 1 * s);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#111827";
+      ctx.fillRect(-7.5 * s, hipY - 1.5 * s, 15 * s, 2.2 * s);
+      if (opt.number) {
+        ctx.fillStyle = "#fff";
+        ctx.font = "800 " + Math.max(7, 8.5 * s) + "px Space Grotesk, Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(String(opt.number), 0, shY + 15 * s);
+      }
+      oval(0, shY + 2 * s, 3 * s, 3.4 * s, skin);
+      if (!opt.behind) {
+        stick(9 * s, shY + 6 * s, 15 * s, shY + 16 * s, 3.4 * s, skin);
+        oval(16 * s, shY + 18 * s, 4.6 * s, 3.6 * s, "#8b5a2b");
+        ctx.save();
+        ctx.translate(-9 * s, shY + 6 * s);
+        ctx.rotate(opt.pitch ? -0.9 + wind * 1.7 : -0.25);
+        stick(0, 0, -11 * s, 2 * s, 3.2 * s, skin);
+        oval(-12 * s, 2 * s, 2.1 * s, 2.1 * s, skin);
+        ctx.restore();
+      } else {
+        stick(-12 * s, shY + 6 * s, -18 * s, shY + 16 * s, 4 * s, jersey);
+        oval(-19 * s, shY + 17 * s, 3.2 * s, 2.8 * s, skin);
+      }
+      if (opt.behind) {
+        oval(0, headY + 4 * s, 5.5 * s, 4 * s, skin);
+        const helm = ctx.createLinearGradient(-12 * s, headY - 10 * s, 12 * s, headY + 8 * s);
+        helm.addColorStop(0, "#7f1d1d");
+        helm.addColorStop(0.5, "#dc2626");
+        helm.addColorStop(1, "#7f1d1d");
+        oval(0, headY - 2 * s, 10 * s, 9 * s, helm);
+        ctx.fillStyle = "#111827";
+        ctx.fillRect(-11 * s, headY + 2 * s, 22 * s, 3.5 * s);
+        oval(-9 * s, headY + 3 * s, 3.2 * s, 3.8 * s, "#7f1d1d");
+        oval(9 * s, headY + 3 * s, 3.2 * s, 3.8 * s, "#7f1d1d");
+        ctx.fillStyle = "rgba(255,255,255,0.22)";
+        ctx.beginPath();
+        ctx.ellipse(-3 * s, headY - 5 * s, 3.2 * s, 1.6 * s, -0.4, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (opt.mask) {
+        oval(0, headY, 8 * s, 8.4 * s, "#111827");
+        ctx.strokeStyle = "#d1d5db";
+        ctx.lineWidth = Math.max(1.2, 1.6 * s);
+        ctx.beginPath();
+        ctx.arc(0, headY, 6.5 * s, 0.2, Math.PI - 0.2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-4 * s, headY - 1 * s);
+        ctx.lineTo(-4 * s, headY + 5 * s);
+        ctx.moveTo(0, headY - 1 * s);
+        ctx.lineTo(0, headY + 5 * s);
+        ctx.moveTo(4 * s, headY - 1 * s);
+        ctx.lineTo(4 * s, headY + 5 * s);
+        ctx.stroke();
+        oval(0, headY + 4 * s, 3.4 * s, 2.4 * s, skin);
+      } else {
+        oval(-6.4 * s, headY + 1 * s, 1.8 * s, 2.4 * s, skin);
+        oval(6.4 * s, headY + 1 * s, 1.8 * s, 2.4 * s, skin);
+        oval(0, headY, 7.2 * s, 8 * s, skin);
+        ctx.fillStyle = "#111827";
+        ctx.beginPath();
+        ctx.ellipse(0, headY - 4 * s, 7.4 * s, 4.4 * s, 0, Math.PI, 0);
+        ctx.fill();
+        ctx.fillRect(-7.4 * s, headY - 4.2 * s, 14.8 * s, 2.6 * s);
+        ctx.fillStyle = "#1f2937";
+        ctx.beginPath();
+        ctx.moveTo(-8 * s, headY - 1.6 * s);
+        ctx.lineTo(8 * s, headY - 1.6 * s);
+        ctx.lineTo(5 * s, headY + 0.4 * s);
+        ctx.lineTo(-5 * s, headY + 0.4 * s);
+        ctx.closePath();
+        ctx.fill();
+        if (s > 0.42) {
+          ctx.fillStyle = "#fff";
+          ctx.beginPath();
+          ctx.ellipse(-2.3 * s, headY + 0.6 * s, 1.5 * s, 1.2 * s, 0, 0, Math.PI * 2);
+          ctx.ellipse(2.3 * s, headY + 0.6 * s, 1.5 * s, 1.2 * s, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#1c1917";
+          ctx.beginPath();
+          ctx.arc(-2.2 * s, headY + 0.7 * s, 0.7 * s, 0, Math.PI * 2);
+          ctx.arc(2.2 * s, headY + 0.7 * s, 0.7 * s, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "rgba(80,40,20,0.55)";
+          ctx.lineWidth = Math.max(0.8, 0.9 * s);
+          ctx.beginPath();
+          ctx.moveTo(0, headY + 1.6 * s);
+          ctx.lineTo(0, headY + 3.6 * s);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(0, headY + 4.6 * s, 1.6 * s, 0.15, Math.PI - 0.15);
+          ctx.stroke();
+        }
+      }
       ctx.restore();
+    }
+
+    function drawDefense(w, h) {
+      FIELDERS.filter(function (spec) { return spec.id !== "p"; })
+        .map(function (spec) { return fielderSpot(w, h, spec); })
+        .sort(function (a, b) { return a.y - b.y; })
+        .forEach(function (spot) {
+          drawPerson(spot.x, spot.y, spot.scale, {
+            skin: spot.spec.skin,
+            number: spot.spec.num,
+            glove: true
+          });
+        });
+    }
+
+    function drawPitcher(w, h, t) {
+      const mound = along(w, h, park(w, h).moundT, 0);
+      drawPerson(mound.x, mound.y + 6, fielderScale(park(w, h).moundT), {
+        skin: "#d9a57a",
+        number: "1",
+        pitch: true,
+        wind: state.phase === "pitch" ? t : 0
+      });
     }
 
     function drawBatter(w, h, swinging) {
       const p = park(w, h);
       const x = p.homeX - 38;
-      const y = p.homeY + 8;
-      const skin = "#d9a57a";
-      const jersey = "#c81e1e";
-      const pants = "#e8edf4";
-      oval(x, y + 28, 20, 7, "rgba(0,0,0,0.28)");
-      stick(x - 7, y + 10, x - 11, y + 30, 8, pants);
-      stick(x + 6, y + 10, x + 9, y + 30, 8, pants);
-      stick(x - 11, y + 28, x - 12, y + 34, 4.2, "#f8fafc");
-      stick(x + 9, y + 28, x + 10, y + 34, 4.2, "#f8fafc");
-      ctx.strokeStyle = "#c81e1e";
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(x - 13, y + 30);
-      ctx.lineTo(x - 9, y + 30);
-      ctx.moveTo(x + 7, y + 30);
-      ctx.lineTo(x + 11, y + 30);
-      ctx.stroke();
-      oval(x - 12, y + 36, 5, 2.4, "#111827");
-      oval(x + 10, y + 36, 5, 2.4, "#111827");
-      const body = ctx.createLinearGradient(x - 18, y - 16, x + 18, y + 14);
-      body.addColorStop(0, "#ef4444");
-      body.addColorStop(0.5, jersey);
-      body.addColorStop(1, "#9f1239");
-      oval(x, y - 6, 17, 16, body);
-      ctx.fillStyle = body;
-      ctx.beginPath();
-      ctx.moveTo(x - 16, y - 4);
-      ctx.lineTo(x + 16, y - 4);
-      ctx.lineTo(x + 13, y + 14);
-      ctx.lineTo(x - 13, y + 14);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = "#111827";
-      ctx.fillRect(x - 13, y + 12, 26, 3);
-      ctx.fillStyle = "#fff";
-      ctx.font = "800 13px Space Grotesk, Inter, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("8", x, y + 6);
-      oval(x, y - 18, 7, 5, skin);
-      const helm = ctx.createLinearGradient(x - 14, y - 36, x + 14, y - 16);
-      helm.addColorStop(0, "#7f1d1d");
-      helm.addColorStop(0.5, "#b91c1c");
-      helm.addColorStop(1, "#7f1d1d");
-      oval(x, y - 28, 13, 12, helm);
-      ctx.fillStyle = "#111827";
-      ctx.fillRect(x - 14, y - 24, 28, 5);
-      oval(x - 11, y - 22, 4, 5, "#7f1d1d");
-      oval(x + 11, y - 22, 4, 5, "#7f1d1d");
-      ctx.fillStyle = "rgba(255,255,255,0.22)";
-      ctx.beginPath();
-      ctx.ellipse(x - 4, y - 32, 4, 2, -0.4, 0, Math.PI * 2);
-      ctx.fill();
-      stick(x - 14, y - 8, x - 22, y + 4, 5, jersey);
-      oval(x - 23, y + 6, 4, 3.4, skin);
+      const y = p.homeY + 10;
+      drawPerson(x, y, 1.15, { skin: "#d9a57a", number: "8", behind: true });
       ctx.save();
-      ctx.translate(x + 12, y - 4);
+      ctx.translate(x + 14, y - 28);
       ctx.rotate(swinging ? 1.42 : -1.18);
-      stick(2, 6, 6, 10, 4.6, skin);
-      const bat = ctx.createLinearGradient(0, 8, 0, -58);
+      stick(2, 8, 6, 12, 5, "#d9a57a");
+      const bat = ctx.createLinearGradient(0, 10, 0, -62);
       bat.addColorStop(0, "#6b3f1f");
-      bat.addColorStop(0.35, "#c4a574");
+      bat.addColorStop(0.4, "#c4a574");
       bat.addColorStop(1, "#e7d3a8");
       ctx.strokeStyle = bat;
-      ctx.lineWidth = 5;
+      ctx.lineWidth = 5.5;
       ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.moveTo(0, 8);
-      ctx.lineTo(0, -48);
+      ctx.moveTo(0, 10);
+      ctx.lineTo(0, -52);
       ctx.stroke();
-      oval(0, 10, 3.2, 3.2, "#4a2c14");
-      oval(0, -50, 4.4, 6, "#d6b27a");
+      oval(0, 12, 3.4, 3.4, "#4a2c14");
+      oval(0, -54, 4.6, 6.2, "#d6b27a");
       ctx.restore();
     }
 
     function drawCatcher(w, h) {
       const p = park(w, h);
-      const x = p.homeX + 2;
-      const y = p.homeY + 52;
-      const skin = "#d9a57a";
-      const jersey = "#c81e1e";
-      oval(x, y + 16, 24, 7, "rgba(0,0,0,0.3)");
-      stick(x - 10, y + 2, x - 16, y + 16, 7, "#1e293b");
-      stick(x + 10, y + 2, x + 16, y + 16, 7, "#1e293b");
-      oval(x - 16, y + 18, 6, 3, "#111827");
-      oval(x + 16, y + 18, 6, 3, "#111827");
-      ctx.fillStyle = "#9ca3af";
-      ctx.beginPath();
-      ctx.moveTo(x - 12, y - 8);
-      ctx.lineTo(x + 12, y - 8);
-      ctx.lineTo(x + 14, y + 8);
-      ctx.lineTo(x - 14, y + 8);
-      ctx.closePath();
-      ctx.fill();
-      oval(x, y - 4, 14, 11, jersey);
-      ctx.fillStyle = "#e5e7eb";
-      ctx.fillRect(x - 11, y - 10, 22, 5);
-      ctx.strokeStyle = "#6b7280";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x - 11, y - 10, 22, 12);
-      oval(x, y - 22, 9, 8, "#111827");
-      ctx.strokeStyle = "#9ca3af";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(x, y - 22, 8, 0.15, Math.PI - 0.15);
-      ctx.stroke();
-      ctx.fillStyle = skin;
-      ctx.beginPath();
-      ctx.arc(x, y - 19, 4, 0, Math.PI);
-      ctx.fill();
-      stick(x + 12, y - 6, x + 22, y + 2, 5, jersey);
-      oval(x + 24, y + 4, 7, 5.5, "#8b5a2b");
+      drawPerson(p.homeX + 2, p.homeY + 54, 1.05, {
+        skin: "#c68642",
+        number: "2",
+        crouch: 0.85,
+        mask: true
+      });
     }
 
     function drawBall(w, h) {
       if (state.phase === "pitch" && state.pitch) {
         const p = ballPos(w, h, state.t, state.pitch);
-        ctx.fillStyle = "#fff";
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = "#b91c1c";
-        ctx.lineWidth = Math.max(1, p.r * 0.12);
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r * 0.65, 0.3, 2.4);
-        ctx.stroke();
+        paintSoftball(p.x, p.y, p.r);
       }
-      if (state.flight) {
-        const reach = Math.max(0.2, state.flight.dist / 220);
-        const t = Math.min(1.2, state.flight.u * reach);
-        const p = along(w, h, Math.min(1.05, t), state.flight.side);
-        const lift = Math.sin(Math.min(1, t) * Math.PI) * (state.flight.kind === "homer" ? 70 : 28);
-        const r = Math.max(3, 8 - t * 5);
-        ctx.fillStyle = "#fff";
-        ctx.beginPath();
-        ctx.arc(p.x, p.y - lift, r, 0, Math.PI * 2);
-        ctx.fill();
+      if (state.flight && state.flight.kind !== "miss") {
+        const b = flightBall(w, h);
+        if (b) paintSoftball(b.x, b.y, b.r);
       }
     }
 
@@ -813,7 +940,7 @@
         ctx.textAlign = "center";
         ctx.fillText(state.call, w / 2, boxY + 28);
         ctx.font = "600 15px Inter, sans-serif";
-        ctx.fillStyle = state.call === "WHIFF" || state.call === "TAKE" || state.call === "WEAK OUT"
+        ctx.fillStyle = state.call === "WHIFF" || state.call === "TAKE" || state.call === "WEAK OUT" || state.call === "CAUGHT"
           ? "#fda4af"
           : state.call === "GONE" || state.feedback === "Perfect"
             ? "#fde68a"
@@ -840,15 +967,17 @@
         state.t += (dt / 1000) * (0.95 * (state.pitch ? state.pitch.speed : 1));
         if (state.t >= 1.05) applyResult({ kind: "miss", label: "TAKE", pts: 0, out: true, dist: 0 }, state.t);
       }
-      if (state.flight) state.flight.u = Math.min(1, state.flight.u + dt / 700);
+      if (state.flight && !state.flight.caught) state.flight.u = Math.min(1, state.flight.u + dt / 700);
       if (state.shake > 0) state.shake -= 1;
       if (state.flash > 0) state.flash -= 1;
 
       const w = canvas.width;
       const h = canvas.height;
+      if (state.phase === "result") checkCatch(w, h);
       ctx.save();
       if (state.shake) ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
       drawField(w, h);
+      drawDefense(w, h);
       drawPitcher(w, h, state.t);
       drawBall(w, h);
       drawBatter(w, h, state.phase === "result");

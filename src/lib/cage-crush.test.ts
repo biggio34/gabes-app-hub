@@ -7,6 +7,7 @@ import {
   emptyBoard,
   isCageCrushBlobKey,
   normalizeBoard,
+  airBallHitsFielder,
   swingWhy,
   upsertWeeklyScore,
 } from "./cage-crush.ts";
@@ -70,5 +71,14 @@ describe("swing feedback", () => {
     assert.equal(swingWhy({ kind: "foul", label: "FOUL" }, "SCREW", 0.84), "Weak contact · just off");
     assert.equal(swingWhy({ kind: "homer", label: "GONE" }, "FASTBALL", 0.82), "Perfect");
     assert.equal(swingWhy({ kind: "single", label: "SINGLE" }, "FASTBALL", 0.73), "A little early");
+  });
+});
+
+describe("air catch", () => {
+  it("is an out only when the airborne ball hits a fielder", () => {
+    const fielder = { x: 100, y: 200, scale: 1 };
+    assert.equal(airBallHitsFielder({ x: 100, y: 184, lift: 20, r: 6 }, fielder), true);
+    assert.equal(airBallHitsFielder({ x: 100, y: 184, lift: 3, r: 6 }, fielder), false);
+    assert.equal(airBallHitsFielder({ x: 200, y: 184, lift: 20, r: 6 }, fielder), false);
   });
 });
