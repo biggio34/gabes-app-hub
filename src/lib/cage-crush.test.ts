@@ -183,6 +183,14 @@ describe("air catch", () => {
     assert.equal(airBallHitsFielder(near, fielder, 0), false);
     assert.equal(airBallHitsFielder(near, fielder, OUTFIELD_RANGE_STEPS), true);
     assert.equal(airBallHitsFielder({ x: 220, y: 184, lift: 20, r: 6 }, fielder, OUTFIELD_RANGE_STEPS), false);
+    assert.equal(
+      airBallHitsFielder({ x: 150, y: 184, lift: 2, r: 6, liftMax: 70 }, fielder, OUTFIELD_RANGE_STEPS),
+      true,
+    );
+    assert.equal(
+      airBallHitsFielder({ x: 100, y: 184, lift: 2, r: 6, liftMax: 70 }, fielder, 0),
+      false,
+    );
     const chase = chaseTowardBall(near, fielder, OUTFIELD_RANGE_STEPS);
     assert.ok(chase.move > 0);
     assert.ok(chase.move <= 16 * OUTFIELD_RANGE_STEPS);

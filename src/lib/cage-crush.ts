@@ -458,7 +458,7 @@ export function isOutfielder(id: string) {
 
 export function fielderDrawScale(spec: { id?: string; t: number }) {
   const perspective = 0.34 + (1 - spec.t) * 0.72;
-  if (spec.id && isOutfielder(spec.id)) return Math.min(0.84, perspective * 1.58);
+  if (spec.id && isOutfielder(spec.id)) return Math.min(0.92, perspective * 1.85);
   if (spec.id === "p") return perspective * 0.88;
   if (spec.id) return perspective * 0.66;
   return perspective;
@@ -489,11 +489,12 @@ export function chaseTowardBall(
 }
 
 export function airBallHitsFielder(
-  ball: { x: number; y: number; lift: number; r: number },
+  ball: { x: number; y: number; lift: number; r: number; liftMax?: number },
   fielder: { x: number; y: number; scale: number },
   steps = 0,
 ) {
-  if (ball.lift < 6) return false;
+  const descendingFly = steps > 0 && (ball.liftMax || 0) >= 48;
+  if (ball.lift < 6 && !descendingFly) return false;
   const cx = fielder.x;
   const cy = fielder.y - 16 * fielder.scale;
   const reach = 18 * fielder.scale + ball.r + Math.max(0, steps) * FIELD_STEP * fielder.scale;

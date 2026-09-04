@@ -591,7 +591,7 @@
       const t = typeof spec === "number" ? spec : spec.t;
       const id = typeof spec === "number" ? "" : spec.id;
       const perspective = 0.34 + (1 - t) * 0.72;
-      if (id === "lf" || id === "cf" || id === "rf") return Math.min(0.84, perspective * 1.58);
+      if (id === "lf" || id === "cf" || id === "rf") return Math.min(0.92, perspective * 1.85);
       if (id === "p") return perspective * 0.88;
       if (id) return perspective * 0.66;
       return perspective;
@@ -626,11 +626,12 @@
       const frac = t / Math.max(0.2, state.flight.maxDepth || 1);
       const lift = Math.sin(Math.min(1, frac) * Math.PI) * (state.flight.liftMax || 28);
       const r = Math.max(3.5, 9 - t * 4);
-      return { x: p.x, y: p.y - lift, lift: lift, r: r, t: t };
+      return { x: p.x, y: p.y - lift, lift: lift, r: r, t: t, liftMax: state.flight.liftMax || 0 };
     }
 
     function airBallHitsFielder(ball, fielder, steps) {
-      if (ball.lift < 6) return false;
+      const descendingFly = (steps || 0) > 0 && (ball.liftMax || 0) >= 48;
+      if (ball.lift < 6 && !descendingFly) return false;
       const cx = fielder.x;
       const cy = fielder.y - 16 * fielder.scale;
       const reach = 18 * fielder.scale + ball.r + Math.max(0, steps || 0) * FIELD_STEP * fielder.scale;
