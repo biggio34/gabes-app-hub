@@ -281,19 +281,20 @@ export function sheetGroups(book: WristBook, version: WristVersion | null): Wris
   for (const cell of version.cells) {
     if (!cell.callId) continue;
     const call = callById(book, cell.callId);
-    if (!call || call.kind !== kind) continue;
+    if (!call) continue;
     const list = byCall.get(call.id) || [];
     list.push(sheetCode(cell.grid, cell.row, cell.col, layout.signStart, layout.rowStart));
     byCall.set(call.id, list);
   }
-  return book.library
-    .filter((call) => call.kind === kind && byCall.has(call.id))
-    .map((call) => ({
-      callId: call.id,
-      name: call.name,
-      short: call.short,
-      codes: (byCall.get(call.id) || []).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
-    }));
+  const listed = book.library.filter((call) => byCall.has(call.id));
+  const preferred = listed.filter((call) => call.kind === kind);
+  const rest = listed.filter((call) => call.kind !== kind);
+  return [...preferred, ...rest].map((call) => ({
+    callId: call.id,
+    name: call.name,
+    short: call.short,
+    codes: (byCall.get(call.id) || []).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+  }));
 }
 
 const DEFAULT_PITCHES: Array<[string, string, string]> = [

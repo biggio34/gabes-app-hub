@@ -581,13 +581,14 @@
       (version.cells || []).forEach(function (cell) {
         if (!cell.callId) return;
         const call = callById(cell.callId);
-        if (!call || call.kind !== kind) return;
+        if (!call) return;
         if (!byCall[call.id]) byCall[call.id] = [];
         byCall[call.id].push(sheetCode(cell.grid || 0, cell.row, cell.col, layout));
       });
-      return book.library.filter(function (call) {
-        return call.kind === kind && byCall[call.id];
-      }).map(function (call) {
+      const listed = book.library.filter(function (call) { return byCall[call.id]; });
+      const preferred = listed.filter(function (call) { return call.kind === kind; });
+      const rest = listed.filter(function (call) { return call.kind !== kind; });
+      return preferred.concat(rest).map(function (call) {
         return {
           callId: call.id,
           name: call.name,
