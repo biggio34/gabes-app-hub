@@ -11,6 +11,7 @@ import {
   flightLift,
   pitcherCanCatch,
   qualityFromT,
+  flightMaxDepth,
   smashCarry,
   smashValue,
   sprayFromTiming,
@@ -75,16 +76,17 @@ describe("swing feedback", () => {
     assert.equal(swingWhy({ kind: "miss", label: "WHIFF" }, "CHANGE", 0.94), "Late on the change");
     assert.equal(swingWhy({ kind: "out", label: "WEAK OUT" }, "DROP", 0.7), "Weak contact · a little early");
     assert.equal(swingWhy({ kind: "foul", label: "FOUL" }, "SCREW", 0.84), "Weak contact · just off");
-    assert.equal(swingWhy({ kind: "homer", label: "GONE" }, "FASTBALL", 0.82), "Perfect · up the middle");
-    assert.equal(swingWhy({ kind: "single", label: "SINGLE" }, "FASTBALL", 0.73), "A little early · ripped to left");
+    assert.equal(swingWhy({ kind: "homer", label: "GONE" }, "FASTBALL", 0.82), "Front of the plate · up the middle");
+    assert.equal(swingWhy({ kind: "single", label: "SINGLE" }, "FASTBALL", 0.73), "Out in front · left field");
   });
 });
 
 describe("spray and pitcher", () => {
-  it("sends early pulls left, late swings right, and on-time shots over the pitcher", () => {
-    assert.ok(sprayFromTiming(0.73, "double") < -0.5);
-    assert.ok(sprayFromTiming(0.91, "double") > 0.5);
-    assert.ok(Math.abs(sprayFromTiming(0.82, "double")) < 0.1);
+  it("sprays out-front left, front-of-plate middle, and mid-plate right", () => {
+    assert.ok(sprayFromTiming(0.73, "double") < -0.45);
+    assert.ok(sprayFromTiming(0.91, "double") > 0.45);
+    assert.ok(Math.abs(sprayFromTiming(0.82, "double")) < 0.12);
+    assert.ok(Math.abs(sprayFromTiming(0.8, "single")) < 0.12);
     assert.ok(qualityFromT(0.73) > 0.65);
     assert.ok(flightLift("single", 0.82) > flightLift("single", 0.73));
     assert.equal(pitcherCanCatch({ lift: 40 }, { kind: "single", side: 0 }), false);
@@ -102,6 +104,7 @@ describe("smash factor", () => {
     const upNearBottom = smashValue(0.15) - smashValue(0.05);
     assert.ok(upNearTop > upNearBottom);
     assert.ok(smashCarry(200, 1) > smashCarry(200, 0.2));
+    assert.ok(flightMaxDepth(smashCarry(200, 1)) > flightMaxDepth(smashCarry(200, 0.2)));
   });
 });
 

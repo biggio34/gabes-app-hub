@@ -304,17 +304,24 @@
 
     const SWEET_T = 0.82;
     const SWING_WINDOW = 0.3;
+    const PLATE_FRONT = 0.76;
+    const PLATE_MIDDLE = 0.88;
+    const FLIGHT_SPEED = 0.36;
 
     function qualityFromT(t) {
       return Math.max(0, 1 - Math.abs(t - SWEET_T) / SWING_WINDOW);
     }
 
     function sprayFromTiming(t, kind) {
-      const delta = t - SWEET_T;
-      if (kind === "foul") return delta < 0 ? -1.22 : 1.22;
+      if (kind === "foul") return t < SWEET_T ? -1.22 : 1.22;
       if (kind === "miss") return 0;
-      if (Math.abs(delta) <= 0.035) return delta * 1.6;
-      return Math.max(-1.05, Math.min(1.05, delta / 0.12));
+      if (t < PLATE_FRONT) return Math.max(-1.05, -0.42 - (PLATE_FRONT - t) * 4);
+      if (t <= PLATE_MIDDLE) return (t - SWEET_T) * 0.45;
+      return Math.min(1.05, 0.4 + (t - PLATE_MIDDLE) * 4);
+    }
+
+    function flightMaxDepth(dist) {
+      return Math.max(0.28, Math.min(1.18, dist / 260));
     }
 
     function flightLift(kind, t) {
@@ -347,9 +354,9 @@
       if (hit.kind === "foul" || hit.kind === "out") {
         return "Weak contact · " + (abs <= 0.07 ? "just off" : "a little " + side);
       }
-      if (abs <= 0.035) return "Perfect · up the middle";
-      if (abs <= 0.07) return "A hair " + side + " · " + field + " field";
-      return "A little " + side + " · ripped to " + field;
+      if (t < PLATE_FRONT) return "Out in front · left field";
+      if (t <= PLATE_MIDDLE) return "Front of the plate · up the middle";
+      return "Middle of the plate · right field";
     }
 
     function gradeContact(quality, pitch) {
@@ -397,12 +404,15 @@
       state.feedback = why;
       state.result = hit.label + (hit.pts ? "  +" + hit.pts : "") + "  ·  " + why;
       state.call = hit.label;
+      const carry = smashCarry(hit.dist, state.smash);
+      const maxDepth = flightMaxDepth(carry);
       state.flight = {
         kind: hit.kind,
-        dist: smashCarry(hit.dist, state.smash),
+        dist: carry,
         pts: hit.pts,
         wasOut: !!hit.out,
-        u: 0,
+        depth: 0,
+        maxDepth: maxDepth,
         caught: false,
         catchAt: null,
         liftMax: smashLaunch(flightLift(hit.kind, at), state.smash),
@@ -410,7 +420,7 @@
       };
       burst(hit.kind);
       hud();
-      scheduleNext(hit.kind === "homer" ? 1600 : 1300);
+      scheduleNext(Math.round(maxDepth / FLIGHT_SPEED * 1000) + 500);
     }
 
     function scheduleNext(ms) {
@@ -484,11 +494,11 @@
     function flightBall(w, h) {
       if (!state.flight || state.flight.kind === "miss") return null;
       if (state.flight.caught && state.flight.catchAt) return state.flight.catchAt;
-      const reach = Math.max(0.2, state.flight.dist / 220);
-      const t = Math.min(1.2, state.flight.u * reach);
+      const t = Math.min(state.flight.maxDepth || 1, state.flight.depth || 0);
       const p = along(w, h, Math.min(1.05, t), state.flight.side);
-      const lift = Math.sin(Math.min(1, t) * Math.PI) * (state.flight.liftMax || 28);
-      const r = Math.max(3, 8 - t * 5);
+      const frac = t / Math.max(0.2, state.flight.maxDepth || 1);
+      const lift = Math.sin(Math.min(1, frac) * Math.PI) * (state.flight.liftMax || 28);
+      const r = Math.max(3.5, 9 - t * 4);
       return { x: p.x, y: p.y - lift, lift: lift, r: r, t: t };
     }
 
@@ -1039,7 +1049,7 @@
         ctx.font = "600 15px Inter, sans-serif";
         ctx.fillStyle = state.call === "WHIFF" || state.call === "TAKE" || state.call === "WEAK OUT" || state.call === "CAUGHT"
           ? "#fda4af"
-          : state.call === "GONE" || state.feedback.indexOf("Perfect") === 0
+          : state.call === "GONE" || state.feedback.indexOf("up the middle") !== -1
             ? "#fde68a"
             : "#e2e8f0";
         ctx.fillText(state.feedback, w / 2, boxY + 50);
@@ -1068,7 +1078,12 @@
         state.t += (dt / 1000) * (0.95 * (state.pitch ? state.pitch.speed : 1));
         if (state.t >= 1.05) applyResult({ kind: "miss", label: "TAKE", pts: 0, out: true, dist: 0 }, state.t);
       }
-      if (state.flight && !state.flight.caught) state.flight.u = Math.min(1, state.flight.u + dt / 700);
+      if (state.flight && !state.flight.caught) {
+        state.flight.depth = Math.min(
+          state.flight.maxDepth || 1,
+          (state.flight.depth || 0) + (dt / 1000) * FLIGHT_SPEED
+        );
+      }
       if (state.shake > 0) state.shake -= 1;
       if (state.flash > 0) state.flash -= 1;
 

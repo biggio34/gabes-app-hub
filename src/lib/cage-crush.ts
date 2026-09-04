@@ -184,12 +184,20 @@ export function qualityFromT(t: number) {
   return Math.max(0, 1 - Math.abs(t - SWING_SWEET_T) / SWING_WINDOW);
 }
 
+export const PLATE_FRONT = 0.76;
+export const PLATE_MIDDLE = 0.88;
+export const FLIGHT_SPEED = 0.36;
+
 export function sprayFromTiming(t: number, kind: string) {
-  const delta = t - SWING_SWEET_T;
-  if (kind === "foul") return delta < 0 ? -1.22 : 1.22;
+  if (kind === "foul") return t < SWING_SWEET_T ? -1.22 : 1.22;
   if (kind === "miss") return 0;
-  if (Math.abs(delta) <= 0.035) return delta * 1.6;
-  return Math.max(-1.05, Math.min(1.05, delta / 0.12));
+  if (t < PLATE_FRONT) return Math.max(-1.05, -0.42 - (PLATE_FRONT - t) * 4);
+  if (t <= PLATE_MIDDLE) return (t - SWING_SWEET_T) * 0.45;
+  return Math.min(1.05, 0.4 + (t - PLATE_MIDDLE) * 4);
+}
+
+export function flightMaxDepth(dist: number) {
+  return Math.max(0.28, Math.min(1.18, dist / 260));
 }
 
 export function flightLift(kind: string, t: number) {
@@ -245,9 +253,9 @@ export function swingWhy(
   if (hit.kind === "foul" || hit.kind === "out") {
     return "Weak contact · " + (abs <= 0.07 ? "just off" : "a little " + side);
   }
-  if (abs <= 0.035) return "Perfect · up the middle";
-  if (abs <= 0.07) return "A hair " + side + " · " + field + " field";
-  return "A little " + side + " · ripped to " + field;
+  if (t < PLATE_FRONT) return "Out in front · left field";
+  if (t <= PLATE_MIDDLE) return "Front of the plate · up the middle";
+  return "Middle of the plate · right field";
 }
 
 export function airBallHitsFielder(
