@@ -475,8 +475,16 @@
       fairPath(ctx, w, h, 1);
       ctx.fill();
 
+      const b3 = along(w, h, 0.5, -1);
+      const b1 = along(w, h, 0.5, 1);
+      const b2 = along(w, h, 0.62, 0);
       ctx.fillStyle = "#d2b48c";
-      fairPath(ctx, w, h, 0.46);
+      ctx.beginPath();
+      ctx.moveTo(p.homeX, p.homeY);
+      ctx.lineTo(b3.x, b3.y);
+      ctx.lineTo(b2.x, b2.y);
+      ctx.lineTo(b1.x, b1.y);
+      ctx.closePath();
       ctx.fill();
 
       ctx.fillStyle = "#c4a574";
@@ -491,10 +499,6 @@
       ctx.fill();
       ctx.fillStyle = "#fff";
       ctx.fillRect(mound.x - 11, mound.y + 5, 22, 3);
-
-      const b3 = along(w, h, 0.48, -1);
-      const b1 = along(w, h, 0.48, 1);
-      const b2 = along(w, h, 0.72, 0);
       ctx.fillStyle = "#fff";
       [[b3.x + 10, b3.y + 8], [b1.x - 10, b1.y + 8], [b2.x, b2.y + 10]].forEach(function (pt) {
         ctx.save();
@@ -569,25 +573,29 @@
       ctx.fill();
       ctx.fillStyle = "#b91c1c";
       ctx.beginPath();
-      ctx.ellipse(x, y - 10, 16, 12, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y - 8, 18, 14, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillRect(x - 14, y - 8, 28, 24);
+      ctx.fillRect(x - 16, y - 6, 32, 24);
+      ctx.fillStyle = "#fff";
+      ctx.font = "800 11px Space Grotesk, Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("8", x, y + 8);
       ctx.fillStyle = "#7f1d1d";
       ctx.beginPath();
-      ctx.ellipse(x, y - 22, 12, 10, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y - 24, 13, 11, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#111827";
-      ctx.fillRect(x - 13, y - 18, 26, 5);
+      ctx.fillRect(x - 14, y - 20, 28, 6);
       ctx.fillStyle = "#0f172a";
-      ctx.fillRect(x - 12, y + 14, 9, 16);
-      ctx.fillRect(x + 3, y + 14, 9, 16);
+      ctx.fillRect(x - 13, y + 16, 10, 16);
+      ctx.fillRect(x + 3, y + 16, 10, 16);
       ctx.save();
-      ctx.translate(x + 8, y - 4);
-      ctx.rotate(swinging ? 1.45 : -1.15);
+      ctx.translate(x + 10, y - 2);
+      ctx.rotate(swinging ? 1.45 : -1.2);
       ctx.fillStyle = "#e2e8f0";
-      ctx.fillRect(-2, -48, 5, 52);
+      ctx.fillRect(-2, -50, 5, 54);
       ctx.fillStyle = "#7f1d1d";
-      ctx.fillRect(-3, -54, 7, 8);
+      ctx.fillRect(-3, -56, 7, 8);
       ctx.restore();
     }
 
