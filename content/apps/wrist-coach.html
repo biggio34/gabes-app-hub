@@ -53,7 +53,7 @@
         </div>
         <div class="min-w-0">
           <h1 class="title-font text-2xl font-semibold">Wrist Coach</h1>
-          <p id="book-subtitle" class="text-sm text-slate-400">Your signs. Wrist card + coach key.</p>
+          <p id="book-subtitle" class="text-sm text-slate-400"></p>
         </div>
       </div>
       <div class="flex flex-wrap justify-end gap-2 shrink-0">
@@ -72,70 +72,76 @@
     <p id="load-error" class="hidden text-sm text-red-400"></p>
 
     <section class="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-5">
-      <div class="flex flex-wrap items-end justify-between gap-3">
-        <label class="grid gap-1.5 text-sm min-w-[12rem] flex-1">
-          Book title
-          <input id="book-title" maxlength="60" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
-        </label>
-        <p class="text-xs text-slate-500 max-w-sm">
-          This book is yours only. Shuffle a new version when a card might have been seen.
-        </p>
+      <label class="grid gap-1.5 text-sm max-w-md">
+        Book title
+        <input id="book-title" maxlength="60" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+      </label>
+    </section>
+
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+      <h2 class="font-semibold">Call library</h2>
+      <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div>
+          <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Pitches</p>
+          <div id="pitch-list" class="grid gap-2"></div>
+          <form id="add-pitch" class="mt-3 grid gap-2">
+            <input id="pitch-name" placeholder="New pitch" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
+            <div class="flex gap-2">
+              <input id="pitch-short" maxlength="4" placeholder="FB" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+              <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add</button>
+            </div>
+          </form>
+        </div>
+        <div>
+          <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Locations</p>
+          <div id="location-list" class="grid gap-2"></div>
+          <form id="add-location" class="mt-3 grid gap-2">
+            <input id="location-name" placeholder="New location" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
+            <div class="flex gap-2">
+              <input id="location-short" maxlength="4" placeholder="IN" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+              <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add</button>
+            </div>
+          </form>
+        </div>
+        <div>
+          <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Offense</p>
+          <div id="play-list" class="grid gap-2"></div>
+          <form id="add-play" class="mt-3 grid gap-2">
+            <input id="play-name" placeholder="New play" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
+            <div class="flex gap-2">
+              <input id="play-short" maxlength="4" placeholder="HA" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+              <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add</button>
+            </div>
+          </form>
+        </div>
+        <div>
+          <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Defense</p>
+          <div id="defense-list" class="grid gap-2"></div>
+          <form id="add-defense" class="mt-3 grid gap-2">
+            <input id="defense-name" placeholder="New call" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
+            <div class="flex gap-2">
+              <input id="defense-short" maxlength="4" placeholder="HLD" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+              <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add</button>
+            </div>
+          </form>
+        </div>
       </div>
     </section>
 
-    <div class="grid gap-6 lg:grid-cols-2">
-      <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
-        <div>
-          <h2 class="font-semibold">Call library</h2>
-          <p class="text-sm text-slate-400">Pitches and a few offense plays. Short code is what fits on the card.</p>
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="font-semibold">Wrist card</h2>
+        <div class="flex gap-2">
+          <button type="button" id="view-player" class="rounded-full px-3 py-1 text-xs font-semibold bg-red-700 text-white">Player</button>
+          <button type="button" id="view-coach" class="rounded-full px-3 py-1 text-xs font-semibold bg-slate-800 text-slate-400">Coach</button>
         </div>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <div>
-            <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Pitches</p>
-            <div id="pitch-list" class="grid gap-2"></div>
-            <form id="add-pitch" class="mt-3 grid gap-2">
-              <input id="pitch-name" placeholder="New pitch" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
-              <div class="flex gap-2">
-                <input id="pitch-short" maxlength="4" placeholder="FB" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
-                <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add pitch</button>
-              </div>
-            </form>
-          </div>
-          <div>
-            <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Offense</p>
-            <div id="play-list" class="grid gap-2"></div>
-            <form id="add-play" class="mt-3 grid gap-2">
-              <input id="play-name" placeholder="New play" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
-              <div class="flex gap-2">
-                <input id="play-short" maxlength="4" placeholder="BNT" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
-                <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add play</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </section>
-
-      <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="font-semibold">Wrist card</h2>
-            <p class="text-sm text-slate-400">2.75 × 3.5 in · players see codes only</p>
-          </div>
-          <div class="flex gap-2">
-            <button type="button" id="view-player" class="rounded-full px-3 py-1 text-xs font-semibold bg-red-700 text-white">Player</button>
-            <button type="button" id="view-coach" class="rounded-full px-3 py-1 text-xs font-semibold bg-slate-800 text-slate-400">Coach</button>
-          </div>
-        </div>
-        <div id="card-preview" class="flex justify-center"></div>
-      </section>
-    </div>
+      </div>
+      <div id="card-preview" class="flex justify-center"></div>
+    </section>
 
     <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 class="font-semibold">Versions</h2>
-          <p class="text-sm text-slate-400">Shuffle a new card and keep the old one. Switch when you change the signs.</p>
-        </div>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="font-semibold">Versions</h2>
         <button type="button" id="shuffle-version" class="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold hover:bg-red-600">
           Shuffle new version
         </button>
@@ -144,10 +150,7 @@
     </section>
 
     <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
-      <div>
-        <h2 class="font-semibold">Coach key</h2>
-        <p class="text-sm text-slate-400">Clipboard sheet. Do not show this to players.</p>
-      </div>
+      <h2 class="font-semibold">Coach key</h2>
       <div id="coach-key" class="rounded-2xl border border-slate-800 bg-slate-950 p-4 overflow-x-auto"></div>
     </section>
   </div>
@@ -164,13 +167,21 @@
       ["pitch-sc", "Screw", "SC"],
       ["pitch-dc", "Drop curve", "DC"],
       ["pitch-rc", "Rise curve", "RC"],
-      ["pitch-pl", "Peel", "PL"],
-      ["pitch-in", "Inside", "IN"],
-      ["pitch-out", "Outside", "OUT"],
-      ["pitch-up", "Up", "UP"],
-      ["pitch-dn", "Down", "DN"]
+      ["pitch-pl", "Peel", "PL"]
     ];
-    const DEFAULT_PLAYS = [
+    const DEFAULT_LOCATIONS = [
+      ["loc-in", "Inside", "IN"],
+      ["loc-out", "Outside", "OUT"],
+      ["loc-up", "Up", "UP"],
+      ["loc-dn", "Down", "DN"],
+      ["loc-ui", "Up and in", "UI"],
+      ["loc-ua", "Up and away", "UA"],
+      ["loc-di", "Down and in", "DI"],
+      ["loc-da", "Down and away", "DA"],
+      ["loc-mid", "Middle", "MID"]
+    ];
+    const DEFAULT_OFFENSE = [
+      ["play-ha", "Hit away", "HA"],
       ["play-bnt", "Bunt", "BNT"],
       ["play-slp", "Slap", "SLP"],
       ["play-stl", "Steal", "STL"],
@@ -180,7 +191,30 @@
       ["play-swg", "Swing", "SWG"],
       ["play-dly", "Delay steal", "DLY"],
       ["play-fbn", "Fake bunt", "FBN"],
-      ["play-ssq", "Safety squeeze", "SSQ"]
+      ["play-ssq", "Safety squeeze", "SSQ"],
+      ["play-sac", "Sacrifice", "SAC"],
+      ["play-slh", "Slash", "SLH"],
+      ["play-dbl", "Double steal", "DBL"],
+      ["play-s2", "Steal second", "S2"],
+      ["play-s3", "Steal third", "S3"],
+      ["play-bfh", "Bunt for hit", "BFH"]
+    ];
+    const DEFAULT_DEFENSE = [
+      ["def-hld", "Hold", "HLD"],
+      ["def-thr", "Throw through", "THR"],
+      ["def-cut", "Cut", "CUT"],
+      ["def-pk", "Pickoff", "PK"],
+      ["def-ibb", "Intentional walk", "IBB"],
+      ["def-ifi", "Infield in", "IFI"],
+      ["def-ifb", "Infield back", "IFB"],
+      ["def-cin", "Corners in", "CIN"],
+      ["def-po", "Pitch out", "PO"],
+      ["def-bnd", "Bunt defense", "BND"],
+      ["def-plt", "Play at plate", "PLT"],
+      ["def-p2", "Play at two", "P2"],
+      ["def-c2", "Cut 2", "C2"],
+      ["def-13", "1st and 3rd", "13"],
+      ["def-ns", "No steal", "NS"]
     ];
 
     let book = null;
@@ -193,12 +227,24 @@
       return hub.userName || "Coach";
     }
 
+    function rowsToCalls(kind, rows) {
+      return rows.map(function (row) {
+        return { id: row[0], kind: kind, name: row[1], short: row[2] };
+      });
+    }
+
     function defaultLibrary() {
-      return DEFAULT_PITCHES.map(function (row) {
-        return { id: row[0], kind: "pitch", name: row[1], short: row[2] };
-      }).concat(DEFAULT_PLAYS.map(function (row) {
-        return { id: row[0], kind: "offense", name: row[1], short: row[2] };
-      }));
+      return rowsToCalls("pitch", DEFAULT_PITCHES)
+        .concat(rowsToCalls("location", DEFAULT_LOCATIONS))
+        .concat(rowsToCalls("offense", DEFAULT_OFFENSE))
+        .concat(rowsToCalls("defense", DEFAULT_DEFENSE));
+    }
+
+    function kindLabel(kind) {
+      if (kind === "location") return "Location";
+      if (kind === "offense") return "Offense";
+      if (kind === "defense") return "Defense";
+      return "Pitch";
     }
 
     function nextVersionName(versions) {
@@ -457,14 +503,13 @@
             '<td class="py-1.5 pr-3 font-semibold">' + escapeHtml(cell.code) + '</td>' +
             '<td class="py-1.5 pr-3 text-slate-400">' + escapeHtml(call ? call.short : "") + '</td>' +
             '<td class="py-1.5">' + escapeHtml(call ? call.name : "—") + '</td>' +
-            '<td class="py-1.5 text-slate-500">' + escapeHtml(call ? (call.kind === "offense" ? "Offense" : "Pitch") : "") + '</td>' +
+            '<td class="py-1.5 text-slate-500">' + escapeHtml(call ? kindLabel(call.kind) : "") + '</td>' +
           '</tr>'
         );
       }).join("");
       mount.innerHTML =
-        '<div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">' +
+        '<div class="mb-3">' +
           '<p class="text-sm font-semibold">' + escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</p>' +
-          '<p class="text-xs text-amber-300">Coach clipboard — keep off the field of view</p>' +
         '</div>' +
         '<div class="mb-4 flex justify-center">' + wristCardHtml(version, true, "") + '</div>' +
         '<table class="w-full text-sm">' +
@@ -485,7 +530,7 @@
       }).join("");
       const cardPage =
         '<section class="print-page print-cards">' +
-          '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">Cut on the card edges. Players see codes only. ' +
+          '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
             escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</p>' +
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;justify-items:center">' + cards + '</div>' +
         '</section>';
@@ -496,14 +541,13 @@
             '<td style="padding:4px 10px 4px 0;font-weight:700">' + escapeHtml(cell.code) + '</td>' +
             '<td style="padding:4px 10px 4px 0">' + escapeHtml(call ? call.short : "") + '</td>' +
             '<td style="padding:4px 10px 4px 0">' + escapeHtml(call ? call.name : "—") + '</td>' +
-            '<td style="padding:4px 0;color:#475569">' + escapeHtml(call ? (call.kind === "offense" ? "Offense" : "Pitch") : "") + '</td>' +
+            '<td style="padding:4px 0;color:#475569">' + escapeHtml(call ? kindLabel(call.kind) : "") + '</td>' +
           '</tr>'
         );
       }).join("");
       const keyPage =
         '<section class="print-page print-key" style="color:#0f172a">' +
-          '<p style="margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#b45309">Coach key — clipboard only</p>' +
-          '<h1 style="margin:4px 0 12px;font-size:22px">' + escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</h1>' +
+          '<h1 style="margin:0 0 12px;font-size:22px">' + escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</h1>' +
           '<div style="display:flex;gap:24px;align-items:flex-start">' +
             wristCardHtml(version, true, "") +
             '<table style="font-size:13px;border-collapse:collapse">' +
@@ -520,9 +564,11 @@
     function render() {
       if (!book) return;
       document.getElementById("book-title").value = book.title || "";
-      document.getElementById("book-subtitle").textContent = book.title + " · your book only";
+      document.getElementById("book-subtitle").textContent = book.title || "";
       renderLibraryKind("pitch", "pitch-list");
+      renderLibraryKind("location", "location-list");
       renderLibraryKind("offense", "play-list");
+      renderLibraryKind("defense", "defense-list");
       renderCard();
       renderVersions();
       renderCoachKey();
@@ -565,10 +611,26 @@
       document.getElementById("play-name").value = "";
       document.getElementById("play-short").value = "";
     });
+    document.getElementById("add-location").addEventListener("submit", function (event) {
+      event.preventDefault();
+      addCall("location", document.getElementById("location-name").value, document.getElementById("location-short").value);
+      document.getElementById("location-name").value = "";
+      document.getElementById("location-short").value = "";
+    });
+    document.getElementById("add-defense").addEventListener("submit", function (event) {
+      event.preventDefault();
+      addCall("defense", document.getElementById("defense-name").value, document.getElementById("defense-short").value);
+      document.getElementById("defense-name").value = "";
+      document.getElementById("defense-short").value = "";
+    });
     document.getElementById("pitch-list").addEventListener("change", onCallEdit);
+    document.getElementById("location-list").addEventListener("change", onCallEdit);
     document.getElementById("play-list").addEventListener("change", onCallEdit);
+    document.getElementById("defense-list").addEventListener("change", onCallEdit);
     document.getElementById("pitch-list").addEventListener("click", onCallDelete);
+    document.getElementById("location-list").addEventListener("click", onCallDelete);
     document.getElementById("play-list").addEventListener("click", onCallDelete);
+    document.getElementById("defense-list").addEventListener("click", onCallDelete);
     function onCallEdit(event) {
       const id = event.target.getAttribute("data-call-name") || event.target.getAttribute("data-call-short");
       if (!id) return;

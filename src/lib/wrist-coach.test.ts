@@ -44,11 +44,71 @@ describe("wrist coach book", () => {
     assert.notEqual(wristCoachBlobKey("user-a"), wristCoachBlobKey("user-b"));
   });
 
-  it("ships pitches and a few offense plays", () => {
+  it("ships four call groups and keeps locations off the pitch list", () => {
     const library = defaultLibrary();
+    const kinds = new Set(library.map((item) => item.kind));
+    assert.deepEqual([...kinds].sort(), ["defense", "location", "offense", "pitch"]);
     assert.ok(library.some((item) => item.kind === "pitch" && item.name === "Fastball"));
+    assert.equal(
+      library.some((item) => item.kind === "pitch" && ["IN", "OUT", "UP", "DN"].includes(item.short)),
+      false,
+    );
+    assert.ok(library.some((item) => item.kind === "location" && item.short === "IN"));
+    assert.ok(library.some((item) => item.kind === "location" && item.short === "UA"));
+    assert.ok(library.some((item) => item.kind === "offense" && item.name === "Hit away"));
     assert.ok(library.some((item) => item.kind === "offense" && item.name === "Bunt"));
-    assert.ok(library.filter((item) => item.kind === "offense").length >= 4);
+    assert.ok(library.filter((item) => item.kind === "offense").length >= 12);
+    assert.ok(library.some((item) => item.kind === "defense" && item.name === "Hold"));
+    assert.ok(library.some((item) => item.kind === "defense" && item.name === "Throw through"));
+  });
+
+  it("moves old IN/OUT/UP/DN pitches into locations and fills the new groups", () => {
+    const book = normalizeBook(
+      {
+        title: "Old book",
+        library: [
+          { id: "pitch-fb", kind: "pitch", name: "Fastball", short: "FB" },
+          { id: "pitch-in", kind: "pitch", name: "Inside", short: "IN" },
+          { id: "play-bnt", kind: "offense", name: "Bunt", short: "BNT" },
+        ],
+        versions: [
+          {
+            id: "ver-1",
+            name: "Version A",
+            createdAt: 1,
+            cells: [{ row: 0, col: 0, code: "11", callId: "pitch-in" }],
+          },
+        ],
+      },
+      "user-9",
+    );
+    assert.equal(book.library.find((item) => item.id === "pitch-in")?.kind, "location");
+    assert.ok(book.library.some((item) => item.kind === "location" && item.short === "DN"));
+    assert.ok(book.library.some((item) => item.kind === "offense" && item.name === "Hit away"));
+    assert.ok(book.library.some((item) => item.kind === "defense" && item.name === "Infield in"));
+    assert.equal(book.library.find((item) => item.id === "pitch-fb")?.kind, "pitch");
+  });
+
+  it("does not re-add deleted defense after a four-group book is saved", () => {
+    const full = defaultLibrary().filter((item) => item.name !== "Hold");
+    const book = normalizeBook(
+      {
+        title: "Current",
+        library: full,
+        versions: [
+          {
+            id: "ver-1",
+            name: "Version A",
+            createdAt: 1,
+            cells: [{ row: 0, col: 0, code: "11", callId: "pitch-fb" }],
+          },
+        ],
+      },
+      "user-9",
+    );
+    assert.equal(book.library.some((item) => item.name === "Hold"), false);
+    assert.ok(book.library.some((item) => item.kind === "defense"));
+    assert.ok(book.library.some((item) => item.kind === "location"));
   });
 
   it("starts a coach with one shuffled version", () => {

@@ -4,7 +4,15 @@ export function wristCoachBlobKey(userId: string) {
   return `${WRIST_COACH_BLOB_PREFIX}${userId}`;
 }
 
-export type WristCallKind = "pitch" | "offense";
+export const WRIST_CALL_KINDS = ["pitch", "location", "offense", "defense"] as const;
+export type WristCallKind = (typeof WRIST_CALL_KINDS)[number];
+
+export function kindLabel(kind: WristCallKind | string) {
+  if (kind === "location") return "Location";
+  if (kind === "offense") return "Offense";
+  if (kind === "defense") return "Defense";
+  return "Pitch";
+}
 
 export type WristCall = {
   id: string;
@@ -52,13 +60,22 @@ const DEFAULT_PITCHES: Array<[string, string, string]> = [
   ["pitch-dc", "Drop curve", "DC"],
   ["pitch-rc", "Rise curve", "RC"],
   ["pitch-pl", "Peel", "PL"],
-  ["pitch-in", "Inside", "IN"],
-  ["pitch-out", "Outside", "OUT"],
-  ["pitch-up", "Up", "UP"],
-  ["pitch-dn", "Down", "DN"],
 ];
 
-const DEFAULT_PLAYS: Array<[string, string, string]> = [
+const DEFAULT_LOCATIONS: Array<[string, string, string]> = [
+  ["loc-in", "Inside", "IN"],
+  ["loc-out", "Outside", "OUT"],
+  ["loc-up", "Up", "UP"],
+  ["loc-dn", "Down", "DN"],
+  ["loc-ui", "Up and in", "UI"],
+  ["loc-ua", "Up and away", "UA"],
+  ["loc-di", "Down and in", "DI"],
+  ["loc-da", "Down and away", "DA"],
+  ["loc-mid", "Middle", "MID"],
+];
+
+const DEFAULT_OFFENSE: Array<[string, string, string]> = [
+  ["play-ha", "Hit away", "HA"],
   ["play-bnt", "Bunt", "BNT"],
   ["play-slp", "Slap", "SLP"],
   ["play-stl", "Steal", "STL"],
@@ -69,7 +86,34 @@ const DEFAULT_PLAYS: Array<[string, string, string]> = [
   ["play-dly", "Delay steal", "DLY"],
   ["play-fbn", "Fake bunt", "FBN"],
   ["play-ssq", "Safety squeeze", "SSQ"],
+  ["play-sac", "Sacrifice", "SAC"],
+  ["play-slh", "Slash", "SLH"],
+  ["play-dbl", "Double steal", "DBL"],
+  ["play-s2", "Steal second", "S2"],
+  ["play-s3", "Steal third", "S3"],
+  ["play-bfh", "Bunt for hit", "BFH"],
 ];
+
+const DEFAULT_DEFENSE: Array<[string, string, string]> = [
+  ["def-hld", "Hold", "HLD"],
+  ["def-thr", "Throw through", "THR"],
+  ["def-cut", "Cut", "CUT"],
+  ["def-pk", "Pickoff", "PK"],
+  ["def-ibb", "Intentional walk", "IBB"],
+  ["def-ifi", "Infield in", "IFI"],
+  ["def-ifb", "Infield back", "IFB"],
+  ["def-cin", "Corners in", "CIN"],
+  ["def-po", "Pitch out", "PO"],
+  ["def-bnd", "Bunt defense", "BND"],
+  ["def-plt", "Play at plate", "PLT"],
+  ["def-p2", "Play at two", "P2"],
+  ["def-c2", "Cut 2", "C2"],
+  ["def-13", "1st and 3rd", "13"],
+  ["def-ns", "No steal", "NS"],
+];
+
+const LOCATION_PITCH_IDS = new Set(["pitch-in", "pitch-out", "pitch-up", "pitch-dn"]);
+const LOCATION_SHORTS = new Set(["IN", "OUT", "UP", "DN", "UI", "UA", "DI", "DA", "MID"]);
 
 function slugCall(kind: WristCallKind, name: string) {
   const base = name
@@ -84,21 +128,62 @@ export function newCallId(kind: WristCallKind, name: string) {
   return slugCall(kind, name);
 }
 
+function rowsToCalls(kind: WristCallKind, rows: Array<[string, string, string]>): WristCall[] {
+  return rows.map(([id, name, short]) => ({ id, kind, name, short }));
+}
+
 export function defaultLibrary(): WristCall[] {
   return [
-    ...DEFAULT_PITCHES.map(([id, name, short]) => ({
-      id,
-      kind: "pitch" as const,
-      name,
-      short,
-    })),
-    ...DEFAULT_PLAYS.map(([id, name, short]) => ({
-      id,
-      kind: "offense" as const,
-      name,
-      short,
-    })),
+    ...rowsToCalls("pitch", DEFAULT_PITCHES),
+    ...rowsToCalls("location", DEFAULT_LOCATIONS),
+    ...rowsToCalls("offense", DEFAULT_OFFENSE),
+    ...rowsToCalls("defense", DEFAULT_DEFENSE),
   ];
+}
+
+function callKey(call: Pick<WristCall, "id" | "name" | "short">) {
+  return [
+    String(call.id || "").toLowerCase(),
+    String(call.short || "").toUpperCase(),
+    String(call.name || "").trim().toLowerCase(),
+  ].filter(Boolean);
+}
+
+function libraryHas(list: WristCall[], candidate: WristCall) {
+  const keys = new Set(list.flatMap(callKey));
+  return callKey(candidate).some((key) => keys.has(key));
+}
+
+function reclassifyLocations(list: WristCall[]) {
+  return list.map((call) => {
+    const short = call.short.toUpperCase();
+    if (
+      call.kind === "pitch" &&
+      (LOCATION_PITCH_IDS.has(call.id) || LOCATION_SHORTS.has(short))
+    ) {
+      return { ...call, kind: "location" as const };
+    }
+    return call;
+  });
+}
+
+export function isLegacyTwoGroupLibrary(list: WristCall[]) {
+  const kinds = new Set(list.map((item) => item.kind));
+  return !kinds.has("defense") && !kinds.has("location");
+}
+
+export function upgradeLibrary(list: WristCall[]) {
+  const next = reclassifyLocations(list);
+  if (!isLegacyTwoGroupLibrary(list)) return next;
+  const extras = [
+    ...rowsToCalls("location", DEFAULT_LOCATIONS),
+    ...rowsToCalls("offense", DEFAULT_OFFENSE),
+    ...rowsToCalls("defense", DEFAULT_DEFENSE),
+  ];
+  for (const call of extras) {
+    if (!libraryHas(next, call)) next.push(call);
+  }
+  return next;
 }
 
 export function nextVersionName(existing: WristVersion[]) {
@@ -199,17 +284,24 @@ function asRecord(value: unknown) {
     : null;
 }
 
+function normalizeKind(value: unknown): WristCallKind {
+  if (value === "location" || value === "offense" || value === "defense" || value === "pitch") {
+    return value;
+  }
+  return "pitch";
+}
+
 function normalizeCall(raw: unknown, index: number): WristCall | null {
   const item = asRecord(raw);
   if (!item) return null;
-  const kind: WristCallKind = item.kind === "offense" ? "offense" : "pitch";
+  const kind = normalizeKind(item.kind);
   const name = String(item.name || "").trim();
   const short = String(item.short || "").trim().slice(0, 4).toUpperCase();
   if (!name && !short) return null;
   return {
     id: String(item.id || `call-${kind}-${index}`),
     kind,
-    name: name || short || (kind === "pitch" ? "Pitch" : "Play"),
+    name: name || short || kindLabel(kind),
     short: short || (name || "XX").slice(0, 3).toUpperCase(),
   };
 }
@@ -276,7 +368,7 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
     title: String(item.title || "").trim() || title?.trim() || "My signs",
     rows,
     cols,
-    library: library.length ? library : defaultLibrary(),
+    library: library.length ? upgradeLibrary(library) : defaultLibrary(),
     versions: [],
     activeVersionId: "",
     updatedAt: Number(item.updatedAt) || Date.now(),
