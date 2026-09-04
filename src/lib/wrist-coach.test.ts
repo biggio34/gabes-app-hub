@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { wristCoachAllowed } from "./areas.ts";
+import { areaAndFeatureLinks, wristCoachAllowed } from "./areas.ts";
 import {
   DEFAULT_COLS,
   DEFAULT_ROWS,
@@ -18,6 +18,20 @@ import {
 describe("wrist coach permission", () => {
   it("always lets the owner in", () => {
     assert.equal(wristCoachAllowed({ role: "owner", areas: [], features: [] }), true);
+  });
+
+  it("keeps the Wrist Coach flag next to areas when saving a person", () => {
+    assert.deepEqual(
+      areaAndFeatureLinks({
+        areas: ["softball", "financial"],
+        features: ["wrist-coach"],
+      }),
+      { areas: ["softball", "financial"], features: ["wrist-coach"] },
+    );
+    assert.deepEqual(
+      areaAndFeatureLinks({ areas: ["softball"], features: [] }),
+      { areas: ["softball"], features: [] },
+    );
   });
 
   it("requires softball plus the Wrist Coach flag for members", () => {

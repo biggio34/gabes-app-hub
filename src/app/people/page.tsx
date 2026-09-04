@@ -33,22 +33,23 @@ function WristCoachCheck({
   checked: boolean;
   onToggle: () => void;
 }) {
-  if (!softballOn) return null;
   return (
-    <div className="mt-2 ml-1">
-      <button
-        type="button"
-        onClick={onToggle}
-        className={`rounded-full px-3 py-1 text-xs font-semibold ${
-          checked ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400"
-        }`}
-      >
-        Wrist Coach
-      </button>
-      <p className="mt-1 text-[11px] text-slate-500">
-        Their own pitch and play-call book. Owner always has this.
-      </p>
-    </div>
+    <label className="mt-2 flex min-h-11 cursor-pointer touch-manipulation select-none items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950 px-3 py-2">
+      <input
+        type="checkbox"
+        className="size-5 shrink-0 accent-red-600"
+        checked={checked}
+        onChange={onToggle}
+      />
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">Wrist Coach</span>
+        <span className="block text-[11px] text-slate-500">
+          {softballOn
+            ? "Their own pitch and play-call book."
+            : "Turns on Softball too."}
+        </span>
+      </span>
+    </label>
   );
 }
 
@@ -430,10 +431,10 @@ export default function PeoplePage() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">People</h1>
           <p className="text-sm text-slate-400">
             Give someone a login, pick Financial / Softball / Luna Haus, then
-            put them on a club or team. Wrist Coach is a separate checkbox
-            under Softball — not every Softball login gets it. Teams you add
-            here show in Team Roster, Lineup, Team Formation, Tryouts, and
-            Practice Planner. You can also change a username or set a new
+            put them on a club or team. Wrist Coach is its own row under each
+            person — tap it to turn it on (that also turns on Softball). Teams
+            you add here show in Team Roster, Lineup, Team Formation, Tryouts,
+            and Practice Planner. You can also change a username or set a new
             password. Saved passwords cannot be shown again.
           </p>
         </div>
@@ -611,7 +612,15 @@ export default function PeoplePage() {
             <WristCoachCheck
               softballOn={areas.includes("softball")}
               checked={features.includes(WRIST_COACH_FEATURE)}
-              onToggle={() => setFeatures(toggleValue(features, WRIST_COACH_FEATURE))}
+              onToggle={() => {
+                const next = toggleValue(features, WRIST_COACH_FEATURE);
+                setFeatures(next);
+                if (next.includes(WRIST_COACH_FEATURE) && !areas.includes("softball")) {
+                  setAreas((current) =>
+                    current.includes("softball") ? current : [...current, "softball"],
+                  );
+                }
+              }}
             />
           </div>
           <div>
@@ -704,11 +713,19 @@ export default function PeoplePage() {
                           type="button"
                           onClick={() => {
                             const nextAreas = toggleValue(user.areas, area);
+                            const nextFeatures = nextAreas.includes("softball")
+                              ? user.features
+                              : user.features.filter((item) => item !== WRIST_COACH_FEATURE);
+                            setUsers((current) =>
+                              current.map((item) =>
+                                item.id === user.id
+                                  ? { ...item, areas: nextAreas, features: nextFeatures }
+                                  : item,
+                              ),
+                            );
                             void savePerson(user.id, {
                               areas: nextAreas,
-                              features: nextAreas.includes("softball")
-                                ? user.features
-                                : user.features.filter((item) => item !== WRIST_COACH_FEATURE),
+                              features: nextFeatures,
                             }).catch(() => {
                               void load();
                             });
@@ -728,12 +745,27 @@ export default function PeoplePage() {
                       checked={user.features.includes(WRIST_COACH_FEATURE)}
                       onToggle={() => {
                         const nextFeatures = toggleValue(user.features, WRIST_COACH_FEATURE);
+                        const nextAreas =
+                          nextFeatures.includes(WRIST_COACH_FEATURE) &&
+                          !user.areas.includes("softball")
+                            ? [...user.areas, "softball"]
+                            : user.areas;
+                        setUsers((current) =>
+                          current.map((item) =>
+                            item.id === user.id
+                              ? { ...item, areas: nextAreas, features: nextFeatures }
+                              : item,
+                          ),
+                        );
                         void savePerson(user.id, {
-                          areas: user.areas.includes("softball")
-                            ? user.areas
-                            : [...user.areas, "softball"],
+                          areas: nextAreas,
                           features: nextFeatures,
-                        }).catch(() => {
+                        }).catch((err) => {
+                          setError(
+                            err instanceof Error
+                              ? err.message
+                              : "Could not save Wrist Coach.",
+                          );
                           void load();
                         });
                       }}

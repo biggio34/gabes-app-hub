@@ -1,5 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
-import { AREAS, HUB_FEATURES, isHubFeature, type Area, type HubFeature } from "./areas";
+import { AREAS, HUB_FEATURES, areaAndFeatureLinks, isHubFeature, type Area, type HubFeature } from "./areas";
 import { hashPassword } from "./auth";
 import { ownerPasswordValue, readyDb } from "./db/client";
 import { isSupabaseConfigured } from "./db/supabase";
@@ -282,9 +282,10 @@ export async function updateUser(
       passwordHash: current.passwordHash,
     })
     .where(eq(users.id, id));
+  const links = areaAndFeatureLinks(current);
   await replaceLinks(id, {
-    areas: patch.areas || patch.features ? current.areas : undefined,
-    features: patch.areas || patch.features ? current.features : undefined,
+    areas: patch.areas || patch.features ? links.areas : undefined,
+    features: patch.areas || patch.features ? links.features : undefined,
     clubIds: patch.clubIds || patch.teamIds ? current.clubIds : undefined,
     teamIds: patch.clubIds || patch.teamIds ? current.teamIds : undefined,
   });

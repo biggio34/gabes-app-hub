@@ -1,4 +1,4 @@
-import { AREAS, isHubFeature, type Area, type HubFeature } from "@/lib/areas";
+import { AREAS, areaAndFeatureLinks, isHubFeature, type Area, type HubFeature } from "@/lib/areas";
 import { hashPassword } from "@/lib/auth";
 import {
   DEFAULT_CLUB_ID,
@@ -269,8 +269,10 @@ export async function saveUser(
       .eq("id", user.id),
     "Could not update that person.",
   );
+  const links = areaAndFeatureLinks(user);
   await replaceLinks(user.id, {
-    areas: patch.areas ? user.areas : undefined,
+    areas: patch.areas ? links.areas : undefined,
+    features: patch.areas ? links.features : undefined,
     clubIds: patch.clubs ? user.clubIds : undefined,
     teamIds: patch.teams ? user.teamIds : undefined,
   });

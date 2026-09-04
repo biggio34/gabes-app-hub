@@ -38,6 +38,17 @@ export function isHubFeature(value: string): value is HubFeature {
   return (HUB_FEATURES as readonly string[]).includes(value);
 }
 
+/** Areas and extra tools stored together in user_areas / hub_user_areas. */
+export function areaAndFeatureLinks(user: {
+  areas?: readonly string[] | null;
+  features?: readonly string[] | null;
+}) {
+  return {
+    areas: (user.areas ?? []).filter(isArea),
+    features: (user.features ?? []).filter(isHubFeature),
+  };
+}
+
 export function wristCoachAllowed(user: {
   role: string;
   areas: readonly string[];
