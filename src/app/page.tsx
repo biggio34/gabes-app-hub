@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { areaMeta, AREAS } from "@/lib/areas";
-import { canAccessArea, getSession } from "@/lib/auth";
+import { canAccessArea, getSession, wristCoachAllowed } from "@/lib/auth";
 import { hubApps } from "@/lib/catalog";
 import { labelsForUser } from "@/lib/clubs";
 import { findUserById } from "@/lib/users";
@@ -75,13 +75,23 @@ export default async function HubHome() {
               {area === "softball" ? (
                 <p className="mb-3 text-sm text-slate-400">
                   Teams you add on People show in Roster, Lineup, Team
-                  Formation, Tryouts, and Practice Planner. Start with Team
-                  Roster — one People id per girl, card plus season history,
-                  jersey number per year.
+                  Formation, Tryouts, and Practice Planner. Wrist Coach is a
+                  separate checkbox — not every Softball login gets it. Start
+                  with Team Roster — one People id per girl, card plus season
+                  history, jersey number per year.
                 </p>
               ) : null}
               <div className="grid gap-4 md:grid-cols-2">
-                {apps.map((app) => {
+                {apps
+                  .filter((app) => {
+                    if (app.requiresFeature !== "wrist-coach") return true;
+                    return wristCoachAllowed({
+                      role: session.role,
+                      areas: stored?.areas ?? session.areas,
+                      features: stored?.features ?? session.features,
+                    });
+                  })
+                  .map((app) => {
                   const href = app.href || `/apps/${app.slug}`;
                   return (
                     <a

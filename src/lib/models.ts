@@ -1,4 +1,4 @@
-import type { Area, Role } from "./areas";
+import type { Area, HubFeature, Role } from "./areas";
 
 export type Club = {
   id: string;
@@ -21,6 +21,7 @@ export type StoredUser = {
   passwordHash: string;
   role: Role;
   areas: Area[];
+  features: HubFeature[];
   clubIds: string[];
   teamIds: string[];
   createdAt: string;
@@ -41,6 +42,7 @@ export function publicUser(user: StoredUser) {
     email: user.email ?? "",
     role: user.role,
     areas: user.areas,
+    features: user.features,
     clubIds: user.clubIds,
     teamIds: user.teamIds,
   };

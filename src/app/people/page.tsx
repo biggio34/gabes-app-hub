@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AREAS, areaMeta, type Area } from "@/lib/areas";
+import { AREAS, WRIST_COACH_FEATURE, areaMeta, type Area, type HubFeature } from "@/lib/areas";
 import { SecretField } from "@/components/secret-field";
 
 type Person = {
@@ -12,6 +12,7 @@ type Person = {
   email: string;
   role: "owner" | "member";
   areas: Area[];
+  features: HubFeature[];
   clubIds: string[];
   teamIds: string[];
 };
@@ -21,6 +22,61 @@ type Team = { id: string; clubId: string; name: string };
 
 function toggleValue<T>(list: T[], value: T) {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+function WristCoachCheck({
+  softballOn,
+  checked,
+  onToggle,
+  saveId,
+}: {
+  softballOn: boolean;
+  checked: boolean;
+  onToggle: () => void;
+  saveId: string;
+}) {
+  const lock = useRef(false);
+  function activate(event: { preventDefault: () => void; stopPropagation: () => void }) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (lock.current) return;
+    lock.current = true;
+    onToggle();
+    window.setTimeout(() => {
+      lock.current = false;
+    }, 400);
+  }
+  return (
+    <button
+      type="button"
+      aria-pressed={checked}
+      data-wrist-coach={saveId}
+      onClick={activate}
+      onTouchEnd={activate}
+      className="relative z-10 mt-2 flex min-h-12 w-full touch-manipulation select-none items-center gap-3 rounded-2xl border border-slate-700 bg-slate-950 px-3 py-3 text-left"
+    >
+      <span
+        aria-hidden="true"
+        className={`flex size-6 shrink-0 items-center justify-center rounded-md border text-xs font-bold ${
+          checked
+            ? "border-red-500 bg-red-700 text-white"
+            : "border-slate-500 bg-slate-900 text-transparent"
+        }`}
+      >
+        ✓
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">Wrist Coach</span>
+        <span className="block text-[11px] text-slate-500">
+          {checked
+            ? "On — they can open the player-card book."
+            : softballOn
+              ? "Off. Tap to give them Wrist Coach."
+              : "Off. Tap to turn on Softball and Wrist Coach."}
+        </span>
+      </span>
+    </button>
+  );
 }
 
 function LoginEditor({
@@ -113,6 +169,7 @@ export default function PeoplePage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [areas, setAreas] = useState<Area[]>([]);
+  const [features, setFeatures] = useState<HubFeature[]>([]);
   const [clubIds, setClubIds] = useState<string[]>([]);
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [newClub, setNewClub] = useState("");
@@ -136,6 +193,7 @@ export default function PeoplePage() {
         ...user,
         clubIds: user.clubIds ?? [],
         teamIds: user.teamIds ?? [],
+        features: user.features ?? [],
       })),
     );
     setClubs(data.clubs ?? []);
@@ -184,6 +242,7 @@ export default function PeoplePage() {
           email,
           password,
           areas,
+          features,
           clubIds,
           teamIds,
         }),
@@ -203,6 +262,7 @@ export default function PeoplePage() {
       setEmail("");
       setPassword("");
       setAreas([]);
+      setFeatures([]);
       setClubIds([]);
       setTeamIds([]);
       if (data.emailSent) {
@@ -227,6 +287,7 @@ export default function PeoplePage() {
     id: string,
     patch: {
       areas?: Area[];
+      features?: HubFeature[];
       clubIds?: string[];
       teamIds?: string[];
       username?: string;
@@ -396,10 +457,11 @@ export default function PeoplePage() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">People</h1>
           <p className="text-sm text-slate-400">
             Give someone a login, pick Financial / Softball / Luna Haus, then
-            put them on a club or team. Teams you add here show in Team Roster,
-            Lineup, Team Formation, Tryouts, and Practice Planner. You can also
-            change a username or set a new password. Saved passwords cannot be
-            shown again.
+            put them on a club or team. Wrist Coach is its own row under each
+            person — tap it to turn it on (that also turns on Softball). Teams
+            you add here show in Team Roster, Lineup, Team Formation, Tryouts,
+            and Practice Planner. You can also change a username or set a new
+            password. Saved passwords cannot be shown again.
           </p>
         </div>
 
@@ -554,7 +616,15 @@ export default function PeoplePage() {
                 <button
                   key={area}
                   type="button"
-                  onClick={() => setAreas(toggleValue(areas, area))}
+                  onClick={() => {
+                    const next = toggleValue(areas, area);
+                    setAreas(next);
+                    if (!next.includes("softball")) {
+                      setFeatures((current) =>
+                        current.filter((item) => item !== WRIST_COACH_FEATURE),
+                      );
+                    }
+                  }}
                   className={`rounded-full px-3 py-1 text-xs font-semibold ${
                     areas.includes(area)
                       ? "bg-red-700 text-white"
@@ -565,6 +635,20 @@ export default function PeoplePage() {
                 </button>
               ))}
             </div>
+            <WristCoachCheck
+              saveId="new"
+              softballOn={areas.includes("softball")}
+              checked={features.includes(WRIST_COACH_FEATURE)}
+              onToggle={() => {
+                const next = toggleValue(features, WRIST_COACH_FEATURE);
+                setFeatures(next);
+                if (next.includes(WRIST_COACH_FEATURE) && !areas.includes("softball")) {
+                  setAreas((current) =>
+                    current.includes("softball") ? current : [...current, "softball" as Area],
+                  );
+                }
+              }}
+            />
           </div>
           <div>
             <p className="mb-1.5 text-xs font-semibold tracking-[0.12em] text-slate-500 uppercase">
@@ -655,8 +739,20 @@ export default function PeoplePage() {
                           key={area}
                           type="button"
                           onClick={() => {
+                            const nextAreas = toggleValue(user.areas, area);
+                            const nextFeatures = nextAreas.includes("softball")
+                              ? user.features
+                              : user.features.filter((item) => item !== WRIST_COACH_FEATURE);
+                            setUsers((current) =>
+                              current.map((item) =>
+                                item.id === user.id
+                                  ? { ...item, areas: nextAreas, features: nextFeatures }
+                                  : item,
+                              ),
+                            );
                             void savePerson(user.id, {
-                              areas: toggleValue(user.areas, area),
+                              areas: nextAreas,
+                              features: nextFeatures,
                             }).catch(() => {
                               void load();
                             });
@@ -671,6 +767,37 @@ export default function PeoplePage() {
                         </button>
                       ))}
                     </div>
+                    <WristCoachCheck
+                      saveId={user.id}
+                      softballOn={user.areas.includes("softball")}
+                      checked={user.features.includes(WRIST_COACH_FEATURE)}
+                      onToggle={() => {
+                        const nextFeatures = toggleValue(user.features, WRIST_COACH_FEATURE);
+                        const nextAreas: Area[] =
+                          nextFeatures.includes(WRIST_COACH_FEATURE) &&
+                          !user.areas.includes("softball")
+                            ? [...user.areas, "softball"]
+                            : user.areas;
+                        setUsers((current) =>
+                          current.map((item) =>
+                            item.id === user.id
+                              ? { ...item, areas: nextAreas, features: nextFeatures }
+                              : item,
+                          ),
+                        );
+                        void savePerson(user.id, {
+                          areas: nextAreas,
+                          features: nextFeatures,
+                        }).catch((err) => {
+                          setError(
+                            err instanceof Error
+                              ? err.message
+                              : "Could not save Wrist Coach.",
+                          );
+                          void load();
+                        });
+                      }}
+                    />
                     <AssignmentPicker
                       selectedClubIds={user.clubIds}
                       selectedTeamIds={user.teamIds}

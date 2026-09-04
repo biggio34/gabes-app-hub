@@ -8,6 +8,7 @@ export type HubApp = {
   area: Area;
   href?: string;
   external?: boolean;
+  requiresFeature?: string;
 };
 
 export const hubApps: HubApp[] = [
@@ -67,6 +68,15 @@ export const hubApps: HubApp[] = [
     area: "softball",
   },
   {
+    slug: "wrist-coach",
+    file: "wrist-coach.html",
+    title: "Wrist Coach",
+    description:
+      "Your play-call wristband. Edit the library, shuffle versions, print a wrist card and a coach key.",
+    area: "softball",
+    requiresFeature: "wrist-coach",
+  },
+  {
     slug: "supply-orders",
     file: "",
     title: "Supply Orders",
@@ -109,6 +119,8 @@ export const pathRewrites: Record<string, string> = {
   "/mn-elks-team-formation": "/apps/team-formation",
   "/softball-tryout-evaluator/": "/apps/tryout-evaluator",
   "/softball-tryout-evaluator": "/apps/tryout-evaluator",
+  "/wrist-coach/": "/apps/wrist-coach",
+  "/wrist-coach": "/apps/wrist-coach",
   "/luna-haus-salon/": "/apps/luna-haus-salon",
   "/luna-haus-salon": "/apps/luna-haus-salon",
 };

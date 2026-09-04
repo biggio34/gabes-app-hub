@@ -1,7 +1,8 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
-import { canAccessArea, getSession } from "@/lib/auth";
+import { canAccessArea, getSession, wristCoachAllowed } from "@/lib/auth";
+import { findUserById } from "@/lib/users";
 import { hubApps, rewriteAppHtml } from "@/lib/catalog";
 import { softballContext } from "@/lib/softball";
 
@@ -22,6 +23,18 @@ export async function GET(
   if (!canAccessArea(session, app.area)) {
     return new NextResponse("You do not have access to this app.", { status: 403 });
   }
+  if (app.requiresFeature === "wrist-coach") {
+    const stored = await findUserById(session.id);
+    if (
+      !wristCoachAllowed({
+        role: session.role,
+        areas: stored?.areas ?? session.areas,
+        features: stored?.features ?? session.features,
+      })
+    ) {
+      return new NextResponse("You do not have access to Wrist Coach.", { status: 403 });
+    }
+  }
 
   const filePath = path.join(process.cwd(), "content/apps", app.file);
   let html = rewriteAppHtml(await readFile(filePath, "utf8"));
@@ -36,6 +49,8 @@ export async function GET(
       teamName: softball.teamName,
       teams: softball.teams,
       clubs: softball.clubs,
+      userId: session.id,
+      userName: session.name,
     }).replaceAll("<", "\\u003c");
     html = html.replace(
       "<head>",

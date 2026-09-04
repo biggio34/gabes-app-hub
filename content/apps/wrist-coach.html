@@ -1,0 +1,1856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wrist Coach</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+    body { font-family: Inter, system-ui, sans-serif; }
+    .title-font { font-family: 'Space Grotesk', Inter, sans-serif; letter-spacing: -0.03em; }
+    .color-pick {
+      width: 42px;
+      height: 32px;
+      padding: 0;
+      border: 1px solid #475569;
+      border-radius: 8px;
+      background: transparent;
+      cursor: pointer;
+    }
+    .color-pick::-webkit-color-swatch-wrapper { padding: 2px; }
+    .color-pick::-webkit-color-swatch { border: none; border-radius: 6px; }
+    .band-card {
+      background: #fff;
+      color: #0f172a;
+      border: 1px solid #cbd5e1;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .band-half {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      gap: 0.05in;
+      padding: 0.04in 0.05in;
+    }
+    .band-banner {
+      flex: 0 0 auto;
+      text-align: center;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      line-height: 1.1;
+      padding: 0.035in 0.06in;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .bs-block {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      gap: 1px;
+    }
+    .bs-head, .bs-rownum {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      line-height: 1;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .bs-cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      line-height: 1;
+      overflow: hidden;
+      border: 1px solid #cbd5e1;
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .coach-sheet-page {
+      background: #fff;
+      box-sizing: border-box;
+      overflow: hidden;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .coach-sheet {
+      width: 100%;
+      height: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      color: #111;
+      table-layout: fixed;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .coach-sheet th,
+    .coach-sheet td {
+      border: 1px solid #111;
+      text-align: center;
+      font-weight: 800;
+      line-height: 1.15;
+      padding: 5px 2px;
+    }
+    .coach-sheet .sheet-banner {
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .coach-sheet .sheet-play {
+      background: #fff;
+      color: #111;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .coach-sheet .sheet-code {
+      font-variant-numeric: tabular-nums;
+    }
+    .swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      border: 1px solid #64748b;
+      padding: 0;
+    }
+    .swatch[data-on="1"] { outline: 2px solid #f8fafc; outline-offset: 1px; }
+    .count-step {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .print-only { display: none; }
+    @media print {
+      @page { size: letter; margin: 0.45in; }
+      body { background: #fff !important; color: #0f172a !important; }
+      .no-print { display: none !important; }
+      .print-only { display: block !important; }
+      .print-page { page-break-after: always; }
+      .print-page:last-child { page-break-after: auto; }
+      .band-card { break-inside: avoid; box-shadow: none; }
+    }
+  </style>
+</head>
+<body class="min-h-dvh bg-slate-950 text-slate-200">
+  <div class="no-print mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 sm:px-6">
+    <header class="flex items-start justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <a href="/" class="text-sm text-slate-400 hover:text-red-400 shrink-0">← Hub</a>
+        <div class="flex size-12 items-center justify-center rounded-2xl bg-red-700 shrink-0">
+          <i class="fa-solid fa-hand text-white text-lg"></i>
+        </div>
+        <div class="min-w-0">
+          <h1 class="title-font text-2xl font-semibold">Wrist Coach</h1>
+          <p id="book-subtitle" class="text-sm text-slate-400"></p>
+        </div>
+      </div>
+      <div class="flex flex-wrap justify-end gap-2 shrink-0">
+        <button type="button" id="print-cards" class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">
+          Print player cards
+        </button>
+        <button type="button" id="print-key" class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">
+          Print coach sheet
+        </button>
+        <button type="button" id="print-both" class="rounded-xl bg-red-700 px-3 py-2 text-xs font-semibold hover:bg-red-600">
+          Print / PDF
+        </button>
+      </div>
+    </header>
+    <p id="save-status" class="hidden text-xs text-slate-500"></p>
+    <p id="load-error" class="hidden text-sm text-red-400"></p>
+
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+      <h2 class="font-semibold">Formatting</h2>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label class="grid gap-1.5 text-sm">
+          Wristband name
+          <input id="book-title" maxlength="60" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+        <div class="grid gap-1.5 text-sm">
+          Type
+          <div id="kind-btns" class="flex flex-wrap gap-1.5">
+            <button type="button" data-kind="offense" class="kind-btn rounded-full px-3 py-1.5 text-xs font-semibold">Offense</button>
+            <button type="button" data-kind="defense" class="kind-btn rounded-full px-3 py-1.5 text-xs font-semibold">Defense</button>
+          </div>
+        </div>
+        <div class="grid gap-1.5 text-sm sm:col-span-2">
+          Size
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" data-size="wrist" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">4 × 2 in</button>
+            <button type="button" data-size="softball" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">3.5 × 2.25 in</button>
+            <button type="button" data-size="large" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">5 × 3 in</button>
+            <button type="button" data-size="custom" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">Custom</button>
+            <div id="custom-size" class="hidden items-center gap-2 text-sm">
+              <input id="card-w" inputmode="decimal" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              <span>×</span>
+              <input id="card-h" inputmode="decimal" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              <span class="text-slate-500">in</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <label class="grid gap-1.5 text-sm">
+          Sign start
+          <input id="sign-start" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+        <label class="grid gap-1.5 text-sm">
+          Row start
+          <input id="row-start" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+        <label class="grid gap-1.5 text-sm">
+          Grids
+          <input id="grid-count" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+        <label class="grid gap-1.5 text-sm">
+          Columns
+          <input id="grid-cols" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+        <label class="grid gap-1.5 text-sm">
+          Rows
+          <input id="grid-rows" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-3">
+        <label class="grid gap-1.5 text-sm">
+          Wristband
+          <span class="flex items-center gap-2">
+            <input type="color" id="theme-band" class="color-pick" aria-label="Wristband color">
+            <input id="theme-band-hex" maxlength="7" class="w-28 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-red-500">
+          </span>
+        </label>
+        <label class="grid gap-1.5 text-sm">
+          Wristband text
+          <span class="flex items-center gap-2">
+            <input type="color" id="theme-ink" class="color-pick" aria-label="Wristband text color">
+            <input id="theme-ink-hex" maxlength="7" class="w-28 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-red-500">
+          </span>
+        </label>
+        <label class="grid gap-1.5 text-sm">
+          Highlight
+          <span class="flex items-center gap-2">
+            <input type="color" id="theme-highlight" class="color-pick" aria-label="Highlight color">
+            <input id="theme-highlight-hex" maxlength="7" class="w-28 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-red-500">
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="font-semibold">Versions</h2>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="shuffle-current" class="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">
+            Shuffle this version
+          </button>
+          <button type="button" id="shuffle-version" class="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold hover:bg-red-600">
+            Copy and Create New Version
+          </button>
+        </div>
+      </div>
+      <ul id="version-list" class="grid gap-2"></ul>
+    </section>
+
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+      <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="signs-heading" class="font-semibold">Signs</h2>
+        <p id="sign-tally" class="text-xs text-slate-500"></p>
+      </div>
+      <div class="grid gap-5 max-w-2xl">
+        <div data-kind-panel="pitch">
+          <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Pitches</p>
+          <div id="pitch-list" class="grid gap-2"></div>
+          <form id="add-pitch" class="mt-3 grid gap-2">
+            <input id="pitch-name" placeholder="New pitch" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
+            <div class="flex gap-2">
+              <input id="pitch-short" maxlength="4" placeholder="FB" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+              <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add</button>
+            </div>
+          </form>
+        </div>
+        <div data-kind-panel="location">
+          <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Locations</p>
+          <div id="location-list" class="grid gap-2"></div>
+          <form id="add-location" class="mt-3 grid gap-2">
+            <input id="location-name" placeholder="New location" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
+            <div class="flex gap-2">
+              <input id="location-short" maxlength="4" placeholder="IN" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+              <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add</button>
+            </div>
+          </form>
+        </div>
+        <div data-kind-panel="offense">
+          <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Offense</p>
+          <div id="play-list" class="grid gap-2"></div>
+          <form id="add-play" class="mt-3 grid gap-2">
+            <input id="play-name" placeholder="New play" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
+            <div class="flex gap-2">
+              <input id="play-short" maxlength="4" placeholder="HA" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+              <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add</button>
+            </div>
+          </form>
+        </div>
+        <div data-kind-panel="defense">
+          <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Defense</p>
+          <div id="defense-list" class="grid gap-2"></div>
+          <form id="add-defense" class="mt-3 grid gap-2">
+            <input id="defense-name" placeholder="New call" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
+            <div class="flex gap-2">
+              <input id="defense-short" maxlength="4" placeholder="HLD" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+              <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="font-semibold">Player card</h2>
+        <div class="flex gap-2">
+          <button type="button" id="view-player" class="rounded-full px-3 py-1 text-xs font-semibold bg-red-700 text-white">Card</button>
+          <button type="button" id="view-coach" class="rounded-full px-3 py-1 text-xs font-semibold bg-slate-800 text-slate-400">Key</button>
+        </div>
+      </div>
+      <div id="card-preview" class="flex justify-center overflow-x-auto"></div>
+    </section>
+
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+      <h2 class="font-semibold">Coach sheet</h2>
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="grid gap-1.5 text-sm">
+          Columns
+          <input id="sheet-cols" inputmode="numeric" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+        <label class="grid gap-1.5 text-sm">
+          Rows
+          <input id="sheet-rows" inputmode="numeric" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+        <div class="grid gap-1.5 text-sm">
+          Size
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" data-sheet-size="letter" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">8.5 × 11 in</button>
+            <button type="button" data-sheet-size="half" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">8.5 × 5.5 in</button>
+            <button type="button" data-sheet-size="index" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">5 × 8 in</button>
+            <button type="button" data-sheet-size="custom" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">Custom</button>
+            <div id="sheet-custom-size" class="hidden items-center gap-2 text-sm">
+              <input id="sheet-w" inputmode="decimal" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              <span>×</span>
+              <input id="sheet-h" inputmode="decimal" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              <span class="text-slate-500">in</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="coach-key" class="overflow-x-auto rounded-2xl bg-slate-950 p-3"></div>
+    </section>
+  </div>
+
+  <div id="count-modal" class="hidden no-print fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4">
+    <div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-5">
+      <p id="count-modal-title" class="font-semibold"></p>
+      <p id="count-modal-sub" class="mt-1 text-sm text-slate-400"></p>
+      <div id="count-modal-choices" class="mt-4 grid gap-2"></div>
+      <button type="button" id="count-modal-cancel" class="mt-4 w-full rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <div id="unlock-modal" class="hidden no-print fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4">
+    <div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-5">
+      <p id="unlock-modal-title" class="font-semibold">Unlock this version?</p>
+      <p id="unlock-modal-sub" class="mt-1 text-sm text-slate-400">It can be shuffled again.</p>
+      <div class="mt-4 grid gap-2 sm:grid-cols-2">
+        <button type="button" id="unlock-modal-cancel" class="rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
+          Cancel
+        </button>
+        <button type="button" id="unlock-modal-confirm" class="rounded-xl bg-red-700 px-3 py-2 text-sm font-semibold hover:bg-red-600">
+          Unlock
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="print-root" class="print-only"></div>
+
+  <script>
+    const DEFAULT_PITCHES = [
+      ["pitch-fb", "Fastball", "FB"],
+      ["pitch-ch", "Change", "CH"],
+      ["pitch-rs", "Rise", "RS"],
+      ["pitch-dr", "Drop", "DR"],
+      ["pitch-cv", "Curve", "CV"],
+      ["pitch-sc", "Screw", "SC"],
+      ["pitch-dc", "Drop curve", "DC"],
+      ["pitch-rc", "Rise curve", "RC"],
+      ["pitch-pl", "Peel", "PL"]
+    ];
+    const DEFAULT_LOCATIONS = [
+      ["loc-in", "Inside", "IN"],
+      ["loc-out", "Outside", "OUT"],
+      ["loc-up", "Up", "UP"],
+      ["loc-dn", "Down", "DN"],
+      ["loc-ui", "Up and in", "UI"],
+      ["loc-ua", "Up and away", "UA"],
+      ["loc-di", "Down and in", "DI"],
+      ["loc-da", "Down and away", "DA"],
+      ["loc-mid", "Middle", "MID"]
+    ];
+    const DEFAULT_OFFENSE = [
+      ["play-br", "Bunt + run", "B+R", 15],
+      ["play-b1", "Bunt to 1st", "B1", 15],
+      ["play-b3", "Bunt to 3rd", "B3", 15],
+      ["play-des", "Delayed steal", "DES", 13],
+      ["play-fbh", "Fake bunt + hit", "FBH", 11],
+      ["play-fbs", "Fake bunt + steal", "FBS", 10],
+      ["play-fbt", "Fake bunt + take", "FBT", 10],
+      ["play-hr", "Hit and run", "H+R", 10],
+      ["play-ssq", "Safety squeeze", "SAS", 7],
+      ["play-stl", "Steal", "S", 15],
+      ["play-sus", "Suicide squeeze", "SUS", 7],
+      ["play-tke", "Take", "T", 7],
+      ["play-x", "X", "X", 15],
+      ["play-ha", "Hit away", "HA"],
+      ["play-bnt", "Bunt", "BNT"],
+      ["play-slp", "Slap", "SLP"],
+      ["play-sqz", "Squeeze", "SQZ"],
+      ["play-swg", "Swing", "SWG"],
+      ["play-dly", "Delay steal", "DLY"],
+      ["play-fbn", "Fake bunt", "FBN"],
+      ["play-sac", "Sacrifice", "SAC"],
+      ["play-slh", "Slash", "SLH"],
+      ["play-dbl", "Double steal", "DBL"],
+      ["play-s2", "Steal second", "S2"],
+      ["play-s3", "Steal third", "S3"],
+      ["play-bfh", "Bunt for hit", "BFH"]
+    ];
+    const DEFAULT_DEFENSE = [
+      ["def-hld", "Hold", "HLD"],
+      ["def-thr", "Throw through", "THR"],
+      ["def-cut", "Cut", "CUT"],
+      ["def-pk", "Pickoff", "PK"],
+      ["def-ibb", "Intentional walk", "IBB"],
+      ["def-ifi", "Infield in", "IFI"],
+      ["def-ifb", "Infield back", "IFB"],
+      ["def-cin", "Corners in", "CIN"],
+      ["def-po", "Pitch out", "PO"],
+      ["def-bnd", "Bunt defense", "BND"],
+      ["def-plt", "Play at plate", "PLT"],
+      ["def-p2", "Play at two", "P2"],
+      ["def-c2", "Cut 2", "C2"],
+      ["def-13", "1st and 3rd", "13"],
+      ["def-ns", "No steal", "NS"]
+    ];
+
+    const PALETTE = ["clear", "white", "black", "red", "blue", "green", "orange"];
+    const COLOR_HEX = {
+      clear: "transparent",
+      white: "#ffffff",
+      black: "#111827",
+      red: "#b91c1c",
+      blue: "#1d4ed8",
+      green: "#15803d",
+      orange: "#ea580c"
+    };
+    const SIZE_PRESETS = {
+      wrist: { widthIn: 4, heightIn: 2 },
+      softball: { widthIn: 3.5, heightIn: 2.25 },
+      large: { widthIn: 5, heightIn: 3 }
+    };
+    const DEFAULT_THEME = { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
+
+    let book = null;
+    let showCoachOnCard = false;
+    let saveTimer = null;
+    let printMode = "both";
+    let pendingCount = null;
+
+    function hubName() {
+      const hub = window.HUB_SOFTBALL || {};
+      return hub.userName || "Coach";
+    }
+
+    function clampInt(value, fallback, min, max) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(max, Math.max(min, Math.round(n)));
+    }
+
+    function normalizeHex(value, fallback) {
+      const raw = String(value || "").trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toLowerCase();
+      if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
+        const h = raw.slice(1).toLowerCase();
+        return "#" + h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+      }
+      return fallback;
+    }
+
+    function defaultTheme() {
+      return { band: DEFAULT_THEME.band, ink: DEFAULT_THEME.ink, highlight: DEFAULT_THEME.highlight };
+    }
+
+    function normalizeTheme(raw) {
+      const fallback = defaultTheme();
+      const theme = raw || {};
+      return {
+        band: normalizeHex(theme.band || theme.wristband, fallback.band),
+        ink: normalizeHex(theme.ink || theme.text, fallback.ink),
+        highlight: normalizeHex(theme.highlight || theme.cell, fallback.highlight)
+      };
+    }
+
+    function defaultKindThemes(fallback) {
+      const theme = normalizeTheme(fallback);
+      return {
+        offense: { band: theme.band, ink: theme.ink, highlight: theme.highlight },
+        defense: { band: theme.band, ink: theme.ink, highlight: theme.highlight }
+      };
+    }
+
+    function kindThemesOf(version, fallbackTheme) {
+      const fallback = fallbackTheme || (book && book.theme ? book.theme : defaultTheme());
+      const themes = version && version.themes ? version.themes : {};
+      const defaults = defaultKindThemes(fallback);
+      return {
+        offense: themes.offense ? normalizeTheme(themes.offense) : defaults.offense,
+        defense: themes.defense ? normalizeTheme(themes.defense) : defaults.defense
+      };
+    }
+
+    function themeOf() {
+      const kind = book && book.bandKind === "defense" ? "defense" : "offense";
+      const themes = kindThemesOf(activeVersion());
+      const theme = themes[kind];
+      return {
+        band: normalizeHex(theme.band, DEFAULT_THEME.band),
+        ink: normalizeHex(theme.ink, DEFAULT_THEME.ink),
+        highlight: normalizeHex(theme.highlight, DEFAULT_THEME.highlight)
+      };
+    }
+
+    function rowsToCalls(kind, rows) {
+      return rows.map(function (row) {
+        return {
+          id: row[0],
+          kind: kind,
+          name: row[1],
+          short: row[2],
+          fill: "clear",
+          ink: "clear",
+          count: clampInt(row[3], 0, 0, 300)
+        };
+      });
+    }
+
+    function normalizeColor(value) {
+      return PALETTE.indexOf(value) >= 0 ? value : "clear";
+    }
+
+    function callColors(call) {
+      const fill = normalizeColor(call && call.fill);
+      const ink = normalizeColor(call && call.ink);
+      const background = fill === "clear" ? "#ffffff" : COLOR_HEX[fill];
+      let color = "#0f172a";
+      if (ink === "clear") color = (fill === "clear" || fill === "white") ? "#0f172a" : "#ffffff";
+      else if (ink === "white") color = "#ffffff";
+      else color = COLOR_HEX[ink];
+      return { background: background, color: color };
+    }
+
+    function hexLuma(hex) {
+      const n = parseInt(String(hex || "").replace("#", ""), 16);
+      if (!Number.isFinite(n)) return 255;
+      const r = (n >> 16) & 255;
+      const g = (n >> 8) & 255;
+      const b = n & 255;
+      return (r * 299 + g * 587 + b * 114) / 1000;
+    }
+
+    function cellPaint(call) {
+      const theme = themeOf();
+      const fill = normalizeColor(call && call.fill);
+      if (fill === "clear") {
+        return {
+          background: theme.highlight,
+          color: hexLuma(theme.highlight) > 140 ? "#0f172a" : "#ffffff"
+        };
+      }
+      return callColors(call);
+    }
+
+    function defaultCardSize() {
+      return { preset: "wrist", widthIn: 4, heightIn: 2 };
+    }
+
+    function cardSize() {
+      const size = book && book.cardSize ? book.cardSize : defaultCardSize();
+      if (size.preset === "wrist" || size.preset === "softball" || size.preset === "large") {
+        return { preset: size.preset, widthIn: SIZE_PRESETS[size.preset].widthIn, heightIn: SIZE_PRESETS[size.preset].heightIn };
+      }
+      const widthIn = Math.min(8.5, Math.max(1, Number(size.widthIn) || 4));
+      const heightIn = Math.min(11, Math.max(1, Number(size.heightIn) || 2));
+      return { preset: "custom", widthIn: widthIn, heightIn: heightIn };
+    }
+
+    function defaultLibrary() {
+      return rowsToCalls("pitch", DEFAULT_PITCHES)
+        .concat(rowsToCalls("location", DEFAULT_LOCATIONS))
+        .concat(rowsToCalls("offense", DEFAULT_OFFENSE))
+        .concat(rowsToCalls("defense", DEFAULT_DEFENSE));
+    }
+
+    function kindLabel(kind) {
+      if (kind === "location") return "Location";
+      if (kind === "offense") return "Offense";
+      if (kind === "defense") return "Defense";
+      return "Pitch";
+    }
+
+    function defaultKindTitles(fallback) {
+      const base = String(fallback || "").trim();
+      return {
+        offense: base || "Offense",
+        defense: base || "Defense"
+      };
+    }
+
+    function kindTitlesOf(version, fallbackTitle) {
+      const fallback = fallbackTitle != null
+        ? fallbackTitle
+        : (book && book.title ? book.title : "");
+      const titles = version && version.titles ? version.titles : {};
+      const defaults = defaultKindTitles(fallback);
+      return {
+        offense: String(titles.offense || "").trim() || defaults.offense,
+        defense: String(titles.defense || "").trim() || defaults.defense
+      };
+    }
+
+    function bandTitle() {
+      const titles = kindTitlesOf(activeVersion());
+      return book && book.bandKind === "defense" ? titles.defense : titles.offense;
+    }
+
+    function setKindTitle(version, kind, value) {
+      if (!version) return;
+      version.titles = kindTitlesOf(version);
+      const clean = String(value || "").trim();
+      if (kind === "defense") version.titles.defense = clean || "Defense";
+      else version.titles.offense = clean || "Offense";
+    }
+
+    function layoutOf(current) {
+      const src = current || book || {};
+      return {
+        grids: clampInt(src.grids, 6, 1, 8),
+        rows: clampInt(src.rows, 5, 3, 8),
+        cols: clampInt(src.cols, 5, 3, 8),
+        signStart: clampInt(src.signStart, 1, 0, 9),
+        rowStart: clampInt(src.rowStart, 1, 0, 9)
+      };
+    }
+
+    function cellCount(layout) {
+      return layout.grids * layout.rows * layout.cols;
+    }
+
+    function columnCode(grid, col, signStart) {
+      return String(grid * 10 + signStart + col).padStart(2, "0");
+    }
+
+    function rowCode(row, rowStart) {
+      return String(rowStart + row);
+    }
+
+    function callCode(grid, row, col, layout) {
+      return columnCode(grid, col, layout.signStart) + "-" + rowCode(row, layout.rowStart);
+    }
+
+    const SHEET_SIZE_PRESETS = {
+      letter: { widthIn: 8.5, heightIn: 11 },
+      half: { widthIn: 8.5, heightIn: 5.5 },
+      index: { widthIn: 5, heightIn: 8 }
+    };
+
+    function defaultSheet() {
+      return { cols: 15, rows: 1, preset: "letter", widthIn: 8.5, heightIn: 11 };
+    }
+
+    function sheetOf() {
+      const sheet = book && book.sheet ? book.sheet : defaultSheet();
+      const cols = clampInt(sheet.cols, 15, 4, 20);
+      const rows = clampInt(sheet.rows, 1, 1, 8);
+      if (sheet.preset === "letter" || sheet.preset === "half" || sheet.preset === "index") {
+        return { cols: cols, rows: rows, preset: sheet.preset, widthIn: SHEET_SIZE_PRESETS[sheet.preset].widthIn, heightIn: SHEET_SIZE_PRESETS[sheet.preset].heightIn };
+      }
+      return {
+        cols: cols,
+        rows: rows,
+        preset: "custom",
+        widthIn: Math.min(8.5, Math.max(2, Number(sheet.widthIn) || 8.5)),
+        heightIn: Math.min(11, Math.max(2, Number(sheet.heightIn) || 11))
+      };
+    }
+
+    function sheetCode(grid, row, col, layout) {
+      return columnCode(grid, col, layout.signStart) + rowCode(row, layout.rowStart);
+    }
+
+    function cardCounts(version) {
+      const counts = {};
+      ((version && version.cells) || []).forEach(function (cell) {
+        if (!cell.callId) return;
+        counts[cell.callId] = (counts[cell.callId] || 0) + 1;
+      });
+      return counts;
+    }
+
+    function materializeKindCounts(kind, counts) {
+      book.library.forEach(function (call) {
+        if (call.kind === kind) call.count = counts[call.id] || 0;
+      });
+    }
+
+    function moveLibraryCall(id, direction) {
+      const call = callById(id);
+      if (!call) return false;
+      const kindItems = book.library.filter(function (item) { return item.kind === call.kind; });
+      const from = kindItems.findIndex(function (item) { return item.id === id; });
+      const to = from + direction;
+      if (from < 0 || to < 0 || to >= kindItems.length) return false;
+      const reordered = kindItems.slice();
+      const moved = reordered.splice(from, 1)[0];
+      reordered.splice(to, 0, moved);
+      let i = 0;
+      book.library = book.library.map(function (item) {
+        return item.kind === call.kind ? reordered[i++] : item;
+      });
+      return true;
+    }
+
+    function rebalanceCounts(sourceId, otherId, nextSourceCount) {
+      const source = callById(sourceId);
+      const other = callById(otherId);
+      if (!source || !other || source.id === other.id || source.kind !== other.kind) return false;
+      const next = Math.max(0, Math.round(Number(nextSourceCount) || 0));
+      const delta = next - source.count;
+      if (delta === 0) return true;
+      if (other.count - delta < 0) return false;
+      source.count = next;
+      other.count -= delta;
+      return true;
+    }
+
+    function sheetGroups(version) {
+      if (!version || !book) return [];
+      const kind = book.bandKind || "offense";
+      const layout = layoutOf(book);
+      const byCall = {};
+      (version.cells || []).forEach(function (cell) {
+        if (!cell.callId) return;
+        const call = callById(cell.callId);
+        if (!call) return;
+        if (!byCall[call.id]) byCall[call.id] = [];
+        byCall[call.id].push(sheetCode(cell.grid || 0, cell.row, cell.col, layout));
+      });
+      const listed = book.library.filter(function (call) { return byCall[call.id]; });
+      const preferred = listed.filter(function (call) { return call.kind === kind; });
+      const rest = listed.filter(function (call) { return call.kind !== kind; });
+      return preferred.concat(rest).map(function (call) {
+        return {
+          callId: call.id,
+          name: call.name,
+          short: call.short,
+          codes: byCall[call.id].slice().sort(function (a, b) {
+            return String(a).localeCompare(String(b), undefined, { numeric: true });
+          })
+        };
+      });
+    }
+
+    function nextVersionName(versions) {
+      const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      const used = new Set((versions || []).map(function (item) { return String(item.name || "").toUpperCase(); }));
+      for (let i = 0; i < letters.length; i += 1) {
+        const name = "Version " + letters[i];
+        if (!used.has(name.toUpperCase())) return name;
+      }
+      return "Version " + ((versions || []).length + 1);
+    }
+
+    function shuffleInPlace(list) {
+      for (let i = list.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+      }
+      return list;
+    }
+
+    function signBag(library, kind, total) {
+      if (total <= 0) return [];
+      const signs = (library || []).filter(function (item) { return item.kind === kind && item.id; });
+      if (!signs.length) return Array.from({ length: total }, function () { return ""; });
+      const specified = signs.some(function (item) { return (item.count || 0) > 0; });
+      const bag = [];
+      if (specified) {
+        signs.forEach(function (sign) {
+          const n = Math.max(0, Math.round(Number(sign.count) || 0));
+          for (let i = 0; i < n; i += 1) bag.push(sign.id);
+        });
+      } else {
+        const base = Math.floor(total / signs.length);
+        let extra = total % signs.length;
+        signs.forEach(function (sign) {
+          const n = base + (extra > 0 ? 1 : 0);
+          extra -= extra > 0 ? 1 : 0;
+          for (let i = 0; i < n; i += 1) bag.push(sign.id);
+        });
+      }
+      if (!bag.length) return Array.from({ length: total }, function () { return ""; });
+      if (bag.length < total) {
+        const pad = bag.slice();
+        while (bag.length < total) bag.push(pad[bag.length % pad.length]);
+      }
+      return shuffleInPlace(bag.slice(0, total));
+    }
+
+    function shuffleVersion(current, name) {
+      const layout = layoutOf(current);
+      const assigned = signBag(current.library, current.bandKind || "offense", cellCount(layout));
+      const cells = [];
+      let i = 0;
+      for (let grid = 0; grid < layout.grids; grid += 1) {
+        for (let row = 0; row < layout.rows; row += 1) {
+          for (let col = 0; col < layout.cols; col += 1) {
+            cells.push({
+              grid: grid,
+              row: row,
+              col: col,
+              code: callCode(grid, row, col, layout),
+              callId: assigned[i] || ""
+            });
+            i += 1;
+          }
+        }
+      }
+      return {
+        id: "ver-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
+        name: name || nextVersionName(current.versions || []),
+        titles: kindTitlesOf(
+          current && current.titles ? current : null,
+          current && current.title ? current.title : undefined
+        ),
+        themes: kindThemesOf(
+          current && current.themes ? current : null,
+          current && current.theme ? current.theme : undefined
+        ),
+        createdAt: Date.now(),
+        locked: false,
+        cells: cells
+      };
+    }
+
+    function emptyBook() {
+      const next = {
+        version: 1,
+        userId: (window.HUB_SOFTBALL && HUB_SOFTBALL.userId) || "",
+        title: hubName() + "'s signs",
+        bandKind: "offense",
+        rows: 5,
+        cols: 5,
+        grids: 6,
+        signStart: 1,
+        rowStart: 1,
+        theme: defaultTheme(),
+        sheet: defaultSheet(),
+        cardSize: defaultCardSize(),
+        library: defaultLibrary(),
+        versions: [],
+        activeVersionId: "",
+        updatedAt: Date.now()
+      };
+      const first = shuffleVersion(next, "Version A");
+      next.versions = [first];
+      next.activeVersionId = first.id;
+      return next;
+    }
+
+    function ensureBookShape() {
+      if (!book.library || !book.library.length) book.library = defaultLibrary();
+      book.library.forEach(function (item) {
+        if (item.count == null) item.count = 0;
+      });
+      if (!book.cardSize) book.cardSize = defaultCardSize();
+      if (!book.theme) book.theme = defaultTheme();
+      book.theme = normalizeTheme(book.theme);
+      book.sheet = sheetOf();
+      let kindReset = false;
+      if (book.bandKind !== "offense" && book.bandKind !== "defense") {
+        book.bandKind = "offense";
+        kindReset = true;
+      }
+      const layout = layoutOf(book);
+      book.grids = layout.grids;
+      book.rows = layout.rows;
+      book.cols = layout.cols;
+      book.signStart = layout.signStart;
+      book.rowStart = layout.rowStart;
+      if (!book.versions || !book.versions.length) {
+        const first = shuffleVersion(book, "Version A");
+        book.versions = [first];
+        book.activeVersionId = first.id;
+      }
+      book.versions.forEach(function (item) {
+        if (item.locked == null) item.locked = false;
+        item.titles = kindTitlesOf(item);
+        item.themes = kindThemesOf(item);
+      });
+      book.theme = themeOf();
+      const version = activeVersion();
+      if (
+        version &&
+        !version.locked &&
+        (kindReset || (version.cells && version.cells.length !== cellCount(layout)))
+      ) {
+        refillActive();
+      }
+    }
+
+    function refillActive() {
+      const current = activeVersion();
+      if (current && current.locked) return false;
+      const next = shuffleVersion(book, current ? current.name : "Version A");
+      if (current) {
+        next.id = current.id;
+        next.createdAt = current.createdAt;
+        next.locked = false;
+        next.titles = kindTitlesOf(current);
+        next.themes = kindThemesOf(current);
+        book.versions = book.versions.map(function (item) {
+          return item.id === current.id ? next : item;
+        });
+      } else {
+        book.versions = [next];
+        book.activeVersionId = next.id;
+      }
+      return true;
+    }
+
+    function shuffleCurrent() {
+      const current = activeVersion();
+      if (!current || current.locked) return false;
+      return refillActive();
+    }
+
+    function activeVersion() {
+      if (!book) return null;
+      return book.versions.find(function (item) { return item.id === book.activeVersionId; }) || book.versions[0] || null;
+    }
+
+    function callById(id) {
+      if (!book) return null;
+      return book.library.find(function (item) { return item.id === id; }) || null;
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function setStatus(message) {
+      const el = document.getElementById("save-status");
+      el.textContent = message;
+      el.classList.toggle("hidden", !message);
+    }
+
+    function setError(message) {
+      const el = document.getElementById("load-error");
+      el.textContent = message;
+      el.classList.toggle("hidden", !message);
+    }
+
+    function scheduleSave() {
+      if (book) book.updatedAt = Date.now();
+      setStatus("Saving…");
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveBook, 400);
+    }
+
+    async function saveBook() {
+      if (!book) return;
+      book.updatedAt = Date.now();
+      const sentUpdatedAt = book.updatedAt;
+      const payload = JSON.parse(JSON.stringify(book));
+      try {
+        const response = await fetch("/api/softball/wrist-coach", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ book: payload })
+        });
+        const data = await response.json().catch(function () { return {}; });
+        if (!response.ok) {
+          setError(data.error || "Could not save Wrist Coach.");
+          setStatus("");
+          return;
+        }
+        if (data.book && book.updatedAt === sentUpdatedAt) {
+          book = data.book;
+          ensureBookShape();
+        } else if (book.updatedAt !== sentUpdatedAt) {
+          scheduleSave();
+          return;
+        }
+        setError("");
+        setStatus("Saved on the server.");
+      } catch (err) {
+        setError("Could not save Wrist Coach.");
+        setStatus("");
+      }
+    }
+
+    async function loadBook() {
+      try {
+        const response = await fetch("/api/softball/wrist-coach");
+        const data = await response.json().catch(function () { return {}; });
+        if (response.status === 403) {
+          setError("This login does not have Wrist Coach. Gabe can turn it on under Softball in People.");
+          return;
+        }
+        if (!response.ok) {
+          setError(data.error || "Could not load Wrist Coach.");
+          book = emptyBook();
+        } else {
+          book = data.book || emptyBook();
+        }
+        ensureBookShape();
+        render();
+        if (!data.updatedAt) scheduleSave();
+      } catch (err) {
+        book = emptyBook();
+        setError("Could not load Wrist Coach.");
+        render();
+      }
+    }
+
+    function swatchRow(id, field, selected) {
+      return PALETTE.map(function (color) {
+        const bg = color === "clear" ? "linear-gradient(135deg,#fff 50%,#cbd5e1 50%)" : COLOR_HEX[color];
+        return (
+          '<button type="button" class="swatch" data-call-' + field + '="' + escapeHtml(id) + '" data-color="' + color + '" data-on="' + (selected === color ? "1" : "0") + '" title="' + color + '" style="background:' + bg + '"></button>'
+        );
+      }).join("");
+    }
+
+    function renderLibraryKind(kind, mountId) {
+      const mount = document.getElementById(mountId);
+      const items = book.library.filter(function (item) { return item.kind === kind; });
+      const onCard = cardCounts(activeVersion());
+      mount.innerHTML = items.map(function (item, index) {
+        const fill = normalizeColor(item.fill);
+        const ink = normalizeColor(item.ink);
+        const count = onCard[item.id] || 0;
+        return (
+          '<div class="grid gap-1.5">' +
+            '<div class="grid grid-cols-[auto_3.5rem_1fr_auto_auto] gap-2 items-center">' +
+              '<div class="grid gap-1">' +
+                '<button type="button" data-call-move="' + escapeHtml(item.id) + '" data-dir="-1" class="count-step" aria-label="Move up"' + (index === 0 ? " disabled" : "") + '>↑</button>' +
+                '<button type="button" data-call-move="' + escapeHtml(item.id) + '" data-dir="1" class="count-step" aria-label="Move down"' + (index === items.length - 1 ? " disabled" : "") + '>↓</button>' +
+              '</div>' +
+              '<input data-call-short="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.short) + '" maxlength="4" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs uppercase outline-none focus:border-red-500">' +
+              '<input data-call-name="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.name) + '" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm outline-none focus:border-red-500">' +
+              '<div class="flex items-center gap-1">' +
+                '<button type="button" data-call-less="' + escapeHtml(item.id) + '" class="count-step" aria-label="Fewer">−</button>' +
+                '<input data-call-count="' + escapeHtml(item.id) + '" value="' + escapeHtml(String(count)) + '" inputmode="numeric" class="w-12 rounded-lg border border-slate-700 bg-slate-950 px-1 py-1.5 text-center text-xs outline-none focus:border-red-500" aria-label="On card">' +
+                '<button type="button" data-call-more="' + escapeHtml(item.id) + '" class="count-step" aria-label="More">+</button>' +
+              '</div>' +
+              '<button type="button" data-call-del="' + escapeHtml(item.id) + '" class="text-xs text-slate-500 hover:text-red-400" aria-label="Remove">×</button>' +
+            '</div>' +
+            '<div class="flex flex-wrap items-center gap-2">' +
+              '<span class="text-[10px] text-slate-500">Cell</span>' +
+              '<div class="flex gap-1">' + swatchRow(item.id, "fill", fill) + '</div>' +
+              '<span class="text-[10px] text-slate-500">Text</span>' +
+              '<div class="flex gap-1">' + swatchRow(item.id, "ink", ink) + '</div>' +
+            '</div>' +
+          '</div>'
+        );
+      }).join("") || '<p class="text-xs text-slate-500">None yet.</p>';
+    }
+
+    function cellAt(version, grid, row, col) {
+      return (version.cells || []).find(function (cell) {
+        return Number(cell.grid || 0) === grid && Number(cell.row) === row && Number(cell.col) === col;
+      }) || null;
+    }
+
+    function wristCardHtml(version, coachView, extraClass) {
+      if (!version) return "";
+      const layout = layoutOf(book);
+      const size = cardSize();
+      const theme = themeOf();
+      const topCount = layout.grids <= 3 ? layout.grids : Math.ceil(layout.grids / 2);
+      const groups = [ [], [] ];
+      for (let g = 0; g < layout.grids; g += 1) groups[g < topCount ? 0 : 1].push(g);
+      const headSize = Math.max(6, Math.min(9, size.widthIn * 2.1));
+      const cellSize = Math.max(5.5, Math.min(8.5, size.widthIn * 1.9));
+      function blockHtml(grid) {
+        const cells = ['<div></div>'];
+        for (let col = 0; col < layout.cols; col += 1) {
+          cells.push(
+            '<div class="bs-head" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + headSize + 'px">' +
+              escapeHtml(columnCode(grid, col, layout.signStart)) +
+            '</div>'
+          );
+        }
+        for (let row = 0; row < layout.rows; row += 1) {
+          cells.push(
+            '<div class="bs-rownum" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + headSize + 'px">' +
+              escapeHtml(rowCode(row, layout.rowStart)) +
+            '</div>'
+          );
+          for (let col = 0; col < layout.cols; col += 1) {
+            const cell = cellAt(version, grid, row, col);
+            const call = cell ? callById(cell.callId) : null;
+            const paint = cellPaint(call);
+            const label = call ? escapeHtml(call.short) : "";
+            const title = coachView && call ? escapeHtml(call.name) : (cell ? escapeHtml(cell.code) : "");
+            cells.push(
+              '<div class="bs-cell" title="' + title + '" style="background:' + paint.background + ';color:' + paint.color + ';font-size:' + cellSize + 'px">' +
+                label +
+              '</div>'
+            );
+          }
+        }
+        return (
+          '<div class="bs-block" style="grid-template-columns:0.18in repeat(' + layout.cols + ',minmax(0,1fr));grid-template-rows:0.16in repeat(' + layout.rows + ',minmax(0,1fr))">' +
+            cells.join("") +
+          '</div>'
+        );
+      }
+      function halfHtml(grids) {
+        if (!grids.length) return "";
+        return '<div class="band-half">' + grids.map(blockHtml).join("") + '</div>';
+      }
+      const banner =
+        '<div class="band-banner" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + Math.max(8, Math.min(12, size.widthIn * 2.6)) + 'px">' +
+          escapeHtml(bandTitle()) +
+        '</div>';
+      return (
+        '<div class="band-card rounded-xl ' + (extraClass || "") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+          halfHtml(groups[0]) +
+          banner +
+          halfHtml(groups[1]) +
+        '</div>'
+      );
+    }
+
+    function renderCard() {
+      const mount = document.getElementById("card-preview");
+      mount.innerHTML = wristCardHtml(activeVersion(), showCoachOnCard, "shadow-xl");
+      document.getElementById("view-player").className =
+        "rounded-full px-3 py-1 text-xs font-semibold " + (showCoachOnCard ? "bg-slate-800 text-slate-400" : "bg-red-700 text-white");
+      document.getElementById("view-coach").className =
+        "rounded-full px-3 py-1 text-xs font-semibold " + (showCoachOnCard ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+    }
+
+    function renderVersions() {
+      const current = activeVersion();
+      const shuffleBtn = document.getElementById("shuffle-current");
+      const locked = !!(current && current.locked);
+      shuffleBtn.disabled = locked;
+      shuffleBtn.className = "rounded-xl px-4 py-2 text-sm font-semibold " +
+        (locked ? "bg-slate-800 text-slate-500 cursor-not-allowed" : "bg-slate-800 hover:bg-slate-700");
+      const mount = document.getElementById("version-list");
+      mount.innerHTML = book.versions.map(function (version) {
+        const active = version.id === book.activeVersionId;
+        const when = new Date(version.createdAt).toLocaleString();
+        const titles = kindTitlesOf(version);
+        return (
+          '<li class="flex flex-wrap items-start justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">' +
+            '<div class="min-w-0 grow">' +
+              '<input data-ver-name="' + escapeHtml(version.id) + '" value="' + escapeHtml(version.name) + '" class="bg-transparent text-sm font-semibold outline-none focus:text-red-300">' +
+              '<div class="mt-2 grid gap-2 sm:grid-cols-2">' +
+                '<label class="grid gap-1 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Offense' +
+                  '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="offense" maxlength="60" value="' + escapeHtml(titles.offense) + '" class="rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
+                '</label>' +
+                '<label class="grid gap-1 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Defense' +
+                  '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="defense" maxlength="60" value="' + escapeHtml(titles.defense) + '" class="rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
+                '</label>' +
+              '</div>' +
+              '<p class="mt-2 text-xs text-slate-500">' + escapeHtml(when) + (active ? " · Active" : "") + (version.locked ? " · Locked" : "") + '</p>' +
+            '</div>' +
+            '<div class="flex items-center gap-3 pt-1">' +
+              (active
+                ? '<span class="text-xs font-semibold text-red-400">Using</span>'
+                : '<button type="button" data-ver-use="' + escapeHtml(version.id) + '" class="text-xs text-slate-400 hover:text-red-400">Use</button>') +
+              '<button type="button" data-ver-lock="' + escapeHtml(version.id) + '" class="text-xs ' + (version.locked ? "font-semibold text-red-400" : "text-slate-400 hover:text-red-400") + '">' +
+                (version.locked ? "Unlock" : "Lock") +
+              '</button>' +
+              (book.versions.length > 1
+                ? '<button type="button" data-ver-del="' + escapeHtml(version.id) + '" class="text-xs text-slate-500 hover:text-red-400">Delete</button>'
+                : "") +
+            '</div>' +
+          '</li>'
+        );
+      }).join("");
+    }
+
+    function coachSheetHtml(version) {
+      if (!version) return "";
+      const sheet = sheetOf();
+      const theme = themeOf();
+      const groups = sheetGroups(version);
+      const banner = escapeHtml(bandTitle() + " - CALLS ARE TOP + LEFT");
+      const body = groups.map(function (group) {
+        const needed = Math.max(sheet.rows, Math.ceil(group.codes.length / sheet.cols) || 1);
+        const playRow =
+          '<tr><th class="sheet-play" colspan="' + sheet.cols + '">' +
+            escapeHtml(group.name + " (" + group.short + ")") +
+          '</th></tr>';
+        const codeRows = [];
+        for (let r = 0; r < needed; r += 1) {
+          const cells = [];
+          for (let c = 0; c < sheet.cols; c += 1) {
+            const code = group.codes[r * sheet.cols + c] || "";
+            cells.push('<td class="sheet-code">' + escapeHtml(code) + '</td>');
+          }
+          codeRows.push('<tr>' + cells.join("") + '</tr>');
+        }
+        return playRow + codeRows.join("");
+      }).join("");
+      const font = Math.max(6, Math.min(11, sheet.widthIn * 1.15));
+      return (
+        '<div class="coach-sheet-page shadow-xl" style="width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;padding:0.12in;font-size:' + font + 'px">' +
+          '<table class="coach-sheet">' +
+            '<thead><tr><th class="sheet-banner" colspan="' + sheet.cols + '" style="background:' + theme.band + ';color:' + theme.ink + '">' +
+              banner +
+            '</th></tr></thead>' +
+            '<tbody>' + body + '</tbody>' +
+          '</table>' +
+        '</div>'
+      );
+    }
+
+    function renderCoachKey() {
+      const version = activeVersion();
+      const mount = document.getElementById("coach-key");
+      if (!version) {
+        mount.innerHTML = "";
+        return;
+      }
+      mount.innerHTML = coachSheetHtml(version);
+    }
+
+    function renderPrint() {
+      const version = activeVersion();
+      const root = document.getElementById("print-root");
+      if (!version) {
+        root.innerHTML = "";
+        return;
+      }
+      const size = cardSize();
+      const usableW = 8.5 - 0.9;
+      const usableH = 11 - 1.15;
+      const gap = 0.16;
+      const cols = Math.max(1, Math.floor((usableW + gap) / (size.widthIn + gap)));
+      const rows = Math.max(1, Math.floor((usableH + gap) / (size.heightIn + gap)));
+      const count = cols * rows;
+      const cards = [];
+      for (let i = 0; i < count; i += 1) cards.push(wristCardHtml(version, false, ""));
+      const cardPage =
+        '<section class="print-page print-cards">' +
+          '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
+            'Player cards · ' + size.widthIn + ' × ' + size.heightIn + ' in · ' +
+            escapeHtml(bandTitle()) + ' · ' + escapeHtml(version.name) + '</p>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:' + gap + 'in">' + cards.join("") + '</div>' +
+        '</section>';
+      const sheet = sheetOf();
+      const sheetGap = 0.16;
+      const sheetCols = Math.max(1, Math.floor((usableW + sheetGap) / (sheet.widthIn + sheetGap)));
+      const sheetRows = Math.max(1, Math.floor((usableH + sheetGap) / (sheet.heightIn + sheetGap)));
+      const sheetCount = sheetCols * sheetRows;
+      const sheets = [];
+      for (let i = 0; i < sheetCount; i += 1) sheets.push(coachSheetHtml(version));
+      const keyPage =
+        '<section class="print-page print-key" style="color:#0f172a">' +
+          '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
+            'Coach sheet · ' + sheet.widthIn + ' × ' + sheet.heightIn + ' in · ' +
+            escapeHtml(bandTitle()) + ' · ' + escapeHtml(version.name) + '</p>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:' + sheetGap + 'in">' + sheets.join("") + '</div>' +
+        '</section>';
+      if (printMode === "cards") root.innerHTML = cardPage;
+      else if (printMode === "key") root.innerHTML = keyPage;
+      else root.innerHTML = cardPage + keyPage;
+    }
+
+    function renderSizeControls() {
+      const size = cardSize();
+      document.querySelectorAll(".size-btn").forEach(function (btn) {
+        const on = btn.getAttribute("data-size") === size.preset;
+        btn.className = "size-btn rounded-full px-3 py-1 text-xs font-semibold " +
+          (on ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+      });
+      const custom = document.getElementById("custom-size");
+      custom.classList.toggle("hidden", size.preset !== "custom");
+      custom.classList.toggle("flex", size.preset === "custom");
+      document.getElementById("card-w").value = String(size.widthIn);
+      document.getElementById("card-h").value = String(size.heightIn);
+    }
+
+    function renderKindControls() {
+      const kind = book.bandKind || "offense";
+      document.querySelectorAll(".kind-btn").forEach(function (btn) {
+        const on = btn.getAttribute("data-kind") === kind;
+        btn.className = "kind-btn rounded-full px-3 py-1.5 text-xs font-semibold " +
+          (on ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+      });
+      document.querySelectorAll("[data-kind-panel]").forEach(function (panel) {
+        panel.classList.toggle("hidden", panel.getAttribute("data-kind-panel") !== kind);
+      });
+      const heading = document.getElementById("signs-heading");
+      if (heading) heading.textContent = kindLabel(kind);
+    }
+
+    function renderThemeControls() {
+      const theme = themeOf();
+      document.getElementById("theme-band").value = theme.band;
+      document.getElementById("theme-ink").value = theme.ink;
+      document.getElementById("theme-highlight").value = theme.highlight;
+      document.getElementById("theme-band-hex").value = theme.band.toUpperCase();
+      document.getElementById("theme-ink-hex").value = theme.ink.toUpperCase();
+      document.getElementById("theme-highlight-hex").value = theme.highlight.toUpperCase();
+    }
+
+    function renderLayoutControls() {
+      const layout = layoutOf(book);
+      document.getElementById("sign-start").value = String(layout.signStart);
+      document.getElementById("row-start").value = String(layout.rowStart);
+      document.getElementById("grid-count").value = String(layout.grids);
+      document.getElementById("grid-cols").value = String(layout.cols);
+      document.getElementById("grid-rows").value = String(layout.rows);
+    }
+
+    function renderSheetControls() {
+      const sheet = sheetOf();
+      document.getElementById("sheet-cols").value = String(sheet.cols);
+      document.getElementById("sheet-rows").value = String(sheet.rows);
+      document.querySelectorAll(".sheet-size-btn").forEach(function (btn) {
+        const on = btn.getAttribute("data-sheet-size") === sheet.preset;
+        btn.className = "sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold " +
+          (on ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+      });
+      const custom = document.getElementById("sheet-custom-size");
+      custom.classList.toggle("hidden", sheet.preset !== "custom");
+      custom.classList.toggle("flex", sheet.preset === "custom");
+      document.getElementById("sheet-w").value = String(sheet.widthIn);
+      document.getElementById("sheet-h").value = String(sheet.heightIn);
+    }
+
+    function renderTally() {
+      const layout = layoutOf(book);
+      const kind = book.bandKind || "offense";
+      const onCard = cardCounts(activeVersion());
+      const used = book.library
+        .filter(function (item) { return item.kind === kind; })
+        .reduce(function (sum, item) { return sum + (onCard[item.id] || 0); }, 0);
+      const total = cellCount(layout);
+      document.getElementById("sign-tally").textContent = used + " / " + total;
+    }
+
+    function render() {
+      if (!book) return;
+      document.getElementById("book-title").value = bandTitle();
+      document.getElementById("book-subtitle").textContent = bandTitle();
+      renderKindControls();
+      renderSizeControls();
+      renderLayoutControls();
+      renderSheetControls();
+      renderThemeControls();
+      renderTally();
+      renderLibraryKind("pitch", "pitch-list");
+      renderLibraryKind("location", "location-list");
+      renderLibraryKind("offense", "play-list");
+      renderLibraryKind("defense", "defense-list");
+      renderCard();
+      renderVersions();
+      renderCoachKey();
+    }
+
+    function addCall(kind, name, short) {
+      const cleanName = String(name || "").trim();
+      const cleanShort = String(short || "").trim().slice(0, 4).toUpperCase();
+      if (!cleanName) return;
+      book.library.push({
+        id: kind + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        kind: kind,
+        name: cleanName,
+        short: cleanShort || cleanName.slice(0, 3).toUpperCase(),
+        fill: "clear",
+        ink: "clear",
+        count: 0
+      });
+      render();
+      scheduleSave();
+    }
+
+    function printNow(mode) {
+      printMode = mode;
+      renderPrint();
+      window.print();
+    }
+
+    function applyThemeField(field, value) {
+      const version = activeVersion();
+      if (!version) return;
+      const kind = book.bandKind === "defense" ? "defense" : "offense";
+      version.themes = kindThemesOf(version);
+      version.themes[kind][field] = normalizeHex(value, version.themes[kind][field]);
+      book.theme = themeOf();
+      renderThemeControls();
+      renderCard();
+      renderCoachKey();
+      scheduleSave();
+    }
+
+    function applySheet() {
+      const current = sheetOf();
+      book.sheet = {
+        cols: clampInt(document.getElementById("sheet-cols").value, current.cols, 4, 20),
+        rows: clampInt(document.getElementById("sheet-rows").value, current.rows, 1, 8),
+        preset: current.preset,
+        widthIn: current.widthIn,
+        heightIn: current.heightIn
+      };
+      renderSheetControls();
+      renderCoachKey();
+      scheduleSave();
+    }
+
+    function applySheetSize(preset) {
+      const current = sheetOf();
+      if (preset === "letter" || preset === "half" || preset === "index") {
+        book.sheet = {
+          cols: current.cols,
+          rows: current.rows,
+          preset: preset,
+          widthIn: SHEET_SIZE_PRESETS[preset].widthIn,
+          heightIn: SHEET_SIZE_PRESETS[preset].heightIn
+        };
+      } else {
+        book.sheet = {
+          cols: current.cols,
+          rows: current.rows,
+          preset: "custom",
+          widthIn: current.widthIn,
+          heightIn: current.heightIn
+        };
+      }
+      renderSheetControls();
+      renderCoachKey();
+      scheduleSave();
+    }
+
+    function applyCustomSheetSize() {
+      const current = sheetOf();
+      const w = Number(document.getElementById("sheet-w").value);
+      const h = Number(document.getElementById("sheet-h").value);
+      book.sheet = {
+        cols: current.cols,
+        rows: current.rows,
+        preset: "custom",
+        widthIn: Number.isFinite(w) && w > 0 ? Math.min(8.5, Math.max(2, w)) : 8.5,
+        heightIn: Number.isFinite(h) && h > 0 ? Math.min(11, Math.max(2, h)) : 11
+      };
+      renderSheetControls();
+      renderCoachKey();
+      scheduleSave();
+    }
+
+    function applyLayout() {
+      const next = {
+        grids: clampInt(document.getElementById("grid-count").value, book.grids, 1, 8),
+        rows: clampInt(document.getElementById("grid-rows").value, book.rows, 3, 8),
+        cols: clampInt(document.getElementById("grid-cols").value, book.cols, 3, 8),
+        signStart: clampInt(document.getElementById("sign-start").value, book.signStart, 0, 9),
+        rowStart: clampInt(document.getElementById("row-start").value, book.rowStart, 0, 9)
+      };
+      const changed = next.grids !== book.grids || next.rows !== book.rows || next.cols !== book.cols ||
+        next.signStart !== book.signStart || next.rowStart !== book.rowStart;
+      book.grids = next.grids;
+      book.rows = next.rows;
+      book.cols = next.cols;
+      book.signStart = next.signStart;
+      book.rowStart = next.rowStart;
+      if (changed) refillActive();
+      render();
+      scheduleSave();
+    }
+
+    document.getElementById("book-title").addEventListener("change", function (event) {
+      const version = activeVersion();
+      const kind = book.bandKind === "defense" ? "defense" : "offense";
+      setKindTitle(version, kind, event.target.value);
+      book.title = bandTitle();
+      render();
+      scheduleSave();
+    });
+    document.getElementById("kind-btns").addEventListener("click", function (event) {
+      const btn = event.target.closest("[data-kind]");
+      if (!btn) return;
+      const kind = btn.getAttribute("data-kind");
+      if (kind !== "offense" && kind !== "defense") return;
+      if (kind === book.bandKind) return;
+      book.bandKind = kind;
+      refillActive();
+      render();
+      scheduleSave();
+    });
+    ["theme-band", "theme-ink", "theme-highlight"].forEach(function (id) {
+      const field = id.replace("theme-", "");
+      document.getElementById(id).addEventListener("input", function (event) {
+        applyThemeField(field, event.target.value);
+      });
+      document.getElementById(id + "-hex").addEventListener("change", function (event) {
+        applyThemeField(field, event.target.value);
+      });
+    });
+    ["sign-start", "row-start", "grid-count", "grid-cols", "grid-rows"].forEach(function (id) {
+      document.getElementById(id).addEventListener("change", applyLayout);
+    });
+    document.getElementById("sheet-cols").addEventListener("change", applySheet);
+    document.getElementById("sheet-rows").addEventListener("change", applySheet);
+    document.querySelectorAll(".sheet-size-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        applySheetSize(btn.getAttribute("data-sheet-size") || "letter");
+      });
+    });
+    document.getElementById("sheet-w").addEventListener("change", applyCustomSheetSize);
+    document.getElementById("sheet-h").addEventListener("change", applyCustomSheetSize);
+    document.getElementById("add-pitch").addEventListener("submit", function (event) {
+      event.preventDefault();
+      addCall("pitch", document.getElementById("pitch-name").value, document.getElementById("pitch-short").value);
+      document.getElementById("pitch-name").value = "";
+      document.getElementById("pitch-short").value = "";
+    });
+    document.getElementById("add-play").addEventListener("submit", function (event) {
+      event.preventDefault();
+      addCall("offense", document.getElementById("play-name").value, document.getElementById("play-short").value);
+      document.getElementById("play-name").value = "";
+      document.getElementById("play-short").value = "";
+    });
+    document.getElementById("add-location").addEventListener("submit", function (event) {
+      event.preventDefault();
+      addCall("location", document.getElementById("location-name").value, document.getElementById("location-short").value);
+      document.getElementById("location-name").value = "";
+      document.getElementById("location-short").value = "";
+    });
+    document.getElementById("add-defense").addEventListener("submit", function (event) {
+      event.preventDefault();
+      addCall("defense", document.getElementById("defense-name").value, document.getElementById("defense-short").value);
+      document.getElementById("defense-name").value = "";
+      document.getElementById("defense-short").value = "";
+    });
+    document.getElementById("pitch-list").addEventListener("change", onCallEdit);
+    document.getElementById("location-list").addEventListener("change", onCallEdit);
+    document.getElementById("play-list").addEventListener("change", onCallEdit);
+    document.getElementById("defense-list").addEventListener("change", onCallEdit);
+    document.getElementById("pitch-list").addEventListener("click", onLibraryClick);
+    document.getElementById("location-list").addEventListener("click", onLibraryClick);
+    document.getElementById("play-list").addEventListener("click", onLibraryClick);
+    document.getElementById("defense-list").addEventListener("click", onLibraryClick);
+    document.getElementById("count-modal-cancel").addEventListener("click", function () {
+      closeCountModal();
+      render();
+    });
+    document.getElementById("count-modal-choices").addEventListener("click", function (event) {
+      const btn = event.target.closest("[data-count-other]");
+      if (!btn || !pendingCount) return;
+      const otherId = btn.getAttribute("data-count-other");
+      const source = callById(pendingCount.id);
+      if (!source) {
+        closeCountModal();
+        render();
+        return;
+      }
+      materializeKindCounts(source.kind, cardCounts(activeVersion()));
+      if (!rebalanceCounts(pendingCount.id, otherId, pendingCount.next)) {
+        closeCountModal();
+        render();
+        return;
+      }
+      closeCountModal();
+      refillActive();
+      render();
+      scheduleSave();
+    });
+    function closeCountModal() {
+      pendingCount = null;
+      document.getElementById("count-modal").classList.add("hidden");
+    }
+
+    function openCountTrade(id, nextCount) {
+      const call = callById(id);
+      if (!call) return;
+      const kind = call.kind;
+      materializeKindCounts(kind, cardCounts(activeVersion()));
+      const current = call.count;
+      const next = clampInt(nextCount, current, 0, 300);
+      if (next === current) {
+        render();
+        return;
+      }
+      const delta = next - current;
+      const others = book.library.filter(function (item) {
+        if (item.id === id || item.kind !== kind) return false;
+        return delta > 0 ? item.count >= delta : true;
+      });
+      if (!others.length) {
+        render();
+        return;
+      }
+      pendingCount = { id: id, next: next, current: current };
+      document.getElementById("count-modal-title").textContent =
+        call.name + " · " + current + " → " + next;
+      document.getElementById("count-modal-sub").textContent =
+        delta > 0 ? "Reduce" : "Add to";
+      document.getElementById("count-modal-choices").innerHTML = others.map(function (item) {
+        return (
+          '<button type="button" data-count-other="' + escapeHtml(item.id) + '" class="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm hover:border-red-500">' +
+            '<span>' + escapeHtml(item.name) + ' (' + escapeHtml(item.short) + ')</span>' +
+            '<span class="text-slate-400">' + escapeHtml(String(item.count)) + '</span>' +
+          '</button>'
+        );
+      }).join("");
+      document.getElementById("count-modal").classList.remove("hidden");
+    }
+
+    function onCallEdit(event) {
+      const id = event.target.getAttribute("data-call-name") ||
+        event.target.getAttribute("data-call-short") ||
+        event.target.getAttribute("data-call-count");
+      if (!id) return;
+      const call = callById(id);
+      if (!call) return;
+      if (event.target.getAttribute("data-call-name")) {
+        call.name = event.target.value.trim() || call.name;
+        render();
+        scheduleSave();
+        return;
+      }
+      if (event.target.getAttribute("data-call-short")) {
+        call.short = event.target.value.trim().slice(0, 4).toUpperCase() || call.short;
+        render();
+        scheduleSave();
+        return;
+      }
+      if (event.target.getAttribute("data-call-count")) {
+        openCountTrade(id, event.target.value);
+      }
+    }
+    function onLibraryClick(event) {
+      const target = event.target.closest("button");
+      if (!(target instanceof HTMLElement) || target.disabled) return;
+      const moveId = target.getAttribute("data-call-move");
+      if (moveId) {
+        if (moveLibraryCall(moveId, Number(target.getAttribute("data-dir")) < 0 ? -1 : 1)) {
+          render();
+          scheduleSave();
+        }
+        return;
+      }
+      const moreId = target.getAttribute("data-call-more");
+      if (moreId) {
+        const onCard = cardCounts(activeVersion());
+        openCountTrade(moreId, (onCard[moreId] || 0) + 1);
+        return;
+      }
+      const lessId = target.getAttribute("data-call-less");
+      if (lessId) {
+        const onCard = cardCounts(activeVersion());
+        const current = onCard[lessId] || 0;
+        if (current <= 0) return;
+        openCountTrade(lessId, current - 1);
+        return;
+      }
+      const fillId = target.getAttribute("data-call-fill");
+      const inkId = target.getAttribute("data-call-ink");
+      const color = target.getAttribute("data-color");
+      if (fillId && color) {
+        const call = callById(fillId);
+        if (call) {
+          call.fill = normalizeColor(color);
+          render();
+          scheduleSave();
+        }
+        return;
+      }
+      if (inkId && color) {
+        const call = callById(inkId);
+        if (call) {
+          call.ink = normalizeColor(color);
+          render();
+          scheduleSave();
+        }
+        return;
+      }
+      const id = target.getAttribute("data-call-del");
+      if (!id) return;
+      book.library = book.library.filter(function (item) { return item.id !== id; });
+      refillActive();
+      render();
+      scheduleSave();
+    }
+    document.querySelectorAll(".size-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const preset = btn.getAttribute("data-size") || "wrist";
+        if (preset === "custom") {
+          const current = cardSize();
+          book.cardSize = { preset: "custom", widthIn: current.widthIn, heightIn: current.heightIn };
+        } else if (SIZE_PRESETS[preset]) {
+          book.cardSize = {
+            preset: preset,
+            widthIn: SIZE_PRESETS[preset].widthIn,
+            heightIn: SIZE_PRESETS[preset].heightIn
+          };
+        }
+        render();
+        scheduleSave();
+      });
+    });
+    function applyCustomSize() {
+      const w = Number(document.getElementById("card-w").value);
+      const h = Number(document.getElementById("card-h").value);
+      book.cardSize = {
+        preset: "custom",
+        widthIn: Number.isFinite(w) && w > 0 ? Math.min(8.5, Math.max(1, w)) : 4,
+        heightIn: Number.isFinite(h) && h > 0 ? Math.min(11, Math.max(1, h)) : 2
+      };
+      render();
+      scheduleSave();
+    }
+    document.getElementById("card-w").addEventListener("change", applyCustomSize);
+    document.getElementById("card-h").addEventListener("change", applyCustomSize);
+    document.getElementById("view-player").addEventListener("click", function () {
+      showCoachOnCard = false;
+      renderCard();
+    });
+    document.getElementById("view-coach").addEventListener("click", function () {
+      showCoachOnCard = true;
+      renderCard();
+    });
+    document.getElementById("shuffle-current").addEventListener("click", function () {
+      if (!shuffleCurrent()) return;
+      render();
+      scheduleSave();
+    });
+    document.getElementById("shuffle-version").addEventListener("click", function () {
+      const current = activeVersion();
+      if (!current) return;
+      const version = {
+        id: "ver-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
+        name: nextVersionName(book.versions),
+        titles: kindTitlesOf(current),
+        themes: kindThemesOf(current),
+        createdAt: Date.now(),
+        locked: false,
+        cells: current.cells.map(function (cell) { return Object.assign({}, cell); })
+      };
+      book.versions.push(version);
+      book.activeVersionId = version.id;
+      render();
+      scheduleSave();
+    });
+    let pendingUnlockId = null;
+    function closeUnlockModal() {
+      pendingUnlockId = null;
+      document.getElementById("unlock-modal").classList.add("hidden");
+    }
+    function openUnlockModal(version) {
+      pendingUnlockId = version.id;
+      document.getElementById("unlock-modal-title").textContent = "Unlock " + version.name + "?";
+      document.getElementById("unlock-modal").classList.remove("hidden");
+    }
+    document.getElementById("unlock-modal-cancel").addEventListener("click", closeUnlockModal);
+    document.getElementById("unlock-modal-confirm").addEventListener("click", function () {
+      const version = book.versions.find(function (item) { return item.id === pendingUnlockId; });
+      if (version) version.locked = false;
+      closeUnlockModal();
+      render();
+      scheduleSave();
+    });
+    document.getElementById("version-list").addEventListener("change", function (event) {
+      const nameId = event.target.getAttribute("data-ver-name");
+      const titleId = event.target.getAttribute("data-ver-title");
+      if (nameId) {
+        const version = book.versions.find(function (item) { return item.id === nameId; });
+        if (!version) return;
+        version.name = event.target.value.trim() || version.name;
+        render();
+        scheduleSave();
+        return;
+      }
+      if (!titleId) return;
+      const version = book.versions.find(function (item) { return item.id === titleId; });
+      if (!version) return;
+      const kind = event.target.getAttribute("data-ver-kind") === "defense" ? "defense" : "offense";
+      setKindTitle(version, kind, event.target.value);
+      if (version.id === book.activeVersionId && kind === (book.bandKind === "defense" ? "defense" : "offense")) {
+        book.title = bandTitle();
+      }
+      render();
+      scheduleSave();
+    });
+    document.getElementById("version-list").addEventListener("click", function (event) {
+      const useId = event.target.getAttribute("data-ver-use");
+      const lockId = event.target.getAttribute("data-ver-lock");
+      const delId = event.target.getAttribute("data-ver-del");
+      if (useId) {
+        book.activeVersionId = useId;
+        render();
+        scheduleSave();
+      }
+      if (lockId) {
+        const version = book.versions.find(function (item) { return item.id === lockId; });
+        if (!version) return;
+        if (version.locked) {
+          openUnlockModal(version);
+          return;
+        }
+        version.locked = true;
+        render();
+        scheduleSave();
+      }
+      if (delId && book.versions.length > 1) {
+        book.versions = book.versions.filter(function (item) { return item.id !== delId; });
+        if (book.activeVersionId === delId) book.activeVersionId = book.versions[0].id;
+        render();
+        scheduleSave();
+      }
+    });
+    document.getElementById("print-cards").addEventListener("click", function () { printNow("cards"); });
+    document.getElementById("print-key").addEventListener("click", function () { printNow("key"); });
+    document.getElementById("print-both").addEventListener("click", function () { printNow("both"); });
+
+    loadBook();
+  </script>
+</body>
+</html>
