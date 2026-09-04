@@ -14,11 +14,88 @@ export function kindLabel(kind: WristCallKind | string) {
   return "Pitch";
 }
 
+export const WRIST_COLORS = ["clear", "white", "black", "red", "blue", "green", "orange"] as const;
+export type WristColor = (typeof WRIST_COLORS)[number];
+
+export const WRIST_COLOR_HEX: Record<WristColor, string> = {
+  clear: "transparent",
+  white: "#ffffff",
+  black: "#111827",
+  red: "#b91c1c",
+  blue: "#1d4ed8",
+  green: "#15803d",
+  orange: "#ea580c",
+};
+
+export function isWristColor(value: unknown): value is WristColor {
+  return typeof value === "string" && (WRIST_COLORS as readonly string[]).includes(value);
+}
+
+export function normalizeColor(value: unknown, fallback: WristColor = "clear"): WristColor {
+  return isWristColor(value) ? value : fallback;
+}
+
+export function callColors(call?: Pick<WristCall, "fill" | "ink"> | null) {
+  const fill = normalizeColor(call?.fill);
+  const ink = normalizeColor(call?.ink);
+  const background = fill === "clear" ? "#ffffff" : WRIST_COLOR_HEX[fill];
+  let color = "#0f172a";
+  if (ink === "clear") {
+    color = fill === "clear" || fill === "white" ? "#0f172a" : "#ffffff";
+  } else if (ink === "white") {
+    color = "#ffffff";
+  } else {
+    color = WRIST_COLOR_HEX[ink];
+  }
+  return { background, color };
+}
+
+export const CARD_SIZE_PRESETS = {
+  softball: { widthIn: 3.5, heightIn: 2.25 },
+  large: { widthIn: 5, heightIn: 3 },
+} as const;
+
+export type CardSizePreset = "softball" | "large" | "custom";
+
+export type WristCardSize = {
+  preset: CardSizePreset;
+  widthIn: number;
+  heightIn: number;
+};
+
+export function defaultCardSize(): WristCardSize {
+  return { preset: "softball", ...CARD_SIZE_PRESETS.softball };
+}
+
+function clampInches(value: unknown, fallback: number, min: number, max: number) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n * 100) / 100));
+}
+
+export function normalizeCardSize(raw: unknown): WristCardSize {
+  const item = asRecord(raw);
+  const preset = item?.preset;
+  if (preset === "softball" || preset === "large") {
+    return { preset, ...CARD_SIZE_PRESETS[preset] };
+  }
+  if (preset === "custom" || item?.widthIn != null || item?.heightIn != null) {
+    return {
+      preset: "custom",
+      widthIn: clampInches(item?.widthIn, CARD_SIZE_PRESETS.softball.widthIn, 1, 8.5),
+      heightIn: clampInches(item?.heightIn, CARD_SIZE_PRESETS.softball.heightIn, 1, 11),
+    };
+  }
+  return defaultCardSize();
+}
+
 export type WristCall = {
   id: string;
   kind: WristCallKind;
   name: string;
   short: string;
+  fill: WristColor;
+  ink: WristColor;
 };
 
 export type WristCell = {
@@ -41,6 +118,7 @@ export type WristBook = {
   title: string;
   rows: number;
   cols: number;
+  cardSize: WristCardSize;
   library: WristCall[];
   versions: WristVersion[];
   activeVersionId: string;
@@ -129,7 +207,14 @@ export function newCallId(kind: WristCallKind, name: string) {
 }
 
 function rowsToCalls(kind: WristCallKind, rows: Array<[string, string, string]>): WristCall[] {
-  return rows.map(([id, name, short]) => ({ id, kind, name, short }));
+  return rows.map(([id, name, short]) => ({
+    id,
+    kind,
+    name,
+    short,
+    fill: "clear",
+    ink: "clear",
+  }));
 }
 
 export function defaultLibrary(): WristCall[] {
@@ -303,6 +388,8 @@ function normalizeCall(raw: unknown, index: number): WristCall | null {
     kind,
     name: name || short || kindLabel(kind),
     short: short || (name || "XX").slice(0, 3).toUpperCase(),
+    fill: normalizeColor(item.fill),
+    ink: normalizeColor(item.ink),
   };
 }
 
@@ -343,6 +430,7 @@ export function emptyBook(userId: string, title?: string): WristBook {
     title: title?.trim() || "My signs",
     rows: DEFAULT_ROWS,
     cols: DEFAULT_COLS,
+    cardSize: defaultCardSize(),
     library,
     versions: [],
     activeVersionId: "",
@@ -368,6 +456,7 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
     title: String(item.title || "").trim() || title?.trim() || "My signs",
     rows,
     cols,
+    cardSize: normalizeCardSize(item.cardSize),
     library: library.length ? upgradeLibrary(library) : defaultLibrary(),
     versions: [],
     activeVersionId: "",

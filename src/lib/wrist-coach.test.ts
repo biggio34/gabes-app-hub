@@ -5,9 +5,11 @@ import {
   DEFAULT_COLS,
   DEFAULT_ROWS,
   activeVersion,
+  callColors,
   defaultLibrary,
   emptyBook,
   normalizeBook,
+  normalizeCardSize,
   nextVersionName,
   shuffleVersion,
   wristCoachBlobKey,
@@ -136,6 +138,61 @@ describe("wrist coach book", () => {
     const firstMap = first.cells.map((cell) => `${cell.code}:${cell.callId}`).join("|");
     const secondMap = second.cells.map((cell) => `${cell.code}:${cell.callId}`).join("|");
     assert.notEqual(firstMap, secondMap);
+  });
+
+  it("defaults the player card to the 3.5 × 2.25 softball size", () => {
+    const book = emptyBook("user-1");
+    assert.deepEqual(book.cardSize, { preset: "softball", widthIn: 3.5, heightIn: 2.25 });
+    assert.deepEqual(normalizeCardSize({ preset: "large" }), {
+      preset: "large",
+      widthIn: 5,
+      heightIn: 3,
+    });
+    assert.deepEqual(normalizeCardSize({ preset: "custom", widthIn: 4.25, heightIn: 2.5 }), {
+      preset: "custom",
+      widthIn: 4.25,
+      heightIn: 2.5,
+    });
+    assert.deepEqual(normalizeCardSize({ preset: "custom", widthIn: 99, heightIn: 0 }), {
+      preset: "custom",
+      widthIn: 8.5,
+      heightIn: 1,
+    });
+  });
+
+  it("keeps cell and text colors on each call", () => {
+    const book = normalizeBook(
+      {
+        title: "Color book",
+        library: [
+          {
+            id: "pitch-fb",
+            kind: "pitch",
+            name: "Fastball",
+            short: "FB",
+            fill: "red",
+            ink: "white",
+          },
+          { id: "loc-in", kind: "location", name: "Inside", short: "IN" },
+        ],
+        versions: [
+          {
+            id: "ver-1",
+            name: "Version A",
+            createdAt: 1,
+            cells: [{ row: 0, col: 0, code: "11", callId: "pitch-fb" }],
+          },
+        ],
+      },
+      "user-9",
+    );
+    const fastball = book.library.find((item) => item.id === "pitch-fb");
+    assert.equal(fastball?.fill, "red");
+    assert.equal(fastball?.ink, "white");
+    assert.deepEqual(callColors(fastball), { background: "#b91c1c", color: "#ffffff" });
+    const inside = book.library.find((item) => item.id === "loc-in");
+    assert.equal(inside?.fill, "clear");
+    assert.equal(inside?.ink, "clear");
   });
 
   it("normalize repairs a missing book and keeps the user id", () => {

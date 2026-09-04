@@ -11,11 +11,12 @@
     body { font-family: Inter, system-ui, sans-serif; }
     .title-font { font-family: 'Space Grotesk', Inter, sans-serif; letter-spacing: -0.03em; }
     .wrist-card {
-      width: 2.75in;
-      min-height: 3.5in;
       background: #fff;
       color: #0f172a;
       border: 1px solid #cbd5e1;
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     .wrist-grid {
       display: grid;
@@ -23,14 +24,24 @@
     }
     .wrist-cell {
       border: 1px solid #94a3b8;
-      min-height: 0.42in;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       line-height: 1.05;
-      padding: 2px;
+      padding: 1px;
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
+    .swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      border: 1px solid #64748b;
+      padding: 0;
+    }
+    .swatch[data-on="1"] { outline: 2px solid #f8fafc; outline-offset: 1px; }
     .print-only { display: none; }
     @media print {
       @page { size: letter; margin: 0.45in; }
@@ -58,10 +69,10 @@
       </div>
       <div class="flex flex-wrap justify-end gap-2 shrink-0">
         <button type="button" id="print-cards" class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">
-          Print cards
+          Print player cards
         </button>
         <button type="button" id="print-key" class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">
-          Print coach key
+          Print coach sheet
         </button>
         <button type="button" id="print-both" class="rounded-xl bg-red-700 px-3 py-2 text-xs font-semibold hover:bg-red-600">
           Print / PDF
@@ -130,13 +141,25 @@
 
     <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <h2 class="font-semibold">Wrist card</h2>
+        <h2 class="font-semibold">Player card</h2>
         <div class="flex gap-2">
-          <button type="button" id="view-player" class="rounded-full px-3 py-1 text-xs font-semibold bg-red-700 text-white">Player</button>
-          <button type="button" id="view-coach" class="rounded-full px-3 py-1 text-xs font-semibold bg-slate-800 text-slate-400">Coach</button>
+          <button type="button" id="view-player" class="rounded-full px-3 py-1 text-xs font-semibold bg-red-700 text-white">Codes</button>
+          <button type="button" id="view-coach" class="rounded-full px-3 py-1 text-xs font-semibold bg-slate-800 text-slate-400">Calls</button>
         </div>
       </div>
-      <div id="card-preview" class="flex justify-center"></div>
+      <div class="flex flex-wrap items-end gap-3">
+        <p class="text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Card size</p>
+        <button type="button" data-size="softball" class="size-btn rounded-full px-3 py-1 text-xs font-semibold bg-slate-800 text-slate-400">3.5 × 2.25 in</button>
+        <button type="button" data-size="large" class="size-btn rounded-full px-3 py-1 text-xs font-semibold bg-slate-800 text-slate-400">5 × 3 in</button>
+        <button type="button" data-size="custom" class="size-btn rounded-full px-3 py-1 text-xs font-semibold bg-slate-800 text-slate-400">Custom</button>
+        <div id="custom-size" class="hidden items-center gap-2 text-sm">
+          <input id="card-w" inputmode="decimal" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+          <span>×</span>
+          <input id="card-h" inputmode="decimal" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+          <span class="text-slate-500">in</span>
+        </div>
+      </div>
+      <div id="card-preview" class="flex justify-center overflow-x-auto"></div>
     </section>
 
     <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
@@ -150,7 +173,7 @@
     </section>
 
     <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
-      <h2 class="font-semibold">Coach key</h2>
+      <h2 class="font-semibold">Coach sheet</h2>
       <div id="coach-key" class="rounded-2xl border border-slate-800 bg-slate-950 p-4 overflow-x-auto"></div>
     </section>
   </div>
@@ -217,6 +240,21 @@
       ["def-ns", "No steal", "NS"]
     ];
 
+    const PALETTE = ["clear", "white", "black", "red", "blue", "green", "orange"];
+    const COLOR_HEX = {
+      clear: "transparent",
+      white: "#ffffff",
+      black: "#111827",
+      red: "#b91c1c",
+      blue: "#1d4ed8",
+      green: "#15803d",
+      orange: "#ea580c"
+    };
+    const SIZE_PRESETS = {
+      softball: { widthIn: 3.5, heightIn: 2.25 },
+      large: { widthIn: 5, heightIn: 3 }
+    };
+
     let book = null;
     let showCoachOnCard = false;
     let saveTimer = null;
@@ -229,8 +267,37 @@
 
     function rowsToCalls(kind, rows) {
       return rows.map(function (row) {
-        return { id: row[0], kind: kind, name: row[1], short: row[2] };
+        return { id: row[0], kind: kind, name: row[1], short: row[2], fill: "clear", ink: "clear" };
       });
+    }
+
+    function normalizeColor(value) {
+      return PALETTE.indexOf(value) >= 0 ? value : "clear";
+    }
+
+    function callColors(call) {
+      const fill = normalizeColor(call && call.fill);
+      const ink = normalizeColor(call && call.ink);
+      const background = fill === "clear" ? "#ffffff" : COLOR_HEX[fill];
+      let color = "#0f172a";
+      if (ink === "clear") color = (fill === "clear" || fill === "white") ? "#0f172a" : "#ffffff";
+      else if (ink === "white") color = "#ffffff";
+      else color = COLOR_HEX[ink];
+      return { background: background, color: color };
+    }
+
+    function defaultCardSize() {
+      return { preset: "softball", widthIn: 3.5, heightIn: 2.25 };
+    }
+
+    function cardSize() {
+      const size = book && book.cardSize ? book.cardSize : defaultCardSize();
+      if (size.preset === "softball" || size.preset === "large") {
+        return { preset: size.preset, widthIn: SIZE_PRESETS[size.preset].widthIn, heightIn: SIZE_PRESETS[size.preset].heightIn };
+      }
+      const widthIn = Math.min(8.5, Math.max(1, Number(size.widthIn) || 3.5));
+      const heightIn = Math.min(11, Math.max(1, Number(size.heightIn) || 2.25));
+      return { preset: "custom", widthIn: widthIn, heightIn: heightIn };
     }
 
     function defaultLibrary() {
@@ -310,6 +377,7 @@
         title: hubName() + "'s signs",
         rows: 6,
         cols: 5,
+        cardSize: defaultCardSize(),
         library: defaultLibrary(),
         versions: [],
         activeVersionId: "",
@@ -403,6 +471,7 @@
           book = data.book || emptyBook();
         }
         if (!book.library || !book.library.length) book.library = defaultLibrary();
+        if (!book.cardSize) book.cardSize = defaultCardSize();
         if (!book.versions || !book.versions.length) {
           const first = shuffleVersion(book, "Version A");
           book.versions = [first];
@@ -417,15 +486,34 @@
       }
     }
 
+    function swatchRow(id, field, selected) {
+      return PALETTE.map(function (color) {
+        const bg = color === "clear" ? "linear-gradient(135deg,#fff 50%,#cbd5e1 50%)" : COLOR_HEX[color];
+        return (
+          '<button type="button" class="swatch" data-call-' + field + '="' + escapeHtml(id) + '" data-color="' + color + '" data-on="' + (selected === color ? "1" : "0") + '" title="' + color + '" style="background:' + bg + '"></button>'
+        );
+      }).join("");
+    }
+
     function renderLibraryKind(kind, mountId) {
       const mount = document.getElementById(mountId);
       const items = book.library.filter(function (item) { return item.kind === kind; });
       mount.innerHTML = items.map(function (item) {
+        const fill = normalizeColor(item.fill);
+        const ink = normalizeColor(item.ink);
         return (
-          '<div class="grid grid-cols-[4.5rem_1fr_auto] gap-2 items-center">' +
-            '<input data-call-short="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.short) + '" maxlength="4" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs uppercase outline-none focus:border-red-500">' +
-            '<input data-call-name="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.name) + '" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm outline-none focus:border-red-500">' +
-            '<button type="button" data-call-del="' + escapeHtml(item.id) + '" class="text-xs text-slate-500 hover:text-red-400" aria-label="Remove">×</button>' +
+          '<div class="grid gap-1.5">' +
+            '<div class="grid grid-cols-[3.5rem_1fr_auto] gap-2 items-center">' +
+              '<input data-call-short="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.short) + '" maxlength="4" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs uppercase outline-none focus:border-red-500">' +
+              '<input data-call-name="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.name) + '" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm outline-none focus:border-red-500">' +
+              '<button type="button" data-call-del="' + escapeHtml(item.id) + '" class="text-xs text-slate-500 hover:text-red-400" aria-label="Remove">×</button>' +
+            '</div>' +
+            '<div class="flex flex-wrap items-center gap-2">' +
+              '<span class="text-[10px] text-slate-500">Cell</span>' +
+              '<div class="flex gap-1">' + swatchRow(item.id, "fill", fill) + '</div>' +
+              '<span class="text-[10px] text-slate-500">Text</span>' +
+              '<div class="flex gap-1">' + swatchRow(item.id, "ink", ink) + '</div>' +
+            '</div>' +
           '</div>'
         );
       }).join("") || '<p class="text-xs text-slate-500">None yet.</p>';
@@ -434,21 +522,26 @@
     function wristCardHtml(version, coachView, extraClass) {
       if (!version) return "";
       const cols = book.cols || 5;
+      const rows = book.rows || 6;
+      const size = cardSize();
+      const headerIn = 0.34;
+      const cellH = Math.max(0.18, (size.heightIn - headerIn - 0.12) / rows);
       const cells = version.cells || [];
       const grid = cells.map(function (cell) {
         const call = callById(cell.callId);
+        const colors = callColors(call);
         const label = coachView && call ? escapeHtml(call.short) : "";
         return (
-          '<div class="wrist-cell">' +
-            '<div style="font-size:11px;font-weight:700">' + escapeHtml(cell.code) + '</div>' +
-            (label ? '<div style="font-size:8px;font-weight:600;letter-spacing:.02em">' + label + '</div>' : '') +
+          '<div class="wrist-cell" style="min-height:' + cellH + 'in;background:' + colors.background + ';color:' + colors.color + ';border-color:' + (colors.background === "#ffffff" ? "#94a3b8" : colors.background) + '">' +
+            '<div style="font-size:10px;font-weight:700">' + escapeHtml(cell.code) + '</div>' +
+            (label ? '<div style="font-size:7px;font-weight:600;letter-spacing:.02em">' + label + '</div>' : '') +
           '</div>'
         );
       }).join("");
       return (
-        '<div class="wrist-card rounded-xl overflow-hidden ' + (extraClass || "") + '">' +
-          '<div class="px-2 pt-2 pb-1">' +
-            '<div class="text-[10px] font-semibold tracking-[0.14em] uppercase text-slate-500">Wrist Coach</div>' +
+        '<div class="wrist-card rounded-xl overflow-hidden ' + (extraClass || "") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+          '<div class="px-2 pt-1.5 pb-1">' +
+            '<div class="text-[10px] font-semibold tracking-[0.14em] uppercase text-slate-500">Player card</div>' +
             '<div class="text-xs font-semibold truncate">' + escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</div>' +
           '</div>' +
           '<div class="wrist-grid px-2 pb-2" style="grid-template-columns:repeat(' + cols + ',minmax(0,1fr))">' + grid + '</div>' +
@@ -525,14 +618,21 @@
         root.innerHTML = "";
         return;
       }
-      const cards = [0, 1, 2, 3].map(function () {
-        return wristCardHtml(version, false, "");
-      }).join("");
+      const size = cardSize();
+      const usableW = 8.5 - 0.9;
+      const usableH = 11 - 1.15;
+      const gap = 0.16;
+      const cols = Math.max(1, Math.floor((usableW + gap) / (size.widthIn + gap)));
+      const rows = Math.max(1, Math.floor((usableH + gap) / (size.heightIn + gap)));
+      const count = cols * rows;
+      const cards = [];
+      for (let i = 0; i < count; i += 1) cards.push(wristCardHtml(version, false, ""));
       const cardPage =
         '<section class="print-page print-cards">' +
           '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
+            'Player cards · ' + size.widthIn + ' × ' + size.heightIn + ' in · ' +
             escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</p>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;justify-items:center">' + cards + '</div>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:' + gap + 'in">' + cards.join("") + '</div>' +
         '</section>';
       const keyRows = version.cells.map(function (cell) {
         const call = callById(cell.callId);
@@ -547,7 +647,7 @@
       }).join("");
       const keyPage =
         '<section class="print-page print-key" style="color:#0f172a">' +
-          '<h1 style="margin:0 0 12px;font-size:22px">' + escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</h1>' +
+          '<h1 style="margin:0 0 12px;font-size:22px">Coach sheet · ' + escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</h1>' +
           '<div style="display:flex;gap:24px;align-items:flex-start">' +
             wristCardHtml(version, true, "") +
             '<table style="font-size:13px;border-collapse:collapse">' +
@@ -561,10 +661,25 @@
       else root.innerHTML = cardPage + keyPage;
     }
 
+    function renderSizeControls() {
+      const size = cardSize();
+      document.querySelectorAll(".size-btn").forEach(function (btn) {
+        const on = btn.getAttribute("data-size") === size.preset;
+        btn.className = "size-btn rounded-full px-3 py-1 text-xs font-semibold " +
+          (on ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+      });
+      const custom = document.getElementById("custom-size");
+      custom.classList.toggle("hidden", size.preset !== "custom");
+      custom.classList.toggle("flex", size.preset === "custom");
+      document.getElementById("card-w").value = String(size.widthIn);
+      document.getElementById("card-h").value = String(size.heightIn);
+    }
+
     function render() {
       if (!book) return;
       document.getElementById("book-title").value = book.title || "";
       document.getElementById("book-subtitle").textContent = book.title || "";
+      renderSizeControls();
       renderLibraryKind("pitch", "pitch-list");
       renderLibraryKind("location", "location-list");
       renderLibraryKind("offense", "play-list");
@@ -582,7 +697,9 @@
         id: kind + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         kind: kind,
         name: cleanName,
-        short: cleanShort || cleanName.slice(0, 3).toUpperCase()
+        short: cleanShort || cleanName.slice(0, 3).toUpperCase(),
+        fill: "clear",
+        ink: "clear"
       });
       render();
       scheduleSave();
@@ -627,10 +744,10 @@
     document.getElementById("location-list").addEventListener("change", onCallEdit);
     document.getElementById("play-list").addEventListener("change", onCallEdit);
     document.getElementById("defense-list").addEventListener("change", onCallEdit);
-    document.getElementById("pitch-list").addEventListener("click", onCallDelete);
-    document.getElementById("location-list").addEventListener("click", onCallDelete);
-    document.getElementById("play-list").addEventListener("click", onCallDelete);
-    document.getElementById("defense-list").addEventListener("click", onCallDelete);
+    document.getElementById("pitch-list").addEventListener("click", onLibraryClick);
+    document.getElementById("location-list").addEventListener("click", onLibraryClick);
+    document.getElementById("play-list").addEventListener("click", onLibraryClick);
+    document.getElementById("defense-list").addEventListener("click", onLibraryClick);
     function onCallEdit(event) {
       const id = event.target.getAttribute("data-call-name") || event.target.getAttribute("data-call-short");
       if (!id) return;
@@ -642,13 +759,66 @@
       renderCoachKey();
       scheduleSave();
     }
-    function onCallDelete(event) {
-      const id = event.target.getAttribute("data-call-del");
+    function onLibraryClick(event) {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const fillId = target.getAttribute("data-call-fill");
+      const inkId = target.getAttribute("data-call-ink");
+      const color = target.getAttribute("data-color");
+      if (fillId && color) {
+        const call = callById(fillId);
+        if (call) {
+          call.fill = normalizeColor(color);
+          render();
+          scheduleSave();
+        }
+        return;
+      }
+      if (inkId && color) {
+        const call = callById(inkId);
+        if (call) {
+          call.ink = normalizeColor(color);
+          render();
+          scheduleSave();
+        }
+        return;
+      }
+      const id = target.getAttribute("data-call-del");
       if (!id) return;
       book.library = book.library.filter(function (item) { return item.id !== id; });
       render();
       scheduleSave();
     }
+    document.querySelectorAll(".size-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const preset = btn.getAttribute("data-size") || "softball";
+        if (preset === "custom") {
+          const current = cardSize();
+          book.cardSize = { preset: "custom", widthIn: current.widthIn, heightIn: current.heightIn };
+        } else if (SIZE_PRESETS[preset]) {
+          book.cardSize = {
+            preset: preset,
+            widthIn: SIZE_PRESETS[preset].widthIn,
+            heightIn: SIZE_PRESETS[preset].heightIn
+          };
+        }
+        render();
+        scheduleSave();
+      });
+    });
+    function applyCustomSize() {
+      const w = Number(document.getElementById("card-w").value);
+      const h = Number(document.getElementById("card-h").value);
+      book.cardSize = {
+        preset: "custom",
+        widthIn: Number.isFinite(w) && w > 0 ? Math.min(8.5, Math.max(1, w)) : 3.5,
+        heightIn: Number.isFinite(h) && h > 0 ? Math.min(11, Math.max(1, h)) : 2.25
+      };
+      render();
+      scheduleSave();
+    }
+    document.getElementById("card-w").addEventListener("change", applyCustomSize);
+    document.getElementById("card-h").addEventListener("change", applyCustomSize);
     document.getElementById("view-player").addEventListener("click", function () {
       showCoachOnCard = false;
       renderCard();
