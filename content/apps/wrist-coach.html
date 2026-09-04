@@ -1008,10 +1008,12 @@
     function renderTally() {
       const layout = layoutOf(book);
       const kind = book.bandKind || "offense";
-      const used = book.library
-        .filter(function (item) { return item.kind === kind; })
-        .reduce(function (sum, item) { return sum + Math.max(0, Number(item.count) || 0); }, 0);
+      const signs = book.library.filter(function (item) { return item.kind === kind; });
+      const specified = signs.some(function (item) { return (item.count || 0) > 0; });
       const total = cellCount(layout);
+      const used = specified
+        ? signs.reduce(function (sum, item) { return sum + Math.max(0, Number(item.count) || 0); }, 0)
+        : total;
       document.getElementById("sign-tally").textContent = used + " / " + total;
     }
 
