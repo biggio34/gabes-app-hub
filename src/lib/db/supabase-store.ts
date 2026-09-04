@@ -1,4 +1,4 @@
-import { AREAS, type Area } from "@/lib/areas";
+import { AREAS, isHubFeature, type Area, type HubFeature } from "@/lib/areas";
 import { hashPassword } from "@/lib/auth";
 import {
   DEFAULT_CLUB_ID,
@@ -117,8 +117,11 @@ async function hydrate(rows: UserRow[]): Promise<StoredUser[]> {
     passwordHash: row.password_hash,
     role: row.role,
     areas: (areas ?? [])
-      .filter((item) => item.user_id === row.id)
+      .filter((item) => item.user_id === row.id && AREAS.includes(item.area as Area))
       .map((item) => item.area as Area),
+    features: (areas ?? [])
+      .filter((item) => item.user_id === row.id && isHubFeature(item.area))
+      .map((item) => item.area as HubFeature),
     clubIds: (clubLinks ?? [])
       .filter((item) => item.user_id === row.id)
       .map((item) => item.club_id as string),
@@ -183,19 +186,21 @@ async function validAssignments(clubIds: string[] = [], teamIds: string[] = []) 
 
 async function replaceLinks(
   userId: string,
-  next: { areas?: Area[]; clubIds?: string[]; teamIds?: string[] },
+  next: { areas?: Area[]; features?: HubFeature[]; clubIds?: string[]; teamIds?: string[] },
 ) {
   const supabase = await client();
-  if (next.areas) {
+  if (next.areas || next.features) {
+    const areaRows = [
+      ...(next.areas ?? []).map((area) => ({ user_id: userId, area })),
+      ...(next.features ?? []).map((feature) => ({ user_id: userId, area: feature })),
+    ];
     throwIfError(
       await supabase.from("hub_user_areas").delete().eq("user_id", userId),
       "Could not update areas.",
     );
-    if (next.areas.length) {
+    if (areaRows.length) {
       throwIfError(
-        await supabase.from("hub_user_areas").insert(
-          next.areas.map((area) => ({ user_id: userId, area })),
-        ),
+        await supabase.from("hub_user_areas").insert(areaRows),
         "Could not update areas.",
       );
     }

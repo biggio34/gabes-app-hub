@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { applySessionCookie, createSessionToken, getSession } from "@/lib/auth";
-import { isArea, type Area } from "@/lib/areas";
+import { applySessionCookie, createSessionToken, getSession, sessionFromStored } from "@/lib/auth";
+import { isArea, isHubFeature, type Area, type HubFeature } from "@/lib/areas";
 import { isRemoteDatabase } from "@/lib/db/client";
 import { assignmentLabels, listOrgs } from "@/lib/clubs";
 import { isInviteEmailConfigured, sendInviteEmail } from "@/lib/invite-email";
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
     email?: string;
     password?: string;
     areas?: string[];
+    features?: string[];
     clubIds?: string[];
     teamIds?: string[];
   } | null;
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
       email: body?.email ?? "",
       password,
       areas: (body?.areas ?? []).filter(isArea) as Area[],
+      features: (body?.features ?? []).filter(isHubFeature) as HubFeature[],
       clubIds: body?.clubIds ?? [],
       teamIds: body?.teamIds ?? [],
     });
@@ -91,6 +93,7 @@ export async function PATCH(request: Request) {
     username?: string;
     password?: string;
     areas?: string[];
+    features?: string[];
     clubIds?: string[];
     teamIds?: string[];
   } | null;
@@ -104,18 +107,13 @@ export async function PATCH(request: Request) {
       username: body.username,
       password: body.password,
       areas: body.areas?.filter(isArea),
+      features: body.features?.filter(isHubFeature),
       clubIds: body.clubIds,
       teamIds: body.teamIds,
     });
     const response = NextResponse.json({ user: publicUser(user) });
     if (session && session.id === user.id) {
-      const token = await createSessionToken({
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role,
-        areas: user.areas,
-      });
+      const token = await createSessionToken(sessionFromStored(user));
       applySessionCookie(response, token);
     }
     return response;

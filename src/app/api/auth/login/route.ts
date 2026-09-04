@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { applySessionCookie, createSessionToken, verifyPassword } from "@/lib/auth";
+import { applySessionCookie, createSessionToken, sessionFromStored, verifyPassword } from "@/lib/auth";
 import { findUserByUsername, matchesOwnerPassword } from "@/lib/users";
 
 export const runtime = "nodejs";
@@ -31,13 +31,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const token = await createSessionToken({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-      areas: user.areas,
-    });
+    const token = await createSessionToken(sessionFromStored(user));
 
     const response = NextResponse.json({ ok: true });
     return applySessionCookie(response, token);

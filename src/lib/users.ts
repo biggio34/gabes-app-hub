@@ -1,5 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
-import { AREAS, type Area } from "./areas";
+import { AREAS, HUB_FEATURES, isHubFeature, type Area, type HubFeature } from "./areas";
 import { hashPassword } from "./auth";
 import { ownerPasswordValue, readyDb } from "./db/client";
 import { isSupabaseConfigured } from "./db/supabase";
@@ -40,8 +40,11 @@ async function hydrate(rows: (typeof users.$inferSelect)[]): Promise<StoredUser[
     passwordHash: row.passwordHash,
     role: row.role as StoredUser["role"],
     areas: areaRows
-      .filter((item) => item.userId === row.id)
+      .filter((item) => item.userId === row.id && AREAS.includes(item.area as Area))
       .map((item) => item.area as Area),
+    features: areaRows
+      .filter((item) => item.userId === row.id && isHubFeature(item.area))
+      .map((item) => item.area as HubFeature),
     clubIds: clubRows
       .filter((item) => item.userId === row.id)
       .map((item) => item.clubId),
@@ -98,15 +101,17 @@ async function validAssignments(clubIds: string[] = [], teamIds: string[] = []) 
 
 async function replaceLinks(
   userId: string,
-  next: { areas?: Area[]; clubIds?: string[]; teamIds?: string[] },
+  next: { areas?: Area[]; features?: HubFeature[]; clubIds?: string[]; teamIds?: string[] },
 ) {
   const db = await readyDb();
-  if (next.areas) {
+  if (next.areas || next.features) {
+    const areaRows = [
+      ...(next.areas ?? []).map((area) => ({ userId, area })),
+      ...(next.features ?? []).map((feature) => ({ userId, area: feature })),
+    ];
     await db.delete(userAreas).where(eq(userAreas.userId, userId));
-    if (next.areas.length) {
-      await db.insert(userAreas).values(
-        next.areas.map((area) => ({ userId, area })),
-      );
+    if (areaRows.length) {
+      await db.insert(userAreas).values(areaRows);
     }
   }
   if (next.clubIds) {
@@ -133,6 +138,7 @@ export async function createUser(input: {
   email: string;
   password: string;
   areas: Area[];
+  features?: HubFeature[];
   clubIds?: string[];
   teamIds?: string[];
 }) {
@@ -157,10 +163,14 @@ export async function createUser(input: {
     passwordHash: await hashPassword(input.password),
     role: "member",
     areas: input.areas.filter((area) => AREAS.includes(area)),
+    features: (input.features ?? []).filter(isHubFeature),
     clubIds: assigned.clubIds,
     teamIds: assigned.teamIds,
     createdAt: new Date().toISOString(),
   };
+  if (user.features.includes("wrist-coach") && !user.areas.includes("softball")) {
+    user.areas = [...user.areas, "softball"];
+  }
   if (isSupabaseConfigured()) {
     await supabaseStore.insertUser(user);
     return user;
@@ -190,6 +200,7 @@ export async function updateUser(
     email?: string;
     username?: string;
     areas?: Area[];
+    features?: HubFeature[];
     password?: string;
     clubIds?: string[];
     teamIds?: string[];
@@ -197,6 +208,7 @@ export async function updateUser(
 ) {
   const current = await findUserById(id);
   if (!current) throw new Error("User not found");
+  current.features = current.features ?? [];
 
   if (patch.username !== undefined) {
     const username = normalizeUsername(patch.username);
@@ -222,6 +234,16 @@ export async function updateUser(
     current.areas = patch.areas.filter((area) => AREAS.includes(area));
     if (current.role === "owner") current.areas = [...AREAS];
   }
+  if (patch.features) {
+    current.features = patch.features.filter(isHubFeature);
+    if (current.role === "owner") current.features = [...HUB_FEATURES];
+  }
+  if (current.features.includes("wrist-coach") && !current.areas.includes("softball")) {
+    current.areas = [...current.areas, "softball"];
+  }
+  if (!current.areas.includes("softball") && current.role !== "owner") {
+    current.features = current.features.filter((feature) => feature !== "wrist-coach");
+  }
   if (patch.clubIds || patch.teamIds) {
     const assigned = isSupabaseConfigured()
       ? await supabaseStore.checkAssignments(
@@ -244,7 +266,7 @@ export async function updateUser(
 
   if (isSupabaseConfigured()) {
     await supabaseStore.saveUser(current, {
-      areas: Boolean(patch.areas),
+      areas: Boolean(patch.areas || patch.features),
       clubs: Boolean(patch.clubIds || patch.teamIds),
       teams: Boolean(patch.clubIds || patch.teamIds),
     });
@@ -261,7 +283,8 @@ export async function updateUser(
     })
     .where(eq(users.id, id));
   await replaceLinks(id, {
-    areas: patch.areas ? current.areas : undefined,
+    areas: patch.areas || patch.features ? current.areas : undefined,
+    features: patch.areas || patch.features ? current.features : undefined,
     clubIds: patch.clubIds || patch.teamIds ? current.clubIds : undefined,
     teamIds: patch.clubIds || patch.teamIds ? current.teamIds : undefined,
   });

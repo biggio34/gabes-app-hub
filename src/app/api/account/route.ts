@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { applySessionCookie, createSessionToken, getSession } from "@/lib/auth";
+import { applySessionCookie, createSessionToken, getSession, sessionFromStored } from "@/lib/auth";
 import { findUserById, publicUser, updateUser } from "@/lib/users";
 
 export const runtime = "nodejs";
@@ -31,13 +31,7 @@ export async function PATCH(request: Request) {
       password: body?.password,
     });
     const response = NextResponse.json({ user: publicUser(user) });
-    const token = await createSessionToken({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: user.role,
-      areas: user.areas,
-    });
+    const token = await createSessionToken(sessionFromStored(user));
     return applySessionCookie(response, token);
   } catch (err) {
     return NextResponse.json(

@@ -28,3 +28,21 @@ export const areaMeta: Record<
 export function isArea(value: string): value is Area {
   return (AREAS as readonly string[]).includes(value);
 }
+
+/** Extra Softball tools. Stored in user_areas, not a top-level hub area. */
+export const HUB_FEATURES = ["wrist-coach"] as const;
+export type HubFeature = (typeof HUB_FEATURES)[number];
+export const WRIST_COACH_FEATURE: HubFeature = "wrist-coach";
+
+export function isHubFeature(value: string): value is HubFeature {
+  return (HUB_FEATURES as readonly string[]).includes(value);
+}
+
+export function wristCoachAllowed(user: {
+  role: string;
+  areas: readonly string[];
+  features?: readonly string[];
+}) {
+  if (user.role === "owner") return true;
+  return user.areas.includes("softball") && (user.features ?? []).includes(WRIST_COACH_FEATURE);
+}

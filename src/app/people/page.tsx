@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AREAS, areaMeta, type Area } from "@/lib/areas";
+import { AREAS, WRIST_COACH_FEATURE, areaMeta, type Area, type HubFeature } from "@/lib/areas";
 import { SecretField } from "@/components/secret-field";
 
 type Person = {
@@ -12,6 +12,7 @@ type Person = {
   email: string;
   role: "owner" | "member";
   areas: Area[];
+  features: HubFeature[];
   clubIds: string[];
   teamIds: string[];
 };
@@ -21,6 +22,34 @@ type Team = { id: string; clubId: string; name: string };
 
 function toggleValue<T>(list: T[], value: T) {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+function WristCoachCheck({
+  softballOn,
+  checked,
+  onToggle,
+}: {
+  softballOn: boolean;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  if (!softballOn) return null;
+  return (
+    <div className="mt-2 ml-1">
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`rounded-full px-3 py-1 text-xs font-semibold ${
+          checked ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400"
+        }`}
+      >
+        Wrist Coach
+      </button>
+      <p className="mt-1 text-[11px] text-slate-500">
+        Their own pitch and play-call book. Owner always has this.
+      </p>
+    </div>
+  );
 }
 
 function LoginEditor({
@@ -113,6 +142,7 @@ export default function PeoplePage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [areas, setAreas] = useState<Area[]>([]);
+  const [features, setFeatures] = useState<HubFeature[]>([]);
   const [clubIds, setClubIds] = useState<string[]>([]);
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [newClub, setNewClub] = useState("");
@@ -136,6 +166,7 @@ export default function PeoplePage() {
         ...user,
         clubIds: user.clubIds ?? [],
         teamIds: user.teamIds ?? [],
+        features: user.features ?? [],
       })),
     );
     setClubs(data.clubs ?? []);
@@ -184,6 +215,7 @@ export default function PeoplePage() {
           email,
           password,
           areas,
+          features,
           clubIds,
           teamIds,
         }),
@@ -203,6 +235,7 @@ export default function PeoplePage() {
       setEmail("");
       setPassword("");
       setAreas([]);
+      setFeatures([]);
       setClubIds([]);
       setTeamIds([]);
       if (data.emailSent) {
@@ -227,6 +260,7 @@ export default function PeoplePage() {
     id: string,
     patch: {
       areas?: Area[];
+      features?: HubFeature[];
       clubIds?: string[];
       teamIds?: string[];
       username?: string;
@@ -396,10 +430,11 @@ export default function PeoplePage() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">People</h1>
           <p className="text-sm text-slate-400">
             Give someone a login, pick Financial / Softball / Luna Haus, then
-            put them on a club or team. Teams you add here show in Team Roster,
-            Lineup, Team Formation, Tryouts, and Practice Planner. You can also
-            change a username or set a new password. Saved passwords cannot be
-            shown again.
+            put them on a club or team. Wrist Coach is a separate checkbox
+            under Softball — not every Softball login gets it. Teams you add
+            here show in Team Roster, Lineup, Team Formation, Tryouts, and
+            Practice Planner. You can also change a username or set a new
+            password. Saved passwords cannot be shown again.
           </p>
         </div>
 
@@ -554,7 +589,15 @@ export default function PeoplePage() {
                 <button
                   key={area}
                   type="button"
-                  onClick={() => setAreas(toggleValue(areas, area))}
+                  onClick={() => {
+                    const next = toggleValue(areas, area);
+                    setAreas(next);
+                    if (!next.includes("softball")) {
+                      setFeatures((current) =>
+                        current.filter((item) => item !== WRIST_COACH_FEATURE),
+                      );
+                    }
+                  }}
                   className={`rounded-full px-3 py-1 text-xs font-semibold ${
                     areas.includes(area)
                       ? "bg-red-700 text-white"
@@ -565,6 +608,11 @@ export default function PeoplePage() {
                 </button>
               ))}
             </div>
+            <WristCoachCheck
+              softballOn={areas.includes("softball")}
+              checked={features.includes(WRIST_COACH_FEATURE)}
+              onToggle={() => setFeatures(toggleValue(features, WRIST_COACH_FEATURE))}
+            />
           </div>
           <div>
             <p className="mb-1.5 text-xs font-semibold tracking-[0.12em] text-slate-500 uppercase">
@@ -655,8 +703,12 @@ export default function PeoplePage() {
                           key={area}
                           type="button"
                           onClick={() => {
+                            const nextAreas = toggleValue(user.areas, area);
                             void savePerson(user.id, {
-                              areas: toggleValue(user.areas, area),
+                              areas: nextAreas,
+                              features: nextAreas.includes("softball")
+                                ? user.features
+                                : user.features.filter((item) => item !== WRIST_COACH_FEATURE),
                             }).catch(() => {
                               void load();
                             });
@@ -671,6 +723,21 @@ export default function PeoplePage() {
                         </button>
                       ))}
                     </div>
+                    <WristCoachCheck
+                      softballOn={user.areas.includes("softball")}
+                      checked={user.features.includes(WRIST_COACH_FEATURE)}
+                      onToggle={() => {
+                        const nextFeatures = toggleValue(user.features, WRIST_COACH_FEATURE);
+                        void savePerson(user.id, {
+                          areas: user.areas.includes("softball")
+                            ? user.areas
+                            : [...user.areas, "softball"],
+                          features: nextFeatures,
+                        }).catch(() => {
+                          void load();
+                        });
+                      }}
+                    />
                     <AssignmentPicker
                       selectedClubIds={user.clubIds}
                       selectedTeamIds={user.teamIds}
