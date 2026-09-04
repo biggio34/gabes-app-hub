@@ -316,7 +316,9 @@
     const PLATE_FRONT = 0.76;
     const PLATE_MIDDLE = 0.88;
     const FLIGHT_SPEED = 0.36;
-    const HR_SMASH = 0.78;
+    const HR_SMASH = 0.86;
+    const OUTFIELD_RANGE_STEPS = 4;
+    const FIELD_STEP = 16;
     const HR_MATCH = 0.55;
     const IDEAL_CONTACT = { inside: 0.7, middle: 0.82, outside: 0.91 };
     const SPOT_SHIFT = { inside: -32, middle: 0, outside: 32 };
@@ -581,13 +583,39 @@
       { id: "p", name: "P", t: 0.32, side: 0, num: "1", skin: "#d9a57a" }
     ];
 
-    function fielderScale(t) {
-      return 0.34 + (1 - t) * 0.72;
+    function isOutfielder(id) {
+      return id === "lf" || id === "cf" || id === "rf";
+    }
+
+    function fielderScale(spec) {
+      const t = typeof spec === "number" ? spec : spec.t;
+      const id = typeof spec === "number" ? "" : spec.id;
+      const perspective = 0.34 + (1 - t) * 0.72;
+      if (id === "lf" || id === "cf" || id === "rf") return Math.min(0.84, perspective * 1.58);
+      if (id === "p") return perspective * 0.88;
+      if (id) return perspective * 0.66;
+      return perspective;
     }
 
     function fielderSpot(w, h, spec) {
       const p = along(w, h, spec.t, spec.side);
-      return { x: p.x, y: p.y, scale: fielderScale(spec.t), spec: spec };
+      return { x: p.x, y: p.y, scale: fielderScale(spec), spec: spec };
+    }
+
+    function chaseTowardBall(ball, fielder, steps) {
+      const cx = fielder.x;
+      const cy = fielder.y - 16 * fielder.scale;
+      const dx = ball.x - cx;
+      const dy = ball.y - cy;
+      const dist = Math.hypot(dx, dy);
+      const maxMove = Math.max(0, steps) * FIELD_STEP * fielder.scale;
+      const move = Math.min(dist, maxMove);
+      if (dist < 0.001) return { x: fielder.x, y: fielder.y, move: 0 };
+      return {
+        x: fielder.x + (dx / dist) * move,
+        y: fielder.y + (dy / dist) * move,
+        move: move
+      };
     }
 
     function flightBall(w, h) {
@@ -601,11 +629,11 @@
       return { x: p.x, y: p.y - lift, lift: lift, r: r, t: t };
     }
 
-    function airBallHitsFielder(ball, fielder) {
+    function airBallHitsFielder(ball, fielder, steps) {
       if (ball.lift < 6) return false;
       const cx = fielder.x;
       const cy = fielder.y - 16 * fielder.scale;
-      const reach = 18 * fielder.scale + ball.r;
+      const reach = 18 * fielder.scale + ball.r + Math.max(0, steps || 0) * FIELD_STEP * fielder.scale;
       const dx = ball.x - cx;
       const dy = ball.y - cy;
       return dx * dx + dy * dy <= reach * reach;
@@ -620,15 +648,18 @@
       for (let i = 0; i < FIELDERS.length; i += 1) {
         if (FIELDERS[i].id === "p" && !pitcherCanCatch(ball, state.flight)) continue;
         const spot = fielderSpot(w, h, FIELDERS[i]);
-        if (!airBallHitsFielder(ball, spot)) continue;
-        catchFly(FIELDERS[i], ball);
+        const steps = isOutfielder(FIELDERS[i].id) ? OUTFIELD_RANGE_STEPS : 0;
+        if (!airBallHitsFielder(ball, spot, steps)) continue;
+        catchFly(FIELDERS[i], ball, chaseTowardBall(ball, spot, steps));
         return;
       }
     }
 
-    function catchFly(fielder, ball) {
+    function catchFly(fielder, ball, chase) {
       if (!state.flight || state.flight.caught) return;
       state.flight.caught = true;
+      state.flight.catchFielder = fielder.id;
+      state.flight.catchPos = chase || null;
       state.flight.catchAt = { x: ball.x, y: ball.y, lift: ball.lift, r: ball.r, t: ball.t };
       if (state.flight.pts) state.score = Math.max(0, state.score - state.flight.pts);
       if (!state.flight.wasOut) state.outs += 1;
@@ -1012,11 +1043,22 @@
     }
 
     function drawDefense(w, h) {
+      const ball = state.flight ? flightBall(w, h) : null;
       FIELDERS.filter(function (spec) { return spec.id !== "p"; })
         .map(function (spec) { return fielderSpot(w, h, spec); })
         .sort(function (a, b) { return a.y - b.y; })
         .forEach(function (spot) {
-          drawPerson(spot.x, spot.y, spot.scale, {
+          let x = spot.x;
+          let y = spot.y;
+          if (state.flight && state.flight.catchFielder === spot.spec.id && state.flight.catchPos) {
+            x = state.flight.catchPos.x;
+            y = state.flight.catchPos.y;
+          } else if (ball && state.flight && !state.flight.caught && isOutfielder(spot.spec.id)) {
+            const chase = chaseTowardBall(ball, spot, OUTFIELD_RANGE_STEPS);
+            x = chase.x;
+            y = chase.y;
+          }
+          drawPerson(x, y, spot.scale, {
             skin: spot.spec.skin,
             number: spot.spec.num,
             jersey: FIELD_JERSEY,
@@ -1027,7 +1069,7 @@
 
     function drawPitcher(w, h, t) {
       const mound = along(w, h, park(w, h).moundT, 0);
-      drawPerson(mound.x, mound.y + 6, fielderScale(park(w, h).moundT), {
+      drawPerson(mound.x, mound.y + 6, fielderScale({ id: "p", t: park(w, h).moundT }), {
         skin: "#d9a57a",
         number: "1",
         jersey: FIELD_JERSEY,

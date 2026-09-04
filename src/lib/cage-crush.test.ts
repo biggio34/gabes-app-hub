@@ -9,13 +9,16 @@ import {
   normalizeBoard,
   airBallHitsFielder,
   canHomer,
+  chaseTowardBall,
   contactMatch,
   evaluateSwing,
+  fielderDrawScale,
   flightLift,
   pitcherCanCatch,
   qualityFromT,
   flightMaxDepth,
   HR_SMASH,
+  OUTFIELD_RANGE_STEPS,
   smashCarry,
   smashValue,
   sprayFromSpot,
@@ -135,6 +138,7 @@ describe("location-aware contact", () => {
     assert.equal(solid.kind, "homer");
     assert.equal(canHomer(HR_SMASH, 1), true);
     assert.equal(canHomer(0.7, 1), false);
+    assert.equal(canHomer(0.8, 1), false);
   });
 });
 
@@ -171,5 +175,18 @@ describe("air catch", () => {
     assert.equal(airBallHitsFielder({ x: 100, y: 184, lift: 20, r: 6 }, fielder), true);
     assert.equal(airBallHitsFielder({ x: 100, y: 184, lift: 3, r: 6 }, fielder), false);
     assert.equal(airBallHitsFielder({ x: 200, y: 184, lift: 20, r: 6 }, fielder), false);
+  });
+
+  it("lets an outfielder take up to four steps for a fly ball", () => {
+    const fielder = { x: 100, y: 200, scale: 1 };
+    const near = { x: 150, y: 184, lift: 20, r: 6 };
+    assert.equal(airBallHitsFielder(near, fielder, 0), false);
+    assert.equal(airBallHitsFielder(near, fielder, OUTFIELD_RANGE_STEPS), true);
+    assert.equal(airBallHitsFielder({ x: 220, y: 184, lift: 20, r: 6 }, fielder, OUTFIELD_RANGE_STEPS), false);
+    const chase = chaseTowardBall(near, fielder, OUTFIELD_RANGE_STEPS);
+    assert.ok(chase.move > 0);
+    assert.ok(chase.move <= 16 * OUTFIELD_RANGE_STEPS);
+    assert.ok(fielderDrawScale({ id: "cf", t: 0.88 }) > fielderDrawScale({ id: "2b", t: 0.6 }));
+    assert.ok(fielderDrawScale({ id: "1b", t: 0.5 }) < fielderDrawScale({ t: 0.5 }));
   });
 });

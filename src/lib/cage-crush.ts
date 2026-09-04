@@ -186,7 +186,9 @@ export type PlateZone = "out-front" | "front-plate" | "mid-plate" | "late";
 export const PLATE_FRONT = 0.76;
 export const PLATE_MIDDLE = 0.88;
 export const FLIGHT_SPEED = 0.36;
-export const HR_SMASH = 0.78;
+export const HR_SMASH = 0.86;
+export const OUTFIELD_RANGE_STEPS = 4;
+export const FIELD_STEP = 16;
 export const HR_MATCH = 0.55;
 export const IDEAL_CONTACT: Record<PitchSpot, number> = {
   inside: 0.7,
@@ -450,14 +452,51 @@ export function evaluateSwing(opts: {
   };
 }
 
+export function isOutfielder(id: string) {
+  return id === "lf" || id === "cf" || id === "rf";
+}
+
+export function fielderDrawScale(spec: { id?: string; t: number }) {
+  const perspective = 0.34 + (1 - spec.t) * 0.72;
+  if (spec.id && isOutfielder(spec.id)) return Math.min(0.84, perspective * 1.58);
+  if (spec.id === "p") return perspective * 0.88;
+  if (spec.id) return perspective * 0.66;
+  return perspective;
+}
+
+export function fielderRangeSteps(id: string) {
+  return isOutfielder(id) ? OUTFIELD_RANGE_STEPS : 0;
+}
+
+export function chaseTowardBall(
+  ball: { x: number; y: number },
+  fielder: { x: number; y: number; scale: number },
+  steps: number,
+) {
+  const cx = fielder.x;
+  const cy = fielder.y - 16 * fielder.scale;
+  const dx = ball.x - cx;
+  const dy = ball.y - cy;
+  const dist = Math.hypot(dx, dy);
+  const maxMove = Math.max(0, steps) * FIELD_STEP * fielder.scale;
+  const move = Math.min(dist, maxMove);
+  if (dist < 0.001) return { x: fielder.x, y: fielder.y, move: 0 };
+  return {
+    x: fielder.x + (dx / dist) * move,
+    y: fielder.y + (dy / dist) * move,
+    move,
+  };
+}
+
 export function airBallHitsFielder(
   ball: { x: number; y: number; lift: number; r: number },
   fielder: { x: number; y: number; scale: number },
+  steps = 0,
 ) {
   if (ball.lift < 6) return false;
   const cx = fielder.x;
   const cy = fielder.y - 16 * fielder.scale;
-  const reach = 18 * fielder.scale + ball.r;
+  const reach = 18 * fielder.scale + ball.r + Math.max(0, steps) * FIELD_STEP * fielder.scale;
   const dx = ball.x - cx;
   const dy = ball.y - cy;
   return dx * dx + dy * dy <= reach * reach;
