@@ -644,7 +644,7 @@ export default function PeoplePage() {
                 setFeatures(next);
                 if (next.includes(WRIST_COACH_FEATURE) && !areas.includes("softball")) {
                   setAreas((current) =>
-                    current.includes("softball") ? current : [...current, "softball"],
+                    current.includes("softball") ? current : [...current, "softball" as Area],
                   );
                 }
               }}
@@ -773,7 +773,7 @@ export default function PeoplePage() {
                       checked={user.features.includes(WRIST_COACH_FEATURE)}
                       onToggle={() => {
                         const nextFeatures = toggleValue(user.features, WRIST_COACH_FEATURE);
-                        const nextAreas =
+                        const nextAreas: Area[] =
                           nextFeatures.includes(WRIST_COACH_FEATURE) &&
                           !user.areas.includes("softball")
                             ? [...user.areas, "softball"]
