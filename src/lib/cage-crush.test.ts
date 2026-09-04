@@ -7,6 +7,7 @@ import {
   emptyBoard,
   isCageCrushBlobKey,
   normalizeBoard,
+  swingWhy,
   upsertWeeklyScore,
 } from "./cage-crush.ts";
 
@@ -57,5 +58,17 @@ describe("cage crush week", () => {
     assert.equal(other.board.entries[0].userId, "gabe");
     assert.equal(other.board.entries[1].score, 55);
     assert.equal(isCageCrushBlobKey(CAGE_CRUSH_BLOB_KEY), true);
+  });
+});
+
+describe("swing feedback", () => {
+  it("calls a take, a whiff, a weak cut, and a perfect swing", () => {
+    assert.equal(swingWhy({ kind: "miss", label: "TAKE" }, "FASTBALL", 1.05), "Took the pitch");
+    assert.equal(swingWhy({ kind: "miss", label: "WHIFF" }, "RISE", 0.5), "Way early on the rise");
+    assert.equal(swingWhy({ kind: "miss", label: "WHIFF" }, "CHANGE", 0.98), "Late on the change");
+    assert.equal(swingWhy({ kind: "out", label: "WEAK OUT" }, "DROP", 0.7), "Weak contact · a little early");
+    assert.equal(swingWhy({ kind: "foul", label: "FOUL" }, "SCREW", 0.84), "Weak contact · just off");
+    assert.equal(swingWhy({ kind: "homer", label: "GONE" }, "FASTBALL", 0.82), "Perfect");
+    assert.equal(swingWhy({ kind: "single", label: "SINGLE" }, "FASTBALL", 0.76), "A little early");
   });
 });

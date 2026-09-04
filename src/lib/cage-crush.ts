@@ -176,3 +176,26 @@ export function upsertWeeklyScore(
 export function isCageCrushBlobKey(value: string) {
   return value === CAGE_CRUSH_BLOB_KEY;
 }
+
+export const SWING_SWEET_T = 0.82;
+
+export function swingWhy(
+  hit: { kind: string; label: string },
+  pitchName: string | undefined,
+  t: number,
+) {
+  const name = pitchName ? pitchName.toLowerCase() : "pitch";
+  if (hit.label === "TAKE") return "Took the pitch";
+  const delta = t - SWING_SWEET_T;
+  const abs = Math.abs(delta);
+  const side = delta < 0 ? "early" : "late";
+  if (hit.kind === "miss") {
+    return (abs > 0.16 ? "Way " + side : side.charAt(0).toUpperCase() + side.slice(1)) + " on the " + name;
+  }
+  if (hit.kind === "foul" || hit.kind === "out") {
+    return "Weak contact · " + (abs <= 0.07 ? "just off" : "a little " + side);
+  }
+  if (abs <= 0.03) return "Perfect";
+  if (abs <= 0.07) return "Almost perfect · a hair " + side;
+  return "A little " + side;
+}
