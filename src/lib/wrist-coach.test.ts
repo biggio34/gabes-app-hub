@@ -8,14 +8,21 @@ import {
 } from "./areas.ts";
 import {
   DEFAULT_COLS,
+  DEFAULT_GRIDS,
   DEFAULT_ROWS,
   activeVersion,
+  callCode,
   callColors,
+  cellCount,
   defaultLibrary,
+  defaultTheme,
   emptyBook,
+  layoutOf,
   normalizeBook,
   normalizeCardSize,
+  normalizeTheme,
   nextVersionName,
+  signBag,
   shuffleVersion,
   wristCoachBlobKey,
 } from "./wrist-coach.ts";
@@ -85,6 +92,7 @@ describe("wrist coach book", () => {
     assert.ok(library.some((item) => item.kind === "location" && item.short === "UA"));
     assert.ok(library.some((item) => item.kind === "offense" && item.name === "Hit away"));
     assert.ok(library.some((item) => item.kind === "offense" && item.name === "Bunt"));
+    assert.ok(library.some((item) => item.kind === "offense" && item.short === "B+R"));
     assert.ok(library.filter((item) => item.kind === "offense").length >= 12);
     assert.ok(library.some((item) => item.kind === "defense" && item.name === "Hold"));
     assert.ok(library.some((item) => item.kind === "defense" && item.name === "Throw through"));
@@ -139,19 +147,60 @@ describe("wrist coach book", () => {
     assert.ok(book.library.some((item) => item.kind === "location"));
   });
 
-  it("starts a coach with one shuffled version", () => {
+  it("starts a coach with one shuffled battleship version", () => {
     const book = emptyBook("user-1", "Gabe's signs");
     assert.equal(book.userId, "user-1");
     assert.equal(book.title, "Gabe's signs");
+    assert.equal(book.bandKind, "offense");
+    assert.equal(book.grids, DEFAULT_GRIDS);
     assert.equal(book.rows, DEFAULT_ROWS);
     assert.equal(book.cols, DEFAULT_COLS);
     assert.equal(book.versions.length, 1);
     const version = activeVersion(book);
     assert.ok(version);
-    assert.equal(version.cells.length, DEFAULT_ROWS * DEFAULT_COLS);
+    assert.equal(version.cells.length, DEFAULT_GRIDS * DEFAULT_ROWS * DEFAULT_COLS);
     const codes = version.cells.map((cell) => cell.code);
     assert.equal(new Set(codes).size, codes.length);
     assert.ok(version.cells.every((cell) => cell.callId));
+    assert.equal(callCode(0, 0, 0, 1, 1), "01-1");
+    assert.equal(callCode(5, 4, 4, 1, 1), "55-5");
+    assert.ok(codes.includes("01-1"));
+    assert.ok(codes.includes("55-5"));
+    assert.ok(codes.includes("13-2"));
+  });
+
+  it("lets the coach pick wristband, text, and highlight colors", () => {
+    const book = emptyBook("user-1");
+    assert.deepEqual(book.theme, defaultTheme());
+    assert.deepEqual(normalizeTheme({ band: "#9f1239", ink: "#fff", highlight: "#112233" }), {
+      band: "#9f1239",
+      ink: "#ffffff",
+      highlight: "#112233",
+    });
+    const saved = normalizeBook(
+      {
+        title: "Navy band",
+        theme: { wristband: "#1e3a8a", text: "#eee", cell: "#f8fafc" },
+        library: defaultLibrary(),
+        versions: [],
+      },
+      "user-9",
+    );
+    assert.deepEqual(saved.theme, {
+      band: "#1e3a8a",
+      ink: "#eeeeee",
+      highlight: "#f8fafc",
+    });
+  });
+
+  it("fills cells from each sign's count", () => {
+    const library = [
+      { id: "play-br", kind: "offense" as const, name: "Bunt + run", short: "B+R", fill: "clear" as const, ink: "clear" as const, count: 3 },
+      { id: "play-x", kind: "offense" as const, name: "X", short: "X", fill: "clear" as const, ink: "clear" as const, count: 2 },
+    ];
+    const bag = signBag(library, "offense", 5);
+    assert.equal(bag.filter((id) => id === "play-br").length, 3);
+    assert.equal(bag.filter((id) => id === "play-x").length, 2);
   });
 
   it("shuffle creates another mapping with a new version name", () => {
@@ -164,11 +213,17 @@ describe("wrist coach book", () => {
     const firstMap = first.cells.map((cell) => `${cell.code}:${cell.callId}`).join("|");
     const secondMap = second.cells.map((cell) => `${cell.code}:${cell.callId}`).join("|");
     assert.notEqual(firstMap, secondMap);
+    assert.equal(second.cells.length, cellCount(layoutOf(book)));
   });
 
-  it("defaults the player card to the 3.5 × 2.25 softball size", () => {
+  it("defaults the player card to the 4 × 2 wrist size", () => {
     const book = emptyBook("user-1");
-    assert.deepEqual(book.cardSize, { preset: "softball", widthIn: 3.5, heightIn: 2.25 });
+    assert.deepEqual(book.cardSize, { preset: "wrist", widthIn: 4, heightIn: 2 });
+    assert.deepEqual(normalizeCardSize({ preset: "softball" }), {
+      preset: "softball",
+      widthIn: 3.5,
+      heightIn: 2.25,
+    });
     assert.deepEqual(normalizeCardSize({ preset: "large" }), {
       preset: "large",
       widthIn: 5,
@@ -219,6 +274,21 @@ describe("wrist coach book", () => {
     const inside = book.library.find((item) => item.id === "loc-in");
     assert.equal(inside?.fill, "clear");
     assert.equal(inside?.ink, "clear");
+    assert.equal(inside?.count, 0);
+  });
+
+  it("keeps a sign count when the book is saved", () => {
+    const book = normalizeBook(
+      {
+        title: "Counted",
+        library: [
+          { id: "play-br", kind: "offense", name: "Bunt + run", short: "B+R", count: 15 },
+        ],
+        versions: [],
+      },
+      "user-9",
+    );
+    assert.equal(book.library.find((item) => item.id === "play-br")?.count, 15);
   });
 
   it("normalize repairs a missing book and keeps the user id", () => {
@@ -227,5 +297,6 @@ describe("wrist coach book", () => {
     assert.equal(book.title, "Coach book");
     assert.ok(book.versions.length >= 1);
     assert.ok(book.library.length > 0);
+    assert.deepEqual(book.theme, defaultTheme());
   });
 });

@@ -52,10 +52,11 @@ export function callColors(call?: Pick<WristCall, "fill" | "ink"> | null) {
 
 export const CARD_SIZE_PRESETS = {
   softball: { widthIn: 3.5, heightIn: 2.25 },
+  wrist: { widthIn: 4, heightIn: 2 },
   large: { widthIn: 5, heightIn: 3 },
 } as const;
 
-export type CardSizePreset = "softball" | "large" | "custom";
+export type CardSizePreset = "softball" | "wrist" | "large" | "custom";
 
 export type WristCardSize = {
   preset: CardSizePreset;
@@ -64,7 +65,7 @@ export type WristCardSize = {
 };
 
 export function defaultCardSize(): WristCardSize {
-  return { preset: "softball", ...CARD_SIZE_PRESETS.softball };
+  return { preset: "wrist", ...CARD_SIZE_PRESETS.wrist };
 }
 
 function clampInches(value: unknown, fallback: number, min: number, max: number) {
@@ -76,7 +77,7 @@ function clampInches(value: unknown, fallback: number, min: number, max: number)
 export function normalizeCardSize(raw: unknown): WristCardSize {
   const item = asRecord(raw);
   const preset = item?.preset;
-  if (preset === "softball" || preset === "large") {
+  if (preset === "softball" || preset === "wrist" || preset === "large") {
     return { preset, ...CARD_SIZE_PRESETS[preset] };
   }
   if (preset === "custom" || item?.widthIn != null || item?.heightIn != null) {
@@ -96,13 +97,29 @@ export type WristCall = {
   short: string;
   fill: WristColor;
   ink: WristColor;
+  count: number;
 };
 
 export type WristCell = {
+  grid: number;
   row: number;
   col: number;
   code: string;
   callId: string;
+};
+
+export type WristTheme = {
+  band: string;
+  ink: string;
+  highlight: string;
+};
+
+export type WristLayout = {
+  grids: number;
+  rows: number;
+  cols: number;
+  signStart: number;
+  rowStart: number;
 };
 
 export type WristVersion = {
@@ -116,8 +133,13 @@ export type WristBook = {
   version: 1;
   userId: string;
   title: string;
+  bandKind: WristCallKind;
   rows: number;
   cols: number;
+  grids: number;
+  signStart: number;
+  rowStart: number;
+  theme: WristTheme;
   cardSize: WristCardSize;
   library: WristCall[];
   versions: WristVersion[];
@@ -125,8 +147,94 @@ export type WristBook = {
   updatedAt: number;
 };
 
-export const DEFAULT_ROWS = 6;
+export const DEFAULT_GRIDS = 6;
+export const DEFAULT_ROWS = 5;
 export const DEFAULT_COLS = 5;
+export const DEFAULT_SIGN_START = 1;
+export const DEFAULT_ROW_START = 1;
+
+export function defaultTheme(): WristTheme {
+  return { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
+}
+
+export function normalizeHex(value: unknown, fallback: string) {
+  const raw = String(value || "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toLowerCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
+    const h = raw.slice(1).toLowerCase();
+    return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
+  }
+  return fallback;
+}
+
+export function normalizeTheme(raw: unknown): WristTheme {
+  const fallback = defaultTheme();
+  const item = asRecord(raw);
+  return {
+    band: normalizeHex(item?.band ?? item?.wristband, fallback.band),
+    ink: normalizeHex(item?.ink ?? item?.text, fallback.ink),
+    highlight: normalizeHex(item?.highlight ?? item?.cell, fallback.highlight),
+  };
+}
+
+function clampInt(value: unknown, fallback: number, min: number, max: number) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+export function normalizeLayout(raw: unknown): WristLayout {
+  const item = asRecord(raw) || {};
+  const legacySingle = item.grids == null && Number(item.rows) === 6 && Number(item.cols) === 5;
+  if (legacySingle) {
+    return {
+      grids: DEFAULT_GRIDS,
+      rows: DEFAULT_ROWS,
+      cols: DEFAULT_COLS,
+      signStart: DEFAULT_SIGN_START,
+      rowStart: DEFAULT_ROW_START,
+    };
+  }
+  return {
+    grids: clampInt(item.grids, DEFAULT_GRIDS, 1, 8),
+    rows: clampInt(item.rows, DEFAULT_ROWS, 3, 8),
+    cols: clampInt(item.cols, DEFAULT_COLS, 3, 8),
+    signStart: clampInt(item.signStart, DEFAULT_SIGN_START, 0, 9),
+    rowStart: clampInt(item.rowStart, DEFAULT_ROW_START, 0, 9),
+  };
+}
+
+export function layoutOf(book: Pick<WristBook, "grids" | "rows" | "cols" | "signStart" | "rowStart">): WristLayout {
+  return {
+    grids: book.grids,
+    rows: book.rows,
+    cols: book.cols,
+    signStart: book.signStart,
+    rowStart: book.rowStart,
+  };
+}
+
+export function cellCount(layout: WristLayout) {
+  return layout.grids * layout.rows * layout.cols;
+}
+
+export function columnCode(grid: number, col: number, signStart = DEFAULT_SIGN_START) {
+  return String(grid * 10 + signStart + col).padStart(2, "0");
+}
+
+export function rowCode(row: number, rowStart = DEFAULT_ROW_START) {
+  return String(rowStart + row);
+}
+
+export function callCode(
+  grid: number,
+  row: number,
+  col: number,
+  signStart = DEFAULT_SIGN_START,
+  rowStart = DEFAULT_ROW_START,
+) {
+  return `${columnCode(grid, col, signStart)}-${rowCode(row, rowStart)}`;
+}
 
 const DEFAULT_PITCHES: Array<[string, string, string]> = [
   ["pitch-fb", "Fastball", "FB"],
@@ -152,18 +260,27 @@ const DEFAULT_LOCATIONS: Array<[string, string, string]> = [
   ["loc-mid", "Middle", "MID"],
 ];
 
-const DEFAULT_OFFENSE: Array<[string, string, string]> = [
+const DEFAULT_OFFENSE: Array<[string, string, string, number?]> = [
+  ["play-br", "Bunt + run", "B+R", 15],
+  ["play-b1", "Bunt to 1st", "B1", 15],
+  ["play-b3", "Bunt to 3rd", "B3", 15],
+  ["play-des", "Delayed steal", "DES", 13],
+  ["play-fbh", "Fake bunt + hit", "FBH", 11],
+  ["play-fbs", "Fake bunt + steal", "FBS", 10],
+  ["play-fbt", "Fake bunt + take", "FBT", 10],
+  ["play-hr", "Hit and run", "H+R", 10],
+  ["play-ssq", "Safety squeeze", "SAS", 7],
+  ["play-stl", "Steal", "S", 15],
+  ["play-sus", "Suicide squeeze", "SUS", 7],
+  ["play-tke", "Take", "T", 7],
+  ["play-x", "X", "X", 15],
   ["play-ha", "Hit away", "HA"],
   ["play-bnt", "Bunt", "BNT"],
   ["play-slp", "Slap", "SLP"],
-  ["play-stl", "Steal", "STL"],
-  ["play-hr", "Hit and run", "H&R"],
   ["play-sqz", "Squeeze", "SQZ"],
-  ["play-tke", "Take", "TKE"],
   ["play-swg", "Swing", "SWG"],
   ["play-dly", "Delay steal", "DLY"],
   ["play-fbn", "Fake bunt", "FBN"],
-  ["play-ssq", "Safety squeeze", "SSQ"],
   ["play-sac", "Sacrifice", "SAC"],
   ["play-slh", "Slash", "SLH"],
   ["play-dbl", "Double steal", "DBL"],
@@ -206,14 +323,18 @@ export function newCallId(kind: WristCallKind, name: string) {
   return slugCall(kind, name);
 }
 
-function rowsToCalls(kind: WristCallKind, rows: Array<[string, string, string]>): WristCall[] {
-  return rows.map(([id, name, short]) => ({
-    id,
+function rowsToCalls(
+  kind: WristCallKind,
+  rows: Array<[string, string, string] | [string, string, string, number?]>,
+): WristCall[] {
+  return rows.map((row) => ({
+    id: row[0],
     kind,
-    name,
-    short,
+    name: row[1],
+    short: row[2],
     fill: "clear",
     ink: "clear",
+    count: clampInt(row[3], 0, 0, 300),
   }));
 }
 
@@ -281,72 +402,75 @@ export function nextVersionName(existing: WristVersion[]) {
   return `Version ${existing.length + 1}`;
 }
 
-function uniqueCodes(count: number, used: Set<string> = new Set()) {
-  const codes: string[] = [];
-  const pool: string[] = [];
-  for (let n = 10; n <= 99; n += 1) pool.push(String(n));
-  for (let i = pool.length - 1; i > 0; i -= 1) {
+function shuffleInPlace<T>(list: T[]) {
+  for (let i = list.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+    [list[i], list[j]] = [list[j], list[i]];
   }
-  for (const code of pool) {
-    if (used.has(code)) continue;
-    codes.push(code);
-    if (codes.length === count) return codes;
-  }
-  let extra = 100;
-  while (codes.length < count) {
-    const code = String(extra);
-    extra += 1;
-    if (used.has(code)) continue;
-    codes.push(code);
-  }
-  return codes;
+  return list;
 }
 
-function assignCalls(callIds: string[], cellCount: number) {
-  if (cellCount <= 0) return [];
-  if (!callIds.length) return Array.from({ length: cellCount }, () => "");
-  const bag = [...callIds];
-  for (let i = bag.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [bag[i], bag[j]] = [bag[j], bag[i]];
-  }
-  const assigned: string[] = [];
-  for (let i = 0; i < cellCount; i += 1) {
-    if (i < bag.length) {
-      assigned.push(bag[i]);
-    } else {
-      assigned.push(callIds[Math.floor(Math.random() * callIds.length)]);
+export function signBag(
+  library: WristCall[],
+  kind: WristCallKind,
+  total: number,
+) {
+  if (total <= 0) return [];
+  const signs = library.filter((item) => item.kind === kind && item.id);
+  if (!signs.length) return Array.from({ length: total }, () => "");
+  const specified = signs.some((item) => (item.count || 0) > 0);
+  const bag: string[] = [];
+  if (specified) {
+    for (const sign of signs) {
+      const n = Math.max(0, Math.round(Number(sign.count) || 0));
+      for (let i = 0; i < n; i += 1) bag.push(sign.id);
+    }
+  } else {
+    const base = Math.floor(total / signs.length);
+    let extra = total % signs.length;
+    for (const sign of signs) {
+      const n = base + (extra > 0 ? 1 : 0);
+      extra -= extra > 0 ? 1 : 0;
+      for (let i = 0; i < n; i += 1) bag.push(sign.id);
     }
   }
-  for (let i = assigned.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [assigned[i], assigned[j]] = [assigned[j], assigned[i]];
+  if (!bag.length) return Array.from({ length: total }, () => "");
+  if (bag.length < total) {
+    const pad = bag.slice();
+    while (bag.length < total) bag.push(pad[bag.length % pad.length]);
   }
-  return assigned;
+  return shuffleInPlace(bag.slice(0, total));
 }
 
 export function shuffleVersion(
-  book: Pick<WristBook, "rows" | "cols" | "library" | "versions">,
+  book: Pick<
+    WristBook,
+    "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
+  >,
   name?: string,
 ): WristVersion {
-  const rows = clampSize(book.rows, DEFAULT_ROWS);
-  const cols = clampSize(book.cols, DEFAULT_COLS);
-  const callIds = book.library.map((item) => item.id).filter(Boolean);
-  const codes = uniqueCodes(rows * cols);
-  const assigned = assignCalls(callIds, rows * cols);
+  const layout = layoutOf({
+    grids: clampInt(book.grids, DEFAULT_GRIDS, 1, 8),
+    rows: clampInt(book.rows, DEFAULT_ROWS, 3, 8),
+    cols: clampInt(book.cols, DEFAULT_COLS, 3, 8),
+    signStart: clampInt(book.signStart, DEFAULT_SIGN_START, 0, 9),
+    rowStart: clampInt(book.rowStart, DEFAULT_ROW_START, 0, 9),
+  });
+  const assigned = signBag(book.library, book.bandKind || "offense", cellCount(layout));
   const cells: WristCell[] = [];
   let i = 0;
-  for (let row = 0; row < rows; row += 1) {
-    for (let col = 0; col < cols; col += 1) {
-      cells.push({
-        row,
-        col,
-        code: codes[i],
-        callId: assigned[i] || "",
-      });
-      i += 1;
+  for (let grid = 0; grid < layout.grids; grid += 1) {
+    for (let row = 0; row < layout.rows; row += 1) {
+      for (let col = 0; col < layout.cols; col += 1) {
+        cells.push({
+          grid,
+          row,
+          col,
+          code: callCode(grid, row, col, layout.signStart, layout.rowStart),
+          callId: assigned[i] || "",
+        });
+        i += 1;
+      }
     }
   }
   return {
@@ -355,12 +479,6 @@ export function shuffleVersion(
     createdAt: Date.now(),
     cells,
   };
-}
-
-function clampSize(value: unknown, fallback: number) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(8, Math.max(3, Math.round(n)));
 }
 
 function asRecord(value: unknown) {
@@ -390,52 +508,77 @@ function normalizeCall(raw: unknown, index: number): WristCall | null {
     short: short || (name || "XX").slice(0, 3).toUpperCase(),
     fill: normalizeColor(item.fill),
     ink: normalizeColor(item.ink),
+    count: clampInt(item.count, 0, 0, 300),
   };
 }
 
-function normalizeCell(raw: unknown): WristCell | null {
+function normalizeCell(raw: unknown, layout: WristLayout): WristCell | null {
   const item = asRecord(raw);
   if (!item) return null;
   const row = Number(item.row);
   const col = Number(item.col);
   if (!Number.isFinite(row) || !Number.isFinite(col)) return null;
+  const grid = Number.isFinite(Number(item.grid)) ? Number(item.grid) : 0;
+  if (grid < 0 || grid >= layout.grids || row < 0 || row >= layout.rows || col < 0 || col >= layout.cols) {
+    return null;
+  }
   return {
+    grid,
     row,
     col,
-    code: String(item.code || "").trim() || "00",
+    code: callCode(grid, row, col, layout.signStart, layout.rowStart),
     callId: String(item.callId || ""),
   };
 }
 
-function normalizeVersion(raw: unknown, index: number, rows: number, cols: number): WristVersion | null {
+function normalizeVersion(raw: unknown, index: number, layout: WristLayout): WristVersion | null {
   const item = asRecord(raw);
   if (!item) return null;
   const cells = (Array.isArray(item.cells) ? item.cells : [])
-    .map(normalizeCell)
+    .map((cell) => normalizeCell(cell, layout))
     .filter((cell): cell is WristCell => Boolean(cell));
-  if (!cells.length) return null;
+  if (cells.length !== cellCount(layout)) return null;
   return {
     id: String(item.id || `ver-${index}`),
     name: String(item.name || `Version ${index + 1}`).trim() || `Version ${index + 1}`,
     createdAt: Number(item.createdAt) || Date.now(),
-    cells: cells.filter((cell) => cell.row < rows && cell.col < cols),
+    cells,
+  };
+}
+
+function bookDraft(
+  userId: string,
+  title: string,
+  extra: Partial<WristBook> = {},
+): WristBook {
+  const layout = extra.grids != null ? layoutOf(extra as WristBook) : {
+    grids: DEFAULT_GRIDS,
+    rows: DEFAULT_ROWS,
+    cols: DEFAULT_COLS,
+    signStart: DEFAULT_SIGN_START,
+    rowStart: DEFAULT_ROW_START,
+  };
+  return {
+    version: 1,
+    userId,
+    title,
+    bandKind: extra.bandKind || "offense",
+    rows: layout.rows,
+    cols: layout.cols,
+    grids: layout.grids,
+    signStart: layout.signStart,
+    rowStart: layout.rowStart,
+    theme: extra.theme || defaultTheme(),
+    cardSize: extra.cardSize || defaultCardSize(),
+    library: extra.library || defaultLibrary(),
+    versions: extra.versions || [],
+    activeVersionId: extra.activeVersionId || "",
+    updatedAt: extra.updatedAt || Date.now(),
   };
 }
 
 export function emptyBook(userId: string, title?: string): WristBook {
-  const library = defaultLibrary();
-  const draft: WristBook = {
-    version: 1,
-    userId,
-    title: title?.trim() || "My signs",
-    rows: DEFAULT_ROWS,
-    cols: DEFAULT_COLS,
-    cardSize: defaultCardSize(),
-    library,
-    versions: [],
-    activeVersionId: "",
-    updatedAt: Date.now(),
-  };
+  const draft = bookDraft(userId, title?.trim() || "My signs");
   const first = shuffleVersion(draft, "Version A");
   draft.versions = [first];
   draft.activeVersionId = first.id;
@@ -445,25 +588,20 @@ export function emptyBook(userId: string, title?: string): WristBook {
 export function normalizeBook(raw: unknown, userId: string, title?: string): WristBook {
   const item = asRecord(raw);
   if (!item) return emptyBook(userId, title);
-  const rows = clampSize(item.rows, DEFAULT_ROWS);
-  const cols = clampSize(item.cols, DEFAULT_COLS);
+  const layout = normalizeLayout(item);
   const library = (Array.isArray(item.library) ? item.library : [])
     .map(normalizeCall)
     .filter((call): call is WristCall => Boolean(call));
-  const book: WristBook = {
-    version: 1,
-    userId,
-    title: String(item.title || "").trim() || title?.trim() || "My signs",
-    rows,
-    cols,
+  const book = bookDraft(userId, String(item.title || "").trim() || title?.trim() || "My signs", {
+    bandKind: normalizeKind(item.bandKind || item.kind || "offense"),
+    ...layout,
+    theme: normalizeTheme(item.theme),
     cardSize: normalizeCardSize(item.cardSize),
     library: library.length ? upgradeLibrary(library) : defaultLibrary(),
-    versions: [],
-    activeVersionId: "",
     updatedAt: Number(item.updatedAt) || Date.now(),
-  };
+  });
   book.versions = (Array.isArray(item.versions) ? item.versions : [])
-    .map((version, index) => normalizeVersion(version, index, rows, cols))
+    .map((version, index) => normalizeVersion(version, index, layout))
     .filter((version): version is WristVersion => Boolean(version));
   if (!book.versions.length) {
     const first = shuffleVersion(book, "Version A");
