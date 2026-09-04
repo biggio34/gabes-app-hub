@@ -408,8 +408,8 @@
         fenceY: fenceTop,
         fenceH: fenceH,
         fenceBottom: fenceTop + fenceH,
-        leftX: w * 0.068,
-        rightX: w * 0.932,
+        leftX: 6,
+        rightX: w - 6,
         moundT: 0.38
       };
     }
@@ -469,7 +469,7 @@
       if (state.flight.kind === "miss") return;
       const ball = flightBall(w, h);
       if (!ball) return;
-      if (state.flight.kind === "homer" && ball.t > 0.9 && ball.lift > 40) return;
+      if (state.flight.kind === "homer") return;
       for (let i = 0; i < FIELDERS.length; i += 1) {
         if (FIELDERS[i].id === "p" && !pitcherCanCatch(ball, state.flight)) continue;
         const spot = fielderSpot(w, h, FIELDERS[i]);
@@ -617,12 +617,12 @@
       ctx.fillStyle = "#4ade80";
       ctx.fillRect(0, p.fenceBottom, w, h - p.fenceBottom);
 
-      ctx.fillStyle = "#d6b07a";
-      ctx.fillRect(0, p.fenceBottom, w, 12);
-
       ctx.fillStyle = "#22c55e";
       fairPath(ctx, w, h, 1);
       ctx.fill();
+
+      ctx.fillStyle = "#d6b07a";
+      ctx.fillRect(0, p.fenceBottom, w, 18);
 
       const b3 = along(w, h, 0.5, -1);
       const b1 = along(w, h, 0.5, 1);
