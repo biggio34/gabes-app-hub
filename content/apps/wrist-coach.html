@@ -593,6 +593,39 @@
       return "Pitch";
     }
 
+    function defaultKindTitles(fallback) {
+      const base = String(fallback || "").trim();
+      return {
+        offense: base || "Offense",
+        defense: base || "Defense"
+      };
+    }
+
+    function kindTitlesOf(version, fallbackTitle) {
+      const fallback = fallbackTitle != null
+        ? fallbackTitle
+        : (book && book.title ? book.title : "");
+      const titles = version && version.titles ? version.titles : {};
+      const defaults = defaultKindTitles(fallback);
+      return {
+        offense: String(titles.offense || "").trim() || defaults.offense,
+        defense: String(titles.defense || "").trim() || defaults.defense
+      };
+    }
+
+    function bandTitle() {
+      const titles = kindTitlesOf(activeVersion());
+      return book && book.bandKind === "defense" ? titles.defense : titles.offense;
+    }
+
+    function setKindTitle(version, kind, value) {
+      if (!version) return;
+      version.titles = kindTitlesOf(version);
+      const clean = String(value || "").trim();
+      if (kind === "defense") version.titles.defense = clean || "Defense";
+      else version.titles.offense = clean || "Offense";
+    }
+
     function layoutOf(current) {
       const src = current || book || {};
       return {
@@ -790,6 +823,10 @@
       return {
         id: "ver-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
         name: name || nextVersionName(current.versions || []),
+        titles: kindTitlesOf(
+          current && current.titles ? current : null,
+          current && current.title ? current.title : undefined
+        ),
         createdAt: Date.now(),
         locked: false,
         cells: cells
@@ -848,6 +885,7 @@
       }
       book.versions.forEach(function (item) {
         if (item.locked == null) item.locked = false;
+        item.titles = kindTitlesOf(item);
       });
       const version = activeVersion();
       if (
@@ -867,6 +905,7 @@
         next.id = current.id;
         next.createdAt = current.createdAt;
         next.locked = false;
+        next.titles = kindTitlesOf(current);
         book.versions = book.versions.map(function (item) {
           return item.id === current.id ? next : item;
         });
@@ -1076,7 +1115,7 @@
       }
       const banner =
         '<div class="band-banner" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + Math.max(8, Math.min(12, size.widthIn * 2.6)) + 'px">' +
-          escapeHtml(book.title || kindLabel(book.bandKind)) +
+          escapeHtml(bandTitle()) +
         '</div>';
       return (
         '<div class="band-card rounded-xl ' + (extraClass || "") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
@@ -1107,13 +1146,22 @@
       mount.innerHTML = book.versions.map(function (version) {
         const active = version.id === book.activeVersionId;
         const when = new Date(version.createdAt).toLocaleString();
+        const titles = kindTitlesOf(version);
         return (
-          '<li class="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">' +
-            '<div class="min-w-0">' +
+          '<li class="flex flex-wrap items-start justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">' +
+            '<div class="min-w-0 grow">' +
               '<input data-ver-name="' + escapeHtml(version.id) + '" value="' + escapeHtml(version.name) + '" class="bg-transparent text-sm font-semibold outline-none focus:text-red-300">' +
-              '<p class="text-xs text-slate-500">' + escapeHtml(when) + (active ? " · Active" : "") + (version.locked ? " · Locked" : "") + '</p>' +
+              '<div class="mt-2 grid gap-2 sm:grid-cols-2">' +
+                '<label class="grid gap-1 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Offense' +
+                  '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="offense" maxlength="60" value="' + escapeHtml(titles.offense) + '" class="rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
+                '</label>' +
+                '<label class="grid gap-1 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Defense' +
+                  '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="defense" maxlength="60" value="' + escapeHtml(titles.defense) + '" class="rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
+                '</label>' +
+              '</div>' +
+              '<p class="mt-2 text-xs text-slate-500">' + escapeHtml(when) + (active ? " · Active" : "") + (version.locked ? " · Locked" : "") + '</p>' +
             '</div>' +
-            '<div class="flex items-center gap-3">' +
+            '<div class="flex items-center gap-3 pt-1">' +
               (active
                 ? '<span class="text-xs font-semibold text-red-400">Using</span>'
                 : '<button type="button" data-ver-use="' + escapeHtml(version.id) + '" class="text-xs text-slate-400 hover:text-red-400">Use</button>') +
@@ -1134,7 +1182,7 @@
       const sheet = sheetOf();
       const theme = themeOf();
       const groups = sheetGroups(version);
-      const banner = escapeHtml((book.title || kindLabel(book.bandKind)) + " - CALLS ARE TOP + LEFT");
+      const banner = escapeHtml(bandTitle() + " - CALLS ARE TOP + LEFT");
       const body = groups.map(function (group) {
         const needed = Math.max(sheet.rows, Math.ceil(group.codes.length / sheet.cols) || 1);
         const playRow =
@@ -1195,7 +1243,7 @@
         '<section class="print-page print-cards">' +
           '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
             'Player cards · ' + size.widthIn + ' × ' + size.heightIn + ' in · ' +
-            escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</p>' +
+            escapeHtml(bandTitle()) + ' · ' + escapeHtml(version.name) + '</p>' +
           '<div style="display:flex;flex-wrap:wrap;gap:' + gap + 'in">' + cards.join("") + '</div>' +
         '</section>';
       const sheet = sheetOf();
@@ -1209,7 +1257,7 @@
         '<section class="print-page print-key" style="color:#0f172a">' +
           '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
             'Coach sheet · ' + sheet.widthIn + ' × ' + sheet.heightIn + ' in · ' +
-            escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</p>' +
+            escapeHtml(bandTitle()) + ' · ' + escapeHtml(version.name) + '</p>' +
           '<div style="display:flex;flex-wrap:wrap;gap:' + sheetGap + 'in">' + sheets.join("") + '</div>' +
         '</section>';
       if (printMode === "cards") root.innerHTML = cardPage;
@@ -1293,8 +1341,8 @@
 
     function render() {
       if (!book) return;
-      document.getElementById("book-title").value = book.title || "";
-      document.getElementById("book-subtitle").textContent = book.title || "";
+      document.getElementById("book-title").value = bandTitle();
+      document.getElementById("book-subtitle").textContent = bandTitle();
       renderKindControls();
       renderSizeControls();
       renderLayoutControls();
@@ -1418,7 +1466,10 @@
     }
 
     document.getElementById("book-title").addEventListener("change", function (event) {
-      book.title = event.target.value.trim() || (hubName() + "'s signs");
+      const version = activeVersion();
+      const kind = book.bandKind === "defense" ? "defense" : "offense";
+      setKindTitle(version, kind, event.target.value);
+      book.title = bandTitle();
       render();
       scheduleSave();
     });
@@ -1677,6 +1728,7 @@
       const version = {
         id: "ver-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
         name: nextVersionName(book.versions),
+        titles: kindTitlesOf(current),
         createdAt: Date.now(),
         locked: false,
         cells: current.cells.map(function (cell) { return Object.assign({}, cell); })
@@ -1705,11 +1757,24 @@
       scheduleSave();
     });
     document.getElementById("version-list").addEventListener("change", function (event) {
-      const id = event.target.getAttribute("data-ver-name");
-      if (!id) return;
-      const version = book.versions.find(function (item) { return item.id === id; });
+      const nameId = event.target.getAttribute("data-ver-name");
+      const titleId = event.target.getAttribute("data-ver-title");
+      if (nameId) {
+        const version = book.versions.find(function (item) { return item.id === nameId; });
+        if (!version) return;
+        version.name = event.target.value.trim() || version.name;
+        render();
+        scheduleSave();
+        return;
+      }
+      if (!titleId) return;
+      const version = book.versions.find(function (item) { return item.id === titleId; });
       if (!version) return;
-      version.name = event.target.value.trim() || version.name;
+      const kind = event.target.getAttribute("data-ver-kind") === "defense" ? "defense" : "offense";
+      setKindTitle(version, kind, event.target.value);
+      if (version.id === book.activeVersionId && kind === (book.bandKind === "defense" ? "defense" : "offense")) {
+        book.title = bandTitle();
+      }
       render();
       scheduleSave();
     });

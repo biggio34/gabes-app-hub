@@ -34,6 +34,9 @@ import {
   sheetGroups,
   signBag,
   copyCurrentVersion,
+  defaultKindTitles,
+  kindTitle,
+  normalizeKindTitles,
   shuffleCurrentVersion,
   shuffleVersion,
   wristCoachBlobKey,
@@ -264,10 +267,52 @@ describe("wrist coach book", () => {
     const copied = copyCurrentVersion(book, first);
     assert.notEqual(copied.id, first.id);
     assert.equal(copied.locked, false);
+    assert.deepEqual(copied.titles, first.titles);
     assert.deepEqual(
       copied.cells.map((cell) => `${cell.code}:${cell.callId}`),
       first.cells.map((cell) => `${cell.code}:${cell.callId}`),
     );
+  });
+
+  it("gives offense and defense their own names on a version", () => {
+    const book = emptyBook("user-1", "PURPLE OFFENSE");
+    const first = activeVersion(book);
+    assert.ok(first);
+    assert.deepEqual(first.titles, defaultKindTitles("PURPLE OFFENSE"));
+    assert.equal(kindTitle(first, "offense"), "PURPLE OFFENSE");
+    assert.equal(kindTitle(first, "defense"), "PURPLE OFFENSE");
+    first.titles = { offense: "PURPLE OFFENSE", defense: "NAVY DEFENSE" };
+    assert.equal(kindTitle(first, "defense"), "NAVY DEFENSE");
+    const reshuffled = shuffleCurrentVersion(book, first);
+    assert.deepEqual(reshuffled?.titles, { offense: "PURPLE OFFENSE", defense: "NAVY DEFENSE" });
+    const copied = copyCurrentVersion(book, first);
+    assert.deepEqual(copied.titles, first.titles);
+    const saved = normalizeBook(
+      {
+        title: "PURPLE OFFENSE",
+        library: defaultLibrary(),
+        versions: [
+          {
+            id: first.id,
+            name: first.name,
+            createdAt: first.createdAt,
+            locked: false,
+            cells: first.cells,
+            titles: { offense: "PURPLE OFFENSE", defense: "NAVY DEFENSE" },
+          },
+        ],
+        activeVersionId: first.id,
+      },
+      "user-1",
+    );
+    assert.deepEqual(activeVersion(saved)?.titles, {
+      offense: "PURPLE OFFENSE",
+      defense: "NAVY DEFENSE",
+    });
+    assert.deepEqual(normalizeKindTitles({}, "Home signs"), {
+      offense: "Home signs",
+      defense: "Home signs",
+    });
   });
 
   it("defaults the player card to the 4 × 2 wrist size", () => {
