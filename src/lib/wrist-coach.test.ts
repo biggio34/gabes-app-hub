@@ -33,6 +33,7 @@ import {
   sheetCode,
   sheetGroups,
   signBag,
+  shuffleCurrentVersion,
   shuffleVersion,
   wristCoachBlobKey,
 } from "./wrist-coach.ts";
@@ -227,6 +228,38 @@ describe("wrist coach book", () => {
     const secondMap = second.cells.map((cell) => `${cell.code}:${cell.callId}`).join("|");
     assert.notEqual(firstMap, secondMap);
     assert.equal(second.cells.length, cellCount(layoutOf(book)));
+  });
+
+  it("shuffles the current version in place and skips a locked version", () => {
+    const book = emptyBook("user-1");
+    const first = activeVersion(book);
+    assert.ok(first);
+    assert.equal(first.locked, false);
+    const reshuffled = shuffleCurrentVersion(book, first);
+    assert.ok(reshuffled);
+    assert.equal(reshuffled.id, first.id);
+    assert.equal(reshuffled.name, first.name);
+    assert.equal(reshuffled.locked, false);
+    const locked = { ...first, locked: true };
+    assert.equal(shuffleCurrentVersion(book, locked), null);
+    const saved = normalizeBook(
+      {
+        title: "Locked book",
+        library: defaultLibrary(),
+        versions: [
+          {
+            id: first.id,
+            name: first.name,
+            createdAt: first.createdAt,
+            locked: true,
+            cells: first.cells,
+          },
+        ],
+        activeVersionId: first.id,
+      },
+      "user-1",
+    );
+    assert.equal(activeVersion(saved)?.locked, true);
   });
 
   it("defaults the player card to the 4 × 2 wrist size", () => {

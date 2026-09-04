@@ -126,6 +126,7 @@ export type WristVersion = {
   id: string;
   name: string;
   createdAt: number;
+  locked: boolean;
   cells: WristCell[];
 };
 
@@ -597,7 +598,25 @@ export function shuffleVersion(
     id: `ver-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     name: name?.trim() || nextVersionName(book.versions),
     createdAt: Date.now(),
+    locked: false,
     cells,
+  };
+}
+
+export function shuffleCurrentVersion(
+  book: Pick<
+    WristBook,
+    "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
+  >,
+  version: WristVersion,
+): WristVersion | null {
+  if (version.locked) return null;
+  const next = shuffleVersion(book, version.name);
+  return {
+    ...next,
+    id: version.id,
+    createdAt: version.createdAt,
+    locked: false,
   };
 }
 
@@ -662,6 +681,7 @@ function normalizeVersion(raw: unknown, index: number, layout: WristLayout): Wri
     id: String(item.id || `ver-${index}`),
     name: String(item.name || `Version ${index + 1}`).trim() || `Version ${index + 1}`,
     createdAt: Number(item.createdAt) || Date.now(),
+    locked: Boolean(item.locked),
     cells,
   };
 }

@@ -312,9 +312,14 @@
     <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="font-semibold">Versions</h2>
-        <button type="button" id="shuffle-version" class="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold hover:bg-red-600">
-          Shuffle new version
-        </button>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="shuffle-current" class="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">
+            Shuffle this version
+          </button>
+          <button type="button" id="shuffle-version" class="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold hover:bg-red-600">
+            Shuffle new version
+          </button>
+        </div>
       </div>
       <ul id="version-list" class="grid gap-2"></ul>
     </section>
@@ -343,6 +348,21 @@
       <button type="button" id="count-modal-cancel" class="mt-4 w-full rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
         Cancel
       </button>
+    </div>
+  </div>
+
+  <div id="unlock-modal" class="hidden no-print fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4">
+    <div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-5">
+      <p id="unlock-modal-title" class="font-semibold">Unlock this version?</p>
+      <p id="unlock-modal-sub" class="mt-1 text-sm text-slate-400">It can be shuffled again.</p>
+      <div class="mt-4 grid gap-2 sm:grid-cols-2">
+        <button type="button" id="unlock-modal-cancel" class="rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
+          Cancel
+        </button>
+        <button type="button" id="unlock-modal-confirm" class="rounded-xl bg-red-700 px-3 py-2 text-sm font-semibold hover:bg-red-600">
+          Unlock
+        </button>
+      </div>
     </div>
   </div>
 
@@ -736,6 +756,7 @@
         id: "ver-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
         name: name || nextVersionName(current.versions || []),
         createdAt: Date.now(),
+        locked: false,
         cells: cells
       };
     }
@@ -786,18 +807,23 @@
         book.versions = [first];
         book.activeVersionId = first.id;
       }
+      book.versions.forEach(function (item) {
+        if (item.locked == null) item.locked = false;
+      });
       const version = activeVersion();
-      if (version && version.cells && version.cells.length !== cellCount(layout)) {
+      if (version && !version.locked && version.cells && version.cells.length !== cellCount(layout)) {
         refillActive();
       }
     }
 
     function refillActive() {
       const current = activeVersion();
+      if (current && current.locked) return false;
       const next = shuffleVersion(book, current ? current.name : "Version A");
       if (current) {
         next.id = current.id;
         next.createdAt = current.createdAt;
+        next.locked = false;
         book.versions = book.versions.map(function (item) {
           return item.id === current.id ? next : item;
         });
@@ -805,6 +831,13 @@
         book.versions = [next];
         book.activeVersionId = next.id;
       }
+      return true;
+    }
+
+    function shuffleCurrent() {
+      const current = activeVersion();
+      if (!current || current.locked) return false;
+      return refillActive();
     }
 
     function activeVersion() {
@@ -1021,6 +1054,12 @@
     }
 
     function renderVersions() {
+      const current = activeVersion();
+      const shuffleBtn = document.getElementById("shuffle-current");
+      const locked = !!(current && current.locked);
+      shuffleBtn.disabled = locked;
+      shuffleBtn.className = "rounded-xl px-4 py-2 text-sm font-semibold " +
+        (locked ? "bg-slate-800 text-slate-500 cursor-not-allowed" : "bg-slate-800 hover:bg-slate-700");
       const mount = document.getElementById("version-list");
       mount.innerHTML = book.versions.map(function (version) {
         const active = version.id === book.activeVersionId;
@@ -1029,12 +1068,15 @@
           '<li class="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">' +
             '<div class="min-w-0">' +
               '<input data-ver-name="' + escapeHtml(version.id) + '" value="' + escapeHtml(version.name) + '" class="bg-transparent text-sm font-semibold outline-none focus:text-red-300">' +
-              '<p class="text-xs text-slate-500">' + escapeHtml(when) + (active ? " · Active" : "") + '</p>' +
+              '<p class="text-xs text-slate-500">' + escapeHtml(when) + (active ? " · Active" : "") + (version.locked ? " · Locked" : "") + '</p>' +
             '</div>' +
             '<div class="flex items-center gap-3">' +
               (active
                 ? '<span class="text-xs font-semibold text-red-400">Using</span>'
                 : '<button type="button" data-ver-use="' + escapeHtml(version.id) + '" class="text-xs text-slate-400 hover:text-red-400">Use</button>') +
+              '<button type="button" data-ver-lock="' + escapeHtml(version.id) + '" class="text-xs ' + (version.locked ? "font-semibold text-red-400" : "text-slate-400 hover:text-red-400") + '">' +
+                (version.locked ? "Unlock" : "Lock") +
+              '</button>' +
               (book.versions.length > 1
                 ? '<button type="button" data-ver-del="' + escapeHtml(version.id) + '" class="text-xs text-slate-500 hover:text-red-400">Delete</button>'
                 : "") +
@@ -1506,10 +1548,33 @@
       showCoachOnCard = true;
       renderCard();
     });
+    document.getElementById("shuffle-current").addEventListener("click", function () {
+      if (!shuffleCurrent()) return;
+      render();
+      scheduleSave();
+    });
     document.getElementById("shuffle-version").addEventListener("click", function () {
       const version = shuffleVersion(book);
       book.versions.push(version);
       book.activeVersionId = version.id;
+      render();
+      scheduleSave();
+    });
+    let pendingUnlockId = null;
+    function closeUnlockModal() {
+      pendingUnlockId = null;
+      document.getElementById("unlock-modal").classList.add("hidden");
+    }
+    function openUnlockModal(version) {
+      pendingUnlockId = version.id;
+      document.getElementById("unlock-modal-title").textContent = "Unlock " + version.name + "?";
+      document.getElementById("unlock-modal").classList.remove("hidden");
+    }
+    document.getElementById("unlock-modal-cancel").addEventListener("click", closeUnlockModal);
+    document.getElementById("unlock-modal-confirm").addEventListener("click", function () {
+      const version = book.versions.find(function (item) { return item.id === pendingUnlockId; });
+      if (version) version.locked = false;
+      closeUnlockModal();
       render();
       scheduleSave();
     });
@@ -1524,9 +1589,21 @@
     });
     document.getElementById("version-list").addEventListener("click", function (event) {
       const useId = event.target.getAttribute("data-ver-use");
+      const lockId = event.target.getAttribute("data-ver-lock");
       const delId = event.target.getAttribute("data-ver-del");
       if (useId) {
         book.activeVersionId = useId;
+        render();
+        scheduleSave();
+      }
+      if (lockId) {
+        const version = book.versions.find(function (item) { return item.id === lockId; });
+        if (!version) return;
+        if (version.locked) {
+          openUnlockModal(version);
+          return;
+        }
+        version.locked = true;
         render();
         scheduleSave();
       }
