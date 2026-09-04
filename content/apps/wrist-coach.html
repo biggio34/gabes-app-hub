@@ -420,6 +420,7 @@
     }
 
     function scheduleSave() {
+      if (book) book.updatedAt = Date.now();
       setStatus("Saving…");
       clearTimeout(saveTimer);
       saveTimer = setTimeout(saveBook, 400);
