@@ -28,10 +28,12 @@ function WristCoachCheck({
   softballOn,
   checked,
   onToggle,
+  saveId,
 }: {
   softballOn: boolean;
   checked: boolean;
   onToggle: () => void;
+  saveId: string;
 }) {
   const lock = useRef(false);
   function activate(event: { preventDefault: () => void; stopPropagation: () => void }) {
@@ -48,6 +50,7 @@ function WristCoachCheck({
     <button
       type="button"
       aria-pressed={checked}
+      data-wrist-coach={saveId}
       onClick={activate}
       onTouchEnd={activate}
       className="relative z-10 mt-2 flex min-h-12 w-full touch-manipulation select-none items-center gap-3 rounded-2xl border border-slate-700 bg-slate-950 px-3 py-3 text-left"
@@ -633,6 +636,7 @@ export default function PeoplePage() {
               ))}
             </div>
             <WristCoachCheck
+              saveId="new"
               softballOn={areas.includes("softball")}
               checked={features.includes(WRIST_COACH_FEATURE)}
               onToggle={() => {
@@ -764,6 +768,7 @@ export default function PeoplePage() {
                       ))}
                     </div>
                     <WristCoachCheck
+                      saveId={user.id}
                       softballOn={user.areas.includes("softball")}
                       checked={user.features.includes(WRIST_COACH_FEATURE)}
                       onToggle={() => {
