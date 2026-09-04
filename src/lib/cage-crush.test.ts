@@ -11,6 +11,8 @@ import {
   flightLift,
   pitcherCanCatch,
   qualityFromT,
+  smashCarry,
+  smashValue,
   sprayFromTiming,
   swingWhy,
   upsertWeeklyScore,
@@ -88,6 +90,18 @@ describe("spray and pitcher", () => {
     assert.equal(pitcherCanCatch({ lift: 40 }, { kind: "single", side: 0 }), false);
     assert.equal(pitcherCanCatch({ lift: 8 }, { kind: "double", side: 0 }), false);
     assert.equal(pitcherCanCatch({ lift: 8 }, { kind: "out", side: 0 }), true);
+  });
+});
+
+describe("smash factor", () => {
+  it("is slow at the bottom, fast at the top, and adds carry", () => {
+    assert.ok(smashValue(0) < 0.02);
+    assert.ok(smashValue(1) > 0.98);
+    assert.ok(smashValue(2) < 0.02);
+    const upNearTop = smashValue(0.95) - smashValue(0.85);
+    const upNearBottom = smashValue(0.15) - smashValue(0.05);
+    assert.ok(upNearTop > upNearBottom);
+    assert.ok(smashCarry(200, 1) > smashCarry(200, 0.2));
   });
 });
 

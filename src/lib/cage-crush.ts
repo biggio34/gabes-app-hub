@@ -194,11 +194,28 @@ export function sprayFromTiming(t: number, kind: string) {
 
 export function flightLift(kind: string, t: number) {
   const onTime = Math.abs(t - SWING_SWEET_T) <= 0.045;
-  if (kind === "homer") return onTime ? 96 : 80;
-  if (kind === "triple") return onTime ? 72 : 54;
-  if (kind === "double") return onTime ? 64 : 48;
-  if (kind === "single") return onTime ? 56 : 40;
-  return 22;
+  if (kind === "homer") return onTime ? 128 : 108;
+  if (kind === "triple") return onTime ? 96 : 76;
+  if (kind === "double") return onTime ? 86 : 68;
+  if (kind === "single") return onTime ? 74 : 56;
+  return 32;
+}
+
+export function smashValue(cycleT: number) {
+  const u = ((cycleT % 2) + 2) % 2;
+  if (u <= 1) return u * u;
+  const t = u - 1;
+  return (1 - t) * (1 - t);
+}
+
+export function smashCarry(base: number, smash: number) {
+  const s = Math.max(0, Math.min(1, smash));
+  return base * (0.5 + s);
+}
+
+export function smashLaunch(base: number, smash: number) {
+  const s = Math.max(0, Math.min(1, smash));
+  return base * (0.75 + s * 0.7);
 }
 
 export function pitcherCanCatch(
