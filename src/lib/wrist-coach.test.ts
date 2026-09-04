@@ -35,7 +35,10 @@ import {
   signBag,
   copyCurrentVersion,
   defaultKindTitles,
+  defaultKindThemes,
+  kindTheme,
   kindTitle,
+  normalizeKindThemes,
   normalizeKindTitles,
   shuffleCurrentVersion,
   shuffleVersion,
@@ -312,6 +315,52 @@ describe("wrist coach book", () => {
     assert.deepEqual(normalizeKindTitles({}, "Home signs"), {
       offense: "Home signs",
       defense: "Home signs",
+    });
+  });
+
+  it("keeps wristband, text, and highlight colors per type on a version", () => {
+    const book = emptyBook("user-1");
+    const first = activeVersion(book);
+    assert.ok(first);
+    assert.deepEqual(first.themes, defaultKindThemes(defaultTheme()));
+    first.themes = {
+      offense: { band: "#7e22ce", ink: "#ffffff", highlight: "#f8fafc" },
+      defense: { band: "#1e3a8a", ink: "#fde68a", highlight: "#0f172a" },
+    };
+    assert.deepEqual(kindTheme(first, "offense"), first.themes.offense);
+    assert.deepEqual(kindTheme(first, "defense"), first.themes.defense);
+    const reshuffled = shuffleCurrentVersion(book, first);
+    assert.deepEqual(reshuffled?.themes, first.themes);
+    const copied = copyCurrentVersion(book, first);
+    assert.deepEqual(copied.themes, first.themes);
+    const saved = normalizeBook(
+      {
+        title: "Color split",
+        theme: { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" },
+        library: defaultLibrary(),
+        versions: [
+          {
+            id: first.id,
+            name: first.name,
+            createdAt: first.createdAt,
+            locked: false,
+            cells: first.cells,
+            titles: first.titles,
+            themes: first.themes,
+          },
+        ],
+        activeVersionId: first.id,
+      },
+      "user-1",
+    );
+    assert.deepEqual(activeVersion(saved)?.themes.defense, {
+      band: "#1e3a8a",
+      ink: "#fde68a",
+      highlight: "#0f172a",
+    });
+    assert.deepEqual(normalizeKindThemes({}, { band: "#111111", ink: "#222222", highlight: "#333333" }), {
+      offense: { band: "#111111", ink: "#222222", highlight: "#333333" },
+      defense: { band: "#111111", ink: "#222222", highlight: "#333333" },
     });
   });
 

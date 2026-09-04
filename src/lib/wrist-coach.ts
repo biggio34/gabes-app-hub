@@ -127,10 +127,16 @@ export type WristKindTitles = {
   defense: string;
 };
 
+export type WristKindThemes = {
+  offense: WristTheme;
+  defense: WristTheme;
+};
+
 export type WristVersion = {
   id: string;
   name: string;
   titles: WristKindTitles;
+  themes: WristKindThemes;
   createdAt: number;
   locked: boolean;
   cells: WristCell[];
@@ -248,6 +254,34 @@ export function kindTitle(
     ? normalizeKindTitles(version.titles, fallback)
     : defaultKindTitles(fallback);
   return kind === "defense" ? titles.defense : titles.offense;
+}
+
+export function defaultKindThemes(fallback?: WristTheme): WristKindThemes {
+  const theme = normalizeTheme(fallback);
+  return {
+    offense: { ...theme },
+    defense: { ...theme },
+  };
+}
+
+export function normalizeKindThemes(raw: unknown, fallback?: WristTheme): WristKindThemes {
+  const item = asRecord(raw);
+  const defaults = defaultKindThemes(fallback);
+  return {
+    offense: item?.offense != null ? normalizeTheme(item.offense) : defaults.offense,
+    defense: item?.defense != null ? normalizeTheme(item.defense) : defaults.defense,
+  };
+}
+
+export function kindTheme(
+  version: Pick<WristVersion, "themes"> | null | undefined,
+  kind: WristCallKind | string,
+  fallback?: WristTheme,
+) {
+  const themes = version?.themes
+    ? normalizeKindThemes(version.themes, fallback)
+    : defaultKindThemes(fallback);
+  return kind === "defense" ? themes.defense : themes.offense;
 }
 
 export function normalizeTheme(raw: unknown): WristTheme {
@@ -629,9 +663,10 @@ export function shuffleVersion(
   book: Pick<
     WristBook,
     "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
-  > & { title?: string },
+  > & { title?: string; theme?: WristTheme },
   name?: string,
   titles?: WristKindTitles,
+  themes?: WristKindThemes,
 ): WristVersion {
   const layout = layoutOf({
     grids: clampInt(book.grids, DEFAULT_GRIDS, 1, 8),
@@ -661,6 +696,7 @@ export function shuffleVersion(
     id: `ver-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     name: name?.trim() || nextVersionName(book.versions),
     titles: normalizeKindTitles(titles, book.title),
+    themes: normalizeKindThemes(themes, book.theme),
     createdAt: Date.now(),
     locked: false,
     cells,
@@ -675,6 +711,7 @@ export function copyCurrentVersion(
     id: `ver-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     name: nextVersionName(book.versions),
     titles: normalizeKindTitles(version.titles),
+    themes: normalizeKindThemes(version.themes),
     createdAt: Date.now(),
     locked: false,
     cells: version.cells.map((cell) => ({ ...cell })),
@@ -685,17 +722,18 @@ export function shuffleCurrentVersion(
   book: Pick<
     WristBook,
     "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
-  > & { title?: string },
+  > & { title?: string; theme?: WristTheme },
   version: WristVersion,
 ): WristVersion | null {
   if (version.locked) return null;
-  const next = shuffleVersion(book, version.name, version.titles);
+  const next = shuffleVersion(book, version.name, version.titles, version.themes);
   return {
     ...next,
     id: version.id,
     createdAt: version.createdAt,
     locked: false,
     titles: normalizeKindTitles(version.titles, book.title),
+    themes: normalizeKindThemes(version.themes, book.theme),
   };
 }
 
@@ -754,6 +792,7 @@ function normalizeVersion(
   index: number,
   layout: WristLayout,
   fallbackTitle?: string,
+  fallbackTheme?: WristTheme,
 ): WristVersion | null {
   const item = asRecord(raw);
   if (!item) return null;
@@ -765,6 +804,7 @@ function normalizeVersion(
     id: String(item.id || `ver-${index}`),
     name: String(item.name || `Version ${index + 1}`).trim() || `Version ${index + 1}`,
     titles: normalizeKindTitles(item.titles, fallbackTitle),
+    themes: normalizeKindThemes(item.themes, fallbackTheme),
     createdAt: Number(item.createdAt) || Date.now(),
     locked: Boolean(item.locked),
     cells,
@@ -828,7 +868,7 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
     updatedAt: Number(item.updatedAt) || Date.now(),
   });
   book.versions = (Array.isArray(item.versions) ? item.versions : [])
-    .map((version, index) => normalizeVersion(version, index, layout, book.title))
+    .map((version, index) => normalizeVersion(version, index, layout, book.title, book.theme))
     .filter((version): version is WristVersion => Boolean(version));
   if (!book.versions.length) {
     const first = shuffleVersion(book, "Version A");

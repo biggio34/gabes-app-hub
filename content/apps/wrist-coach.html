@@ -506,8 +506,38 @@
       return { band: DEFAULT_THEME.band, ink: DEFAULT_THEME.ink, highlight: DEFAULT_THEME.highlight };
     }
 
+    function normalizeTheme(raw) {
+      const fallback = defaultTheme();
+      const theme = raw || {};
+      return {
+        band: normalizeHex(theme.band || theme.wristband, fallback.band),
+        ink: normalizeHex(theme.ink || theme.text, fallback.ink),
+        highlight: normalizeHex(theme.highlight || theme.cell, fallback.highlight)
+      };
+    }
+
+    function defaultKindThemes(fallback) {
+      const theme = normalizeTheme(fallback);
+      return {
+        offense: { band: theme.band, ink: theme.ink, highlight: theme.highlight },
+        defense: { band: theme.band, ink: theme.ink, highlight: theme.highlight }
+      };
+    }
+
+    function kindThemesOf(version, fallbackTheme) {
+      const fallback = fallbackTheme || (book && book.theme ? book.theme : defaultTheme());
+      const themes = version && version.themes ? version.themes : {};
+      const defaults = defaultKindThemes(fallback);
+      return {
+        offense: themes.offense ? normalizeTheme(themes.offense) : defaults.offense,
+        defense: themes.defense ? normalizeTheme(themes.defense) : defaults.defense
+      };
+    }
+
     function themeOf() {
-      const theme = book && book.theme ? book.theme : defaultTheme();
+      const kind = book && book.bandKind === "defense" ? "defense" : "offense";
+      const themes = kindThemesOf(activeVersion());
+      const theme = themes[kind];
       return {
         band: normalizeHex(theme.band, DEFAULT_THEME.band),
         ink: normalizeHex(theme.ink, DEFAULT_THEME.ink),
@@ -827,6 +857,10 @@
           current && current.titles ? current : null,
           current && current.title ? current.title : undefined
         ),
+        themes: kindThemesOf(
+          current && current.themes ? current : null,
+          current && current.theme ? current.theme : undefined
+        ),
         createdAt: Date.now(),
         locked: false,
         cells: cells
@@ -865,7 +899,7 @@
       });
       if (!book.cardSize) book.cardSize = defaultCardSize();
       if (!book.theme) book.theme = defaultTheme();
-      book.theme = themeOf();
+      book.theme = normalizeTheme(book.theme);
       book.sheet = sheetOf();
       let kindReset = false;
       if (book.bandKind !== "offense" && book.bandKind !== "defense") {
@@ -886,7 +920,9 @@
       book.versions.forEach(function (item) {
         if (item.locked == null) item.locked = false;
         item.titles = kindTitlesOf(item);
+        item.themes = kindThemesOf(item);
       });
+      book.theme = themeOf();
       const version = activeVersion();
       if (
         version &&
@@ -906,6 +942,7 @@
         next.createdAt = current.createdAt;
         next.locked = false;
         next.titles = kindTitlesOf(current);
+        next.themes = kindThemesOf(current);
         book.versions = book.versions.map(function (item) {
           return item.id === current.id ? next : item;
         });
@@ -1382,9 +1419,12 @@
     }
 
     function applyThemeField(field, value) {
-      const theme = themeOf();
-      theme[field] = normalizeHex(value, theme[field]);
-      book.theme = theme;
+      const version = activeVersion();
+      if (!version) return;
+      const kind = book.bandKind === "defense" ? "defense" : "offense";
+      version.themes = kindThemesOf(version);
+      version.themes[kind][field] = normalizeHex(value, version.themes[kind][field]);
+      book.theme = themeOf();
       renderThemeControls();
       renderCard();
       renderCoachKey();
@@ -1729,6 +1769,7 @@
         id: "ver-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
         name: nextVersionName(book.versions),
         titles: kindTitlesOf(current),
+        themes: kindThemesOf(current),
         createdAt: Date.now(),
         locked: false,
         cells: current.cells.map(function (cell) { return Object.assign({}, cell); })
