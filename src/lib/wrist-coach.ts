@@ -129,6 +129,11 @@ export type WristVersion = {
   cells: WristCell[];
 };
 
+export type WristSheet = {
+  cols: number;
+  rows: number;
+};
+
 export type WristBook = {
   version: 1;
   userId: string;
@@ -140,6 +145,7 @@ export type WristBook = {
   signStart: number;
   rowStart: number;
   theme: WristTheme;
+  sheet: WristSheet;
   cardSize: WristCardSize;
   library: WristCall[];
   versions: WristVersion[];
@@ -152,6 +158,20 @@ export const DEFAULT_ROWS = 5;
 export const DEFAULT_COLS = 5;
 export const DEFAULT_SIGN_START = 1;
 export const DEFAULT_ROW_START = 1;
+export const DEFAULT_SHEET_COLS = 15;
+export const DEFAULT_SHEET_ROWS = 1;
+
+export function defaultSheet(): WristSheet {
+  return { cols: DEFAULT_SHEET_COLS, rows: DEFAULT_SHEET_ROWS };
+}
+
+export function normalizeSheet(raw: unknown): WristSheet {
+  const item = asRecord(raw) || {};
+  return {
+    cols: clampInt(item.cols, DEFAULT_SHEET_COLS, 4, 20),
+    rows: clampInt(item.rows, DEFAULT_SHEET_ROWS, 1, 8),
+  };
+}
 
 export function defaultTheme(): WristTheme {
   return { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
@@ -234,6 +254,46 @@ export function callCode(
   rowStart = DEFAULT_ROW_START,
 ) {
   return `${columnCode(grid, col, signStart)}-${rowCode(row, rowStart)}`;
+}
+
+export function sheetCode(
+  grid: number,
+  row: number,
+  col: number,
+  signStart = DEFAULT_SIGN_START,
+  rowStart = DEFAULT_ROW_START,
+) {
+  return `${columnCode(grid, col, signStart)}${rowCode(row, rowStart)}`;
+}
+
+export type WristSheetGroup = {
+  callId: string;
+  name: string;
+  short: string;
+  codes: string[];
+};
+
+export function sheetGroups(book: WristBook, version: WristVersion | null): WristSheetGroup[] {
+  if (!version) return [];
+  const kind = book.bandKind || "offense";
+  const layout = layoutOf(book);
+  const byCall = new Map<string, string[]>();
+  for (const cell of version.cells) {
+    if (!cell.callId) continue;
+    const call = callById(book, cell.callId);
+    if (!call || call.kind !== kind) continue;
+    const list = byCall.get(call.id) || [];
+    list.push(sheetCode(cell.grid, cell.row, cell.col, layout.signStart, layout.rowStart));
+    byCall.set(call.id, list);
+  }
+  return book.library
+    .filter((call) => call.kind === kind && byCall.has(call.id))
+    .map((call) => ({
+      callId: call.id,
+      name: call.name,
+      short: call.short,
+      codes: (byCall.get(call.id) || []).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    }));
 }
 
 const DEFAULT_PITCHES: Array<[string, string, string]> = [
@@ -569,6 +629,7 @@ function bookDraft(
     signStart: layout.signStart,
     rowStart: layout.rowStart,
     theme: extra.theme || defaultTheme(),
+    sheet: extra.sheet || defaultSheet(),
     cardSize: extra.cardSize || defaultCardSize(),
     library: extra.library || defaultLibrary(),
     versions: extra.versions || [],
@@ -596,6 +657,7 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
     bandKind: normalizeKind(item.bandKind || item.kind || "offense"),
     ...layout,
     theme: normalizeTheme(item.theme),
+    sheet: normalizeSheet(item.sheet || { cols: item.sheetCols, rows: item.sheetRows }),
     cardSize: normalizeCardSize(item.cardSize),
     library: library.length ? upgradeLibrary(library) : defaultLibrary(),
     updatedAt: Number(item.updatedAt) || Date.now(),

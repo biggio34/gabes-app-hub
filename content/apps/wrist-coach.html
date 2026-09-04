@@ -78,6 +78,36 @@
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    .coach-sheet {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      color: #111;
+      table-layout: fixed;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .coach-sheet th,
+    .coach-sheet td {
+      border: 1px solid #111;
+      text-align: center;
+      font-weight: 800;
+      line-height: 1.15;
+      padding: 5px 2px;
+    }
+    .coach-sheet .sheet-banner {
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .coach-sheet .sheet-play {
+      background: #fff;
+      color: #111;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .coach-sheet .sheet-code {
+      font-variant-numeric: tabular-nums;
+    }
     .swatch {
       width: 14px;
       height: 14px;
@@ -281,7 +311,17 @@
 
     <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
       <h2 class="font-semibold">Coach sheet</h2>
-      <div id="coach-key" class="rounded-2xl border border-slate-800 bg-slate-950 p-4 overflow-x-auto"></div>
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="grid gap-1.5 text-sm">
+          Columns
+          <input id="sheet-cols" inputmode="numeric" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+        <label class="grid gap-1.5 text-sm">
+          Rows
+          <input id="sheet-rows" inputmode="numeric" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+      </div>
+      <div id="coach-key" class="overflow-x-auto rounded-2xl bg-white p-2"></div>
     </section>
   </div>
 
@@ -517,6 +557,48 @@
       return columnCode(grid, col, layout.signStart) + "-" + rowCode(row, layout.rowStart);
     }
 
+    function defaultSheet() {
+      return { cols: 15, rows: 1 };
+    }
+
+    function sheetOf() {
+      const sheet = book && book.sheet ? book.sheet : defaultSheet();
+      return {
+        cols: clampInt(sheet.cols, 15, 4, 20),
+        rows: clampInt(sheet.rows, 1, 1, 8)
+      };
+    }
+
+    function sheetCode(grid, row, col, layout) {
+      return columnCode(grid, col, layout.signStart) + rowCode(row, layout.rowStart);
+    }
+
+    function sheetGroups(version) {
+      if (!version || !book) return [];
+      const kind = book.bandKind || "offense";
+      const layout = layoutOf(book);
+      const byCall = {};
+      (version.cells || []).forEach(function (cell) {
+        if (!cell.callId) return;
+        const call = callById(cell.callId);
+        if (!call || call.kind !== kind) return;
+        if (!byCall[call.id]) byCall[call.id] = [];
+        byCall[call.id].push(sheetCode(cell.grid || 0, cell.row, cell.col, layout));
+      });
+      return book.library.filter(function (call) {
+        return call.kind === kind && byCall[call.id];
+      }).map(function (call) {
+        return {
+          callId: call.id,
+          name: call.name,
+          short: call.short,
+          codes: byCall[call.id].slice().sort(function (a, b) {
+            return String(a).localeCompare(String(b), undefined, { numeric: true });
+          })
+        };
+      });
+    }
+
     function nextVersionName(versions) {
       const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
       const used = new Set((versions || []).map(function (item) { return String(item.name || "").toUpperCase(); }));
@@ -602,6 +684,7 @@
         signStart: 1,
         rowStart: 1,
         theme: defaultTheme(),
+        sheet: defaultSheet(),
         cardSize: defaultCardSize(),
         library: defaultLibrary(),
         versions: [],
@@ -622,6 +705,7 @@
       if (!book.cardSize) book.cardSize = defaultCardSize();
       if (!book.theme) book.theme = defaultTheme();
       book.theme = themeOf();
+      book.sheet = sheetOf();
       if (!book.bandKind) book.bandKind = "offense";
       const layout = layoutOf(book);
       book.grids = layout.grids;
@@ -882,6 +966,39 @@
       }).join("");
     }
 
+    function coachSheetHtml(version) {
+      if (!version) return "";
+      const sheet = sheetOf();
+      const theme = themeOf();
+      const groups = sheetGroups(version);
+      const banner = escapeHtml((book.title || kindLabel(book.bandKind)) + " - CALLS ARE TOP + LEFT");
+      const body = groups.map(function (group) {
+        const needed = Math.max(sheet.rows, Math.ceil(group.codes.length / sheet.cols) || 1);
+        const playRow =
+          '<tr><th class="sheet-play" colspan="' + sheet.cols + '">' +
+            escapeHtml(group.name + " (" + group.short + ")") +
+          '</th></tr>';
+        const codeRows = [];
+        for (let r = 0; r < needed; r += 1) {
+          const cells = [];
+          for (let c = 0; c < sheet.cols; c += 1) {
+            const code = group.codes[r * sheet.cols + c] || "";
+            cells.push('<td class="sheet-code">' + escapeHtml(code) + '</td>');
+          }
+          codeRows.push('<tr>' + cells.join("") + '</tr>');
+        }
+        return playRow + codeRows.join("");
+      }).join("");
+      return (
+        '<table class="coach-sheet">' +
+          '<thead><tr><th class="sheet-banner" colspan="' + sheet.cols + '" style="background:' + theme.band + ';color:' + theme.ink + '">' +
+            banner +
+          '</th></tr></thead>' +
+          '<tbody>' + body + '</tbody>' +
+        '</table>'
+      );
+    }
+
     function renderCoachKey() {
       const version = activeVersion();
       const mount = document.getElementById("coach-key");
@@ -889,27 +1006,7 @@
         mount.innerHTML = "";
         return;
       }
-      const rows = version.cells.slice().sort(function (a, b) {
-        return String(a.code).localeCompare(String(b.code), undefined, { numeric: true });
-      }).map(function (cell) {
-        const call = callById(cell.callId);
-        return (
-          '<tr class="border-t border-slate-800">' +
-            '<td class="py-1.5 pr-3 font-semibold">' + escapeHtml(cell.code) + '</td>' +
-            '<td class="py-1.5 pr-3 text-slate-400">' + escapeHtml(call ? call.short : "") + '</td>' +
-            '<td class="py-1.5">' + escapeHtml(call ? call.name : "—") + '</td>' +
-          '</tr>'
-        );
-      }).join("");
-      mount.innerHTML =
-        '<div class="mb-3">' +
-          '<p class="text-sm font-semibold">' + escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</p>' +
-        '</div>' +
-        '<div class="mb-4 flex justify-center">' + wristCardHtml(version, true, "") + '</div>' +
-        '<table class="w-full text-sm">' +
-          '<thead><tr class="text-left text-[11px] uppercase tracking-[0.12em] text-slate-500"><th class="pb-2">Code</th><th class="pb-2">Short</th><th class="pb-2">Call</th></tr></thead>' +
-          '<tbody>' + rows + '</tbody>' +
-        '</table>';
+      mount.innerHTML = coachSheetHtml(version);
     }
 
     function renderPrint() {
@@ -935,28 +1032,9 @@
             escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</p>' +
           '<div style="display:flex;flex-wrap:wrap;gap:' + gap + 'in">' + cards.join("") + '</div>' +
         '</section>';
-      const keyRows = version.cells.slice().sort(function (a, b) {
-        return String(a.code).localeCompare(String(b.code), undefined, { numeric: true });
-      }).map(function (cell) {
-        const call = callById(cell.callId);
-        return (
-          '<tr>' +
-            '<td style="padding:4px 10px 4px 0;font-weight:700">' + escapeHtml(cell.code) + '</td>' +
-            '<td style="padding:4px 10px 4px 0">' + escapeHtml(call ? call.short : "") + '</td>' +
-            '<td style="padding:4px 0">' + escapeHtml(call ? call.name : "—") + '</td>' +
-          '</tr>'
-        );
-      }).join("");
       const keyPage =
         '<section class="print-page print-key" style="color:#0f172a">' +
-          '<h1 style="margin:0 0 12px;font-size:22px">Coach sheet · ' + escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</h1>' +
-          '<div style="display:flex;gap:24px;align-items:flex-start">' +
-            wristCardHtml(version, true, "") +
-            '<table style="font-size:13px;border-collapse:collapse">' +
-              '<thead><tr style="text-align:left;color:#64748b"><th style="padding-bottom:6px">Code</th><th style="padding-bottom:6px">Short</th><th style="padding-bottom:6px">Call</th></tr></thead>' +
-              '<tbody>' + keyRows + '</tbody>' +
-            '</table>' +
-          '</div>' +
+          coachSheetHtml(version) +
         '</section>';
       if (printMode === "cards") root.innerHTML = cardPage;
       else if (printMode === "key") root.innerHTML = keyPage;
@@ -1010,6 +1088,12 @@
       document.getElementById("grid-rows").value = String(layout.rows);
     }
 
+    function renderSheetControls() {
+      const sheet = sheetOf();
+      document.getElementById("sheet-cols").value = String(sheet.cols);
+      document.getElementById("sheet-rows").value = String(sheet.rows);
+    }
+
     function renderTally() {
       const layout = layoutOf(book);
       const kind = book.bandKind || "offense";
@@ -1029,6 +1113,7 @@
       renderKindControls();
       renderSizeControls();
       renderLayoutControls();
+      renderSheetControls();
       renderThemeControls();
       renderTally();
       renderLibraryKind("pitch", "pitch-list");
@@ -1069,6 +1154,16 @@
       book.theme = theme;
       renderThemeControls();
       renderCard();
+      renderCoachKey();
+      scheduleSave();
+    }
+
+    function applySheet() {
+      book.sheet = {
+        cols: clampInt(document.getElementById("sheet-cols").value, 15, 4, 20),
+        rows: clampInt(document.getElementById("sheet-rows").value, 1, 1, 8)
+      };
+      renderSheetControls();
       renderCoachKey();
       scheduleSave();
     }
@@ -1120,6 +1215,8 @@
     ["sign-start", "row-start", "grid-count", "grid-cols", "grid-rows"].forEach(function (id) {
       document.getElementById(id).addEventListener("change", applyLayout);
     });
+    document.getElementById("sheet-cols").addEventListener("change", applySheet);
+    document.getElementById("sheet-rows").addEventListener("change", applySheet);
     document.getElementById("add-pitch").addEventListener("submit", function (event) {
       event.preventDefault();
       addCall("pitch", document.getElementById("pitch-name").value, document.getElementById("pitch-short").value);

@@ -10,18 +10,24 @@ import {
   DEFAULT_COLS,
   DEFAULT_GRIDS,
   DEFAULT_ROWS,
+  DEFAULT_SHEET_COLS,
+  DEFAULT_SHEET_ROWS,
   activeVersion,
   callCode,
   callColors,
   cellCount,
   defaultLibrary,
+  defaultSheet,
   defaultTheme,
   emptyBook,
   layoutOf,
   normalizeBook,
   normalizeCardSize,
+  normalizeSheet,
   normalizeTheme,
   nextVersionName,
+  sheetCode,
+  sheetGroups,
   signBag,
   shuffleVersion,
   wristCoachBlobKey,
@@ -164,6 +170,9 @@ describe("wrist coach book", () => {
     assert.ok(version.cells.every((cell) => cell.callId));
     assert.equal(callCode(0, 0, 0, 1, 1), "01-1");
     assert.equal(callCode(5, 4, 4, 1, 1), "55-5");
+    assert.equal(sheetCode(0, 0, 0, 1, 1), "011");
+    assert.equal(sheetCode(1, 1, 2, 1, 1), "132");
+    assert.equal(sheetCode(5, 4, 4, 1, 1), "555");
     assert.ok(codes.includes("01-1"));
     assert.ok(codes.includes("55-5"));
     assert.ok(codes.includes("13-2"));
@@ -289,6 +298,38 @@ describe("wrist coach book", () => {
       "user-9",
     );
     assert.equal(book.library.find((item) => item.id === "play-br")?.count, 15);
+  });
+
+  it("groups the coach sheet by play and keeps sheet columns and rows", () => {
+    const book = emptyBook("user-1", "PURPLE OFFENSE");
+    assert.deepEqual(book.sheet, defaultSheet());
+    assert.equal(book.sheet.cols, DEFAULT_SHEET_COLS);
+    assert.equal(book.sheet.rows, DEFAULT_SHEET_ROWS);
+    assert.deepEqual(normalizeSheet({ cols: 10, rows: 2 }), { cols: 10, rows: 2 });
+    assert.deepEqual(normalizeSheet({ cols: 99, rows: 0 }), { cols: 20, rows: 1 });
+    const saved = normalizeBook(
+      {
+        title: "Sheet book",
+        sheet: { cols: 12, rows: 2 },
+        library: defaultLibrary(),
+        versions: [],
+      },
+      "user-9",
+    );
+    assert.deepEqual(saved.sheet, { cols: 12, rows: 2 });
+    const version = activeVersion(book);
+    assert.ok(version);
+    const groups = sheetGroups(book, version);
+    assert.ok(groups.length >= 1);
+    const used = new Set(version.cells.map((cell) => cell.callId));
+    assert.equal(groups.length, used.size);
+    for (const group of groups) {
+      assert.ok(group.codes.length >= 1);
+      assert.ok(group.short);
+      assert.ok(group.codes.every((code) => /^\d{3,}$/.test(code)));
+    }
+    const first = groups[0];
+    assert.ok(book.library.some((call) => call.id === first.callId && call.kind === "offense"));
   });
 
   it("normalize repairs a missing book and keeps the user id", () => {
