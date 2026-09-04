@@ -15,17 +15,21 @@ import {
   activeVersion,
   callCode,
   callColors,
+  cardCounts,
   cellCount,
   defaultLibrary,
   defaultSheet,
   defaultTheme,
   emptyBook,
   layoutOf,
+  materializeKindCounts,
+  moveLibraryCall,
   normalizeBook,
   normalizeCardSize,
   normalizeSheet,
   normalizeTheme,
   nextVersionName,
+  rebalanceCounts,
   sheetCode,
   sheetGroups,
   signBag,
@@ -330,6 +334,47 @@ describe("wrist coach book", () => {
     }
     const first = groups[0];
     assert.ok(book.library.some((call) => call.id === first.callId && call.kind === "offense"));
+  });
+
+  it("reorders plays and trades counts between two plays of the same type", () => {
+    const book = emptyBook("user-1");
+    const version = activeVersion(book);
+    assert.ok(version);
+    const counts = cardCounts(version);
+    book.library = materializeKindCounts(book.library, "offense", counts);
+    const offense = book.library.filter((item) => item.kind === "offense");
+    assert.ok(offense.length >= 2);
+    const firstId = offense[0].id;
+    const secondId = offense[1].id;
+    book.library = moveLibraryCall(book.library, firstId, 1);
+    const moved = book.library.filter((item) => item.kind === "offense");
+    assert.equal(moved[0].id, secondId);
+    assert.equal(moved[1].id, firstId);
+    const groups = sheetGroups({ ...book, library: book.library }, version);
+    const offenseGroups = groups.filter((group) =>
+      book.library.find((item) => item.id === group.callId)?.kind === "offense",
+    );
+    if (offenseGroups.length >= 2) {
+      const firstGroup = offenseGroups.find((group) => group.callId === firstId);
+      const secondGroup = offenseGroups.find((group) => group.callId === secondId);
+      if (firstGroup && secondGroup) {
+        assert.ok(
+          offenseGroups.indexOf(secondGroup) < offenseGroups.indexOf(firstGroup),
+        );
+      }
+    }
+    const source = book.library.find((item) => item.id === firstId);
+    const other = book.library.find((item) => item.id === secondId);
+    assert.ok(source && other);
+    const nextSource = source.count + 1;
+    const traded = rebalanceCounts(book.library, firstId, secondId, nextSource);
+    assert.ok(traded);
+    assert.equal(traded.find((item) => item.id === firstId)?.count, source.count + 1);
+    assert.equal(traded.find((item) => item.id === secondId)?.count, other.count - 1);
+    assert.equal(
+      rebalanceCounts(book.library, firstId, secondId, source.count + other.count + 1),
+      null,
+    );
   });
 
   it("normalize repairs a missing book and keeps the user id", () => {

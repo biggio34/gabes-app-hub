@@ -297,6 +297,65 @@ export function sheetGroups(book: WristBook, version: WristVersion | null): Wris
   }));
 }
 
+export function cardCounts(version: WristVersion | null): Record<string, number> {
+  const counts: Record<string, number> = {};
+  if (!version) return counts;
+  for (const cell of version.cells) {
+    if (!cell.callId) continue;
+    counts[cell.callId] = (counts[cell.callId] || 0) + 1;
+  }
+  return counts;
+}
+
+export function materializeKindCounts(
+  library: WristCall[],
+  kind: WristCallKind,
+  counts: Record<string, number>,
+): WristCall[] {
+  return library.map((call) =>
+    call.kind === kind ? { ...call, count: counts[call.id] || 0 } : call,
+  );
+}
+
+export function moveLibraryCall(
+  library: WristCall[],
+  id: string,
+  direction: -1 | 1,
+): WristCall[] {
+  const call = library.find((item) => item.id === id);
+  if (!call) return library;
+  const kindItems = library.filter((item) => item.kind === call.kind);
+  const from = kindItems.findIndex((item) => item.id === id);
+  const to = from + direction;
+  if (from < 0 || to < 0 || to >= kindItems.length) return library;
+  const reordered = kindItems.slice();
+  const [moved] = reordered.splice(from, 1);
+  reordered.splice(to, 0, moved);
+  let i = 0;
+  return library.map((item) => (item.kind === call.kind ? reordered[i++] : item));
+}
+
+export function rebalanceCounts(
+  library: WristCall[],
+  sourceId: string,
+  otherId: string,
+  nextSourceCount: number,
+): WristCall[] | null {
+  const source = library.find((item) => item.id === sourceId);
+  const other = library.find((item) => item.id === otherId);
+  if (!source || !other || source.id === other.id || source.kind !== other.kind) return null;
+  const next = Math.max(0, Math.round(Number(nextSourceCount) || 0));
+  const delta = next - source.count;
+  if (delta === 0) return library;
+  const otherNext = other.count - delta;
+  if (otherNext < 0) return null;
+  return library.map((item) => {
+    if (item.id === sourceId) return { ...item, count: next };
+    if (item.id === otherId) return { ...item, count: otherNext };
+    return item;
+  });
+}
+
 const DEFAULT_PITCHES: Array<[string, string, string]> = [
   ["pitch-fb", "Fastball", "FB"],
   ["pitch-ch", "Change", "CH"],

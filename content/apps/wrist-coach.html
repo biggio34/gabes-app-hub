@@ -116,6 +116,16 @@
       padding: 0;
     }
     .swatch[data-on="1"] { outline: 2px solid #f8fafc; outline-offset: 1px; }
+    .count-step {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-weight: 700;
+      line-height: 1;
+    }
     .print-only { display: none; }
     @media print {
       @page { size: letter; margin: 0.45in; }
@@ -240,7 +250,7 @@
         <h2 id="signs-heading" class="font-semibold">Signs</h2>
         <p id="sign-tally" class="text-xs text-slate-500"></p>
       </div>
-      <div class="grid gap-5 max-w-xl">
+      <div class="grid gap-5 max-w-2xl">
         <div data-kind-panel="pitch">
           <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Pitches</p>
           <div id="pitch-list" class="grid gap-2"></div>
@@ -323,6 +333,17 @@
       </div>
       <div id="coach-key" class="overflow-x-auto rounded-2xl bg-white p-2"></div>
     </section>
+  </div>
+
+  <div id="count-modal" class="hidden no-print fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4">
+    <div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-5">
+      <p id="count-modal-title" class="font-semibold"></p>
+      <p id="count-modal-sub" class="mt-1 text-sm text-slate-400"></p>
+      <div id="count-modal-choices" class="mt-4 grid gap-2"></div>
+      <button type="button" id="count-modal-cancel" class="mt-4 w-full rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
+        Cancel
+      </button>
+    </div>
   </div>
 
   <div id="print-root" class="print-only"></div>
@@ -417,6 +438,7 @@
     let showCoachOnCard = false;
     let saveTimer = null;
     let printMode = "both";
+    let pendingCount = null;
 
     function hubName() {
       const hub = window.HUB_SOFTBALL || {};
@@ -571,6 +593,51 @@
 
     function sheetCode(grid, row, col, layout) {
       return columnCode(grid, col, layout.signStart) + rowCode(row, layout.rowStart);
+    }
+
+    function cardCounts(version) {
+      const counts = {};
+      ((version && version.cells) || []).forEach(function (cell) {
+        if (!cell.callId) return;
+        counts[cell.callId] = (counts[cell.callId] || 0) + 1;
+      });
+      return counts;
+    }
+
+    function materializeKindCounts(kind, counts) {
+      book.library.forEach(function (call) {
+        if (call.kind === kind) call.count = counts[call.id] || 0;
+      });
+    }
+
+    function moveLibraryCall(id, direction) {
+      const call = callById(id);
+      if (!call) return false;
+      const kindItems = book.library.filter(function (item) { return item.kind === call.kind; });
+      const from = kindItems.findIndex(function (item) { return item.id === id; });
+      const to = from + direction;
+      if (from < 0 || to < 0 || to >= kindItems.length) return false;
+      const reordered = kindItems.slice();
+      const moved = reordered.splice(from, 1)[0];
+      reordered.splice(to, 0, moved);
+      let i = 0;
+      book.library = book.library.map(function (item) {
+        return item.kind === call.kind ? reordered[i++] : item;
+      });
+      return true;
+    }
+
+    function rebalanceCounts(sourceId, otherId, nextSourceCount) {
+      const source = callById(sourceId);
+      const other = callById(otherId);
+      if (!source || !other || source.id === other.id || source.kind !== other.kind) return false;
+      const next = Math.max(0, Math.round(Number(nextSourceCount) || 0));
+      const delta = next - source.count;
+      if (delta === 0) return true;
+      if (other.count - delta < 0) return false;
+      source.count = next;
+      other.count -= delta;
+      return true;
     }
 
     function sheetGroups(version) {
@@ -845,15 +912,25 @@
     function renderLibraryKind(kind, mountId) {
       const mount = document.getElementById(mountId);
       const items = book.library.filter(function (item) { return item.kind === kind; });
-      mount.innerHTML = items.map(function (item) {
+      const onCard = cardCounts(activeVersion());
+      mount.innerHTML = items.map(function (item, index) {
         const fill = normalizeColor(item.fill);
         const ink = normalizeColor(item.ink);
+        const count = onCard[item.id] || 0;
         return (
           '<div class="grid gap-1.5">' +
-            '<div class="grid grid-cols-[3.5rem_1fr_3.25rem_auto] gap-2 items-center">' +
+            '<div class="grid grid-cols-[auto_3.5rem_1fr_auto_auto] gap-2 items-center">' +
+              '<div class="grid gap-1">' +
+                '<button type="button" data-call-move="' + escapeHtml(item.id) + '" data-dir="-1" class="count-step" aria-label="Move up"' + (index === 0 ? " disabled" : "") + '>↑</button>' +
+                '<button type="button" data-call-move="' + escapeHtml(item.id) + '" data-dir="1" class="count-step" aria-label="Move down"' + (index === items.length - 1 ? " disabled" : "") + '>↓</button>' +
+              '</div>' +
               '<input data-call-short="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.short) + '" maxlength="4" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs uppercase outline-none focus:border-red-500">' +
               '<input data-call-name="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.name) + '" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm outline-none focus:border-red-500">' +
-              '<input data-call-count="' + escapeHtml(item.id) + '" value="' + escapeHtml(String(item.count || 0)) + '" inputmode="numeric" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs outline-none focus:border-red-500" aria-label="Count">' +
+              '<div class="flex items-center gap-1">' +
+                '<button type="button" data-call-less="' + escapeHtml(item.id) + '" class="count-step" aria-label="Fewer">−</button>' +
+                '<input data-call-count="' + escapeHtml(item.id) + '" value="' + escapeHtml(String(count)) + '" inputmode="numeric" class="w-12 rounded-lg border border-slate-700 bg-slate-950 px-1 py-1.5 text-center text-xs outline-none focus:border-red-500" aria-label="On card">' +
+                '<button type="button" data-call-more="' + escapeHtml(item.id) + '" class="count-step" aria-label="More">+</button>' +
+              '</div>' +
               '<button type="button" data-call-del="' + escapeHtml(item.id) + '" class="text-xs text-slate-500 hover:text-red-400" aria-label="Remove">×</button>' +
             '</div>' +
             '<div class="flex flex-wrap items-center gap-2">' +
@@ -1098,12 +1175,11 @@
     function renderTally() {
       const layout = layoutOf(book);
       const kind = book.bandKind || "offense";
-      const signs = book.library.filter(function (item) { return item.kind === kind; });
-      const specified = signs.some(function (item) { return (item.count || 0) > 0; });
+      const onCard = cardCounts(activeVersion());
+      const used = book.library
+        .filter(function (item) { return item.kind === kind; })
+        .reduce(function (sum, item) { return sum + (onCard[item.id] || 0); }, 0);
       const total = cellCount(layout);
-      const used = specified
-        ? signs.reduce(function (sum, item) { return sum + Math.max(0, Number(item.count) || 0); }, 0)
-        : total;
       document.getElementById("sign-tally").textContent = used + " / " + total;
     }
 
@@ -1250,6 +1326,72 @@
     document.getElementById("location-list").addEventListener("click", onLibraryClick);
     document.getElementById("play-list").addEventListener("click", onLibraryClick);
     document.getElementById("defense-list").addEventListener("click", onLibraryClick);
+    document.getElementById("count-modal-cancel").addEventListener("click", function () {
+      closeCountModal();
+      render();
+    });
+    document.getElementById("count-modal-choices").addEventListener("click", function (event) {
+      const btn = event.target.closest("[data-count-other]");
+      if (!btn || !pendingCount) return;
+      const otherId = btn.getAttribute("data-count-other");
+      const source = callById(pendingCount.id);
+      if (!source) {
+        closeCountModal();
+        render();
+        return;
+      }
+      materializeKindCounts(source.kind, cardCounts(activeVersion()));
+      if (!rebalanceCounts(pendingCount.id, otherId, pendingCount.next)) {
+        closeCountModal();
+        render();
+        return;
+      }
+      closeCountModal();
+      refillActive();
+      render();
+      scheduleSave();
+    });
+    function closeCountModal() {
+      pendingCount = null;
+      document.getElementById("count-modal").classList.add("hidden");
+    }
+
+    function openCountTrade(id, nextCount) {
+      const call = callById(id);
+      if (!call) return;
+      const kind = call.kind;
+      materializeKindCounts(kind, cardCounts(activeVersion()));
+      const current = call.count;
+      const next = clampInt(nextCount, current, 0, 300);
+      if (next === current) {
+        render();
+        return;
+      }
+      const delta = next - current;
+      const others = book.library.filter(function (item) {
+        if (item.id === id || item.kind !== kind) return false;
+        return delta > 0 ? item.count >= delta : true;
+      });
+      if (!others.length) {
+        render();
+        return;
+      }
+      pendingCount = { id: id, next: next, current: current };
+      document.getElementById("count-modal-title").textContent =
+        call.name + " · " + current + " → " + next;
+      document.getElementById("count-modal-sub").textContent =
+        delta > 0 ? "Reduce" : "Add to";
+      document.getElementById("count-modal-choices").innerHTML = others.map(function (item) {
+        return (
+          '<button type="button" data-count-other="' + escapeHtml(item.id) + '" class="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm hover:border-red-500">' +
+            '<span>' + escapeHtml(item.name) + ' (' + escapeHtml(item.short) + ')</span>' +
+            '<span class="text-slate-400">' + escapeHtml(String(item.count)) + '</span>' +
+          '</button>'
+        );
+      }).join("");
+      document.getElementById("count-modal").classList.remove("hidden");
+    }
+
     function onCallEdit(event) {
       const id = event.target.getAttribute("data-call-name") ||
         event.target.getAttribute("data-call-short") ||
@@ -1257,18 +1399,47 @@
       if (!id) return;
       const call = callById(id);
       if (!call) return;
-      if (event.target.getAttribute("data-call-name")) call.name = event.target.value.trim() || call.name;
-      if (event.target.getAttribute("data-call-short")) call.short = event.target.value.trim().slice(0, 4).toUpperCase() || call.short;
-      if (event.target.getAttribute("data-call-count")) {
-        call.count = clampInt(event.target.value, 0, 0, 300);
-        refillActive();
+      if (event.target.getAttribute("data-call-name")) {
+        call.name = event.target.value.trim() || call.name;
+        render();
+        scheduleSave();
+        return;
       }
-      render();
-      scheduleSave();
+      if (event.target.getAttribute("data-call-short")) {
+        call.short = event.target.value.trim().slice(0, 4).toUpperCase() || call.short;
+        render();
+        scheduleSave();
+        return;
+      }
+      if (event.target.getAttribute("data-call-count")) {
+        openCountTrade(id, event.target.value);
+      }
     }
     function onLibraryClick(event) {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
+      const target = event.target.closest("button");
+      if (!(target instanceof HTMLElement) || target.disabled) return;
+      const moveId = target.getAttribute("data-call-move");
+      if (moveId) {
+        if (moveLibraryCall(moveId, Number(target.getAttribute("data-dir")) < 0 ? -1 : 1)) {
+          render();
+          scheduleSave();
+        }
+        return;
+      }
+      const moreId = target.getAttribute("data-call-more");
+      if (moreId) {
+        const onCard = cardCounts(activeVersion());
+        openCountTrade(moreId, (onCard[moreId] || 0) + 1);
+        return;
+      }
+      const lessId = target.getAttribute("data-call-less");
+      if (lessId) {
+        const onCard = cardCounts(activeVersion());
+        const current = onCard[lessId] || 0;
+        if (current <= 0) return;
+        openCountTrade(lessId, current - 1);
+        return;
+      }
       const fillId = target.getAttribute("data-call-fill");
       const inkId = target.getAttribute("data-call-ink");
       const color = target.getAttribute("data-color");
