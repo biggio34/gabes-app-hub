@@ -12,10 +12,8 @@
     .title-font { font-family: "Space Grotesk", Inter, sans-serif; letter-spacing: -0.03em; }
     #stage {
       width: 100%;
-      max-width: 920px;
       height: min(68vh, 560px);
       display: block;
-      border-radius: 1.25rem;
       background: #4f8fd1;
     }
     .swing-btn {
@@ -45,7 +43,7 @@
       </div>
     </header>
 
-    <section class="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-3 sm:p-5">
+    <section class="grid gap-3 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 p-3 sm:p-5">
       <div class="flex flex-wrap items-center justify-between gap-2 px-1">
         <div class="flex flex-wrap gap-4 text-sm">
           <p>Score <span id="score" class="font-semibold text-white">0</span></p>
@@ -54,8 +52,8 @@
         </div>
         <p id="pitch-call" class="text-sm font-semibold text-red-300">Tap Play</p>
       </div>
-      <div class="flex justify-center">
-        <canvas id="stage" width="920" height="560"></canvas>
+      <div class="-mx-3 sm:-mx-5">
+        <canvas id="stage" width="1100" height="560"></canvas>
       </div>
       <div class="grid gap-2 sm:grid-cols-[1fr_auto_1fr] items-center">
         <p id="result-line" class="text-sm text-slate-400 sm:text-left text-center">Time the swing as the ball crosses the plate.</p>
@@ -408,8 +406,8 @@
         fenceY: fenceTop,
         fenceH: fenceH,
         fenceBottom: fenceTop + fenceH,
-        leftX: 6,
-        rightX: w - 6,
+        leftX: 3,
+        rightX: w - 3,
         moundT: 0.38
       };
     }
@@ -622,7 +620,7 @@
       ctx.fill();
 
       ctx.fillStyle = "#d6b07a";
-      ctx.fillRect(0, p.fenceBottom, w, 18);
+      ctx.fillRect(0, p.fenceBottom, w, 22);
 
       const b3 = along(w, h, 0.5, -1);
       const b1 = along(w, h, 0.5, 1);
