@@ -1,4 +1,4 @@
-import { AREAS, areaAndFeatureLinks, isHubFeature, type Area, type HubFeature } from "@/lib/areas";
+import { AREAS, areaAndFeatureLinks, isHubFeature, mergeUserFeatures, type Area, type HubFeature } from "@/lib/areas";
 import { hashPassword } from "@/lib/auth";
 import {
   DEFAULT_CLUB_ID,
@@ -8,6 +8,7 @@ import {
   type StoredUser,
   type Team,
 } from "@/lib/models";
+import { readUserFeaturesMap } from "@/lib/user-features-store";
 import { ownerPasswordValue } from "./client";
 import { getSupabase, throwIfError } from "./supabase";
 
@@ -95,7 +96,7 @@ async function hydrate(rows: UserRow[]): Promise<StoredUser[]> {
   if (rows.length === 0) return [];
   const supabase = await client();
   const ids = rows.map((row) => row.id);
-  const [areas, clubLinks, teamLinks] = await Promise.all([
+  const [areas, clubLinks, teamLinks, featureMap] = await Promise.all([
     throwIfError(
       await supabase.from("hub_user_areas").select("*").in("user_id", ids),
       "Could not read areas.",
@@ -108,6 +109,7 @@ async function hydrate(rows: UserRow[]): Promise<StoredUser[]> {
       await supabase.from("hub_user_teams").select("*").in("user_id", ids),
       "Could not read team assignments.",
     ),
+    readUserFeaturesMap(ids),
   ]);
   return rows.map((row) => ({
     id: row.id,
@@ -119,9 +121,12 @@ async function hydrate(rows: UserRow[]): Promise<StoredUser[]> {
     areas: (areas ?? [])
       .filter((item) => item.user_id === row.id && AREAS.includes(item.area as Area))
       .map((item) => item.area as Area),
-    features: (areas ?? [])
-      .filter((item) => item.user_id === row.id && isHubFeature(item.area))
-      .map((item) => item.area as HubFeature),
+    features: mergeUserFeatures(
+      (areas ?? [])
+        .filter((item) => item.user_id === row.id && isHubFeature(item.area))
+        .map((item) => item.area as string),
+      featureMap.get(row.id),
+    ),
     clubIds: (clubLinks ?? [])
       .filter((item) => item.user_id === row.id)
       .map((item) => item.club_id as string),
@@ -189,11 +194,8 @@ async function replaceLinks(
   next: { areas?: Area[]; features?: HubFeature[]; clubIds?: string[]; teamIds?: string[] },
 ) {
   const supabase = await client();
-  if (next.areas || next.features) {
-    const areaRows = [
-      ...(next.areas ?? []).map((area) => ({ user_id: userId, area })),
-      ...(next.features ?? []).map((feature) => ({ user_id: userId, area: feature })),
-    ];
+  if (next.areas) {
+    const areaRows = next.areas.map((area) => ({ user_id: userId, area }));
     throwIfError(
       await supabase.from("hub_user_areas").delete().eq("user_id", userId),
       "Could not update areas.",
@@ -272,7 +274,6 @@ export async function saveUser(
   const links = areaAndFeatureLinks(user);
   await replaceLinks(user.id, {
     areas: patch.areas ? links.areas : undefined,
-    features: patch.areas ? links.features : undefined,
     clubIds: patch.clubs ? user.clubIds : undefined,
     teamIds: patch.teams ? user.teamIds : undefined,
   });

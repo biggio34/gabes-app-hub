@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { areaAndFeatureLinks, wristCoachAllowed } from "./areas.ts";
+import {
+  areaAndFeatureLinks,
+  mergeUserFeatures,
+  userFeaturesBlobKey,
+  wristCoachAllowed,
+} from "./areas.ts";
 import {
   DEFAULT_COLS,
   DEFAULT_ROWS,
@@ -32,6 +37,13 @@ describe("wrist coach permission", () => {
       areaAndFeatureLinks({ areas: ["softball"], features: [] }),
       { areas: ["softball"], features: [] },
     );
+    assert.equal(userFeaturesBlobKey("user-bot"), "user-features:user-bot");
+    assert.deepEqual(
+      mergeUserFeatures(["softball"], ["wrist-coach"]),
+      ["wrist-coach"],
+    );
+    assert.deepEqual(mergeUserFeatures(["wrist-coach"], []), ["wrist-coach"]);
+    assert.deepEqual(mergeUserFeatures([], []), []);
   });
 
   it("requires softball plus the Wrist Coach flag for members", () => {

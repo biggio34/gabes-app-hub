@@ -29,7 +29,7 @@ export function isArea(value: string): value is Area {
   return (AREAS as readonly string[]).includes(value);
 }
 
-/** Extra Softball tools. Stored in user_areas, not a top-level hub area. */
+/** Extra Softball tools. Stored in a sibling softball_state / hub_softball_state blob. */
 export const HUB_FEATURES = ["wrist-coach"] as const;
 export type HubFeature = (typeof HUB_FEATURES)[number];
 export const WRIST_COACH_FEATURE: HubFeature = "wrist-coach";
@@ -47,6 +47,19 @@ export function areaAndFeatureLinks(user: {
     areas: (user.areas ?? []).filter(isArea),
     features: (user.features ?? []).filter(isHubFeature),
   };
+}
+
+export const USER_FEATURES_BLOB_PREFIX = "user-features:";
+
+export function userFeaturesBlobKey(userId: string) {
+  return `${USER_FEATURES_BLOB_PREFIX}${userId}`;
+}
+
+export function mergeUserFeatures(
+  fromAreas: readonly string[] | null | undefined,
+  fromBlob: readonly string[] | null | undefined,
+): HubFeature[] {
+  return [...new Set([...(fromAreas ?? []), ...(fromBlob ?? [])].filter(isHubFeature))];
 }
 
 export function wristCoachAllowed(user: {

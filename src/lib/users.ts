@@ -1,5 +1,13 @@
 import { eq, inArray } from "drizzle-orm";
-import { AREAS, HUB_FEATURES, areaAndFeatureLinks, isHubFeature, type Area, type HubFeature } from "./areas";
+import {
+  AREAS,
+  HUB_FEATURES,
+  areaAndFeatureLinks,
+  isHubFeature,
+  mergeUserFeatures,
+  type Area,
+  type HubFeature,
+} from "./areas";
 import { hashPassword } from "./auth";
 import { ownerPasswordValue, readyDb } from "./db/client";
 import { isSupabaseConfigured } from "./db/supabase";
@@ -10,6 +18,11 @@ import {
   slugId,
   type StoredUser,
 } from "./models";
+import {
+  deleteUserFeatures,
+  readUserFeaturesMap,
+  writeUserFeatures,
+} from "./user-features-store";
 
 export type { StoredUser } from "./models";
 export { publicUser } from "./models";
@@ -27,10 +40,11 @@ async function hydrate(rows: (typeof users.$inferSelect)[]): Promise<StoredUser[
   if (rows.length === 0) return [];
   const db = await readyDb();
   const ids = rows.map((row) => row.id);
-  const [areaRows, clubRows, teamRows] = await Promise.all([
+  const [areaRows, clubRows, teamRows, featureMap] = await Promise.all([
     db.select().from(userAreas).where(inArray(userAreas.userId, ids)),
     db.select().from(userClubs).where(inArray(userClubs.userId, ids)),
     db.select().from(userTeams).where(inArray(userTeams.userId, ids)),
+    readUserFeaturesMap(ids),
   ]);
   return rows.map((row) => ({
     id: row.id,
@@ -42,9 +56,12 @@ async function hydrate(rows: (typeof users.$inferSelect)[]): Promise<StoredUser[
     areas: areaRows
       .filter((item) => item.userId === row.id && AREAS.includes(item.area as Area))
       .map((item) => item.area as Area),
-    features: areaRows
-      .filter((item) => item.userId === row.id && isHubFeature(item.area))
-      .map((item) => item.area as HubFeature),
+    features: mergeUserFeatures(
+      areaRows
+        .filter((item) => item.userId === row.id && isHubFeature(item.area))
+        .map((item) => item.area),
+      featureMap.get(row.id),
+    ),
     clubIds: clubRows
       .filter((item) => item.userId === row.id)
       .map((item) => item.clubId),
@@ -104,11 +121,8 @@ async function replaceLinks(
   next: { areas?: Area[]; features?: HubFeature[]; clubIds?: string[]; teamIds?: string[] },
 ) {
   const db = await readyDb();
-  if (next.areas || next.features) {
-    const areaRows = [
-      ...(next.areas ?? []).map((area) => ({ userId, area })),
-      ...(next.features ?? []).map((feature) => ({ userId, area: feature })),
-    ];
+  if (next.areas) {
+    const areaRows = next.areas.map((area) => ({ userId, area }));
     await db.delete(userAreas).where(eq(userAreas.userId, userId));
     if (areaRows.length) {
       await db.insert(userAreas).values(areaRows);
@@ -173,6 +187,7 @@ export async function createUser(input: {
   }
   if (isSupabaseConfigured()) {
     await supabaseStore.insertUser(user);
+    await writeUserFeatures(user.id, user.features);
     return user;
   }
   const db = await readyDb();
@@ -186,6 +201,7 @@ export async function createUser(input: {
     createdAt: user.createdAt,
   });
   await replaceLinks(user.id, user);
+  await writeUserFeatures(user.id, user.features);
   return user;
 }
 
@@ -234,7 +250,7 @@ export async function updateUser(
     current.areas = patch.areas.filter((area) => AREAS.includes(area));
     if (current.role === "owner") current.areas = [...AREAS];
   }
-  if (patch.features) {
+  if (patch.features !== undefined) {
     current.features = patch.features.filter(isHubFeature);
     if (current.role === "owner") current.features = [...HUB_FEATURES];
   }
@@ -264,12 +280,14 @@ export async function updateUser(
     current.passwordHash = await hashPassword(patch.password);
   }
 
+  const touchAreas = patch.areas !== undefined || patch.features !== undefined;
   if (isSupabaseConfigured()) {
     await supabaseStore.saveUser(current, {
-      areas: Boolean(patch.areas || patch.features),
+      areas: touchAreas,
       clubs: Boolean(patch.clubIds || patch.teamIds),
       teams: Boolean(patch.clubIds || patch.teamIds),
     });
+    if (touchAreas) await writeUserFeatures(id, current.features);
     return current;
   }
   const db = await readyDb();
@@ -284,11 +302,11 @@ export async function updateUser(
     .where(eq(users.id, id));
   const links = areaAndFeatureLinks(current);
   await replaceLinks(id, {
-    areas: patch.areas || patch.features ? links.areas : undefined,
-    features: patch.areas || patch.features ? links.features : undefined,
+    areas: touchAreas ? links.areas : undefined,
     clubIds: patch.clubIds || patch.teamIds ? current.clubIds : undefined,
     teamIds: patch.clubIds || patch.teamIds ? current.teamIds : undefined,
   });
+  if (touchAreas) await writeUserFeatures(id, current.features);
   return current;
 }
 
@@ -298,6 +316,7 @@ export async function deleteUser(id: string) {
   if (current.role === "owner") throw new Error("The owner account cannot be deleted");
   if (isSupabaseConfigured()) {
     await supabaseStore.removeUser(id);
+    await deleteUserFeatures(id);
     return;
   }
   const db = await readyDb();
@@ -305,4 +324,5 @@ export async function deleteUser(id: string) {
   await db.delete(userClubs).where(eq(userClubs.userId, id));
   await db.delete(userTeams).where(eq(userTeams.userId, id));
   await db.delete(users).where(eq(users.id, id));
+  await deleteUserFeatures(id);
 }

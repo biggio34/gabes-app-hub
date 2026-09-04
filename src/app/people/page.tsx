@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AREAS, WRIST_COACH_FEATURE, areaMeta, type Area, type HubFeature } from "@/lib/areas";
 import { SecretField } from "@/components/secret-field";
@@ -33,23 +33,46 @@ function WristCoachCheck({
   checked: boolean;
   onToggle: () => void;
 }) {
+  const lock = useRef(false);
+  function activate(event: { preventDefault: () => void; stopPropagation: () => void }) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (lock.current) return;
+    lock.current = true;
+    onToggle();
+    window.setTimeout(() => {
+      lock.current = false;
+    }, 400);
+  }
   return (
-    <label className="mt-2 flex min-h-11 cursor-pointer touch-manipulation select-none items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950 px-3 py-2">
-      <input
-        type="checkbox"
-        className="size-5 shrink-0 accent-red-600"
-        checked={checked}
-        onChange={onToggle}
-      />
+    <button
+      type="button"
+      aria-pressed={checked}
+      onClick={activate}
+      onTouchEnd={activate}
+      className="relative z-10 mt-2 flex min-h-12 w-full touch-manipulation select-none items-center gap-3 rounded-2xl border border-slate-700 bg-slate-950 px-3 py-3 text-left"
+    >
+      <span
+        aria-hidden="true"
+        className={`flex size-6 shrink-0 items-center justify-center rounded-md border text-xs font-bold ${
+          checked
+            ? "border-red-500 bg-red-700 text-white"
+            : "border-slate-500 bg-slate-900 text-transparent"
+        }`}
+      >
+        ✓
+      </span>
       <span className="min-w-0">
         <span className="block text-sm font-semibold">Wrist Coach</span>
         <span className="block text-[11px] text-slate-500">
-          {softballOn
-            ? "Their own pitch and play-call book."
-            : "Turns on Softball too."}
+          {checked
+            ? "On — they can open the player-card book."
+            : softballOn
+              ? "Off. Tap to give them Wrist Coach."
+              : "Off. Tap to turn on Softball and Wrist Coach."}
         </span>
       </span>
-    </label>
+    </button>
   );
 }
 
