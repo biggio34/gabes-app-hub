@@ -81,7 +81,7 @@ export const hubApps: HubApp[] = [
     file: "cage-crush.html",
     title: "Cage Crush",
     description:
-      "Softball batting arcade. Time the swing, crush the pitch, chase your high score.",
+      "Softball batting arcade. Time the swing, crush the pitch, and climb the weekly board.",
     area: "softball",
   },
   {
