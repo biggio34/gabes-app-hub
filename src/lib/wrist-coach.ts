@@ -130,9 +130,20 @@ export type WristVersion = {
   cells: WristCell[];
 };
 
+export const SHEET_SIZE_PRESETS = {
+  letter: { widthIn: 8.5, heightIn: 11 },
+  half: { widthIn: 8.5, heightIn: 5.5 },
+  index: { widthIn: 5, heightIn: 8 },
+} as const;
+
+export type SheetSizePreset = "letter" | "half" | "index" | "custom";
+
 export type WristSheet = {
   cols: number;
   rows: number;
+  preset: SheetSizePreset;
+  widthIn: number;
+  heightIn: number;
 };
 
 export type WristBook = {
@@ -163,15 +174,32 @@ export const DEFAULT_SHEET_COLS = 15;
 export const DEFAULT_SHEET_ROWS = 1;
 
 export function defaultSheet(): WristSheet {
-  return { cols: DEFAULT_SHEET_COLS, rows: DEFAULT_SHEET_ROWS };
+  return {
+    cols: DEFAULT_SHEET_COLS,
+    rows: DEFAULT_SHEET_ROWS,
+    preset: "letter",
+    ...SHEET_SIZE_PRESETS.letter,
+  };
 }
 
 export function normalizeSheet(raw: unknown): WristSheet {
   const item = asRecord(raw) || {};
-  return {
-    cols: clampInt(item.cols, DEFAULT_SHEET_COLS, 4, 20),
-    rows: clampInt(item.rows, DEFAULT_SHEET_ROWS, 1, 8),
-  };
+  const cols = clampInt(item.cols, DEFAULT_SHEET_COLS, 4, 20);
+  const rows = clampInt(item.rows, DEFAULT_SHEET_ROWS, 1, 8);
+  const preset = item.preset;
+  if (preset === "letter" || preset === "half" || preset === "index") {
+    return { cols, rows, preset, ...SHEET_SIZE_PRESETS[preset] };
+  }
+  if (preset === "custom" || item.widthIn != null || item.heightIn != null) {
+    return {
+      cols,
+      rows,
+      preset: "custom",
+      widthIn: clampInches(item.widthIn, SHEET_SIZE_PRESETS.letter.widthIn, 2, 8.5),
+      heightIn: clampInches(item.heightIn, SHEET_SIZE_PRESETS.letter.heightIn, 2, 11),
+    };
+  }
+  return { cols, rows, preset: "letter", ...SHEET_SIZE_PRESETS.letter };
 }
 
 export function defaultTheme(): WristTheme {
@@ -600,6 +628,19 @@ export function shuffleVersion(
     createdAt: Date.now(),
     locked: false,
     cells,
+  };
+}
+
+export function copyCurrentVersion(
+  book: Pick<WristBook, "versions">,
+  version: WristVersion,
+): WristVersion {
+  return {
+    id: `ver-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    name: nextVersionName(book.versions),
+    createdAt: Date.now(),
+    locked: false,
+    cells: version.cells.map((cell) => ({ ...cell })),
   };
 }
 

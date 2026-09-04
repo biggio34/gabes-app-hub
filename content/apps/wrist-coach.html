@@ -78,8 +78,16 @@
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    .coach-sheet-page {
+      background: #fff;
+      box-sizing: border-box;
+      overflow: hidden;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
     .coach-sheet {
       width: 100%;
+      height: 100%;
       border-collapse: collapse;
       background: #fff;
       color: #111;
@@ -317,7 +325,7 @@
             Shuffle this version
           </button>
           <button type="button" id="shuffle-version" class="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold hover:bg-red-600">
-            Shuffle new version
+            Copy and Create New Version
           </button>
         </div>
       </div>
@@ -335,8 +343,23 @@
           Rows
           <input id="sheet-rows" inputmode="numeric" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
+        <div class="grid gap-1.5 text-sm">
+          Size
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" data-sheet-size="letter" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">8.5 × 11 in</button>
+            <button type="button" data-sheet-size="half" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">8.5 × 5.5 in</button>
+            <button type="button" data-sheet-size="index" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">5 × 8 in</button>
+            <button type="button" data-sheet-size="custom" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">Custom</button>
+            <div id="sheet-custom-size" class="hidden items-center gap-2 text-sm">
+              <input id="sheet-w" inputmode="decimal" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              <span>×</span>
+              <input id="sheet-h" inputmode="decimal" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              <span class="text-slate-500">in</span>
+            </div>
+          </div>
+        </div>
       </div>
-      <div id="coach-key" class="overflow-x-auto rounded-2xl bg-white p-2"></div>
+      <div id="coach-key" class="overflow-x-auto rounded-2xl bg-slate-950 p-3"></div>
     </section>
   </div>
 
@@ -599,15 +622,29 @@
       return columnCode(grid, col, layout.signStart) + "-" + rowCode(row, layout.rowStart);
     }
 
+    const SHEET_SIZE_PRESETS = {
+      letter: { widthIn: 8.5, heightIn: 11 },
+      half: { widthIn: 8.5, heightIn: 5.5 },
+      index: { widthIn: 5, heightIn: 8 }
+    };
+
     function defaultSheet() {
-      return { cols: 15, rows: 1 };
+      return { cols: 15, rows: 1, preset: "letter", widthIn: 8.5, heightIn: 11 };
     }
 
     function sheetOf() {
       const sheet = book && book.sheet ? book.sheet : defaultSheet();
+      const cols = clampInt(sheet.cols, 15, 4, 20);
+      const rows = clampInt(sheet.rows, 1, 1, 8);
+      if (sheet.preset === "letter" || sheet.preset === "half" || sheet.preset === "index") {
+        return { cols: cols, rows: rows, preset: sheet.preset, widthIn: SHEET_SIZE_PRESETS[sheet.preset].widthIn, heightIn: SHEET_SIZE_PRESETS[sheet.preset].heightIn };
+      }
       return {
-        cols: clampInt(sheet.cols, 15, 4, 20),
-        rows: clampInt(sheet.rows, 1, 1, 8)
+        cols: cols,
+        rows: rows,
+        preset: "custom",
+        widthIn: Math.min(8.5, Math.max(2, Number(sheet.widthIn) || 8.5)),
+        heightIn: Math.min(11, Math.max(2, Number(sheet.heightIn) || 11))
       };
     }
 
@@ -1109,13 +1146,16 @@
         }
         return playRow + codeRows.join("");
       }).join("");
+      const font = Math.max(6, Math.min(11, sheet.widthIn * 1.15));
       return (
-        '<table class="coach-sheet">' +
-          '<thead><tr><th class="sheet-banner" colspan="' + sheet.cols + '" style="background:' + theme.band + ';color:' + theme.ink + '">' +
-            banner +
-          '</th></tr></thead>' +
-          '<tbody>' + body + '</tbody>' +
-        '</table>'
+        '<div class="coach-sheet-page shadow-xl" style="width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;padding:0.12in;font-size:' + font + 'px">' +
+          '<table class="coach-sheet">' +
+            '<thead><tr><th class="sheet-banner" colspan="' + sheet.cols + '" style="background:' + theme.band + ';color:' + theme.ink + '">' +
+              banner +
+            '</th></tr></thead>' +
+            '<tbody>' + body + '</tbody>' +
+          '</table>' +
+        '</div>'
       );
     }
 
@@ -1152,9 +1192,19 @@
             escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</p>' +
           '<div style="display:flex;flex-wrap:wrap;gap:' + gap + 'in">' + cards.join("") + '</div>' +
         '</section>';
+      const sheet = sheetOf();
+      const sheetGap = 0.16;
+      const sheetCols = Math.max(1, Math.floor((usableW + sheetGap) / (sheet.widthIn + sheetGap)));
+      const sheetRows = Math.max(1, Math.floor((usableH + sheetGap) / (sheet.heightIn + sheetGap)));
+      const sheetCount = sheetCols * sheetRows;
+      const sheets = [];
+      for (let i = 0; i < sheetCount; i += 1) sheets.push(coachSheetHtml(version));
       const keyPage =
         '<section class="print-page print-key" style="color:#0f172a">' +
-          coachSheetHtml(version) +
+          '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
+            'Coach sheet · ' + sheet.widthIn + ' × ' + sheet.heightIn + ' in · ' +
+            escapeHtml(book.title) + ' · ' + escapeHtml(version.name) + '</p>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:' + sheetGap + 'in">' + sheets.join("") + '</div>' +
         '</section>';
       if (printMode === "cards") root.innerHTML = cardPage;
       else if (printMode === "key") root.innerHTML = keyPage;
@@ -1212,6 +1262,16 @@
       const sheet = sheetOf();
       document.getElementById("sheet-cols").value = String(sheet.cols);
       document.getElementById("sheet-rows").value = String(sheet.rows);
+      document.querySelectorAll(".sheet-size-btn").forEach(function (btn) {
+        const on = btn.getAttribute("data-sheet-size") === sheet.preset;
+        btn.className = "sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold " +
+          (on ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+      });
+      const custom = document.getElementById("sheet-custom-size");
+      custom.classList.toggle("hidden", sheet.preset !== "custom");
+      custom.classList.toggle("flex", sheet.preset === "custom");
+      document.getElementById("sheet-w").value = String(sheet.widthIn);
+      document.getElementById("sheet-h").value = String(sheet.heightIn);
     }
 
     function renderTally() {
@@ -1278,9 +1338,53 @@
     }
 
     function applySheet() {
+      const current = sheetOf();
       book.sheet = {
-        cols: clampInt(document.getElementById("sheet-cols").value, 15, 4, 20),
-        rows: clampInt(document.getElementById("sheet-rows").value, 1, 1, 8)
+        cols: clampInt(document.getElementById("sheet-cols").value, current.cols, 4, 20),
+        rows: clampInt(document.getElementById("sheet-rows").value, current.rows, 1, 8),
+        preset: current.preset,
+        widthIn: current.widthIn,
+        heightIn: current.heightIn
+      };
+      renderSheetControls();
+      renderCoachKey();
+      scheduleSave();
+    }
+
+    function applySheetSize(preset) {
+      const current = sheetOf();
+      if (preset === "letter" || preset === "half" || preset === "index") {
+        book.sheet = {
+          cols: current.cols,
+          rows: current.rows,
+          preset: preset,
+          widthIn: SHEET_SIZE_PRESETS[preset].widthIn,
+          heightIn: SHEET_SIZE_PRESETS[preset].heightIn
+        };
+      } else {
+        book.sheet = {
+          cols: current.cols,
+          rows: current.rows,
+          preset: "custom",
+          widthIn: current.widthIn,
+          heightIn: current.heightIn
+        };
+      }
+      renderSheetControls();
+      renderCoachKey();
+      scheduleSave();
+    }
+
+    function applyCustomSheetSize() {
+      const current = sheetOf();
+      const w = Number(document.getElementById("sheet-w").value);
+      const h = Number(document.getElementById("sheet-h").value);
+      book.sheet = {
+        cols: current.cols,
+        rows: current.rows,
+        preset: "custom",
+        widthIn: Number.isFinite(w) && w > 0 ? Math.min(8.5, Math.max(2, w)) : 8.5,
+        heightIn: Number.isFinite(h) && h > 0 ? Math.min(11, Math.max(2, h)) : 11
       };
       renderSheetControls();
       renderCoachKey();
@@ -1336,6 +1440,13 @@
     });
     document.getElementById("sheet-cols").addEventListener("change", applySheet);
     document.getElementById("sheet-rows").addEventListener("change", applySheet);
+    document.querySelectorAll(".sheet-size-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        applySheetSize(btn.getAttribute("data-sheet-size") || "letter");
+      });
+    });
+    document.getElementById("sheet-w").addEventListener("change", applyCustomSheetSize);
+    document.getElementById("sheet-h").addEventListener("change", applyCustomSheetSize);
     document.getElementById("add-pitch").addEventListener("submit", function (event) {
       event.preventDefault();
       addCall("pitch", document.getElementById("pitch-name").value, document.getElementById("pitch-short").value);
@@ -1554,7 +1665,15 @@
       scheduleSave();
     });
     document.getElementById("shuffle-version").addEventListener("click", function () {
-      const version = shuffleVersion(book);
+      const current = activeVersion();
+      if (!current) return;
+      const version = {
+        id: "ver-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
+        name: nextVersionName(book.versions),
+        createdAt: Date.now(),
+        locked: false,
+        cells: current.cells.map(function (cell) { return Object.assign({}, cell); })
+      };
       book.versions.push(version);
       book.activeVersionId = version.id;
       render();

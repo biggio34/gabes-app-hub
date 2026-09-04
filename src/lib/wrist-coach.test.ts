@@ -33,6 +33,7 @@ import {
   sheetCode,
   sheetGroups,
   signBag,
+  copyCurrentVersion,
   shuffleCurrentVersion,
   shuffleVersion,
   wristCoachBlobKey,
@@ -260,6 +261,13 @@ describe("wrist coach book", () => {
       "user-1",
     );
     assert.equal(activeVersion(saved)?.locked, true);
+    const copied = copyCurrentVersion(book, first);
+    assert.notEqual(copied.id, first.id);
+    assert.equal(copied.locked, false);
+    assert.deepEqual(
+      copied.cells.map((cell) => `${cell.code}:${cell.callId}`),
+      first.cells.map((cell) => `${cell.code}:${cell.callId}`),
+    );
   });
 
   it("defaults the player card to the 4 × 2 wrist size", () => {
@@ -342,8 +350,34 @@ describe("wrist coach book", () => {
     assert.deepEqual(book.sheet, defaultSheet());
     assert.equal(book.sheet.cols, DEFAULT_SHEET_COLS);
     assert.equal(book.sheet.rows, DEFAULT_SHEET_ROWS);
-    assert.deepEqual(normalizeSheet({ cols: 10, rows: 2 }), { cols: 10, rows: 2 });
-    assert.deepEqual(normalizeSheet({ cols: 99, rows: 0 }), { cols: 20, rows: 1 });
+    assert.deepEqual(normalizeSheet({ cols: 10, rows: 2 }), {
+      cols: 10,
+      rows: 2,
+      preset: "letter",
+      widthIn: 8.5,
+      heightIn: 11,
+    });
+    assert.deepEqual(normalizeSheet({ cols: 99, rows: 0 }), {
+      cols: 20,
+      rows: 1,
+      preset: "letter",
+      widthIn: 8.5,
+      heightIn: 11,
+    });
+    assert.deepEqual(normalizeSheet({ cols: 12, rows: 2, preset: "half" }), {
+      cols: 12,
+      rows: 2,
+      preset: "half",
+      widthIn: 8.5,
+      heightIn: 5.5,
+    });
+    assert.deepEqual(normalizeSheet({ preset: "custom", widthIn: 6, heightIn: 4, cols: 10, rows: 1 }), {
+      cols: 10,
+      rows: 1,
+      preset: "custom",
+      widthIn: 6,
+      heightIn: 4,
+    });
     const saved = normalizeBook(
       {
         title: "Sheet book",
@@ -353,7 +387,13 @@ describe("wrist coach book", () => {
       },
       "user-9",
     );
-    assert.deepEqual(saved.sheet, { cols: 12, rows: 2 });
+    assert.deepEqual(saved.sheet, {
+      cols: 12,
+      rows: 2,
+      preset: "letter",
+      widthIn: 8.5,
+      heightIn: 11,
+    });
     const version = activeVersion(book);
     assert.ok(version);
     const groups = sheetGroups(book, version);
