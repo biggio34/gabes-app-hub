@@ -8,6 +8,10 @@ import {
   isCageCrushBlobKey,
   normalizeBoard,
   airBallHitsFielder,
+  flightLift,
+  pitcherCanCatch,
+  qualityFromT,
+  sprayFromTiming,
   swingWhy,
   upsertWeeklyScore,
 } from "./cage-crush.ts";
@@ -69,8 +73,21 @@ describe("swing feedback", () => {
     assert.equal(swingWhy({ kind: "miss", label: "WHIFF" }, "CHANGE", 0.94), "Late on the change");
     assert.equal(swingWhy({ kind: "out", label: "WEAK OUT" }, "DROP", 0.7), "Weak contact · a little early");
     assert.equal(swingWhy({ kind: "foul", label: "FOUL" }, "SCREW", 0.84), "Weak contact · just off");
-    assert.equal(swingWhy({ kind: "homer", label: "GONE" }, "FASTBALL", 0.82), "Perfect");
-    assert.equal(swingWhy({ kind: "single", label: "SINGLE" }, "FASTBALL", 0.73), "A little early");
+    assert.equal(swingWhy({ kind: "homer", label: "GONE" }, "FASTBALL", 0.82), "Perfect · up the middle");
+    assert.equal(swingWhy({ kind: "single", label: "SINGLE" }, "FASTBALL", 0.73), "A little early · ripped to left");
+  });
+});
+
+describe("spray and pitcher", () => {
+  it("sends early pulls left, late swings right, and on-time shots over the pitcher", () => {
+    assert.ok(sprayFromTiming(0.73, "double") < -0.5);
+    assert.ok(sprayFromTiming(0.91, "double") > 0.5);
+    assert.ok(Math.abs(sprayFromTiming(0.82, "double")) < 0.1);
+    assert.ok(qualityFromT(0.73) > 0.65);
+    assert.ok(flightLift("single", 0.82) > flightLift("single", 0.73));
+    assert.equal(pitcherCanCatch({ lift: 40 }, { kind: "single", side: 0 }), false);
+    assert.equal(pitcherCanCatch({ lift: 8 }, { kind: "double", side: 0 }), false);
+    assert.equal(pitcherCanCatch({ lift: 8 }, { kind: "out", side: 0 }), true);
   });
 });
 

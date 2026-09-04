@@ -269,9 +269,34 @@
     }
 
     const SWEET_T = 0.82;
+    const SWING_WINDOW = 0.3;
 
     function qualityFromT(t) {
-      return Math.max(0, 1 - Math.abs(t - SWEET_T) / 0.2);
+      return Math.max(0, 1 - Math.abs(t - SWEET_T) / SWING_WINDOW);
+    }
+
+    function sprayFromTiming(t, kind) {
+      const delta = t - SWEET_T;
+      if (kind === "foul") return delta < 0 ? -1.22 : 1.22;
+      if (kind === "miss") return 0;
+      if (Math.abs(delta) <= 0.035) return delta * 1.6;
+      return Math.max(-1.05, Math.min(1.05, delta / 0.12));
+    }
+
+    function flightLift(kind, t) {
+      const onTime = Math.abs(t - SWEET_T) <= 0.045;
+      if (kind === "homer") return onTime ? 96 : 80;
+      if (kind === "triple") return onTime ? 72 : 54;
+      if (kind === "double") return onTime ? 64 : 48;
+      if (kind === "single") return onTime ? 56 : 40;
+      return 22;
+    }
+
+    function pitcherCanCatch(ball, flight) {
+      if (ball.lift > 14) return false;
+      if (flight.kind === "homer" || flight.kind === "triple" || flight.kind === "double") return false;
+      if (Math.abs(flight.side) > 0.2) return false;
+      return true;
     }
 
     function swingWhy(hit, pitch, t) {
@@ -280,6 +305,7 @@
       const delta = t - SWEET_T;
       const abs = Math.abs(delta);
       const side = delta < 0 ? "early" : "late";
+      const field = delta < 0 ? "left" : "right";
       if (hit.kind === "miss") {
         return (abs > 0.16 ? "Way " + side : side.charAt(0).toUpperCase() + side.slice(1)) + " on the " + name;
       }
@@ -287,19 +313,19 @@
       if (hit.kind === "foul" || hit.kind === "out") {
         return "Weak contact · " + (abs <= 0.07 ? "just off" : "a little " + side);
       }
-      if (abs <= 0.03) return "Perfect";
-      if (abs <= 0.07) return "Almost perfect · a hair " + side;
-      return "A little " + side;
+      if (abs <= 0.035) return "Perfect · up the middle";
+      if (abs <= 0.07) return "A hair " + side + " · " + field + " field";
+      return "A little " + side + " · ripped to " + field;
     }
 
     function gradeContact(quality, pitch) {
       const juice = quality + (pitch.id === "fb" || pitch.id === "rs" ? 0.04 : 0);
-      if (juice < 0.18) return { kind: "miss", label: "WHIFF", pts: 0, out: true, dist: 0 };
-      if (juice < 0.34) return { kind: "foul", label: "FOUL", pts: 0, out: false, dist: 40 + juice * 40 };
-      if (juice < 0.48) return { kind: "out", label: "WEAK OUT", pts: 0, out: true, dist: 70 + juice * 50 };
-      if (juice < 0.62) return { kind: "single", label: "SINGLE", pts: 2 + state.streak, out: false, dist: 120 + juice * 40 };
-      if (juice < 0.76) return { kind: "double", label: "DOUBLE", pts: 4 + state.streak * 2, out: false, dist: 180 + juice * 40 };
-      if (juice < 0.9) return { kind: "triple", label: "GAP TRIPLE", pts: 7 + state.streak * 2, out: false, dist: 230 + juice * 30 };
+      if (juice < 0.16) return { kind: "miss", label: "WHIFF", pts: 0, out: true, dist: 0 };
+      if (juice < 0.3) return { kind: "foul", label: "FOUL", pts: 0, out: false, dist: 40 + juice * 40 };
+      if (juice < 0.42) return { kind: "out", label: "WEAK OUT", pts: 0, out: true, dist: 70 + juice * 50 };
+      if (juice < 0.55) return { kind: "single", label: "SINGLE", pts: 2 + state.streak, out: false, dist: 120 + juice * 40 };
+      if (juice < 0.7) return { kind: "double", label: "DOUBLE", pts: 4 + state.streak * 2, out: false, dist: 180 + juice * 40 };
+      if (juice < 0.84) return { kind: "triple", label: "GAP TRIPLE", pts: 7 + state.streak * 2, out: false, dist: 230 + juice * 30 };
       const bonus = Math.round(20 + juice * 30);
       return { kind: "homer", label: "GONE", pts: 12 + bonus + state.streak * 3, out: false, dist: 280 + juice * 40 };
     }
@@ -341,9 +367,8 @@
         u: 0,
         caught: false,
         catchAt: null,
-        side: hit.kind === "foul"
-          ? (Math.random() < 0.5 ? -1.2 : 1.2)
-          : (Math.random() - 0.5) * 0.7
+        liftMax: flightLift(hit.kind, at),
+        side: sprayFromTiming(at, hit.kind)
       };
       burst(hit.kind);
       hud();
@@ -424,7 +449,7 @@
       const reach = Math.max(0.2, state.flight.dist / 220);
       const t = Math.min(1.2, state.flight.u * reach);
       const p = along(w, h, Math.min(1.05, t), state.flight.side);
-      const lift = Math.sin(Math.min(1, t) * Math.PI) * (state.flight.kind === "homer" ? 70 : 28);
+      const lift = Math.sin(Math.min(1, t) * Math.PI) * (state.flight.liftMax || 28);
       const r = Math.max(3, 8 - t * 5);
       return { x: p.x, y: p.y - lift, lift: lift, r: r, t: t };
     }
@@ -446,6 +471,7 @@
       if (!ball) return;
       if (state.flight.kind === "homer" && ball.t > 0.9 && ball.lift > 40) return;
       for (let i = 0; i < FIELDERS.length; i += 1) {
+        if (FIELDERS[i].id === "p" && !pitcherCanCatch(ball, state.flight)) continue;
         const spot = fielderSpot(w, h, FIELDERS[i]);
         if (!airBallHitsFielder(ball, spot)) continue;
         catchFly(FIELDERS[i], ball);
@@ -942,7 +968,7 @@
         ctx.font = "600 15px Inter, sans-serif";
         ctx.fillStyle = state.call === "WHIFF" || state.call === "TAKE" || state.call === "WEAK OUT" || state.call === "CAUGHT"
           ? "#fda4af"
-          : state.call === "GONE" || state.feedback === "Perfect"
+          : state.call === "GONE" || state.feedback.indexOf("Perfect") === 0
             ? "#fde68a"
             : "#e2e8f0";
         ctx.fillText(state.feedback, w / 2, boxY + 50);

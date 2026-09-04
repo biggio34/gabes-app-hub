@@ -178,6 +178,38 @@ export function isCageCrushBlobKey(value: string) {
 }
 
 export const SWING_SWEET_T = 0.82;
+export const SWING_WINDOW = 0.3;
+
+export function qualityFromT(t: number) {
+  return Math.max(0, 1 - Math.abs(t - SWING_SWEET_T) / SWING_WINDOW);
+}
+
+export function sprayFromTiming(t: number, kind: string) {
+  const delta = t - SWING_SWEET_T;
+  if (kind === "foul") return delta < 0 ? -1.22 : 1.22;
+  if (kind === "miss") return 0;
+  if (Math.abs(delta) <= 0.035) return delta * 1.6;
+  return Math.max(-1.05, Math.min(1.05, delta / 0.12));
+}
+
+export function flightLift(kind: string, t: number) {
+  const onTime = Math.abs(t - SWING_SWEET_T) <= 0.045;
+  if (kind === "homer") return onTime ? 96 : 80;
+  if (kind === "triple") return onTime ? 72 : 54;
+  if (kind === "double") return onTime ? 64 : 48;
+  if (kind === "single") return onTime ? 56 : 40;
+  return 22;
+}
+
+export function pitcherCanCatch(
+  ball: { lift: number },
+  flight: { kind: string; side: number },
+) {
+  if (ball.lift > 14) return false;
+  if (flight.kind === "homer" || flight.kind === "triple" || flight.kind === "double") return false;
+  if (Math.abs(flight.side) > 0.2) return false;
+  return true;
+}
 
 export function swingWhy(
   hit: { kind: string; label: string },
@@ -189,15 +221,16 @@ export function swingWhy(
   const delta = t - SWING_SWEET_T;
   const abs = Math.abs(delta);
   const side = delta < 0 ? "early" : "late";
+  const field = delta < 0 ? "left" : "right";
   if (hit.kind === "miss") {
     return (abs > 0.16 ? "Way " + side : side.charAt(0).toUpperCase() + side.slice(1)) + " on the " + name;
   }
   if (hit.kind === "foul" || hit.kind === "out") {
     return "Weak contact · " + (abs <= 0.07 ? "just off" : "a little " + side);
   }
-  if (abs <= 0.03) return "Perfect";
-  if (abs <= 0.07) return "Almost perfect · a hair " + side;
-  return "A little " + side;
+  if (abs <= 0.035) return "Perfect · up the middle";
+  if (abs <= 0.07) return "A hair " + side + " · " + field + " field";
+  return "A little " + side + " · ripped to " + field;
 }
 
 export function airBallHitsFielder(
