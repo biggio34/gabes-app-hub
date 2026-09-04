@@ -314,11 +314,13 @@
     async function saveBook() {
       if (!book) return;
       book.updatedAt = Date.now();
+      const sentUpdatedAt = book.updatedAt;
+      const payload = JSON.parse(JSON.stringify(book));
       try {
         const response = await fetch("/api/softball/wrist-coach", {
           method: "PUT",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ book: book })
+          body: JSON.stringify({ book: payload })
         });
         const data = await response.json().catch(function () { return {}; });
         if (!response.ok) {
@@ -326,7 +328,12 @@
           setStatus("");
           return;
         }
-        if (data.book) book = data.book;
+        if (data.book && book.updatedAt === sentUpdatedAt) {
+          book = data.book;
+        } else if (book.updatedAt !== sentUpdatedAt) {
+          scheduleSave();
+          return;
+        }
         setError("");
         setStatus("Saved on the server.");
       } catch (err) {
