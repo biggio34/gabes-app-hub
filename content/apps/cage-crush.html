@@ -235,8 +235,17 @@
       } catch (err) { /* silent */ }
     }
 
+    const PITCH_SPOTS = ["inside", "middle", "outside"];
+
     function pickPitch() {
-      return PITCHES[Math.floor(Math.random() * PITCHES.length)];
+      const base = PITCHES[Math.floor(Math.random() * PITCHES.length)];
+      return Object.assign({}, base, {
+        spot: PITCH_SPOTS[Math.floor(Math.random() * PITCH_SPOTS.length)]
+      });
+    }
+
+    function pitchCall(name, spot) {
+      return (spot ? String(spot).toUpperCase() + " " : "") + name;
     }
 
     function startGame() {
@@ -296,7 +305,7 @@
       state.smashLive = state.smash;
       state.phase = "pitch";
       state.t = 0;
-      state.call = state.pitch.name;
+      state.call = pitchCall(state.pitch.name, state.pitch.spot);
       state.result = "Smash " + Math.round(state.smash * 100) + "  ·  swing when it crosses.";
       hud();
       beep(280 + state.smash * 280, 0.07, "square", 0.04);
@@ -307,9 +316,44 @@
     const PLATE_FRONT = 0.76;
     const PLATE_MIDDLE = 0.88;
     const FLIGHT_SPEED = 0.36;
+    const HR_SMASH = 0.78;
+    const HR_MATCH = 0.55;
+    const IDEAL_CONTACT = { inside: 0.7, middle: 0.82, outside: 0.91 };
+    const SPOT_SHIFT = { inside: -32, middle: 0, outside: 32 };
+    const FIELD_JERSEY = "#1d4ed8";
+    const BAT_JERSEY = "#c81e1e";
 
     function qualityFromT(t) {
       return Math.max(0, 1 - Math.abs(t - SWEET_T) / SWING_WINDOW);
+    }
+
+    function plateZone(t) {
+      if (t < PLATE_FRONT) return "out-front";
+      if (t <= PLATE_MIDDLE) return "front-plate";
+      if (t <= 0.98) return "mid-plate";
+      return "late";
+    }
+
+    function contactMatch(t, spot) {
+      const zone = plateZone(t);
+      if (spot === "inside") {
+        if (zone === "out-front") return 1;
+        if (zone === "front-plate") return 0.68;
+        return 0.22;
+      }
+      if (spot === "outside") {
+        if (zone === "mid-plate") return 1;
+        if (zone === "front-plate") return 0.68;
+        if (zone === "out-front") return 0.22;
+        return 0.4;
+      }
+      if (zone === "front-plate") return 1;
+      if (zone === "out-front" || zone === "mid-plate") return 0.58;
+      return 0.28;
+    }
+
+    function canHomer(smash, match) {
+      return smash >= HR_SMASH && match >= HR_MATCH;
     }
 
     function sprayFromTiming(t, kind) {
@@ -320,12 +364,28 @@
       return Math.min(1.05, 0.4 + (t - PLATE_MIDDLE) * 4);
     }
 
+    function sprayFromSpot(t, spot, kind) {
+      if (kind === "foul") return t < (IDEAL_CONTACT[spot] || SWEET_T) ? -1.22 : 1.22;
+      if (kind === "miss") return 0;
+      if (spot === "outside" && t < PLATE_FRONT) {
+        return Math.max(-1.05, -0.55 - (PLATE_FRONT - t) * 3);
+      }
+      if (spot === "inside" && t > PLATE_MIDDLE) {
+        return Math.min(0.85, 0.18 + (t - PLATE_MIDDLE) * 2);
+      }
+      const match = contactMatch(t, spot);
+      const ideal = spot === "inside" ? -0.78 : spot === "outside" ? 0.78 : 0;
+      const timing = sprayFromTiming(t, kind);
+      return Math.max(-1.12, Math.min(1.12, ideal * match + timing * (1 - match)));
+    }
+
     function flightMaxDepth(dist) {
       return Math.max(0.28, Math.min(1.18, dist / 260));
     }
 
-    function flightLift(kind, t) {
-      const onTime = Math.abs(t - SWEET_T) <= 0.045;
+    function flightLift(kind, t, spot) {
+      const ideal = spot && IDEAL_CONTACT[spot] ? IDEAL_CONTACT[spot] : SWEET_T;
+      const onTime = Math.abs(t - ideal) <= 0.045;
       if (kind === "homer") return onTime ? 128 : 108;
       if (kind === "triple") return onTime ? 96 : 76;
       if (kind === "double") return onTime ? 86 : 68;
@@ -342,33 +402,72 @@
 
     function swingWhy(hit, pitch, t) {
       const name = pitch && pitch.name ? pitch.name.toLowerCase() : "pitch";
+      const spot = pitch && pitch.spot;
       if (hit.label === "TAKE") return "Took the pitch";
       const delta = t - SWEET_T;
       const abs = Math.abs(delta);
       const side = delta < 0 ? "early" : "late";
-      const field = delta < 0 ? "left" : "right";
+      const zone = plateZone(t);
       if (hit.kind === "miss") {
         return (abs > 0.16 ? "Way " + side : side.charAt(0).toUpperCase() + side.slice(1)) + " on the " + name;
       }
       if (hit.label === "CAUGHT") return "Caught in the air by " + (hit.fielder || "a fielder");
+      if (spot === "outside" && zone === "out-front") return "Rolled over the outside pitch";
+      if (spot === "inside" && (zone === "mid-plate" || zone === "late")) return "Jammed on the inside pitch";
       if (hit.kind === "foul" || hit.kind === "out") {
         return "Weak contact · " + (abs <= 0.07 ? "just off" : "a little " + side);
       }
+      if (spot === "inside" && zone === "out-front") return "Inside · out front · left";
+      if (spot === "middle" && zone === "front-plate") return "Middle · front of the plate";
+      if (spot === "outside" && zone === "mid-plate") return "Outside · mid-plate · right";
       if (t < PLATE_FRONT) return "Out in front · left field";
       if (t <= PLATE_MIDDLE) return "Front of the plate · up the middle";
       return "Middle of the plate · right field";
     }
 
-    function gradeContact(quality, pitch) {
-      const juice = quality + (pitch.id === "fb" || pitch.id === "rs" ? 0.04 : 0);
-      if (juice < 0.16) return { kind: "miss", label: "WHIFF", pts: 0, out: true, dist: 0 };
-      if (juice < 0.3) return { kind: "foul", label: "FOUL", pts: 0, out: false, dist: 40 + juice * 40 };
-      if (juice < 0.42) return { kind: "out", label: "WEAK OUT", pts: 0, out: true, dist: 70 + juice * 50 };
-      if (juice < 0.55) return { kind: "single", label: "SINGLE", pts: 2 + state.streak, out: false, dist: 120 + juice * 40 };
-      if (juice < 0.7) return { kind: "double", label: "DOUBLE", pts: 4 + state.streak * 2, out: false, dist: 180 + juice * 40 };
-      if (juice < 0.84) return { kind: "triple", label: "GAP TRIPLE", pts: 7 + state.streak * 2, out: false, dist: 230 + juice * 30 };
-      const bonus = Math.round(20 + juice * 30);
-      return { kind: "homer", label: "GONE", pts: 12 + bonus + state.streak * 3, out: false, dist: 280 + juice * 40 };
+    function evaluateSwing(t, pitch, smash, streak) {
+      const spot = (pitch && pitch.spot) || "middle";
+      const nearBall = Math.max(0, 1 - Math.abs(t - SWEET_T) / 0.34);
+      const match = contactMatch(t, spot);
+      if (nearBall < 0.12) {
+        const miss = { kind: "miss", label: "WHIFF", pts: 0, out: true, dist: 0, side: 0, match: match };
+        miss.why = swingWhy(miss, pitch, t);
+        return miss;
+      }
+      let juice = (0.22 + 0.78 * match) * (0.4 + 0.6 * smash);
+      if (pitch && (pitch.id === "fb" || pitch.id === "rs")) juice += 0.03;
+      if (match < 0.45) juice = Math.min(juice, 0.52);
+      let kind;
+      let label;
+      let pts;
+      let out;
+      let baseDist;
+      if (juice < 0.28) {
+        kind = "foul"; label = "FOUL"; pts = 0; out = false; baseDist = 40 + juice * 40;
+      } else if (juice < 0.4) {
+        kind = "out"; label = "WEAK OUT"; pts = 0; out = true; baseDist = 70 + juice * 50;
+      } else if (canHomer(smash, match) && juice >= 0.7) {
+        kind = "homer"; label = "GONE"; pts = 12 + Math.round(20 + juice * 30) + streak * 3; out = false; baseDist = 280 + juice * 40;
+      } else if (juice < 0.55) {
+        kind = "single"; label = "SINGLE"; pts = 2 + streak; out = false; baseDist = 120 + juice * 40;
+      } else if (juice < 0.68) {
+        kind = "double"; label = "DOUBLE"; pts = 4 + streak * 2; out = false; baseDist = 180 + juice * 40;
+      } else if (juice < 0.82) {
+        kind = "triple"; label = "GAP TRIPLE"; pts = 7 + streak * 2; out = false; baseDist = 230 + juice * 30;
+      } else {
+        kind = "homer"; label = "GONE"; pts = 12 + Math.round(20 + juice * 30) + streak * 3; out = false; baseDist = 280 + juice * 40;
+      }
+      const hit = {
+        kind: kind,
+        label: label,
+        pts: pts,
+        out: out,
+        dist: smashCarry(baseDist, smash * (0.45 + 0.55 * match)),
+        side: sprayFromSpot(t, spot, kind),
+        match: match
+      };
+      hit.why = swingWhy(hit, pitch, t);
+      return hit;
     }
 
     function swing() {
@@ -377,8 +476,7 @@
         return;
       }
       if (!state.running || state.phase !== "pitch") return;
-      const quality = qualityFromT(state.t);
-      const hit = gradeContact(quality, state.pitch);
+      const hit = evaluateSwing(state.t, state.pitch, state.smash, state.streak);
       applyResult(hit, state.t);
     }
 
@@ -400,12 +498,13 @@
       }
       if (state.score > state.high) state.high = state.score;
       const at = t == null ? state.t : t;
-      const why = swingWhy(hit, state.pitch, at);
+      const why = hit.why || swingWhy(hit, state.pitch, at);
       state.feedback = why;
       state.result = hit.label + (hit.pts ? "  +" + hit.pts : "") + "  ·  " + why;
       state.call = hit.label;
-      const carry = smashCarry(hit.dist, state.smash);
+      const carry = hit.dist || 0;
       const maxDepth = flightMaxDepth(carry);
+      const spot = state.pitch && state.pitch.spot;
       state.flight = {
         kind: hit.kind,
         dist: carry,
@@ -415,8 +514,8 @@
         maxDepth: maxDepth,
         caught: false,
         catchAt: null,
-        liftMax: smashLaunch(flightLift(hit.kind, at), state.smash),
-        side: sprayFromTiming(at, hit.kind)
+        liftMax: smashLaunch(flightLift(hit.kind, at, spot), state.smash),
+        side: hit.side != null ? hit.side : sprayFromSpot(at, spot || "middle", hit.kind)
       };
       burst(hit.kind);
       hud();
@@ -578,8 +677,9 @@
     function ballPos(w, h, t, pitch) {
       const depth = park(w, h).moundT * (1 - t);
       const p = along(w, h, depth, (pitch.cut || 0) * t);
+      const shift = (SPOT_SHIFT[pitch.spot] || 0) * t;
       return {
-        x: p.x,
+        x: p.x + shift,
         y: p.y + (pitch.rise || 0) * t * h * 0.12,
         r: 3.2 + t * 13
       };
@@ -781,7 +881,7 @@
     function drawPerson(x, y, scale, opt) {
       const s = scale;
       const skin = opt.skin || "#d4a574";
-      const jersey = "#c81e1e";
+      const jersey = opt.jersey || FIELD_JERSEY;
       const pants = "#eef2f7";
       const crouch = opt.crouch || 0;
       const wind = opt.wind || 0;
@@ -797,7 +897,7 @@
       stick(3 * s, hipY, rightFoot, 4 * s, 5.2 * s, pants);
       stick(leftFoot, 4 * s, leftFoot - 1 * s, 8 * s, 3 * s, "#f8fafc");
       stick(rightFoot, 4 * s, rightFoot + 1 * s, 8 * s, 3 * s, "#f8fafc");
-      ctx.strokeStyle = "#c81e1e";
+      ctx.strokeStyle = jersey;
       ctx.lineWidth = Math.max(1, 1.1 * s);
       ctx.beginPath();
       ctx.moveTo(leftFoot - 3 * s, 6.5 * s);
@@ -873,12 +973,12 @@
         oval(-6.4 * s, headY + 1 * s, 1.8 * s, 2.4 * s, skin);
         oval(6.4 * s, headY + 1 * s, 1.8 * s, 2.4 * s, skin);
         oval(0, headY, 7.2 * s, 8 * s, skin);
-        ctx.fillStyle = "#111827";
+        ctx.fillStyle = opt.jersey === BAT_JERSEY ? "#111827" : "#1e3a8a";
         ctx.beginPath();
         ctx.ellipse(0, headY - 4 * s, 7.4 * s, 4.4 * s, 0, Math.PI, 0);
         ctx.fill();
         ctx.fillRect(-7.4 * s, headY - 4.2 * s, 14.8 * s, 2.6 * s);
-        ctx.fillStyle = "#1f2937";
+        ctx.fillStyle = opt.jersey === BAT_JERSEY ? "#1f2937" : "#172554";
         ctx.beginPath();
         ctx.moveTo(-8 * s, headY - 1.6 * s);
         ctx.lineTo(8 * s, headY - 1.6 * s);
@@ -919,6 +1019,7 @@
           drawPerson(spot.x, spot.y, spot.scale, {
             skin: spot.spec.skin,
             number: spot.spec.num,
+            jersey: FIELD_JERSEY,
             glove: true
           });
         });
@@ -929,6 +1030,7 @@
       drawPerson(mound.x, mound.y + 6, fielderScale(park(w, h).moundT), {
         skin: "#d9a57a",
         number: "1",
+        jersey: FIELD_JERSEY,
         pitch: true,
         wind: state.phase === "pitch" ? t : 0
       });
@@ -938,7 +1040,7 @@
       const p = park(w, h);
       const x = p.homeX - 38;
       const y = p.homeY + 10;
-      drawPerson(x, y, 1.28, { skin: "#d9a57a", number: "8", behind: true });
+      drawPerson(x, y, 1.28, { skin: "#d9a57a", number: "8", jersey: BAT_JERSEY, behind: true });
       ctx.save();
       ctx.translate(x + 14, y - 28);
       ctx.rotate(swinging ? 1.42 : -1.18);
@@ -964,6 +1066,7 @@
       drawPerson(p.homeX + 2, p.homeY + 42, 1.18, {
         skin: "#c68642",
         number: "2",
+        jersey: FIELD_JERSEY,
         crouch: 0.85,
         mask: true
       });
@@ -1000,7 +1103,7 @@
       const barH = h * 0.46;
       const barW = 18;
       ctx.fillStyle = "rgba(15,23,42,0.72)";
-      ctx.fillRect(x - 16, top - 28, 50, barH + 52);
+      ctx.fillRect(x - 34, top - 28, 72, barH + 52);
       ctx.fillStyle = "#111827";
       ctx.fillRect(x, top, barW, barH);
       const hot = ctx.createLinearGradient(0, top + barH, 0, top);
@@ -1011,6 +1114,17 @@
       ctx.fillRect(x + 2, top + 2, barW - 4, barH - 4);
       ctx.fillStyle = "rgba(15,23,42,0.45)";
       ctx.fillRect(x + 2, top + 2, barW - 4, (barH - 4) * (1 - live));
+      const hrY = top + (1 - HR_SMASH) * barH;
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - 5, hrY);
+      ctx.lineTo(x + barW + 5, hrY);
+      ctx.stroke();
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = "800 10px Space Grotesk, Inter, sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText("HR", x - 8, hrY + 3);
       const markerY = top + (1 - live) * barH;
       ctx.fillStyle = "#fff";
       ctx.beginPath();
@@ -1019,7 +1133,7 @@
       ctx.lineTo(x + barW + 8, markerY + 5);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = live >= 0.82 ? "#fde68a" : "#e2e8f0";
+      ctx.fillStyle = live >= HR_SMASH ? "#fde68a" : "#e2e8f0";
       ctx.font = "800 11px Space Grotesk, Inter, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText("SMASH", x + barW / 2, top - 10);
@@ -1048,8 +1162,10 @@
         ctx.fillText(state.call, w / 2, boxY + 28);
         ctx.font = "600 15px Inter, sans-serif";
         ctx.fillStyle = state.call === "WHIFF" || state.call === "TAKE" || state.call === "WEAK OUT" || state.call === "CAUGHT"
+          || state.feedback.indexOf("Rolled over") !== -1 || state.feedback.indexOf("Jammed") !== -1
           ? "#fda4af"
-          : state.call === "GONE" || state.feedback.indexOf("up the middle") !== -1
+          : state.call === "GONE" || state.feedback.indexOf("out front") !== -1
+            || state.feedback.indexOf("front of the plate") !== -1 || state.feedback.indexOf("mid-plate") !== -1
             ? "#fde68a"
             : "#e2e8f0";
         ctx.fillText(state.feedback, w / 2, boxY + 50);

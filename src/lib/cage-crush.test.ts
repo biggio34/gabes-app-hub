@@ -8,12 +8,17 @@ import {
   isCageCrushBlobKey,
   normalizeBoard,
   airBallHitsFielder,
+  canHomer,
+  contactMatch,
+  evaluateSwing,
   flightLift,
   pitcherCanCatch,
   qualityFromT,
   flightMaxDepth,
+  HR_SMASH,
   smashCarry,
   smashValue,
+  sprayFromSpot,
   sprayFromTiming,
   swingWhy,
   upsertWeeklyScore,
@@ -78,6 +83,58 @@ describe("swing feedback", () => {
     assert.equal(swingWhy({ kind: "foul", label: "FOUL" }, "SCREW", 0.84), "Weak contact · just off");
     assert.equal(swingWhy({ kind: "homer", label: "GONE" }, "FASTBALL", 0.82), "Front of the plate · up the middle");
     assert.equal(swingWhy({ kind: "single", label: "SINGLE" }, "FASTBALL", 0.73), "Out in front · left field");
+    assert.equal(
+      swingWhy({ kind: "homer", label: "GONE" }, "FASTBALL", 0.7, "inside"),
+      "Inside · out front · left",
+    );
+    assert.equal(
+      swingWhy({ kind: "single", label: "SINGLE" }, "RISE", 0.7, "outside"),
+      "Rolled over the outside pitch",
+    );
+    assert.equal(
+      swingWhy({ kind: "out", label: "WEAK OUT" }, "DROP", 0.93, "inside"),
+      "Jammed on the inside pitch",
+    );
+  });
+});
+
+describe("location-aware contact", () => {
+  it("rewards the right contact point for inside, middle, and outside", () => {
+    assert.ok(contactMatch(0.7, "inside") > contactMatch(0.93, "inside"));
+    assert.ok(contactMatch(0.91, "outside") > contactMatch(0.7, "outside"));
+    assert.ok(contactMatch(0.82, "middle") > contactMatch(0.7, "middle"));
+    const inside = evaluateSwing({ t: 0.7, spot: "inside", smash: 0.92, pitchName: "FASTBALL" });
+    const middle = evaluateSwing({ t: 0.82, spot: "middle", smash: 0.92, pitchName: "FASTBALL" });
+    const outside = evaluateSwing({ t: 0.91, spot: "outside", smash: 0.92, pitchName: "FASTBALL" });
+    assert.equal(inside.kind, "homer");
+    assert.equal(middle.kind, "homer");
+    assert.equal(outside.kind, "homer");
+    assert.ok(inside.side < -0.45);
+    assert.ok(Math.abs(middle.side) < 0.2);
+    assert.ok(outside.side > 0.45);
+    assert.equal(inside.why, "Inside · out front · left");
+    assert.equal(middle.why, "Middle · front of the plate");
+    assert.equal(outside.why, "Outside · mid-plate · right");
+  });
+
+  it("punishes early outside and late inside even with a high smash", () => {
+    const rollover = evaluateSwing({ t: 0.7, spot: "outside", smash: 0.96, pitchName: "RISE" });
+    const jammed = evaluateSwing({ t: 0.93, spot: "inside", smash: 0.96, pitchName: "DROP" });
+    assert.notEqual(rollover.kind, "homer");
+    assert.notEqual(jammed.kind, "homer");
+    assert.ok(rollover.side < 0);
+    assert.ok(jammed.match < 0.4);
+    assert.equal(canHomer(0.96, rollover.match), false);
+    assert.ok(sprayFromSpot(0.7, "outside", "single") < -0.4);
+  });
+
+  it("needs the HR smash mark plus solid contact for a homer", () => {
+    const soft = evaluateSwing({ t: 0.82, spot: "middle", smash: 0.5, pitchName: "FASTBALL" });
+    const solid = evaluateSwing({ t: 0.82, spot: "middle", smash: HR_SMASH, pitchName: "FASTBALL" });
+    assert.notEqual(soft.kind, "homer");
+    assert.equal(solid.kind, "homer");
+    assert.equal(canHomer(HR_SMASH, 1), true);
+    assert.equal(canHomer(0.7, 1), false);
   });
 });
 

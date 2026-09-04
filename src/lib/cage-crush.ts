@@ -180,13 +180,68 @@ export function isCageCrushBlobKey(value: string) {
 export const SWING_SWEET_T = 0.82;
 export const SWING_WINDOW = 0.3;
 
-export function qualityFromT(t: number) {
-  return Math.max(0, 1 - Math.abs(t - SWING_SWEET_T) / SWING_WINDOW);
-}
+export type PitchSpot = "inside" | "middle" | "outside";
+export type PlateZone = "out-front" | "front-plate" | "mid-plate" | "late";
 
 export const PLATE_FRONT = 0.76;
 export const PLATE_MIDDLE = 0.88;
 export const FLIGHT_SPEED = 0.36;
+export const HR_SMASH = 0.78;
+export const HR_MATCH = 0.55;
+export const IDEAL_CONTACT: Record<PitchSpot, number> = {
+  inside: 0.7,
+  middle: 0.82,
+  outside: 0.91,
+};
+export const SPOT_SHIFT: Record<PitchSpot, number> = {
+  inside: -32,
+  middle: 0,
+  outside: 32,
+};
+
+export function qualityFromT(t: number) {
+  return Math.max(0, 1 - Math.abs(t - SWING_SWEET_T) / SWING_WINDOW);
+}
+
+export function pickPitchSpot(rand = Math.random): PitchSpot {
+  const roll = rand();
+  if (roll < 1 / 3) return "inside";
+  if (roll < 2 / 3) return "middle";
+  return "outside";
+}
+
+export function plateZone(t: number): PlateZone {
+  if (t < PLATE_FRONT) return "out-front";
+  if (t <= PLATE_MIDDLE) return "front-plate";
+  if (t <= 0.98) return "mid-plate";
+  return "late";
+}
+
+export function contactMatch(t: number, spot: PitchSpot) {
+  const zone = plateZone(t);
+  if (spot === "inside") {
+    if (zone === "out-front") return 1;
+    if (zone === "front-plate") return 0.68;
+    return 0.22;
+  }
+  if (spot === "outside") {
+    if (zone === "mid-plate") return 1;
+    if (zone === "front-plate") return 0.68;
+    if (zone === "out-front") return 0.22;
+    return 0.4;
+  }
+  if (zone === "front-plate") return 1;
+  if (zone === "out-front" || zone === "mid-plate") return 0.58;
+  return 0.28;
+}
+
+export function canHomer(smash: number, match: number) {
+  return smash >= HR_SMASH && match >= HR_MATCH;
+}
+
+export function pitchCall(name: string, spot?: PitchSpot) {
+  return (spot ? spot.toUpperCase() + " " : "") + name;
+}
 
 export function sprayFromTiming(t: number, kind: string) {
   if (kind === "foul") return t < SWING_SWEET_T ? -1.22 : 1.22;
@@ -196,12 +251,29 @@ export function sprayFromTiming(t: number, kind: string) {
   return Math.min(1.05, 0.4 + (t - PLATE_MIDDLE) * 4);
 }
 
+export function sprayFromSpot(t: number, spot: PitchSpot, kind: string) {
+  if (kind === "foul") return t < IDEAL_CONTACT[spot] ? -1.22 : 1.22;
+  if (kind === "miss") return 0;
+  if (spot === "outside" && t < PLATE_FRONT) {
+    return Math.max(-1.05, -0.55 - (PLATE_FRONT - t) * 3);
+  }
+  if (spot === "inside" && t > PLATE_MIDDLE) {
+    return Math.min(0.85, 0.18 + (t - PLATE_MIDDLE) * 2);
+  }
+  const match = contactMatch(t, spot);
+  const ideal = spot === "inside" ? -0.78 : spot === "outside" ? 0.78 : 0;
+  const timing = sprayFromTiming(t, kind);
+  const mixed = ideal * match + timing * (1 - match);
+  return Math.max(-1.12, Math.min(1.12, mixed));
+}
+
 export function flightMaxDepth(dist: number) {
   return Math.max(0.28, Math.min(1.18, dist / 260));
 }
 
-export function flightLift(kind: string, t: number) {
-  const onTime = Math.abs(t - SWING_SWEET_T) <= 0.045;
+export function flightLift(kind: string, t: number, spot?: PitchSpot) {
+  const ideal = spot ? IDEAL_CONTACT[spot] : SWING_SWEET_T;
+  const onTime = Math.abs(t - ideal) <= 0.045;
   if (kind === "homer") return onTime ? 128 : 108;
   if (kind === "triple") return onTime ? 96 : 76;
   if (kind === "double") return onTime ? 86 : 68;
@@ -236,26 +308,146 @@ export function pitcherCanCatch(
   return true;
 }
 
+export type SwingKind = "miss" | "foul" | "out" | "single" | "double" | "triple" | "homer";
+
+export type SwingEval = {
+  kind: SwingKind;
+  label: string;
+  pts: number;
+  out: boolean;
+  dist: number;
+  side: number;
+  why: string;
+  match: number;
+};
+
 export function swingWhy(
   hit: { kind: string; label: string },
   pitchName: string | undefined,
   t: number,
+  spot?: PitchSpot,
 ) {
   const name = pitchName ? pitchName.toLowerCase() : "pitch";
   if (hit.label === "TAKE") return "Took the pitch";
   const delta = t - SWING_SWEET_T;
   const abs = Math.abs(delta);
   const side = delta < 0 ? "early" : "late";
-  const field = delta < 0 ? "left" : "right";
+  const zone = plateZone(t);
   if (hit.kind === "miss") {
     return (abs > 0.16 ? "Way " + side : side.charAt(0).toUpperCase() + side.slice(1)) + " on the " + name;
+  }
+  if (hit.label === "CAUGHT") return "Caught in the air";
+  if (spot === "outside" && zone === "out-front") return "Rolled over the outside pitch";
+  if (spot === "inside" && (zone === "mid-plate" || zone === "late")) {
+    return "Jammed on the inside pitch";
   }
   if (hit.kind === "foul" || hit.kind === "out") {
     return "Weak contact · " + (abs <= 0.07 ? "just off" : "a little " + side);
   }
+  if (spot === "inside" && zone === "out-front") return "Inside · out front · left";
+  if (spot === "middle" && zone === "front-plate") return "Middle · front of the plate";
+  if (spot === "outside" && zone === "mid-plate") return "Outside · mid-plate · right";
   if (t < PLATE_FRONT) return "Out in front · left field";
   if (t <= PLATE_MIDDLE) return "Front of the plate · up the middle";
   return "Middle of the plate · right field";
+}
+
+export function evaluateSwing(opts: {
+  t: number;
+  spot: PitchSpot;
+  smash: number;
+  streak?: number;
+  pitchId?: string;
+  pitchName?: string;
+}): SwingEval {
+  const t = opts.t;
+  const spot = opts.spot;
+  const smash = Math.max(0, Math.min(1, opts.smash));
+  const streak = opts.streak || 0;
+  const nearBall = Math.max(0, 1 - Math.abs(t - SWING_SWEET_T) / 0.34);
+  const match = contactMatch(t, spot);
+  const name = opts.pitchName;
+
+  if (nearBall < 0.12) {
+    const miss: SwingEval = {
+      kind: "miss",
+      label: "WHIFF",
+      pts: 0,
+      out: true,
+      dist: 0,
+      side: 0,
+      why: "",
+      match,
+    };
+    miss.why = swingWhy(miss, name, t, spot);
+    return miss;
+  }
+
+  let juice = (0.22 + 0.78 * match) * (0.4 + 0.6 * smash);
+  if (opts.pitchId === "fb" || opts.pitchId === "rs") juice += 0.03;
+  if (match < 0.45) juice = Math.min(juice, 0.52);
+
+  let kind: SwingKind;
+  let label: string;
+  let pts: number;
+  let out: boolean;
+  let baseDist: number;
+
+  if (juice < 0.28) {
+    kind = "foul";
+    label = "FOUL";
+    pts = 0;
+    out = false;
+    baseDist = 40 + juice * 40;
+  } else if (juice < 0.4) {
+    kind = "out";
+    label = "WEAK OUT";
+    pts = 0;
+    out = true;
+    baseDist = 70 + juice * 50;
+  } else if (canHomer(smash, match) && juice >= 0.7) {
+    kind = "homer";
+    label = "GONE";
+    pts = 12 + Math.round(20 + juice * 30) + streak * 3;
+    out = false;
+    baseDist = 280 + juice * 40;
+  } else if (juice < 0.55) {
+    kind = "single";
+    label = "SINGLE";
+    pts = 2 + streak;
+    out = false;
+    baseDist = 120 + juice * 40;
+  } else if (juice < 0.68) {
+    kind = "double";
+    label = "DOUBLE";
+    pts = 4 + streak * 2;
+    out = false;
+    baseDist = 180 + juice * 40;
+  } else if (juice < 0.82) {
+    kind = "triple";
+    label = "GAP TRIPLE";
+    pts = 7 + streak * 2;
+    out = false;
+    baseDist = 230 + juice * 30;
+  } else {
+    kind = "homer";
+    label = "GONE";
+    pts = 12 + Math.round(20 + juice * 30) + streak * 3;
+    out = false;
+    baseDist = 280 + juice * 40;
+  }
+
+  const dist = smashCarry(baseDist, smash * (0.45 + 0.55 * match));
+  return {
+    kind,
+    label,
+    pts,
+    out,
+    dist,
+    side: sprayFromSpot(t, spot, kind),
+    why: swingWhy({ kind, label }, name, t, spot),
+    match,
+  };
 }
 
 export function airBallHitsFielder(
