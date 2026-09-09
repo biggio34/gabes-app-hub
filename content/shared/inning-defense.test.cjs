@@ -77,11 +77,24 @@ describe("inning defense helpers", () => {
       { dpFlex: true, apCount: 1 },
     );
     assert.match(svg, /<svg /);
+    assert.match(svg, /viewBox="0 0 2400 620"/);
+    assert.match(svg, /preserveAspectRatio="none"/);
+    assert.match(svg, /x1="1200" y1="510" x2="2400" y2="153"/);
+    assert.match(svg, /x1="1200" y1="510" x2="0" y2="153"/);
     assert.match(svg, />12</);
     assert.match(svg, />7</);
     assert.match(svg, />LF</);
     assert.match(svg, />DP</);
     assert.match(svg, />AP1</);
+    assert.match(svg, /data-pos="DP"[^>]*><rect x="50" y="520"/);
+    assert.match(svg, /data-pos="AP1"[^>]*><rect x="50" y="440"/);
+  });
+
+  it("puts extra APs in the lower left, stacking upward", () => {
+    const svg = InningDefense.miniFieldSvg({}, [], { apCount: 2 });
+    assert.match(svg, /data-pos="AP1"[^>]*><rect x="50" y="520"/);
+    assert.match(svg, /data-pos="AP2"[^>]*><rect x="50" y="440"/);
+    assert.doesNotMatch(svg, /x="510"/);
   });
 
   it("summarizes who is on the bench for an inning", () => {

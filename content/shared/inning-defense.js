@@ -14,17 +14,22 @@
   const MIN_INNINGS = 5;
   const MAX_INNINGS = 12;
 
+  // Same geometry as the Lineup Builder diamond (viewBox 0 0 2400 620).
   const MINI_FIELD_POSITIONS = [
-    { key: "P", x: 260, y: 242 },
-    { key: "C", x: 260, y: 295 },
-    { key: "1B", x: 365, y: 248 },
-    { key: "2B", x: 320, y: 175 },
-    { key: "3B", x: 155, y: 248 },
-    { key: "SS", x: 200, y: 175 },
-    { key: "LF", x: 130, y: 105 },
-    { key: "CF", x: 260, y: 85 },
-    { key: "RF", x: 390, y: 105 },
+    { key: "P", x: 1085, y: 360, w: 230, h: 68 },
+    { key: "C", x: 1080, y: 475, w: 240, h: 72 },
+    { key: "1B", x: 1405, y: 358, w: 185, h: 62 },
+    { key: "2B", x: 1300, y: 238, w: 175, h: 78 },
+    { key: "3B", x: 810, y: 358, w: 185, h: 62 },
+    { key: "SS", x: 895, y: 238, w: 175, h: 78 },
+    { key: "LF", x: 340, y: 140, w: 195, h: 62 },
+    { key: "CF", x: 1085, y: 92, w: 230, h: 62 },
+    { key: "RF", x: 1865, y: 140, w: 195, h: 62 },
   ];
+  const SPECIAL_BOX_X = 50;
+  const SPECIAL_BOX_WIDTH = 240;
+  const SPECIAL_STACK_BOTTOM = 600;
+  const SPECIAL_STACK_STEP = 80;
 
   function clampInningCount(value) {
     const n = parseInt(value, 10);
@@ -240,10 +245,44 @@
     return "•";
   }
 
+  function specialBoxSvg(key, map, players, y, boxHeight) {
+    const pid = map[key];
+    const player = pid ? playerById(players, pid) : null;
+    const isEmpty = !player;
+    const label = isEmpty ? key : playerLabel(player, key);
+    const cx = SPECIAL_BOX_X + SPECIAL_BOX_WIDTH / 2;
+    const cy = y + boxHeight / 2;
+    return (
+      '<g data-pos="' +
+      escapeXml(key) +
+      '">' +
+      '<rect x="' +
+      SPECIAL_BOX_X +
+      '" y="' +
+      y +
+      '" width="' +
+      SPECIAL_BOX_WIDTH +
+      '" height="' +
+      boxHeight +
+      '" rx="8" fill="#9f1239" stroke="#f1f5f9" stroke-width="2"/>' +
+      '<text x="' +
+      cx +
+      '" y="' +
+      cy +
+      '" font-family="Inter, system-ui, sans-serif" font-size="' +
+      (isEmpty ? "50" : "56") +
+      '" font-weight="700" fill="' +
+      (isEmpty ? "#ef4444" : "#f1f5f9") +
+      '" text-anchor="middle" dominant-baseline="middle">' +
+      escapeXml(label) +
+      "</text></g>"
+    );
+  }
+
   function miniFieldSvg(defense, players, opts) {
     const options = opts || {};
-    const width = options.width || 620;
-    const height = options.height || 360;
+    const width = options.width || "100%";
+    const height = options.height || "100%";
     const isDpFlex = Boolean(options.dpFlex);
     const apCount = Math.max(0, parseInt(options.apCount, 10) || 0);
     const map = defense || {};
@@ -253,91 +292,55 @@
       width +
       '" height="' +
       height +
-      '" viewBox="0 0 620 360" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; border:1px solid #854d0e; border-radius:8px; background:#15803d;">' +
-      '<rect x="0" y="0" width="620" height="360" fill="#15803d"/>' +
-      '<polygon points="260,310 365,248 260,180 155,248" fill="#b45309" stroke="#78350f" stroke-width="3"/>' +
-      '<line x1="260" y1="310" x2="620" y2="70" stroke="#f5f5f4" stroke-width="2"/>' +
-      '<line x1="260" y1="310" x2="0" y2="70" stroke="#f5f5f4" stroke-width="2"/>' +
-      '<ellipse cx="260" cy="248" rx="22" ry="8" fill="#854d0e" stroke="#451a03" stroke-width="1"/>';
+      '" viewBox="0 0 2400 620" preserveAspectRatio="none" style="display:block; width:100%; height:100%; border:1px solid #854d0e; border-radius:8px; background:#15803d;">' +
+      '<rect x="0" y="0" width="2400" height="620" fill="#15803d"/>' +
+      '<polygon points="780,385 1200,255 1620,385 1200,510" fill="#b45309" stroke="#78350f" stroke-width="4"/>' +
+      '<line x1="1200" y1="510" x2="2400" y2="153" stroke="#f5f5f4" stroke-width="4"/>' +
+      '<line x1="1200" y1="510" x2="0" y2="153" stroke="#f5f5f4" stroke-width="4"/>' +
+      '<ellipse cx="1200" cy="395" rx="95" ry="20" fill="#854d0e" stroke="#451a03" stroke-width="2"/>' +
+      '<rect x="1135" y="387" width="130" height="11" fill="#e7e5e4" rx="2"/>';
 
     MINI_FIELD_POSITIONS.forEach(function (pos) {
       const pid = map[pos.key];
       const player = pid ? playerById(players, pid) : null;
       const isEmpty = !player;
       const label = isEmpty ? pos.key : playerLabel(player, pos.key);
-      const textColor = isEmpty ? "#ef4444" : "#ffffff";
-      const fontSize = isEmpty ? "11" : "18";
       svg +=
         '<g>' +
         '<rect x="' +
-        (pos.x - 22) +
-        '" y="' +
-        (pos.y - 13) +
-        '" width="44" height="26" rx="6" fill="#166534" stroke="#f1f5f9" stroke-width="2"/>' +
-        '<text x="' +
         pos.x +
         '" y="' +
-        (pos.y + 5) +
+        pos.y +
+        '" width="' +
+        pos.w +
+        '" height="' +
+        pos.h +
+        '" rx="10" fill="#166534" stroke="#f1f5f9" stroke-width="4"/>' +
+        '<text x="' +
+        (pos.x + pos.w / 2) +
+        '" y="' +
+        (pos.y + pos.h / 2) +
         '" font-family="Inter, system-ui, sans-serif" font-size="' +
-        fontSize +
-        '" font-weight="800" fill="' +
-        textColor +
+        (isEmpty ? "50" : "70") +
+        '" font-weight="700" fill="' +
+        (isEmpty ? "#ef4444" : "#f1f5f9") +
         '" text-anchor="middle" dominant-baseline="middle">' +
         escapeXml(label) +
         "</text>" +
         "</g>";
     });
 
-    let rightX = 510;
-    let rightY = 70;
+    // DP and APs stack in the lower left, same as the starting-lineup diamond.
+    let specialSlot = 0;
+    function nextSpecialY() {
+      specialSlot += 1;
+      return SPECIAL_STACK_BOTTOM - specialSlot * SPECIAL_STACK_STEP;
+    }
     if (isDpFlex) {
-      const pid = map.DP;
-      const player = pid ? playerById(players, pid) : null;
-      const isEmpty = !player;
-      const label = isEmpty ? "DP" : playerLabel(player, "DP");
-      svg +=
-        '<g><rect x="' +
-        rightX +
-        '" y="' +
-        rightY +
-        '" width="52" height="24" rx="5" fill="#9f1239" stroke="#f1f5f9" stroke-width="1.5"/>' +
-        '<text x="' +
-        (rightX + 26) +
-        '" y="' +
-        (rightY + 13) +
-        '" font-family="Inter, system-ui, sans-serif" font-size="' +
-        (isEmpty ? "10" : "15") +
-        '" font-weight="800" fill="' +
-        (isEmpty ? "#ef4444" : "#ffffff") +
-        '" text-anchor="middle" dominant-baseline="middle">' +
-        escapeXml(label) +
-        "</text></g>";
-      rightY += 30;
+      svg += specialBoxSvg("DP", map, players, nextSpecialY(), 80);
     }
     for (let i = 1; i <= apCount; i++) {
-      const key = "AP" + i;
-      const pid = map[key];
-      const player = pid ? playerById(players, pid) : null;
-      const isEmpty = !player;
-      const label = isEmpty ? key : playerLabel(player, key);
-      svg +=
-        '<g><rect x="' +
-        rightX +
-        '" y="' +
-        rightY +
-        '" width="52" height="22" rx="5" fill="#9f1239" stroke="#f1f5f9" stroke-width="1.5"/>' +
-        '<text x="' +
-        (rightX + 26) +
-        '" y="' +
-        (rightY + 12) +
-        '" font-family="Inter, system-ui, sans-serif" font-size="' +
-        (isEmpty ? "9" : "13") +
-        '" font-weight="800" fill="' +
-        (isEmpty ? "#ef4444" : "#ffffff") +
-        '" text-anchor="middle" dominant-baseline="middle">' +
-        escapeXml(label) +
-        "</text></g>";
-      rightY += 26;
+      svg += specialBoxSvg("AP" + i, map, players, nextSpecialY(), 72);
     }
 
     svg += "</svg>";
