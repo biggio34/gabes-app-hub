@@ -265,6 +265,13 @@
             <span class="hidden sm:inline">Games</span>
           </button>
 
+          <button type="button" onclick="showInningPlan()"
+                  class="flex items-center gap-x-1.5 px-3 py-1.5 rounded-2xl border border-red-300 bg-red-50 hover:bg-red-100 text-sm font-semibold text-red-800"
+                  title="Set who plays where in each inning">
+            <i class="fa-solid fa-table-cells"></i>
+            <span class="hidden sm:inline">Inning defenses</span>
+          </button>
+
           <button onclick="exportPNG()" 
                   class="flex items-center gap-x-2 px-4 py-2 rounded-2xl bg-red-700 hover:bg-red-800 active:bg-black transition-colors text-white text-sm font-semibold shadow">
             <i class="fa-solid fa-camera mr-1.5"></i>
@@ -374,7 +381,9 @@
             </div>
           </div>
 
-          <div id="inning-tabs" class="flex items-center gap-1 px-2 py-1.5 bg-zinc-900 overflow-x-auto"></div>
+          <div id="inning-tabs" class="flex items-center gap-1.5 px-2 py-1.5 bg-zinc-900 overflow-x-auto">
+            <span class="text-[10px] font-semibold uppercase tracking-wide text-amber-200/80 px-1 shrink-0">Set inning</span>
+          </div>
 
           <!-- The Diamond -->
           <div class="p-0 bg-stone-900 flex-1 relative" style="min-height: 0;">
@@ -469,15 +478,15 @@
       </div>
 
       <!-- INNING-BY-INNING DEFENSE PLAN -->
-      <div class="mt-4 bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
-        <div class="px-4 py-3 border-b bg-stone-50 flex flex-wrap items-center justify-between gap-3">
+      <div id="inning-plan" class="mt-4 bg-white rounded-3xl border border-red-200 shadow-sm overflow-hidden scroll-mt-20">
+        <div class="px-4 py-3 border-b bg-red-50 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div class="font-semibold text-red-900 flex items-center gap-2">
               <i class="fa-solid fa-layer-group"></i>
-              <span>Inning-by-inning defense</span>
+              <span>Set defense for each inning</span>
             </div>
-            <div class="text-[11px] text-stone-500 mt-0.5">
-              Pre-plan each inning. The diamond above edits the selected inning. Switch between a grid and a field diagram per inning.
+            <div class="text-[11px] text-stone-600 mt-0.5">
+              Each cell is that girl’s position that inning. Change a dropdown to assign it. Or pick an inning on the diamond above and move players on the field.
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -504,7 +513,7 @@
       <!-- Footer / Tips -->
       <div class="mt-4 text-center text-xs text-stone-400">
         Tap a player on the defense diagram to select them → click another field position to swap, or click any player in the Subs list to sub them in (fewer clicks).
-        Works great on iPad &amp; iPhone. Players come from Team Roster. Mark a player Out for this game only. Use the inning tabs to pre-plan defense for the whole game.
+        Use <strong>Inning defenses</strong> (top right) or the grid below the field to assign a position for every inning.
       </div>
     </div>
   </div>
@@ -1138,6 +1147,13 @@
       }
     }
 
+    function showInningPlan() {
+      const el = document.getElementById("inning-plan");
+      if (!el) return;
+      setInningPlanView("table");
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
     function setEditingInning(inningNumber) {
       ensureInningPlan();
       const next = Math.max(1, Math.min(state.inningCount, parseInt(inningNumber, 10) || 1));
@@ -1231,9 +1247,13 @@
       const bar = document.getElementById("inning-tabs");
       const label = document.getElementById("defense-inning-label");
       ensureInningPlan();
-      if (label) label.textContent = "Inning " + state.editingInning;
+      if (label) label.textContent = "Editing inning " + state.editingInning;
       if (!bar) return;
       bar.innerHTML = "";
+      const caption = document.createElement("span");
+      caption.className = "text-[10px] font-semibold uppercase tracking-wide text-amber-200/80 px-1 shrink-0";
+      caption.textContent = "Set inning";
+      bar.appendChild(caption);
       for (let i = 1; i <= state.inningCount; i++) {
         const btn = document.createElement("button");
         btn.type = "button";
@@ -1242,8 +1262,8 @@
           ? InningDefense.filledFieldCount(defense)
           : Object.values(defense || {}).filter(Boolean).length;
         btn.className = "inning-tab" + (i === state.editingInning ? " active" : "") + (filled ? " has-plan" : "");
-        btn.textContent = i;
-        btn.title = filled ? "Inning " + i + " · " + filled + " on the field" : "Inning " + i + " · not planned yet";
+        btn.textContent = "Inn " + i;
+        btn.title = filled ? "Inning " + i + " · " + filled + " on the field" : "Inning " + i + " · tap to assign on the field";
         btn.onclick = () => setEditingInning(i);
         bar.appendChild(btn);
       }
@@ -1308,7 +1328,7 @@
         html += `</tr>`;
       });
       html += `</tbody></table></div>
-        <div class="mt-2 text-[11px] text-stone-500">Bn = bench that inning. Changing a cell swaps if the position is already taken. Gold column is the inning on the diamond.</div>`;
+        <div class="mt-2 text-[11px] text-stone-600">Each dropdown is that batter’s position for that inning. Bn = bench. Gold column is the inning on the diamond above.</div>`;
       body.innerHTML = html;
       body.querySelectorAll(".inning-pos-select").forEach((select) => {
         select.onchange = () => {
