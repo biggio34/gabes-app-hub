@@ -139,8 +139,45 @@ export type WristVersion = {
   themes: WristKindThemes;
   createdAt: number;
   locked: boolean;
+  /** @deprecated Legacy alias of offenseCells for older saved books. */
   cells: WristCell[];
+  offenseCells: WristCell[];
+  defenseCells: WristCell[];
 };
+
+export function playCardKind(kind?: WristCallKind | string): "offense" | "defense" {
+  return kind === "defense" ? "defense" : "offense";
+}
+
+export function cloneCells(cells: WristCell[] | null | undefined): WristCell[] {
+  return (cells || []).map((cell) => ({ ...cell }));
+}
+
+export function versionCells(
+  version:
+    | Pick<WristVersion, "offenseCells" | "defenseCells" | "cells">
+    | null
+    | undefined,
+  kind?: WristCallKind | string,
+): WristCell[] {
+  if (!version) return [];
+  if (playCardKind(kind) === "defense") return version.defenseCells || [];
+  return version.offenseCells || version.cells || [];
+}
+
+export function withVersionCells(
+  version: WristVersion,
+  kind: WristCallKind | string,
+  cells: WristCell[],
+): WristVersion {
+  const next = cloneCells(cells);
+  const offense = cloneCells(version.offenseCells || version.cells);
+  const defense = cloneCells(version.defenseCells);
+  if (playCardKind(kind) === "defense") {
+    return { ...version, defenseCells: next, offenseCells: offense, cells: offense };
+  }
+  return { ...version, offenseCells: next, defenseCells: defense, cells: next };
+}
 
 export const SHEET_SIZE_PRESETS = {
   letter: { widthIn: 8.5, heightIn: 11 },
@@ -372,32 +409,33 @@ export type WristSheetGroup = {
 
 export function sheetGroups(book: WristBook, version: WristVersion | null): WristSheetGroup[] {
   if (!version) return [];
-  const kind = book.bandKind || "offense";
+  const kind = playCardKind(book.bandKind);
   const layout = layoutOf(book);
   const byCall = new Map<string, string[]>();
-  for (const cell of version.cells) {
+  for (const cell of versionCells(version, kind)) {
     if (!cell.callId) continue;
     const call = callById(book, cell.callId);
-    if (!call) continue;
+    if (!call || call.kind !== kind) continue;
     const list = byCall.get(call.id) || [];
     list.push(sheetCode(cell.grid, cell.row, cell.col, layout.signStart, layout.rowStart));
     byCall.set(call.id, list);
   }
-  const listed = book.library.filter((call) => byCall.has(call.id));
-  const preferred = listed.filter((call) => call.kind === kind);
-  const rest = listed.filter((call) => call.kind !== kind);
-  return [...preferred, ...rest].map((call) => ({
-    callId: call.id,
-    name: call.name,
-    short: call.short,
-    codes: (byCall.get(call.id) || []).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
-  }));
+  return book.library
+    .filter((call) => call.kind === kind && byCall.has(call.id))
+    .map((call) => ({
+      callId: call.id,
+      name: call.name,
+      short: call.short,
+      codes: (byCall.get(call.id) || []).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    }));
 }
 
-export function cardCounts(version: WristVersion | null): Record<string, number> {
+export function cardCounts(
+  version: WristVersion | null,
+  kind?: WristCallKind | string,
+): Record<string, number> {
   const counts: Record<string, number> = {};
-  if (!version) return counts;
-  for (const cell of version.cells) {
+  for (const cell of versionCells(version, kind)) {
     if (!cell.callId) continue;
     counts[cell.callId] = (counts[cell.callId] || 0) + 1;
   }
@@ -659,23 +697,25 @@ export function signBag(
   return shuffleInPlace(bag.slice(0, total));
 }
 
-export function shuffleVersion(
-  book: Pick<
-    WristBook,
-    "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
-  > & { title?: string; theme?: WristTheme },
-  name?: string,
-  titles?: WristKindTitles,
-  themes?: WristKindThemes,
-): WristVersion {
-  const layout = layoutOf({
+export function bookLayout(
+  book: Pick<WristBook, "grids" | "rows" | "cols" | "signStart" | "rowStart">,
+): WristLayout {
+  return layoutOf({
     grids: clampInt(book.grids, DEFAULT_GRIDS, 1, 8),
     rows: clampInt(book.rows, DEFAULT_ROWS, 3, 8),
     cols: clampInt(book.cols, DEFAULT_COLS, 3, 8),
     signStart: clampInt(book.signStart, DEFAULT_SIGN_START, 0, 9),
     rowStart: clampInt(book.rowStart, DEFAULT_ROW_START, 0, 9),
   });
-  const assigned = signBag(book.library, book.bandKind || "offense", cellCount(layout));
+}
+
+export function buildKindCells(
+  book: Pick<WristBook, "grids" | "rows" | "cols" | "signStart" | "rowStart" | "library">,
+  kind: WristCallKind | string,
+): WristCell[] {
+  const layout = bookLayout(book);
+  const cardKind = playCardKind(kind);
+  const assigned = signBag(book.library, cardKind, cellCount(layout));
   const cells: WristCell[] = [];
   let i = 0;
   for (let grid = 0; grid < layout.grids; grid += 1) {
@@ -692,6 +732,42 @@ export function shuffleVersion(
       }
     }
   }
+  return cells;
+}
+
+function cellsMatchLayout(cells: WristCell[] | null | undefined, layout: WristLayout) {
+  return Array.isArray(cells) && cells.length === cellCount(layout);
+}
+
+export function inferPlayCardKind(
+  cells: WristCell[] | null | undefined,
+  library: WristCall[],
+): "offense" | "defense" | null {
+  if (!cells?.length) return null;
+  const byId = new Map(library.map((call) => [call.id, call]));
+  let offense = 0;
+  let defense = 0;
+  for (const cell of cells) {
+    const call = byId.get(cell.callId);
+    if (call?.kind === "offense") offense += 1;
+    else if (call?.kind === "defense") defense += 1;
+  }
+  if (defense > offense) return "defense";
+  if (offense > 0) return "offense";
+  return null;
+}
+
+export function shuffleVersion(
+  book: Pick<
+    WristBook,
+    "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
+  > & { title?: string; theme?: WristTheme },
+  name?: string,
+  titles?: WristKindTitles,
+  themes?: WristKindThemes,
+): WristVersion {
+  const offenseCells = buildKindCells(book, "offense");
+  const defenseCells = buildKindCells(book, "defense");
   return {
     id: `ver-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     name: name?.trim() || nextVersionName(book.versions),
@@ -699,7 +775,9 @@ export function shuffleVersion(
     themes: normalizeKindThemes(themes, book.theme),
     createdAt: Date.now(),
     locked: false,
-    cells,
+    cells: offenseCells,
+    offenseCells,
+    defenseCells,
   };
 }
 
@@ -707,6 +785,8 @@ export function copyCurrentVersion(
   book: Pick<WristBook, "versions">,
   version: WristVersion,
 ): WristVersion {
+  const offenseCells = cloneCells(version.offenseCells || version.cells);
+  const defenseCells = cloneCells(version.defenseCells);
   return {
     id: `ver-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     name: nextVersionName(book.versions),
@@ -714,7 +794,9 @@ export function copyCurrentVersion(
     themes: normalizeKindThemes(version.themes),
     createdAt: Date.now(),
     locked: false,
-    cells: version.cells.map((cell) => ({ ...cell })),
+    cells: offenseCells,
+    offenseCells,
+    defenseCells,
   };
 }
 
@@ -722,6 +804,19 @@ export function shuffleCurrentVersion(
   book: Pick<
     WristBook,
     "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
+  > & { title?: string; theme?: WristTheme },
+  version: WristVersion,
+  kind?: WristCallKind | string,
+): WristVersion | null {
+  if (version.locked) return null;
+  const cardKind = playCardKind(kind || book.bandKind);
+  return withVersionCells(version, cardKind, buildKindCells(book, cardKind));
+}
+
+export function refillVersionCards(
+  book: Pick<
+    WristBook,
+    "grids" | "rows" | "cols" | "signStart" | "rowStart" | "library" | "versions"
   > & { title?: string; theme?: WristTheme },
   version: WristVersion,
 ): WristVersion | null {
@@ -735,6 +830,10 @@ export function shuffleCurrentVersion(
     titles: normalizeKindTitles(version.titles, book.title),
     themes: normalizeKindThemes(version.themes, book.theme),
   };
+}
+
+export function setVersionLocked(version: WristVersion, locked: boolean): WristVersion {
+  return { ...version, locked: Boolean(locked) };
 }
 
 function asRecord(value: unknown) {
@@ -787,19 +886,44 @@ function normalizeCell(raw: unknown, layout: WristLayout): WristCell | null {
   };
 }
 
+function parseCells(raw: unknown, layout: WristLayout): WristCell[] {
+  return (Array.isArray(raw) ? raw : [])
+    .map((cell) => normalizeCell(cell, layout))
+    .filter((cell): cell is WristCell => Boolean(cell));
+}
+
 function normalizeVersion(
   raw: unknown,
   index: number,
   layout: WristLayout,
+  library: WristCall[],
   fallbackTitle?: string,
   fallbackTheme?: WristTheme,
 ): WristVersion | null {
   const item = asRecord(raw);
   if (!item) return null;
-  const cells = (Array.isArray(item.cells) ? item.cells : [])
-    .map((cell) => normalizeCell(cell, layout))
-    .filter((cell): cell is WristCell => Boolean(cell));
-  if (cells.length !== cellCount(layout)) return null;
+  const legacyCells = parseCells(item.cells, layout);
+  let offenseCells = parseCells(item.offenseCells, layout);
+  let defenseCells = parseCells(item.defenseCells, layout);
+  const draft = {
+    grids: layout.grids,
+    rows: layout.rows,
+    cols: layout.cols,
+    signStart: layout.signStart,
+    rowStart: layout.rowStart,
+    library,
+  };
+
+  if (!cellsMatchLayout(offenseCells, layout) && cellsMatchLayout(legacyCells, layout)) {
+    if (inferPlayCardKind(legacyCells, library) === "defense" && !cellsMatchLayout(defenseCells, layout)) {
+      defenseCells = cloneCells(legacyCells);
+    } else {
+      offenseCells = cloneCells(legacyCells);
+    }
+  }
+  if (!cellsMatchLayout(offenseCells, layout)) offenseCells = buildKindCells(draft, "offense");
+  if (!cellsMatchLayout(defenseCells, layout)) defenseCells = buildKindCells(draft, "defense");
+
   return {
     id: String(item.id || `ver-${index}`),
     name: String(item.name || `Version ${index + 1}`).trim() || `Version ${index + 1}`,
@@ -807,7 +931,9 @@ function normalizeVersion(
     themes: normalizeKindThemes(item.themes, fallbackTheme),
     createdAt: Number(item.createdAt) || Date.now(),
     locked: Boolean(item.locked),
-    cells,
+    cells: offenseCells,
+    offenseCells,
+    defenseCells,
   };
 }
 
@@ -868,7 +994,9 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
     updatedAt: Number(item.updatedAt) || Date.now(),
   });
   book.versions = (Array.isArray(item.versions) ? item.versions : [])
-    .map((version, index) => normalizeVersion(version, index, layout, book.title, book.theme))
+    .map((version, index) =>
+      normalizeVersion(version, index, layout, book.library, book.title, book.theme),
+    )
     .filter((version): version is WristVersion => Boolean(version));
   if (!book.versions.length) {
     const first = shuffleVersion(book, "Version A");

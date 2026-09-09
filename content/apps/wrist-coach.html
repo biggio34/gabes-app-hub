@@ -256,13 +256,14 @@
         <h2 class="font-semibold">Versions</h2>
         <div class="flex flex-wrap gap-2">
           <button type="button" id="shuffle-current" class="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">
-            Shuffle this version
+            Shuffle this card
           </button>
           <button type="button" id="shuffle-version" class="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold hover:bg-red-600">
             Copy and Create New Version
           </button>
         </div>
       </div>
+      <p class="text-xs text-slate-500 -mt-1">Lock and unlock freeze or free both cards. Shuffle and sign edits only change the Offense or Defense card you are viewing.</p>
       <ul id="version-list" class="grid gap-2"></ul>
     </section>
 
@@ -375,7 +376,7 @@
   <div id="unlock-modal" class="hidden no-print fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4">
     <div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-5">
       <p id="unlock-modal-title" class="font-semibold">Unlock this version?</p>
-      <p id="unlock-modal-sub" class="mt-1 text-sm text-slate-400">It can be shuffled again.</p>
+      <p id="unlock-modal-sub" class="mt-1 text-sm text-slate-400">Offense and defense cards on this version can be shuffled again.</p>
       <div class="mt-4 grid gap-2 sm:grid-cols-2">
         <button type="button" id="unlock-modal-cancel" class="rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
           Cancel
@@ -713,9 +714,9 @@
       return columnCode(grid, col, layout.signStart) + rowCode(row, layout.rowStart);
     }
 
-    function cardCounts(version) {
+    function cardCounts(version, kind) {
       const counts = {};
-      ((version && version.cells) || []).forEach(function (cell) {
+      versionCells(version, kind || (book && book.bandKind)).forEach(function (cell) {
         if (!cell.callId) return;
         counts[cell.callId] = (counts[cell.callId] || 0) + 1;
       });
@@ -758,22 +759,62 @@
       return true;
     }
 
+    function playCardKind(kind) {
+      return kind === "defense" ? "defense" : "offense";
+    }
+
+    function cloneCells(cells) {
+      return (cells || []).map(function (cell) { return Object.assign({}, cell); });
+    }
+
+    function versionCells(version, kind) {
+      if (!version) return [];
+      if (playCardKind(kind) === "defense") return version.defenseCells || [];
+      return version.offenseCells || version.cells || [];
+    }
+
+    function setVersionCells(version, kind, cells) {
+      const next = cloneCells(cells);
+      if (playCardKind(kind) === "defense") {
+        version.defenseCells = next;
+        version.offenseCells = cloneCells(version.offenseCells || version.cells);
+        version.cells = version.offenseCells;
+        return;
+      }
+      version.offenseCells = next;
+      version.defenseCells = cloneCells(version.defenseCells);
+      version.cells = next;
+    }
+
+    function inferPlayCardKind(cells) {
+      if (!cells || !cells.length || !book) return null;
+      let offense = 0;
+      let defense = 0;
+      cells.forEach(function (cell) {
+        const call = callById(cell.callId);
+        if (call && call.kind === "offense") offense += 1;
+        else if (call && call.kind === "defense") defense += 1;
+      });
+      if (defense > offense) return "defense";
+      if (offense > 0) return "offense";
+      return null;
+    }
+
     function sheetGroups(version) {
       if (!version || !book) return [];
-      const kind = book.bandKind || "offense";
+      const kind = playCardKind(book.bandKind);
       const layout = layoutOf(book);
       const byCall = {};
-      (version.cells || []).forEach(function (cell) {
+      versionCells(version, kind).forEach(function (cell) {
         if (!cell.callId) return;
         const call = callById(cell.callId);
-        if (!call) return;
+        if (!call || call.kind !== kind) return;
         if (!byCall[call.id]) byCall[call.id] = [];
         byCall[call.id].push(sheetCode(cell.grid || 0, cell.row, cell.col, layout));
       });
-      const listed = book.library.filter(function (call) { return byCall[call.id]; });
-      const preferred = listed.filter(function (call) { return call.kind === kind; });
-      const rest = listed.filter(function (call) { return call.kind !== kind; });
-      return preferred.concat(rest).map(function (call) {
+      return book.library.filter(function (call) {
+        return call.kind === kind && byCall[call.id];
+      }).map(function (call) {
         return {
           callId: call.id,
           name: call.name,
@@ -831,9 +872,9 @@
       return shuffleInPlace(bag.slice(0, total));
     }
 
-    function shuffleVersion(current, name) {
+    function buildKindCells(current, kind) {
       const layout = layoutOf(current);
-      const assigned = signBag(current.library, current.bandKind || "offense", cellCount(layout));
+      const assigned = signBag(current.library, playCardKind(kind), cellCount(layout));
       const cells = [];
       let i = 0;
       for (let grid = 0; grid < layout.grids; grid += 1) {
@@ -850,6 +891,12 @@
           }
         }
       }
+      return cells;
+    }
+
+    function shuffleVersion(current, name) {
+      const offenseCells = buildKindCells(current, "offense");
+      const defenseCells = buildKindCells(current, "defense");
       return {
         id: "ver-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
         name: name || nextVersionName(current.versions || []),
@@ -863,7 +910,9 @@
         ),
         createdAt: Date.now(),
         locked: false,
-        cells: cells
+        cells: offenseCells,
+        offenseCells: offenseCells,
+        defenseCells: defenseCells
       };
     }
 
@@ -901,10 +950,8 @@
       if (!book.theme) book.theme = defaultTheme();
       book.theme = normalizeTheme(book.theme);
       book.sheet = sheetOf();
-      let kindReset = false;
       if (book.bandKind !== "offense" && book.bandKind !== "defense") {
         book.bandKind = "offense";
-        kindReset = true;
       }
       const layout = layoutOf(book);
       book.grids = layout.grids;
@@ -921,19 +968,44 @@
         if (item.locked == null) item.locked = false;
         item.titles = kindTitlesOf(item);
         item.themes = kindThemesOf(item);
+        const needed = cellCount(layout);
+        const legacy = item.cells && item.cells.length === needed ? item.cells : null;
+        const legacyKind = inferPlayCardKind(legacy);
+        if (!item.offenseCells || item.offenseCells.length !== needed) {
+          item.offenseCells = legacy && legacyKind !== "defense" ? cloneCells(legacy) : buildKindCells(book, "offense");
+        }
+        if (!item.defenseCells || item.defenseCells.length !== needed) {
+          item.defenseCells = legacy && legacyKind === "defense" ? cloneCells(legacy) : buildKindCells(book, "defense");
+        }
+        item.cells = item.offenseCells;
       });
       book.theme = themeOf();
       const version = activeVersion();
+      const needed = cellCount(layout);
       if (
         version &&
         !version.locked &&
-        (kindReset || (version.cells && version.cells.length !== cellCount(layout)))
+        ((version.offenseCells && version.offenseCells.length !== needed) ||
+          (version.defenseCells && version.defenseCells.length !== needed))
       ) {
-        refillActive();
+        refillBothCards();
       }
     }
 
-    function refillActive() {
+    function refillCard(kind) {
+      const current = activeVersion();
+      if (current && current.locked) return false;
+      if (!current) {
+        const next = shuffleVersion(book, "Version A");
+        book.versions = [next];
+        book.activeVersionId = next.id;
+        return true;
+      }
+      setVersionCells(current, kind || book.bandKind, buildKindCells(book, kind || book.bandKind));
+      return true;
+    }
+
+    function refillBothCards() {
       const current = activeVersion();
       if (current && current.locked) return false;
       const next = shuffleVersion(book, current ? current.name : "Version A");
@@ -953,10 +1025,14 @@
       return true;
     }
 
+    function refillActive() {
+      return refillCard(book.bandKind);
+    }
+
     function shuffleCurrent() {
       const current = activeVersion();
       if (!current || current.locked) return false;
-      return refillActive();
+      return refillCard(book.bandKind);
     }
 
     function activeVersion() {
@@ -1044,7 +1120,11 @@
         }
         ensureBookShape();
         render();
-        if (!data.updatedAt) scheduleSave();
+        const incoming = data.book && Array.isArray(data.book.versions) ? data.book.versions : [];
+        const needsPersist = incoming.some(function (item) {
+          return !item || !item.offenseCells || !item.defenseCells;
+        });
+        if (!data.updatedAt || needsPersist) scheduleSave();
       } catch (err) {
         book = emptyBook();
         setError("Could not load Wrist Coach.");
@@ -1097,7 +1177,7 @@
     }
 
     function cellAt(version, grid, row, col) {
-      return (version.cells || []).find(function (cell) {
+      return versionCells(version, book.bandKind).find(function (cell) {
         return Number(cell.grid || 0) === grid && Number(cell.row) === row && Number(cell.col) === col;
       }) || null;
     }
@@ -1196,7 +1276,7 @@
                   '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="defense" maxlength="60" value="' + escapeHtml(titles.defense) + '" class="rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
                 '</label>' +
               '</div>' +
-              '<p class="mt-2 text-xs text-slate-500">' + escapeHtml(when) + (active ? " · Active" : "") + (version.locked ? " · Locked" : "") + '</p>' +
+              '<p class="mt-2 text-xs text-slate-500">' + escapeHtml(when) + (active ? " · Active" : "") + (version.locked ? " · Locked (both cards)" : "") + '</p>' +
             '</div>' +
             '<div class="flex items-center gap-3 pt-1">' +
               (active
@@ -1500,7 +1580,7 @@
       book.cols = next.cols;
       book.signStart = next.signStart;
       book.rowStart = next.rowStart;
-      if (changed) refillActive();
+      if (changed) refillBothCards();
       render();
       scheduleSave();
     }
@@ -1520,7 +1600,6 @@
       if (kind !== "offense" && kind !== "defense") return;
       if (kind === book.bandKind) return;
       book.bandKind = kind;
-      refillActive();
       render();
       scheduleSave();
     });
@@ -1598,7 +1677,7 @@
         return;
       }
       closeCountModal();
-      refillActive();
+      refillCard(source.kind);
       render();
       scheduleSave();
     });
@@ -1714,8 +1793,9 @@
       }
       const id = target.getAttribute("data-call-del");
       if (!id) return;
+      const removed = callById(id);
       book.library = book.library.filter(function (item) { return item.id !== id; });
-      refillActive();
+      refillCard(removed && removed.kind ? removed.kind : book.bandKind);
       render();
       scheduleSave();
     }
@@ -1772,7 +1852,9 @@
         themes: kindThemesOf(current),
         createdAt: Date.now(),
         locked: false,
-        cells: current.cells.map(function (cell) { return Object.assign({}, cell); })
+        cells: cloneCells(current.offenseCells || current.cells),
+        offenseCells: cloneCells(current.offenseCells || current.cells),
+        defenseCells: cloneCells(current.defenseCells)
       };
       book.versions.push(version);
       book.activeVersionId = version.id;

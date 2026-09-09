@@ -42,6 +42,9 @@ import {
   normalizeKindTitles,
   shuffleCurrentVersion,
   shuffleVersion,
+  setVersionLocked,
+  versionCells,
+  playCardKind,
   wristCoachBlobKey,
 } from "./wrist-coach.ts";
 
@@ -275,6 +278,79 @@ describe("wrist coach book", () => {
       copied.cells.map((cell) => `${cell.code}:${cell.callId}`),
       first.cells.map((cell) => `${cell.code}:${cell.callId}`),
     );
+    assert.deepEqual(
+      copied.defenseCells.map((cell) => `${cell.code}:${cell.callId}`),
+      first.defenseCells.map((cell) => `${cell.code}:${cell.callId}`),
+    );
+  });
+
+  it("keeps offense and defense cards independent on the same version", () => {
+    const book = emptyBook("user-1");
+    const first = activeVersion(book);
+    assert.ok(first);
+    assert.equal(playCardKind("defense"), "defense");
+    assert.equal(first.offenseCells.length, first.cells.length);
+    assert.equal(first.defenseCells.length, first.cells.length);
+    const offenseIds = new Set(first.offenseCells.map((cell) => cell.callId));
+    const defenseIds = new Set(first.defenseCells.map((cell) => cell.callId));
+    assert.ok([...offenseIds].every((id) => book.library.find((call) => call.id === id)?.kind === "offense"));
+    assert.ok([...defenseIds].every((id) => book.library.find((call) => call.id === id)?.kind === "defense"));
+    const defenseBefore = first.defenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|");
+    const offenseBefore = first.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|");
+    const shuffledOffense = shuffleCurrentVersion(book, first, "offense");
+    assert.ok(shuffledOffense);
+    assert.equal(
+      shuffledOffense.defenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"),
+      defenseBefore,
+    );
+    const shuffledDefense = shuffleCurrentVersion({ ...book, bandKind: "defense" }, shuffledOffense, "defense");
+    assert.ok(shuffledDefense);
+    assert.equal(
+      shuffledDefense.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"),
+      shuffledOffense.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"),
+    );
+    assert.notEqual(
+      shuffledDefense.defenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"),
+      defenseBefore,
+    );
+    const locked = setVersionLocked(shuffledDefense, true);
+    assert.equal(locked.locked, true);
+    assert.equal(shuffleCurrentVersion(book, locked, "offense"), null);
+    assert.equal(shuffleCurrentVersion({ ...book, bandKind: "defense" }, locked, "defense"), null);
+    const unlocked = setVersionLocked(locked, false);
+    assert.equal(unlocked.locked, false);
+    assert.ok(shuffleCurrentVersion(book, unlocked, "offense"));
+    const saved = normalizeBook(
+      {
+        title: "Split cards",
+        bandKind: "defense",
+        library: defaultLibrary(),
+        versions: [
+          {
+            id: first.id,
+            name: first.name,
+            createdAt: first.createdAt,
+            locked: true,
+            cells: first.offenseCells,
+            titles: first.titles,
+            themes: first.themes,
+          },
+        ],
+        activeVersionId: first.id,
+      },
+      "user-1",
+    );
+    const restored = activeVersion(saved);
+    assert.ok(restored);
+    assert.equal(restored.locked, true);
+    assert.equal(versionCells(restored, "offense").length, cellCount(layoutOf(saved)));
+    assert.equal(versionCells(restored, "defense").length, cellCount(layoutOf(saved)));
+    assert.ok(
+      versionCells(restored, "offense").every(
+        (cell) => book.library.find((call) => call.id === cell.callId)?.kind !== "defense",
+      ),
+    );
+    assert.equal(offenseBefore.split("|").length, first.offenseCells.length);
   });
 
   it("gives offense and defense their own names on a version", () => {
