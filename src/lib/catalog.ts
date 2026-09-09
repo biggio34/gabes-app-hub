@@ -48,7 +48,7 @@ export const hubApps: HubApp[] = [
     slug: "lineup",
     file: "lineup.html",
     title: "Lineup Builder",
-    description: "Game lineups from the Team Roster for the team you pick.",
+    description: "Game lineups from the Team Roster, with inning-by-inning defense plans.",
     area: "softball",
   },
   {
