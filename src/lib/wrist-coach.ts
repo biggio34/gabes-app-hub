@@ -214,6 +214,11 @@ export type WristBook = {
   updatedAt: number;
 };
 
+type WristShuffleBook = Pick<
+  WristBook,
+  "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
+> & { title?: string; theme?: WristTheme };
+
 export const DEFAULT_GRIDS = 6;
 export const DEFAULT_ROWS = 5;
 export const DEFAULT_COLS = 5;
@@ -758,10 +763,7 @@ export function inferPlayCardKind(
 }
 
 export function shuffleVersion(
-  book: Pick<
-    WristBook,
-    "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
-  > & { title?: string; theme?: WristTheme },
+  book: WristShuffleBook,
   name?: string,
   titles?: WristKindTitles,
   themes?: WristKindThemes,
@@ -801,10 +803,7 @@ export function copyCurrentVersion(
 }
 
 export function shuffleCurrentVersion(
-  book: Pick<
-    WristBook,
-    "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
-  > & { title?: string; theme?: WristTheme },
+  book: WristShuffleBook,
   version: WristVersion,
   kind?: WristCallKind | string,
 ): WristVersion | null {
@@ -814,10 +813,7 @@ export function shuffleCurrentVersion(
 }
 
 export function refillVersionCards(
-  book: Pick<
-    WristBook,
-    "grids" | "rows" | "cols" | "signStart" | "rowStart" | "library" | "versions"
-  > & { title?: string; theme?: WristTheme },
+  book: WristShuffleBook,
   version: WristVersion,
 ): WristVersion | null {
   if (version.locked) return null;
