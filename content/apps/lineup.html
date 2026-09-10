@@ -592,7 +592,7 @@
   <!-- Roster primary / secondary positions (same fields as Team Roster) -->
   <div id="roster-positions-modal" class="hidden fixed inset-0 bg-black/60 flex items-end md:items-center justify-center z-[70]">
     <div onclick="event.target.id === 'roster-positions-modal' && hideRosterPositionsModal()" class="absolute inset-0"></div>
-    <div class="bg-white w-full md:w-[520px] md:rounded-3xl md:m-4 rounded-t-3xl p-5 relative max-h-[88vh] overflow-auto">
+    <div class="bg-white w-full md:w-[560px] md:rounded-3xl md:m-4 rounded-t-3xl p-5 relative max-h-[88vh] overflow-auto">
       <div class="flex justify-between items-center mb-3">
         <h3 class="font-semibold text-lg">Primary / secondary positions</h3>
         <button type="button" onclick="hideRosterPositionsModal()" class="text-2xl leading-none text-stone-400 hover:text-stone-600">×</button>
@@ -2699,7 +2699,7 @@
       box.innerHTML = players.map((player) => {
         const num = player.number ? "#" + player.number + " " : "";
         const extra = orderSet.has(player.id) ? "" : `<span class="text-[10px] text-stone-400 font-medium">Not in batting order</span>`;
-        return `<div class="grid grid-cols-[1fr_5.5rem_5.5rem] gap-2 items-center text-xs" data-roster-pos-id="${player.id}">
+        return `<div class="grid grid-cols-[minmax(0,1fr)_6.75rem_6.75rem] gap-2 items-center text-xs" data-roster-pos-id="${player.id}">
           <div class="min-w-0">
             <div class="font-semibold text-stone-800 truncate">${num}${player.name || "Player"}</div>
             ${extra}
