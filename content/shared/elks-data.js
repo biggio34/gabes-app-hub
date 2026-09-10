@@ -1825,6 +1825,20 @@
     pushToCloud(snapshot);
   }
 
+  // Field positions only. DP / AP are batting-roster spots, not primary/secondary.
+  const PLAYER_POSITION_OPTIONS = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'UT'];
+
+  function isBattingRosterSpot(pos) {
+    const p = String(pos || '').trim().toUpperCase();
+    return p === 'DP' || p === 'FLEX' || p === 'AP' || /^AP\d+$/.test(p);
+  }
+
+  function playerFieldPositions(player) {
+    return [player && player.position, player && player.position2].filter(function (pos) {
+      return Boolean(pos) && !isBattingRosterSpot(pos);
+    });
+  }
+
   const LANE_POSITION_OPTIONS = [
     { key: 'P', label: 'Pitchers (P)' },
     { key: 'C', label: 'Catchers (C)' },
@@ -2206,6 +2220,9 @@
     canonicalTeamId,
     realTeamId,
     mountTeamPicker,
+    PLAYER_POSITION_OPTIONS,
+    isBattingRosterSpot,
+    playerFieldPositions,
     LANE_POSITION_OPTIONS,
     expandPosition,
     playerMatchesPositions,

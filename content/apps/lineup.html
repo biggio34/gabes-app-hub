@@ -716,7 +716,9 @@
     let currentGameId = null;
 
     const POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"];
-    const ROSTER_POSITION_OPTIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "UT", "DP"];
+    const ROSTER_POSITION_OPTIONS = (window.ElksData && ElksData.PLAYER_POSITION_OPTIONS)
+      ? ElksData.PLAYER_POSITION_OPTIONS.slice()
+      : ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "UT"];
 
     // === Transient click-to-select defense model (replaces unreliable drag on the field) ===
     let selectedDefensePlayerId = null;   // player currently "in hand" for move/swap
@@ -2646,7 +2648,10 @@
 
     function playerLockLabel(player) {
       if (!player) return "Player";
-      const prefs = [player.position, player.position2].filter(Boolean).join("/");
+      const prefs = (window.ElksData && ElksData.playerFieldPositions
+        ? ElksData.playerFieldPositions(player)
+        : [player.position, player.position2].filter(Boolean)
+      ).join("/");
       const num = player.number ? "#" + player.number + " " : "";
       return num + (player.name || "Player") + (prefs ? " · " + prefs : "");
     }
@@ -2659,7 +2664,9 @@
     }
 
     function rosterPositionSelectHtml(selected) {
-      const current = String(selected || "");
+      const current = (window.ElksData && ElksData.isBattingRosterSpot && ElksData.isBattingRosterSpot(selected))
+        ? ""
+        : String(selected || "");
       return [`<option value="">Any / unset</option>`]
         .concat(
           ROSTER_POSITION_OPTIONS.map((pos) => {

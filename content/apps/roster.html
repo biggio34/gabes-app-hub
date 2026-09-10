@@ -72,7 +72,6 @@
             <option>CF</option>
             <option>RF</option>
             <option>UT</option>
-            <option>DP</option>
           </select>
         </label>
         <label class="grid gap-1.5 text-sm sm:col-span-2">
@@ -89,7 +88,6 @@
             <option>CF</option>
             <option>RF</option>
             <option>UT</option>
-            <option>DP</option>
           </select>
         </label>
       </div>
@@ -191,7 +189,9 @@
   </div>
 
   <script>
-    const POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "UT", "DP"];
+    const POSITIONS = (window.ElksData && ElksData.PLAYER_POSITION_OPTIONS)
+      ? ElksData.PLAYER_POSITION_OPTIONS.slice()
+      : ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "UT"];
     let state = null;
     let editingId = null;
     let cardPlayerId = null;
@@ -307,7 +307,10 @@
         const li = document.createElement("li");
         li.className = "rounded-3xl border border-slate-800 bg-slate-900 p-5";
         const number = player.number ? "#" + player.number : "No number";
-        const positions = [player.position, player.position2].filter(Boolean).join(" / ") || "No position";
+        const positions = (ElksData.playerFieldPositions
+          ? ElksData.playerFieldPositions(player)
+          : [player.position, player.position2].filter(Boolean)
+        ).join(" / ") || "No position";
         const teamName = ElksData.teamNameForPlayer
           ? ElksData.teamNameForPlayer(player, state.teams || [])
           : "";
@@ -502,7 +505,9 @@
       document.getElementById("card-meta").textContent = [
         player.number ? "#" + player.number : "",
         teamName,
-        [player.position, player.position2].filter(Boolean).join(" / "),
+        ElksData.playerFieldPositions
+          ? ElksData.playerFieldPositions(player).join(" / ")
+          : [player.position, player.position2].filter(Boolean).join(" / "),
       ].filter(Boolean).join(" · ");
       fillPositionSelect(document.getElementById("card-position"), player.position);
       fillPositionSelect(document.getElementById("card-position2"), player.position2);
