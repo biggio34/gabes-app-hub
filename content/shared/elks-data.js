@@ -1717,6 +1717,8 @@
       number: player.number ? Number(player.number) || player.number : undefined,
       notes: player.evalNotes || '',
       assignedTeamId: player.assignedTeamId || null,
+      position: player.position || '',
+      position2: player.position2 || '',
     };
   }
 

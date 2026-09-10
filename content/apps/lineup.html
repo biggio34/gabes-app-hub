@@ -565,12 +565,15 @@
         <button type="button" onclick="hideSuggestModal()" class="text-2xl leading-none text-stone-400 hover:text-stone-600">×</button>
       </div>
       <p class="text-sm text-stone-600 mb-3">
-        Lock any positions you want to pick yourself. Leave the rest open and Suggest will fill them for this inning.
+        Lock any positions you want to pick yourself. <strong>P and C</strong> are only filled if that girl is listed as pitcher or catcher (primary or secondary) on the Team Roster. The other seven spots can still go to anyone.
       </p>
       <div id="suggest-locks" class="space-y-1.5 mb-4"></div>
+      <button type="button" onclick="showRosterPositionsModal()" class="w-full mb-3 py-2.5 rounded-2xl border border-stone-300 text-sm font-semibold text-stone-800 hover:bg-stone-50">
+        Update primary / secondary positions
+      </button>
       <label class="flex items-start gap-2.5 text-sm text-stone-800 mb-2.5">
         <input id="suggest-preferred" type="checkbox" checked class="mt-1 rounded border-stone-300">
-        <span>Fill remaining spots from each girl’s <strong>primary and secondary</strong> positions</span>
+        <span>Prefer each girl’s <strong>primary and secondary</strong> for the other seven spots</span>
       </label>
       <label class="flex items-start gap-2.5 text-sm text-stone-800 mb-3">
         <input id="suggest-equal" type="checkbox" checked class="mt-1 rounded border-stone-300">
@@ -582,6 +585,25 @@
       <div class="flex gap-3">
         <button type="button" onclick="hideSuggestModal()" class="flex-1 py-3 rounded-2xl border font-semibold text-stone-700">Cancel</button>
         <button type="button" onclick="applySuggestDefense()" class="flex-1 py-3 rounded-2xl bg-red-800 text-white font-semibold">Fill this inning</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Roster primary / secondary positions (same fields as Team Roster) -->
+  <div id="roster-positions-modal" class="hidden fixed inset-0 bg-black/60 flex items-end md:items-center justify-center z-[70]">
+    <div onclick="event.target.id === 'roster-positions-modal' && hideRosterPositionsModal()" class="absolute inset-0"></div>
+    <div class="bg-white w-full md:w-[520px] md:rounded-3xl md:m-4 rounded-t-3xl p-5 relative max-h-[88vh] overflow-auto">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-semibold text-lg">Primary / secondary positions</h3>
+        <button type="button" onclick="hideRosterPositionsModal()" class="text-2xl leading-none text-stone-400 hover:text-stone-600">×</button>
+      </div>
+      <p class="text-sm text-stone-600 mb-3">
+        These are the same primary and secondary positions as Team Roster. Suggest uses them for pitcher and catcher, and prefers them for the rest of the field.
+      </p>
+      <div id="roster-positions-list" class="space-y-2 mb-4"></div>
+      <div class="flex gap-3">
+        <button type="button" onclick="hideRosterPositionsModal()" class="flex-1 py-3 rounded-2xl border font-semibold text-stone-700">Cancel</button>
+        <button type="button" onclick="saveRosterPositionsFromModal()" class="flex-1 py-3 rounded-2xl bg-red-800 text-white font-semibold">Save to roster</button>
       </div>
     </div>
   </div>
@@ -694,6 +716,7 @@
     let currentGameId = null;
 
     const POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"];
+    const ROSTER_POSITION_OPTIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "UT", "DP"];
 
     // === Transient click-to-select defense model (replaces unreliable drag on the field) ===
     let selectedDefensePlayerId = null;   // player currently "in hand" for move/swap
@@ -2633,6 +2656,87 @@
       if (!modal) return;
       modal.classList.add("hidden");
       modal.classList.remove("flex");
+    }
+
+    function rosterPositionSelectHtml(selected) {
+      const current = String(selected || "");
+      return [`<option value="">Any / unset</option>`]
+        .concat(
+          ROSTER_POSITION_OPTIONS.map((pos) => {
+            const sel = pos === current ? " selected" : "";
+            return `<option value="${pos}"${sel}>${pos}</option>`;
+          }),
+        )
+        .join("");
+    }
+
+    function rosterPositionPlayers() {
+      const inOrder = new Set(state.battingOrder || []);
+      const batting = (state.battingOrder || [])
+        .map((id) => state.players.find((p) => p.id === id))
+        .filter(Boolean);
+      const rest = (state.players || []).filter((p) => !inOrder.has(p.id));
+      return batting.concat(rest);
+    }
+
+    function hideRosterPositionsModal() {
+      const modal = document.getElementById("roster-positions-modal");
+      if (!modal) return;
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    function showRosterPositionsModal() {
+      const box = document.getElementById("roster-positions-list");
+      const modal = document.getElementById("roster-positions-modal");
+      if (!box || !modal) return;
+      const players = rosterPositionPlayers();
+      if (!players.length) {
+        alert("Add players on Team Roster first.");
+        return;
+      }
+      const orderSet = new Set(state.battingOrder || []);
+      box.innerHTML = players.map((player) => {
+        const num = player.number ? "#" + player.number + " " : "";
+        const extra = orderSet.has(player.id) ? "" : `<span class="text-[10px] text-stone-400 font-medium">Not in batting order</span>`;
+        return `<div class="grid grid-cols-[1fr_5.5rem_5.5rem] gap-2 items-center text-xs" data-roster-pos-id="${player.id}">
+          <div class="min-w-0">
+            <div class="font-semibold text-stone-800 truncate">${num}${player.name || "Player"}</div>
+            ${extra}
+          </div>
+          <label class="grid gap-0.5">
+            <span class="text-[10px] uppercase tracking-wide text-stone-400">Primary</span>
+            <select data-roster-primary class="w-full bg-white border border-stone-300 rounded-xl px-1.5 py-1.5 font-medium">${rosterPositionSelectHtml(player.position)}</select>
+          </label>
+          <label class="grid gap-0.5">
+            <span class="text-[10px] uppercase tracking-wide text-stone-400">Secondary</span>
+            <select data-roster-secondary class="w-full bg-white border border-stone-300 rounded-xl px-1.5 py-1.5 font-medium">${rosterPositionSelectHtml(player.position2)}</select>
+          </label>
+        </div>`;
+      }).join("");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function saveRosterPositionsFromModal() {
+      const rows = document.querySelectorAll("[data-roster-pos-id]");
+      const shared = window.ElksData ? ElksData.load() : null;
+      rows.forEach((row) => {
+        const id = row.getAttribute("data-roster-pos-id");
+        const position = (row.querySelector("[data-roster-primary]") || {}).value || "";
+        const position2 = (row.querySelector("[data-roster-secondary]") || {}).value || "";
+        const player = (state.players || []).find((p) => p.id === id);
+        if (player) {
+          player.position = position;
+          player.position2 = position2;
+        }
+        if (shared && window.ElksData && (shared.players || []).some((item) => item.id === id)) {
+          ElksData.upsertPlayer(shared, { id, position, position2 });
+        }
+      });
+      if (shared && window.ElksData) ElksData.save(shared);
+      hideRosterPositionsModal();
+      populateSuggestLocks();
     }
 
     function populateSuggestLocks() {
