@@ -1826,17 +1826,35 @@
   }
 
   // Field positions only. DP / AP are batting-roster spots, not primary/secondary.
-  const PLAYER_POSITION_OPTIONS = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'UT'];
+  // UT is secondary-only: it is not a primary and not a lineup assignment.
+  const PLAYER_PRIMARY_POSITION_OPTIONS = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
+  const PLAYER_SECONDARY_POSITION_OPTIONS = PLAYER_PRIMARY_POSITION_OPTIONS.concat(['UT']);
+  const PLAYER_POSITION_OPTIONS = PLAYER_SECONDARY_POSITION_OPTIONS;
 
   function isBattingRosterSpot(pos) {
     const p = String(pos || '').trim().toUpperCase();
     return p === 'DP' || p === 'FLEX' || p === 'AP' || /^AP\d+$/.test(p);
   }
 
+  function isUtilityPosition(pos) {
+    const p = String(pos || '').trim().toUpperCase();
+    return p === 'UT' || p === 'UTIL' || p === 'UTILITY';
+  }
+
+  function normalizePrimaryPosition(pos) {
+    if (!pos || isBattingRosterSpot(pos) || isUtilityPosition(pos)) return '';
+    return String(pos);
+  }
+
+  function normalizeSecondaryPosition(pos) {
+    if (!pos || isBattingRosterSpot(pos)) return '';
+    return String(pos);
+  }
+
   function playerFieldPositions(player) {
-    return [player && player.position, player && player.position2].filter(function (pos) {
-      return Boolean(pos) && !isBattingRosterSpot(pos);
-    });
+    const primary = normalizePrimaryPosition(player && player.position);
+    const secondary = normalizeSecondaryPosition(player && player.position2);
+    return [primary, secondary].filter(Boolean);
   }
 
   const LANE_POSITION_OPTIONS = [
@@ -2221,7 +2239,12 @@
     realTeamId,
     mountTeamPicker,
     PLAYER_POSITION_OPTIONS,
+    PLAYER_PRIMARY_POSITION_OPTIONS,
+    PLAYER_SECONDARY_POSITION_OPTIONS,
     isBattingRosterSpot,
+    isUtilityPosition,
+    normalizePrimaryPosition,
+    normalizeSecondaryPosition,
     playerFieldPositions,
     LANE_POSITION_OPTIONS,
     expandPosition,

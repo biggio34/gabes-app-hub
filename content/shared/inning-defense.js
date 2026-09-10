@@ -91,6 +91,9 @@
       return defense;
     }
 
+    const spot = String(requested || "").trim().toUpperCase();
+    if (spot === "UT" || spot === "UTIL" || spot === "UTILITY") return defense;
+
     let targetKey = requested;
     if (requested === "AP") {
       const alreadyOnAP = Object.keys(defense).find(function (key) {
@@ -375,9 +378,18 @@
     return [];
   }
 
+  function isUtilityLabel(raw) {
+    const p = String(raw || "")
+      .trim()
+      .toUpperCase();
+    return p === "UT" || p === "UTIL" || p === "UTILITY";
+  }
+
   function preferenceScore(player, pos) {
-    const primary = expandPreferredPosition(player && player.position);
-    if (primary.indexOf(pos) !== -1) return 2;
+    if (!isUtilityLabel(player && player.position)) {
+      const primary = expandPreferredPosition(player && player.position);
+      if (primary.indexOf(pos) !== -1) return 2;
+    }
     const secondary = expandPreferredPosition(player && player.position2);
     if (secondary.indexOf(pos) !== -1) return 1;
     return 0;

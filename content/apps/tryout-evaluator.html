@@ -386,7 +386,7 @@
             <select id="p-position" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 focus:outline-none focus:border-red-500">
               <option value="">—</option>
               <option>P</option><option>C</option><option>1B</option><option>2B</option>
-              <option>3B</option><option>SS</option><option>OF</option><option>UT</option>
+              <option>3B</option><option>SS</option><option>OF</option>
             </select>
           </div>
           <div>
@@ -993,8 +993,12 @@
         firstName,
         lastName,
         name: ElksData.joinName(firstName, lastName) || 'Unnamed',
-        position: document.getElementById('p-position').value,
-        position2: document.getElementById('p-position2').value,
+        position: ElksData.normalizePrimaryPosition
+          ? ElksData.normalizePrimaryPosition(document.getElementById('p-position').value)
+          : document.getElementById('p-position').value,
+        position2: ElksData.normalizeSecondaryPosition
+          ? ElksData.normalizeSecondaryPosition(document.getElementById('p-position2').value)
+          : document.getElementById('p-position2').value,
         birthdate: document.getElementById('p-birthdate').value,
         originalTeam: document.getElementById('p-original-team').value.trim(),
       };

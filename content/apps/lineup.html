@@ -716,9 +716,12 @@
     let currentGameId = null;
 
     const POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"];
-    const ROSTER_POSITION_OPTIONS = (window.ElksData && ElksData.PLAYER_POSITION_OPTIONS)
-      ? ElksData.PLAYER_POSITION_OPTIONS.slice()
-      : ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "UT"];
+    const ROSTER_PRIMARY_POSITION_OPTIONS = (window.ElksData && ElksData.PLAYER_PRIMARY_POSITION_OPTIONS)
+      ? ElksData.PLAYER_PRIMARY_POSITION_OPTIONS.slice()
+      : ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"];
+    const ROSTER_SECONDARY_POSITION_OPTIONS = (window.ElksData && ElksData.PLAYER_SECONDARY_POSITION_OPTIONS)
+      ? ElksData.PLAYER_SECONDARY_POSITION_OPTIONS.slice()
+      : ROSTER_PRIMARY_POSITION_OPTIONS.concat(["UT"]);
 
     // === Transient click-to-select defense model (replaces unreliable drag on the field) ===
     let selectedDefensePlayerId = null;   // player currently "in hand" for move/swap
@@ -2663,13 +2666,16 @@
       modal.classList.remove("flex");
     }
 
-    function rosterPositionSelectHtml(selected) {
-      const current = (window.ElksData && ElksData.isBattingRosterSpot && ElksData.isBattingRosterSpot(selected))
-        ? ""
-        : String(selected || "");
+    function rosterPositionSelectHtml(selected, kind) {
+      const options = kind === "secondary" ? ROSTER_SECONDARY_POSITION_OPTIONS : ROSTER_PRIMARY_POSITION_OPTIONS;
+      let current = String(selected || "");
+      if (window.ElksData && ElksData.isBattingRosterSpot && ElksData.isBattingRosterSpot(current)) current = "";
+      if (kind !== "secondary" && window.ElksData && ElksData.isUtilityPosition && ElksData.isUtilityPosition(current)) {
+        current = "";
+      }
       return [`<option value="">Any / unset</option>`]
         .concat(
-          ROSTER_POSITION_OPTIONS.map((pos) => {
+          options.map((pos) => {
             const sel = pos === current ? " selected" : "";
             return `<option value="${pos}"${sel}>${pos}</option>`;
           }),
@@ -2713,11 +2719,11 @@
           </div>
           <label class="grid gap-0.5">
             <span class="text-[10px] uppercase tracking-wide text-stone-400">Primary</span>
-            <select data-roster-primary class="w-full bg-white border border-stone-300 rounded-xl px-1.5 py-1.5 font-medium">${rosterPositionSelectHtml(player.position)}</select>
+            <select data-roster-primary class="w-full bg-white border border-stone-300 rounded-xl px-1.5 py-1.5 font-medium">${rosterPositionSelectHtml(player.position, "primary")}</select>
           </label>
           <label class="grid gap-0.5">
             <span class="text-[10px] uppercase tracking-wide text-stone-400">Secondary</span>
-            <select data-roster-secondary class="w-full bg-white border border-stone-300 rounded-xl px-1.5 py-1.5 font-medium">${rosterPositionSelectHtml(player.position2)}</select>
+            <select data-roster-secondary class="w-full bg-white border border-stone-300 rounded-xl px-1.5 py-1.5 font-medium">${rosterPositionSelectHtml(player.position2, "secondary")}</select>
           </label>
         </div>`;
       }).join("");
@@ -2730,8 +2736,12 @@
       const shared = window.ElksData ? ElksData.load() : null;
       rows.forEach((row) => {
         const id = row.getAttribute("data-roster-pos-id");
-        const position = (row.querySelector("[data-roster-primary]") || {}).value || "";
-        const position2 = (row.querySelector("[data-roster-secondary]") || {}).value || "";
+        let position = (row.querySelector("[data-roster-primary]") || {}).value || "";
+        let position2 = (row.querySelector("[data-roster-secondary]") || {}).value || "";
+        if (window.ElksData && ElksData.normalizePrimaryPosition) {
+          position = ElksData.normalizePrimaryPosition(position);
+          position2 = ElksData.normalizeSecondaryPosition(position2);
+        }
         const player = (state.players || []).find((p) => p.id === id);
         if (player) {
           player.position = position;

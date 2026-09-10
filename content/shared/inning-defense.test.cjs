@@ -226,6 +226,35 @@ describe("inning defense helpers", () => {
     assert.equal(defense.C, "1");
   });
 
+  it("ignores UT as a lineup assignment", () => {
+    const defense = InningDefense.assignInDefense({ SS: "a" }, "a", "UT");
+    assert.equal(defense.SS, "a");
+    assert.equal(defense.UT, undefined);
+  });
+
+  it("uses secondary UT as a preference, not primary UT", () => {
+    const players = [
+      { id: "1", name: "Ava", position: "UT", position2: "" },
+      { id: "2", name: "Mia", position: "SS", position2: "UT" },
+      { id: "3", name: "Sophia", position: "C", position2: "" },
+      { id: "4", name: "Emma", position: "P", position2: "" },
+      { id: "5", name: "Lily", position: "2B", position2: "" },
+      { id: "6", name: "Harper", position: "3B", position2: "" },
+      { id: "7", name: "Zoe", position: "LF", position2: "" },
+      { id: "8", name: "Chloe", position: "CF", position2: "" },
+      { id: "9", name: "Isla", position: "RF", position2: "" },
+    ];
+    const defense = InningDefense.suggestInningDefense({
+      battingOrder: players.map((p) => p.id),
+      players,
+      usePreferredPositions: true,
+    });
+    assert.equal(defense.SS, "2");
+    assert.equal(defense.P, "4");
+    assert.equal(defense.C, "3");
+    assert.ok(InningDefense.isFieldPosition(InningDefense.playerPosition(defense, "1")));
+  });
+
   it("assigns leftover roster batters to AP slots", () => {
     const ids = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"];
     const players = ids.map((id) => ({
