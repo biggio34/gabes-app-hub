@@ -618,7 +618,7 @@
                 const age = getAge(player.birthdate);
                 const ageLevel = getSoftballAgeLevel(player.birthdate);
                 const isSelected = selectedPlayerIds.has(player.id);
-                const pos = [player.position, player.position2].filter(Boolean).join('/');
+                const pos = (ElksData.playerFieldPositions ? ElksData.playerFieldPositions(player) : [player.position, player.position2].filter(Boolean)).join('/');
                 const num = player.number ? `#${player.number}` : '';
 
                 const div = document.createElement('div');
@@ -727,7 +727,7 @@
                         const age = getAge(p.birthdate);
                         const ageLevel = getSoftballAgeLevel(p.birthdate);
                         const isSelected = selectedPlayerIds.has(p.id);
-                        const pos = [p.position, p.position2].filter(Boolean).join('/');
+                        const pos = (ElksData.playerFieldPositions ? ElksData.playerFieldPositions(p) : [p.position, p.position2].filter(Boolean)).join('/');
                         const num = p.number ? `#${p.number} ` : '';
                         const pLabel = ElksData.displayName(p);
                         const avatar = p.photo
@@ -1448,7 +1448,7 @@
             players.forEach(p => {
                 const assignedTeam = p.assignedTeamId ? (teams.find(t => t.id === p.assignedTeamId)?.name || '') : '';
                 const avg = tryoutAvg(p);
-                const pos = [p.position, p.position2].filter(Boolean).join('/');
+                const pos = (ElksData.playerFieldPositions ? ElksData.playerFieldPositions(p) : [p.position, p.position2].filter(Boolean)).join('/');
                 const full = ElksData.displayName(p);
                 const row = [
                     `"${(p.firstName || '').replace(/"/g, '""')}"`,

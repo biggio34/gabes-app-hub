@@ -71,8 +71,6 @@
             <option>LF</option>
             <option>CF</option>
             <option>RF</option>
-            <option>UT</option>
-            <option>DP</option>
           </select>
         </label>
         <label class="grid gap-1.5 text-sm sm:col-span-2">
@@ -89,7 +87,6 @@
             <option>CF</option>
             <option>RF</option>
             <option>UT</option>
-            <option>DP</option>
           </select>
         </label>
       </div>
@@ -191,7 +188,12 @@
   </div>
 
   <script>
-    const POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "UT", "DP"];
+    const PRIMARY_POSITIONS = (window.ElksData && ElksData.PLAYER_PRIMARY_POSITION_OPTIONS)
+      ? ElksData.PLAYER_PRIMARY_POSITION_OPTIONS.slice()
+      : ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"];
+    const SECONDARY_POSITIONS = (window.ElksData && ElksData.PLAYER_SECONDARY_POSITION_OPTIONS)
+      ? ElksData.PLAYER_SECONDARY_POSITION_OPTIONS.slice()
+      : PRIMARY_POSITIONS.concat(["UT"]);
     let state = null;
     let editingId = null;
     let cardPlayerId = null;
@@ -307,7 +309,10 @@
         const li = document.createElement("li");
         li.className = "rounded-3xl border border-slate-800 bg-slate-900 p-5";
         const number = player.number ? "#" + player.number : "No number";
-        const positions = [player.position, player.position2].filter(Boolean).join(" / ") || "No position";
+        const positions = (ElksData.playerFieldPositions
+          ? ElksData.playerFieldPositions(player)
+          : [player.position, player.position2].filter(Boolean)
+        ).join(" / ") || "No position";
         const teamName = ElksData.teamNameForPlayer
           ? ElksData.teamNameForPlayer(player, state.teams || [])
           : "";
@@ -353,8 +358,8 @@
       document.getElementById("first-name").value = player.firstName || "";
       document.getElementById("last-name").value = player.lastName || "";
       document.getElementById("number").value = player.number || "";
-      document.getElementById("position").value = POSITIONS.includes(player.position) ? player.position : "";
-      document.getElementById("position2").value = POSITIONS.includes(player.position2) ? player.position2 : "";
+      document.getElementById("position").value = PRIMARY_POSITIONS.includes(player.position) ? player.position : "";
+      document.getElementById("position2").value = SECONDARY_POSITIONS.includes(player.position2) ? player.position2 : "";
       document.getElementById("cancel-edit").classList.remove("hidden");
       document.getElementById("first-name").focus();
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -378,8 +383,12 @@
       const firstName = document.getElementById("first-name").value.trim();
       const lastName = document.getElementById("last-name").value.trim();
       const number = document.getElementById("number").value.trim();
-      const position = document.getElementById("position").value;
-      const position2 = document.getElementById("position2").value;
+      const position = ElksData.normalizePrimaryPosition
+        ? ElksData.normalizePrimaryPosition(document.getElementById("position").value)
+        : document.getElementById("position").value;
+      const position2 = ElksData.normalizeSecondaryPosition
+        ? ElksData.normalizeSecondaryPosition(document.getElementById("position2").value)
+        : document.getElementById("position2").value;
       if (!firstName || !lastName) {
         showError("First and last name are required.");
         return;
@@ -471,8 +480,9 @@
       }
     });
 
-    function fillPositionSelect(select, selected) {
-      select.innerHTML = '<option value="">Any / unset</option>' + POSITIONS.map((pos) =>
+    function fillPositionSelect(select, selected, options) {
+      const list = options || SECONDARY_POSITIONS;
+      select.innerHTML = '<option value="">Any / unset</option>' + list.map((pos) =>
         `<option ${pos === selected ? "selected" : ""}>${pos}</option>`
       ).join("");
     }
@@ -502,10 +512,12 @@
       document.getElementById("card-meta").textContent = [
         player.number ? "#" + player.number : "",
         teamName,
-        [player.position, player.position2].filter(Boolean).join(" / "),
+        ElksData.playerFieldPositions
+          ? ElksData.playerFieldPositions(player).join(" / ")
+          : [player.position, player.position2].filter(Boolean).join(" / "),
       ].filter(Boolean).join(" · ");
-      fillPositionSelect(document.getElementById("card-position"), player.position);
-      fillPositionSelect(document.getElementById("card-position2"), player.position2);
+      fillPositionSelect(document.getElementById("card-position"), player.position, PRIMARY_POSITIONS);
+      fillPositionSelect(document.getElementById("card-position2"), player.position2, SECONDARY_POSITIONS);
       document.getElementById("card-strengths").value = card.strengths || "";
       document.getElementById("card-focus").value = card.developmentFocus || "";
       document.getElementById("card-notes").value = card.notes || "";
@@ -572,8 +584,12 @@
       }
       if (ElksData.updatePlayerCard) ElksData.updatePlayerCard(player, patch);
       else player.card = Object.assign({}, player.card || {}, patch);
-      player.position = document.getElementById("card-position").value;
-      player.position2 = document.getElementById("card-position2").value;
+      player.position = ElksData.normalizePrimaryPosition
+        ? ElksData.normalizePrimaryPosition(document.getElementById("card-position").value)
+        : document.getElementById("card-position").value;
+      player.position2 = ElksData.normalizeSecondaryPosition
+        ? ElksData.normalizeSecondaryPosition(document.getElementById("card-position2").value)
+        : document.getElementById("card-position2").value;
       if (ElksData.touchCurrentSeason) {
         ElksData.touchCurrentSeason(player, {
           year: ElksData.seasonYearForState ? ElksData.seasonYearForState(state) : new Date().getFullYear(),

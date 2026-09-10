@@ -91,6 +91,9 @@
       return defense;
     }
 
+    const spot = String(requested || "").trim().toUpperCase();
+    if (spot === "UT" || spot === "UTIL" || spot === "UTILITY") return defense;
+
     let targetKey = requested;
     if (requested === "AP") {
       const alreadyOnAP = Object.keys(defense).find(function (key) {
@@ -375,11 +378,37 @@
     return [];
   }
 
+  function isUtilityLabel(raw) {
+    const p = String(raw || "")
+      .trim()
+      .toUpperCase();
+    return p === "UT" || p === "UTIL" || p === "UTILITY";
+  }
+
   function preferenceScore(player, pos) {
-    const primary = expandPreferredPosition(player && player.position);
-    if (primary.indexOf(pos) !== -1) return 2;
+    if (!isUtilityLabel(player && player.position)) {
+      const primary = expandPreferredPosition(player && player.position);
+      if (primary.indexOf(pos) !== -1) return 2;
+    }
     const secondary = expandPreferredPosition(player && player.position2);
     if (secondary.indexOf(pos) !== -1) return 1;
+    return 0;
+  }
+
+  function listedPosition(player, which) {
+    return String((player && player[which]) || "")
+      .trim()
+      .toUpperCase();
+  }
+
+  function canPlayBattery(player, pos) {
+    if (pos !== "P" && pos !== "C") return false;
+    return listedPosition(player, "position") === pos || listedPosition(player, "position2") === pos;
+  }
+
+  function batteryRank(player, pos) {
+    if (listedPosition(player, "position") === pos) return 2;
+    if (listedPosition(player, "position2") === pos) return 1;
     return 0;
   }
 
@@ -431,25 +460,52 @@
       used[id] = true;
     });
 
-    const remaining = battingOrder.filter(function (id) {
-      return !used[id];
-    });
-    const emptySpots = FIELD_POSITIONS.filter(function (pos) {
-      return !defense[pos];
-    });
-    const sitCount = Math.max(0, remaining.length - emptySpots.length);
-
-    const ranked = remaining.map(function (id, idx) {
+    function poolItem(id) {
       return {
         id: id,
-        idx: idx,
+        idx: battingOrder.indexOf(id),
         sits: sitOutCount(id, innings, inningIndex),
         player: playerById(players, id),
       };
+    }
+
+    function remainingIds() {
+      return battingOrder.filter(function (id) {
+        return !used[id];
+      });
+    }
+
+    function assignBattery(pos) {
+      if (defense[pos]) return;
+      const eligible = remainingIds()
+        .map(poolItem)
+        .filter(function (item) {
+          return canPlayBattery(item.player, pos);
+        });
+      if (!eligible.length) return;
+      eligible.sort(function (a, b) {
+        const rankDiff = batteryRank(b.player, pos) - batteryRank(a.player, pos);
+        if (rankDiff) return rankDiff;
+        if (equalPT && a.sits !== b.sits) return b.sits - a.sits;
+        return a.idx - b.idx;
+      });
+      const pick = eligible[0];
+      defense[pos] = pick.id;
+      used[pick.id] = true;
+    }
+
+    assignBattery("P");
+    assignBattery("C");
+
+    const remaining = remainingIds();
+    const emptySpots = FIELD_POSITIONS.filter(function (pos) {
+      return pos !== "P" && pos !== "C" && !defense[pos];
     });
+    const sitCount = Math.max(0, remaining.length - emptySpots.length);
 
     const sitterSet = {};
     if (equalPT) {
+      const ranked = remaining.map(poolItem);
       ranked.sort(function (a, b) {
         if (a.sits !== b.sits) return a.sits - b.sits;
         return b.idx - a.idx;
@@ -462,23 +518,17 @@
         sitterSet[id] = true;
       });
     }
+
     const fielders = remaining
       .filter(function (id) {
         return !sitterSet[id];
       })
-      .map(function (id) {
-        return {
-          id: id,
-          idx: battingOrder.indexOf(id),
-          sits: sitOutCount(id, innings, inningIndex),
-          player: playerById(players, id),
-        };
-      });
+      .map(poolItem);
     const extras = remaining.filter(function (id) {
       return sitterSet[id];
     });
 
-    const fillOrder = ["P", "C", "SS", "2B", "3B", "1B", "LF", "CF", "RF"];
+    const fillOrder = ["SS", "2B", "3B", "1B", "LF", "CF", "RF"];
     const spots = emptySpots.slice().sort(function (a, b) {
       return fillOrder.indexOf(a) - fillOrder.indexOf(b);
     });
@@ -501,7 +551,7 @@
         defense[pos] = pick.id;
       });
     } else {
-      emptySpots.forEach(function (pos, i) {
+      spots.forEach(function (pos, i) {
         if (fielders[i]) defense[pos] = fielders[i].id;
       });
     }
@@ -532,6 +582,7 @@
     benchSummary: benchSummary,
     isFieldPosition: isFieldPosition,
     expandPreferredPosition: expandPreferredPosition,
+    canPlayBattery: canPlayBattery,
     sitOutCount: sitOutCount,
     suggestInningDefense: suggestInningDefense,
     miniFieldSvg: miniFieldSvg,
