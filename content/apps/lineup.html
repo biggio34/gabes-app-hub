@@ -1366,7 +1366,9 @@
         : [];
       const options = inningPositionOptions();
       let html = `<div class="overflow-auto max-h-[520px] rounded-2xl border border-stone-200"><table class="inning-plan-table text-xs">
-        <thead><tr><th class="text-left px-3">Batter</th>`;
+        <thead><tr>
+          <th class="text-left px-3">Batter</th>
+          <th class="text-center" title="Innings not in the field">Off</th>`;
       for (let i = 1; i <= state.inningCount; i++) {
         const active = i === state.editingInning;
         html += `<th class="text-center ${active ? "inning-col-active" : ""}">Inn ${i}</th>`;
@@ -1380,9 +1382,9 @@
               <span class="lineup-number w-4 text-right">${idx + 1}</span>
               ${p.number ? `<span class="w-5 h-5 rounded-md bg-red-100 text-red-700 text-[10px] font-bold flex items-center justify-center">${p.number}</span>` : ""}
               <span class="truncate max-w-[120px]">${p.name || ""}</span>
-              ${sitOutBadge(p.id)}
             </div>
-          </th>`;
+          </th>
+          <td class="text-center">${sitOutBadge(p.id)}</td>`;
         row.positions.forEach((pos, inningIndex) => {
           const editing = inningIndex === state.editingInning - 1;
           html += `<td class="text-center ${editing ? "bg-amber-50" : ""}"><select data-inning="${inningIndex}" data-player="${p.id}" class="inning-pos-select bg-transparent border border-stone-200 rounded-lg px-1 py-0.5 text-xs font-semibold ${pos ? "text-stone-800" : "text-stone-400"}">`;
@@ -1587,7 +1589,6 @@
             <div class="flex items-center gap-1.5 min-w-0">
               ${player.number ? `<div class="w-5 h-5 flex-shrink-0 rounded-md bg-red-100 text-red-700 text-[10px] font-bold flex items-center justify-center">${player.number}</div>` : ''}
               <div class="font-semibold text-xs text-stone-900 leading-tight truncate">${player.name}${isFlex ? ' <span class="text-amber-700 font-bold">(Flex)</span>' : ''}</div>
-              ${sitOutBadge(player.id)}
             </div>
           `;
 
