@@ -16,6 +16,7 @@ import {
   isUnorderedOutOfStock,
   remainderQty,
   shoppingStage,
+  unorderForPending,
   type Leftover,
   type OrderStatus,
   type SalonOrder,
@@ -42,6 +43,8 @@ export {
   SETTABLE_STATUSES,
   statusLabel,
   isUnorderedOutOfStock,
+  unorderForPending,
+  canRevertToPending,
 } from "./salon-order-model";
 export type {
   Leftover,
@@ -467,10 +470,13 @@ export async function updateItem(
     }
     if (!isSettableStatus(patch.status)) throw new Error("That status is not valid.");
     if (patch.status === "pending" && current.orderedQty > 0) {
-      throw new Error("Can't send this back to Pending after it was ordered.");
+      const reverted = unorderForPending(current);
+      current.orderedQty = reverted.orderedQty;
+      current.receivedQty = reverted.receivedQty;
+      current.leftover = reverted.leftover;
     }
     if (patch.status === "in_cart" && current.orderedQty > 0) {
-      throw new Error("This line is already ordered.");
+      throw new Error("Move this back to Pending before adding it to the cart.");
     }
     if (patch.status === "ordered" && current.orderedQty < 1) {
       current.orderedQty = current.qty;
@@ -549,7 +555,15 @@ export async function bulkUpdateStatus(input: {
   const now = new Date().toISOString();
   let updated = 0;
   for (const item of matched) {
-    if (input.status === "pending" && item.orderedQty > 0) continue;
+    if (input.status === "pending" && item.orderedQty > 0) {
+      const targetingOrdered =
+        fromStatus === "ordered" || fromStatus === "partial" || fromStatus === "received";
+      if (!targetingOrdered || item.leftover === "rolled") continue;
+      const reverted = unorderForPending(item);
+      item.orderedQty = reverted.orderedQty;
+      item.receivedQty = reverted.receivedQty;
+      item.leftover = reverted.leftover;
+    }
     if (input.status === "in_cart" && item.orderedQty > 0) continue;
     if (input.status === "ordered" && item.orderedQty < 1) {
       item.orderedQty = item.qty;
@@ -575,7 +589,11 @@ export async function bulkUpdateStatus(input: {
     updated += 1;
   }
   if (updated === 0) {
-    throw new Error("Those items are already ordered, so they can't go back.");
+    throw new Error(
+      input.status === "pending"
+        ? "Those items can't go back to Pending (leftover may already be rolled to next month)."
+        : "Those items are already ordered, so they can't go back to the cart.",
+    );
   }
   return updated;
 }

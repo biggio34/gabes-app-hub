@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
+  canRevertToPending,
   findPendingDuplicate,
   isSettableStatus,
   itemVendor,
@@ -369,6 +370,19 @@ export function SupplyOrdersClient({
     vendorOrderNumber?: string,
   ) {
     if (!view) return;
+    if (
+      status === "pending" &&
+      fromStatus &&
+      (fromStatus === "ordered" || fromStatus === "partial" || fromStatus === "received")
+    ) {
+      if (
+        !confirm(
+          `Move ${vendor} items in ${statusLabel[fromStatus]} back to Pending? Ordered and received qty will be cleared.`,
+        )
+      ) {
+        return;
+      }
+    }
     setError("");
     try {
       await readError(
@@ -1436,6 +1450,9 @@ function ItemFulfillment({
             Status
             <span className="text-slate-400">
               Set by ordered and received qty. Received only when a box lands.
+              {canRevertToPending(item)
+                ? " Use Move back to Pending if this was marked Ordered by mistake."
+                : " Leftover already rolled to next month, so this line can't go back to Pending."}
             </span>
           </p>
         ) : (
@@ -1512,7 +1529,26 @@ function ItemFulfillment({
           onChoose={applyLeftover}
         />
       </div>
-      {hasOrdered ? null : (
+      {hasOrdered ? (
+        canRevertToPending(item) ? (
+          <button
+            type="button"
+            className="mt-3 rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700"
+            onClick={() => {
+              if (
+                !confirm(
+                  "Move this back to Pending? Ordered and received qty will be cleared so you can order it again.",
+                )
+              ) {
+                return;
+              }
+              onPatch({ status: "pending" });
+            }}
+          >
+            Move back to Pending
+          </button>
+        ) : null
+      ) : (
         <button
           type="button"
           className="mt-3 rounded-xl bg-rose-700 px-3 py-2 text-xs font-semibold hover:bg-rose-600"

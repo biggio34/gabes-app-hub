@@ -133,6 +133,26 @@ export function shoppingStage(status: OrderStatus): "pending" | "in_cart" {
   return status === "in_cart" ? "in_cart" : "pending";
 }
 
+export function canRevertToPending(item: {
+  orderedQty: number;
+  leftover: Leftover;
+}) {
+  return item.orderedQty > 0 && item.leftover !== "rolled";
+}
+
+export function unorderForPending(item: { leftover: Leftover }): {
+  orderedQty: number;
+  receivedQty: number;
+  leftover: Leftover;
+} {
+  if (item.leftover === "rolled") {
+    throw new Error(
+      "Leftover already rolled to next month, so this line can't go back to Pending.",
+    );
+  }
+  return { orderedQty: 0, receivedQty: 0, leftover: "" };
+}
+
 export function monthLabel(year: number, month: number) {
   return new Intl.DateTimeFormat("en-US", {
     month: "long",
