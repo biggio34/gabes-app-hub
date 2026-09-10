@@ -222,6 +222,31 @@
       background: #9f1239;
       color: #fff;
     }
+    .sit-out-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.15rem;
+      height: 1.15rem;
+      padding: 0 0.28rem;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+      background: #fde68a;
+      color: #92400e;
+      flex-shrink: 0;
+    }
+    .sit-out-count-zero {
+      background: #e7e5e4;
+      color: #78716c;
+    }
+    .suggest-lock-row {
+      display: grid;
+      grid-template-columns: 2.5rem 1fr;
+      gap: 0.5rem;
+      align-items: center;
+    }
   </style>
 </head>
 <body class="bg-stone-100 text-stone-900">
@@ -386,8 +411,9 @@
                       class="text-xs px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 active:bg-red-500/20 font-medium">
                 Clear inning
               </button>
-              <button onclick="suggestDefense()" 
-                      class="text-xs px-2.5 py-1 rounded-xl bg-red-600 text-white hover:bg-red-700 active:bg-red-800 font-semibold">
+              <button type="button" onclick="showSuggestModal()"
+                      class="text-xs px-2.5 py-1 rounded-xl bg-red-600 text-white hover:bg-red-700 active:bg-red-800 font-semibold"
+                      title="Fill this inning: lock spots, use primary/secondary, equal playing time">
                 Suggest
               </button>
             </div>
@@ -526,6 +552,36 @@
       <div class="mt-4 text-center text-xs text-stone-400">
         Tap a player on the defense diagram to select them → click another field position to swap, or click any player in the Subs list to sub them in (fewer clicks).
         Use <strong>Inning defenses</strong> (top right) or the grid below the field to assign a position for every inning.
+      </div>
+    </div>
+  </div>
+
+  <!-- Suggest defense -->
+  <div id="suggest-modal" class="hidden fixed inset-0 bg-black/60 flex items-end md:items-center justify-center z-50">
+    <div onclick="event.target.id === 'suggest-modal' && hideSuggestModal()" class="absolute inset-0"></div>
+    <div class="bg-white w-full md:w-[460px] md:rounded-3xl md:m-4 rounded-t-3xl p-5 relative max-h-[88vh] overflow-auto">
+      <div class="flex justify-between items-center mb-3">
+        <h3 id="suggest-modal-title" class="font-semibold text-lg">Suggest defense</h3>
+        <button type="button" onclick="hideSuggestModal()" class="text-2xl leading-none text-stone-400 hover:text-stone-600">×</button>
+      </div>
+      <p class="text-sm text-stone-600 mb-3">
+        Lock any positions you want to pick yourself. Leave the rest open and Suggest will fill them for this inning.
+      </p>
+      <div id="suggest-locks" class="space-y-1.5 mb-4"></div>
+      <label class="flex items-start gap-2.5 text-sm text-stone-800 mb-2.5">
+        <input id="suggest-preferred" type="checkbox" checked class="mt-1 rounded border-stone-300">
+        <span>Fill remaining spots from each girl’s <strong>primary and secondary</strong> positions</span>
+      </label>
+      <label class="flex items-start gap-2.5 text-sm text-stone-800 mb-3">
+        <input id="suggest-equal" type="checkbox" checked class="mt-1 rounded border-stone-300">
+        <span><strong>Equal playing time</strong> — look at earlier innings and don’t sit / AP the same kids more than others</span>
+      </label>
+      <p id="suggest-roster-note" class="hidden text-[11px] text-stone-500 mb-3">
+        Full roster batting: anyone not on the field is assigned to AP.
+      </p>
+      <div class="flex gap-3">
+        <button type="button" onclick="hideSuggestModal()" class="flex-1 py-3 rounded-2xl border font-semibold text-stone-700">Cancel</button>
+        <button type="button" onclick="applySuggestDefense()" class="flex-1 py-3 rounded-2xl bg-red-800 text-white font-semibold">Fill this inning</button>
       </div>
     </div>
   </div>
@@ -1310,7 +1366,9 @@
         : [];
       const options = inningPositionOptions();
       let html = `<div class="overflow-auto max-h-[520px] rounded-2xl border border-stone-200"><table class="inning-plan-table text-xs">
-        <thead><tr><th class="text-left px-3">Batter</th>`;
+        <thead><tr>
+          <th class="text-left px-3">Batter</th>
+          <th class="text-center" title="Innings not in the field">Off</th>`;
       for (let i = 1; i <= state.inningCount; i++) {
         const active = i === state.editingInning;
         html += `<th class="text-center ${active ? "inning-col-active" : ""}">Inn ${i}</th>`;
@@ -1325,7 +1383,8 @@
               ${p.number ? `<span class="w-5 h-5 rounded-md bg-red-100 text-red-700 text-[10px] font-bold flex items-center justify-center">${p.number}</span>` : ""}
               <span class="truncate max-w-[120px]">${p.name || ""}</span>
             </div>
-          </th>`;
+          </th>
+          <td class="text-center">${sitOutBadge(p.id)}</td>`;
         row.positions.forEach((pos, inningIndex) => {
           const editing = inningIndex === state.editingInning - 1;
           html += `<td class="text-center ${editing ? "bg-amber-50" : ""}"><select data-inning="${inningIndex}" data-player="${p.id}" class="inning-pos-select bg-transparent border border-stone-200 rounded-lg px-1 py-0.5 text-xs font-semibold ${pos ? "text-stone-800" : "text-stone-400"}">`;
@@ -2554,26 +2613,111 @@
       renderAll();
     }
 
-    function suggestDefense() {
-      // Simple smart suggestion: take players from top of batting order and spread them across positions
-      const available = [...state.battingOrder];
-      if (available.length === 0) return;
+    function sitOutBadge(playerId) {
+      if (!playerId || !window.InningDefense) return "";
+      const n = InningDefense.sitOutCount(playerId, state.inningDefenses);
+      const label = n === 1 ? "1 inning not in the field" : n + " innings not in the field";
+      const extra = n === 0 ? " sit-out-count-zero" : "";
+      return `<span class="sit-out-count${extra}" title="${label}">${n}</span>`;
+    }
 
-      // Clear first
-      POSITIONS.forEach(pos => delete state.defensivePositions[pos]);
+    function playerLockLabel(player) {
+      if (!player) return "Player";
+      const prefs = [player.position, player.position2].filter(Boolean).join("/");
+      const num = player.number ? "#" + player.number + " " : "";
+      return num + (player.name || "Player") + (prefs ? " · " + prefs : "");
+    }
 
-      // Logical spread: try to put variety in infield/outfield
-      const order = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"];
-      
-      // Assign first 9 available players (or all if fewer)
-      for (let i = 0; i < Math.min(9, available.length); i++) {
-        const pos = order[i];
-        const playerId = available[i];
-        state.defensivePositions[pos] = playerId;
+    function hideSuggestModal() {
+      const modal = document.getElementById("suggest-modal");
+      if (!modal) return;
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    function populateSuggestLocks() {
+      const box = document.getElementById("suggest-locks");
+      if (!box) return;
+      ensureInningPlan();
+      const current = state.defensivePositions || {};
+      const players = (state.battingOrder || [])
+        .map((id) => state.players.find((p) => p.id === id))
+        .filter(Boolean);
+      box.innerHTML = POSITIONS.map((pos) => {
+        const selected = current[pos] || "";
+        const opts = [`<option value="">Open — Suggest fills this</option>`]
+          .concat(
+            players.map((p) => {
+              const sel = p.id === selected ? " selected" : "";
+              return `<option value="${p.id}"${sel}>${playerLockLabel(p)}</option>`;
+            }),
+          )
+          .join("");
+        return `<label class="suggest-lock-row text-xs">
+          <span class="font-bold text-stone-700">${pos}</span>
+          <select data-lock-pos="${pos}" class="suggest-lock-select w-full bg-white border border-stone-300 rounded-xl px-2 py-1.5 text-xs font-medium">${opts}</select>
+        </label>`;
+      }).join("");
+      box.querySelectorAll(".suggest-lock-select").forEach((select) => {
+        select.onchange = () => {
+          const id = select.value;
+          if (!id) return;
+          box.querySelectorAll(".suggest-lock-select").forEach((other) => {
+            if (other !== select && other.value === id) other.value = "";
+          });
+        };
+      });
+    }
+
+    function showSuggestModal() {
+      if (!(state.battingOrder || []).length) {
+        alert("Add a batting order first, then Suggest can fill the field.");
+        return;
       }
+      ensureInningPlan();
+      const title = document.getElementById("suggest-modal-title");
+      if (title) title.textContent = "Suggest defense · Inning " + (state.editingInning || 1);
+      const rosterNote = document.getElementById("suggest-roster-note");
+      if (rosterNote) rosterNote.classList.toggle("hidden", state.battingMode !== "roster");
+      populateSuggestLocks();
+      const modal = document.getElementById("suggest-modal");
+      if (!modal) return;
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
 
+    function applySuggestDefense() {
+      if (!window.InningDefense) return;
+      ensureInningPlan();
+      const lockedPositions = {};
+      document.querySelectorAll(".suggest-lock-select").forEach((select) => {
+        if (select.value) lockedPositions[select.dataset.lockPos] = select.value;
+      });
+      const preferredEl = document.getElementById("suggest-preferred");
+      const equalEl = document.getElementById("suggest-equal");
+      const next = InningDefense.suggestInningDefense({
+        battingOrder: state.battingOrder,
+        players: state.players,
+        innings: state.inningDefenses,
+        inningIndex: (state.editingInning || 1) - 1,
+        lockedPositions,
+        usePreferredPositions: preferredEl ? preferredEl.checked : true,
+        equalPlayingTime: equalEl ? equalEl.checked : true,
+        apCount: getAPSlotCount(),
+        dpFlex: state.battingMode === "dp-flex",
+      });
+      const idx = (state.editingInning || 1) - 1;
+      state.inningDefenses[idx] = next;
+      state.defensivePositions = next;
+      selectedDefensePlayerId = null;
+      vacatedDefensePosition = null;
+      hideSuggestModal();
       saveState();
       renderAll();
+    }
+
+    function suggestDefense() {
+      showSuggestModal();
     }
 
     function sortBattingByNumber() {

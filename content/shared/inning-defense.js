@@ -357,6 +357,159 @@
       .join(", ");
   }
 
+  function isFieldPosition(pos) {
+    return FIELD_POSITIONS.indexOf(pos) !== -1;
+  }
+
+  function expandPreferredPosition(raw) {
+    const p = String(raw || "")
+      .trim()
+      .toUpperCase();
+    if (!p) return [];
+    if (p === "OF" || p === "OUTFIELD") return ["LF", "CF", "RF"];
+    if (p === "IF" || p === "INF" || p === "INFIELD") return ["1B", "2B", "3B", "SS"];
+    if (p === "MI" || p === "MIDDLE") return ["2B", "SS"];
+    if (p === "CORNER") return ["1B", "3B"];
+    if (p === "UT" || p === "UTIL" || p === "UTILITY") return FIELD_POSITIONS.slice();
+    if (FIELD_POSITIONS.indexOf(p) !== -1) return [p];
+    return [];
+  }
+
+  function preferenceScore(player, pos) {
+    const primary = expandPreferredPosition(player && player.position);
+    if (primary.indexOf(pos) !== -1) return 2;
+    const secondary = expandPreferredPosition(player && player.position2);
+    if (secondary.indexOf(pos) !== -1) return 1;
+    return 0;
+  }
+
+  function sitOutCount(playerId, innings, throughIndexExclusive) {
+    if (!playerId) return 0;
+    const maps = Array.isArray(innings) ? innings : [];
+    const end =
+      throughIndexExclusive == null ? maps.length : Math.max(0, throughIndexExclusive);
+    let sits = 0;
+    for (let i = 0; i < end && i < maps.length; i++) {
+      const defense = maps[i];
+      if (!defenseHasAssignments(defense)) continue;
+      if (!isFieldPosition(playerPosition(defense, playerId))) sits += 1;
+    }
+    return sits;
+  }
+
+  function assignExtrasOffField(defense, extras, opts) {
+    const options = opts || {};
+    const apCount = Math.max(0, parseInt(options.apCount, 10) || 0);
+    const dpFlex = Boolean(options.dpFlex);
+    if (dpFlex && extras[0]) {
+      defense.DP = extras[0];
+      return defense;
+    }
+    for (let i = 0; i < apCount && i < extras.length; i++) {
+      defense["AP" + (i + 1)] = extras[i];
+    }
+    return defense;
+  }
+
+  function suggestInningDefense(opts) {
+    const options = opts || {};
+    const battingOrder = (options.battingOrder || []).filter(Boolean);
+    const players = options.players || [];
+    const innings = options.innings || [];
+    const inningIndex = Math.max(0, parseInt(options.inningIndex, 10) || 0);
+    const locked = options.lockedPositions || {};
+    const usePreferred = Boolean(options.usePreferredPositions);
+    const equalPT = Boolean(options.equalPlayingTime);
+    const defense = emptyDefense();
+    const used = {};
+
+    Object.keys(locked).forEach(function (pos) {
+      const id = locked[pos];
+      if (!id || used[id]) return;
+      if (!isFieldPosition(pos) && pos !== "DP" && String(pos).indexOf("AP") !== 0) return;
+      defense[pos] = id;
+      used[id] = true;
+    });
+
+    const remaining = battingOrder.filter(function (id) {
+      return !used[id];
+    });
+    const emptySpots = FIELD_POSITIONS.filter(function (pos) {
+      return !defense[pos];
+    });
+    const sitCount = Math.max(0, remaining.length - emptySpots.length);
+
+    const ranked = remaining.map(function (id, idx) {
+      return {
+        id: id,
+        idx: idx,
+        sits: sitOutCount(id, innings, inningIndex),
+        player: playerById(players, id),
+      };
+    });
+
+    const sitterSet = {};
+    if (equalPT) {
+      ranked.sort(function (a, b) {
+        if (a.sits !== b.sits) return a.sits - b.sits;
+        return b.idx - a.idx;
+      });
+      ranked.slice(0, sitCount).forEach(function (item) {
+        sitterSet[item.id] = true;
+      });
+    } else {
+      remaining.slice(Math.max(0, remaining.length - sitCount)).forEach(function (id) {
+        sitterSet[id] = true;
+      });
+    }
+    const fielders = remaining
+      .filter(function (id) {
+        return !sitterSet[id];
+      })
+      .map(function (id) {
+        return {
+          id: id,
+          idx: battingOrder.indexOf(id),
+          sits: sitOutCount(id, innings, inningIndex),
+          player: playerById(players, id),
+        };
+      });
+    const extras = remaining.filter(function (id) {
+      return sitterSet[id];
+    });
+
+    const fillOrder = ["P", "C", "SS", "2B", "3B", "1B", "LF", "CF", "RF"];
+    const spots = emptySpots.slice().sort(function (a, b) {
+      return fillOrder.indexOf(a) - fillOrder.indexOf(b);
+    });
+
+    if (usePreferred) {
+      const pool = fielders.slice();
+      spots.forEach(function (pos) {
+        if (!pool.length) return;
+        let bestAt = 0;
+        for (let i = 1; i < pool.length; i++) {
+          const cur = pool[i];
+          const best = pool[bestAt];
+          const curScore = preferenceScore(cur.player, pos);
+          const bestScore = preferenceScore(best.player, pos);
+          if (curScore > bestScore) bestAt = i;
+          else if (curScore === bestScore && cur.sits > best.sits) bestAt = i;
+          else if (curScore === bestScore && cur.sits === best.sits && cur.idx < best.idx) bestAt = i;
+        }
+        const pick = pool.splice(bestAt, 1)[0];
+        defense[pos] = pick.id;
+      });
+    } else {
+      emptySpots.forEach(function (pos, i) {
+        if (fielders[i]) defense[pos] = fielders[i].id;
+      });
+    }
+
+    assignExtrasOffField(defense, extras, options);
+    return defense;
+  }
+
   return {
     FIELD_POSITIONS: FIELD_POSITIONS,
     DEFAULT_INNING_COUNT: DEFAULT_INNING_COUNT,
@@ -377,6 +530,10 @@
     tableRows: tableRows,
     benchForDefense: benchForDefense,
     benchSummary: benchSummary,
+    isFieldPosition: isFieldPosition,
+    expandPreferredPosition: expandPreferredPosition,
+    sitOutCount: sitOutCount,
+    suggestInningDefense: suggestInningDefense,
     miniFieldSvg: miniFieldSvg,
     escapeXml: escapeXml,
   };

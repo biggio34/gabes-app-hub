@@ -106,4 +106,82 @@ describe("inning defense helpers", () => {
     const summary = InningDefense.benchSummary(["a", "m", "l"], { P: "m", SS: "a" }, players);
     assert.match(summary, /#4 Lily/);
   });
+
+  it("counts planned innings a batter is not in the field", () => {
+    const innings = [
+      { P: "a", SS: "m" },
+      { P: "m", AP1: "a" },
+      {},
+    ];
+    assert.equal(InningDefense.sitOutCount("a", innings), 1);
+    assert.equal(InningDefense.sitOutCount("a", innings, 1), 0);
+    assert.equal(InningDefense.isFieldPosition("AP1"), false);
+  });
+
+  it("keeps coach-locked positions and fills the rest from batting order", () => {
+    const ids = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
+    const defense = InningDefense.suggestInningDefense({
+      battingOrder: ids,
+      players: ids.map((id) => ({ id, name: id })),
+      lockedPositions: { P: "j" },
+    });
+    assert.equal(defense.P, "j");
+    assert.equal(defense.C, "a");
+    assert.equal(defense.RF, "h");
+    assert.equal(defense.AP1, undefined);
+  });
+
+  it("puts a pitcher on P when filling from primary and secondary positions", () => {
+    const players = [
+      { id: "1", name: "Ava", position: "SS", position2: "2B" },
+      { id: "2", name: "Mia", position: "P", position2: "1B" },
+      { id: "3", name: "Sophia", position: "C", position2: "" },
+      { id: "4", name: "Emma", position: "OF", position2: "" },
+      { id: "5", name: "Lily", position: "2B", position2: "OF" },
+      { id: "6", name: "Harper", position: "3B", position2: "SS" },
+      { id: "7", name: "Zoe", position: "OF", position2: "" },
+      { id: "8", name: "Chloe", position: "1B", position2: "" },
+      { id: "9", name: "Isla", position: "UT", position2: "" },
+    ];
+    const defense = InningDefense.suggestInningDefense({
+      battingOrder: players.map((p) => p.id),
+      players,
+      usePreferredPositions: true,
+    });
+    assert.equal(defense.P, "2");
+    assert.equal(defense.C, "3");
+    assert.equal(defense.SS, "1");
+    assert.ok(["LF", "CF", "RF"].includes(
+      InningDefense.playerPosition(defense, "4"),
+    ));
+  });
+
+  it("sits the kid who has sat the least when equal playing time is on", () => {
+    const ids = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
+    const inning1 = InningDefense.suggestInningDefense({
+      battingOrder: ids,
+      equalPlayingTime: true,
+    });
+    assert.equal(InningDefense.playerPosition(inning1, "j"), "");
+    assert.equal(inning1.P, "a");
+    const inning2 = InningDefense.suggestInningDefense({
+      battingOrder: ids,
+      innings: [inning1],
+      inningIndex: 1,
+      equalPlayingTime: true,
+    });
+    assert.equal(InningDefense.playerPosition(inning2, "j"), "RF");
+    assert.equal(InningDefense.playerPosition(inning2, "i"), "");
+  });
+
+  it("assigns leftover roster batters to AP slots", () => {
+    const ids = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"];
+    const defense = InningDefense.suggestInningDefense({
+      battingOrder: ids,
+      apCount: 2,
+    });
+    assert.equal(defense.AP1, "j");
+    assert.equal(defense.AP2, "k");
+    assert.equal(InningDefense.filledFieldCount(defense), 9);
+  });
 });
