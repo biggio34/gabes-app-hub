@@ -101,8 +101,7 @@
     }
     .coach-sheet {
       width: 100%;
-      height: auto;
-      max-height: 100%;
+      height: 100%;
       border-collapse: collapse;
       background: #fff;
       color: #111;
@@ -1366,10 +1365,8 @@
       });
       const headerCount = 1 + blocks.length;
       const codeCount = Math.max(0, bodyRows - blocks.length);
-      const rowCount = headerCount + codeCount;
       const headerScale = 0.72;
-      const borderIn = (rowCount + 2) / 96;
-      const innerH = Math.max(1, sheet.heightIn - 0.24 - borderIn);
+      const innerH = Math.max(1, sheet.heightIn - 0.24);
       const innerW = Math.max(1, sheet.widthIn - 0.24);
       const codeH = codeCount > 0
         ? innerH / (headerCount * headerScale + codeCount)
