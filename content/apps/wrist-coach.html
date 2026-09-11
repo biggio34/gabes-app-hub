@@ -113,7 +113,7 @@
     }
     .coach-sheet {
       width: 100%;
-      height: auto;
+      height: 100%;
       border-collapse: collapse;
       background: #fff;
       color: #111;
@@ -143,9 +143,8 @@
     }
     .coach-sheet .sheet-code {
       font-variant-numeric: tabular-nums;
-      letter-spacing: 0.05em;
-      padding-top: 0;
-      padding-bottom: 0;
+      letter-spacing: 0;
+      padding: 0;
     }
     .swatch {
       width: 14px;
@@ -376,6 +375,7 @@
         <div class="grid gap-1.5 text-sm">
           Size
           <div class="flex flex-wrap items-center gap-2">
+            <button type="button" data-sheet-size="card" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">3.5 × 5.5 in</button>
             <button type="button" data-sheet-size="letter" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">8.5 × 11 in</button>
             <button type="button" data-sheet-size="half" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">8.5 × 5.5 in</button>
             <button type="button" data-sheet-size="index" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">5 × 8 in</button>
@@ -716,28 +716,29 @@
     }
 
     const SHEET_SIZE_PRESETS = {
+      card: { widthIn: 3.5, heightIn: 5.5 },
       letter: { widthIn: 8.5, heightIn: 11 },
       half: { widthIn: 8.5, heightIn: 5.5 },
       index: { widthIn: 5, heightIn: 8 }
     };
 
     function defaultSheet() {
-      return { cols: 15, rows: 1, preset: "letter", widthIn: 8.5, heightIn: 11 };
+      return { cols: 15, rows: 1, preset: "card", widthIn: 3.5, heightIn: 5.5 };
     }
 
     function sheetOf() {
       const sheet = book && book.sheet ? book.sheet : defaultSheet();
       const cols = clampInt(sheet.cols, 15, 4, 20);
       const rows = clampInt(sheet.rows, 1, 1, 8);
-      if (sheet.preset === "letter" || sheet.preset === "half" || sheet.preset === "index") {
+      if (SHEET_SIZE_PRESETS[sheet.preset]) {
         return { cols: cols, rows: rows, preset: sheet.preset, widthIn: SHEET_SIZE_PRESETS[sheet.preset].widthIn, heightIn: SHEET_SIZE_PRESETS[sheet.preset].heightIn };
       }
       return {
         cols: cols,
         rows: rows,
         preset: "custom",
-        widthIn: Math.min(8.5, Math.max(2, Number(sheet.widthIn) || 8.5)),
-        heightIn: Math.min(11, Math.max(2, Number(sheet.heightIn) || 11))
+        widthIn: Math.min(8.5, Math.max(2, Number(sheet.widthIn) || 3.5)),
+        heightIn: Math.min(11, Math.max(2, Number(sheet.heightIn) || 5.5))
       };
     }
 
@@ -1385,11 +1386,11 @@
       const headerPx = headerH * 96;
       const codePx = codeH * 96;
       const colPx = (innerW / Math.max(1, sheet.cols)) * 96;
-      const codeSize = Math.max(10, Math.min(codePx * 0.9, colPx * 0.52));
+      const codeSize = Math.max(10, Math.min(codePx * 0.88, colPx * 0.78));
       const playSize = Math.max(11, Math.min(48, headerPx * 0.88));
       const bannerSize = Math.max(11, Math.min(headerPx * 0.82, innerW * 96 * 0.028));
       const headerStyle = "height:" + headerH + "in";
-      const codeStyle = "height:" + (codeSize / 96) + "in";
+      const codeStyle = "height:" + codeH + "in";
       const body = blocks.map(function (block) {
         const playRow =
           '<tr style="' + headerStyle + '"><th class="sheet-play" colspan="' + sheet.cols + '" style="font-size:' + playSize + 'px">' +
@@ -1615,7 +1616,7 @@
 
     function applySheetSize(preset) {
       const current = sheetOf();
-      if (preset === "letter" || preset === "half" || preset === "index") {
+      if (SHEET_SIZE_PRESETS[preset]) {
         book.sheet = {
           cols: current.cols,
           rows: current.rows,
@@ -1645,8 +1646,8 @@
         cols: current.cols,
         rows: current.rows,
         preset: "custom",
-        widthIn: Number.isFinite(w) && w > 0 ? Math.min(8.5, Math.max(2, w)) : 8.5,
-        heightIn: Number.isFinite(h) && h > 0 ? Math.min(11, Math.max(2, h)) : 11
+        widthIn: Number.isFinite(w) && w > 0 ? Math.min(8.5, Math.max(2, w)) : 3.5,
+        heightIn: Number.isFinite(h) && h > 0 ? Math.min(11, Math.max(2, h)) : 5.5
       };
       renderSheetControls();
       renderCoachKey();
@@ -1707,7 +1708,7 @@
     document.getElementById("sheet-rows").addEventListener("change", applySheet);
     document.querySelectorAll(".sheet-size-btn").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        applySheetSize(btn.getAttribute("data-sheet-size") || "letter");
+        applySheetSize(btn.getAttribute("data-sheet-size") || "card");
       });
     });
     document.getElementById("sheet-w").addEventListener("change", applyCustomSheetSize);
