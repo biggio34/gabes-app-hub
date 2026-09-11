@@ -52,7 +52,7 @@ export function callColors(call?: Pick<WristCall, "fill" | "ink"> | null) {
 
 export const CARD_SIZE_PRESETS = {
   softball: { widthIn: 3.5, heightIn: 2.25 },
-  wrist: { widthIn: 4, heightIn: 2 },
+  wrist: { widthIn: 3.25, heightIn: 2 },
   large: { widthIn: 5, heightIn: 3 },
 } as const;
 

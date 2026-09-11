@@ -440,9 +440,9 @@ describe("wrist coach book", () => {
     });
   });
 
-  it("defaults the player card to the 4 × 2 wrist size", () => {
+  it("defaults the player card to the 3.25 × 2 wrist size", () => {
     const book = emptyBook("user-1");
-    assert.deepEqual(book.cardSize, { preset: "wrist", widthIn: 4, heightIn: 2 });
+    assert.deepEqual(book.cardSize, { preset: "wrist", widthIn: 3.25, heightIn: 2 });
     assert.deepEqual(normalizeCardSize({ preset: "softball" }), {
       preset: "softball",
       widthIn: 3.5,
