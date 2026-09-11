@@ -440,9 +440,9 @@ describe("wrist coach book", () => {
     });
   });
 
-  it("defaults the player card to the 4 × 2 wrist size", () => {
+  it("defaults the player card to the 3.25 × 2 wrist size", () => {
     const book = emptyBook("user-1");
-    assert.deepEqual(book.cardSize, { preset: "wrist", widthIn: 4, heightIn: 2 });
+    assert.deepEqual(book.cardSize, { preset: "wrist", widthIn: 3.25, heightIn: 2 });
     assert.deepEqual(normalizeCardSize({ preset: "softball" }), {
       preset: "softball",
       widthIn: 3.5,
@@ -523,16 +523,23 @@ describe("wrist coach book", () => {
     assert.deepEqual(normalizeSheet({ cols: 10, rows: 2 }), {
       cols: 10,
       rows: 2,
-      preset: "letter",
-      widthIn: 8.5,
-      heightIn: 11,
+      preset: "card",
+      widthIn: 3.5,
+      heightIn: 5.5,
     });
     assert.deepEqual(normalizeSheet({ cols: 99, rows: 0 }), {
       cols: 20,
       rows: 1,
-      preset: "letter",
-      widthIn: 8.5,
-      heightIn: 11,
+      preset: "card",
+      widthIn: 3.5,
+      heightIn: 5.5,
+    });
+    assert.deepEqual(normalizeSheet({ preset: "card" }), {
+      cols: 15,
+      rows: 1,
+      preset: "card",
+      widthIn: 3.5,
+      heightIn: 5.5,
     });
     assert.deepEqual(normalizeSheet({ cols: 12, rows: 2, preset: "half" }), {
       cols: 12,
@@ -540,6 +547,13 @@ describe("wrist coach book", () => {
       preset: "half",
       widthIn: 8.5,
       heightIn: 5.5,
+    });
+    assert.deepEqual(normalizeSheet({ cols: 12, rows: 2, preset: "letter" }), {
+      cols: 12,
+      rows: 2,
+      preset: "letter",
+      widthIn: 8.5,
+      heightIn: 11,
     });
     assert.deepEqual(normalizeSheet({ preset: "custom", widthIn: 6, heightIn: 4, cols: 10, rows: 1 }), {
       cols: 10,
@@ -560,9 +574,9 @@ describe("wrist coach book", () => {
     assert.deepEqual(saved.sheet, {
       cols: 12,
       rows: 2,
-      preset: "letter",
-      widthIn: 8.5,
-      heightIn: 11,
+      preset: "card",
+      widthIn: 3.5,
+      heightIn: 5.5,
     });
     const version = activeVersion(book);
     assert.ok(version);

@@ -42,31 +42,6 @@
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    .band-banner {
-      flex: 0 0 auto;
-      box-sizing: border-box;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 0;
-      max-height: 0.08in;
-      overflow: hidden;
-      padding: 0 0.03in;
-      font-family: "Barlow Condensed", "Arial Narrow", Inter, sans-serif;
-      font-weight: 800;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      line-height: 1;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    .band-banner-text {
-      display: block;
-      max-width: 100%;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
     .bs-block {
       flex: 1;
       min-width: 0;
@@ -126,7 +101,7 @@
     }
     .coach-sheet {
       width: 100%;
-      height: auto;
+      height: 100%;
       border-collapse: collapse;
       background: #fff;
       color: #111;
@@ -156,9 +131,9 @@
     }
     .coach-sheet .sheet-code {
       font-variant-numeric: tabular-nums;
-      letter-spacing: 0.05em;
-      padding-top: 0;
-      padding-bottom: 0;
+      letter-spacing: 0;
+      padding: 0;
+      overflow: hidden;
     }
     .swatch {
       width: 14px;
@@ -180,13 +155,38 @@
     }
     .print-only { display: none; }
     @media print {
-      @page { size: letter; margin: 0.45in; }
-      body { background: #fff !important; color: #0f172a !important; }
+      @page { margin: 0; }
+      html, body {
+        background: #fff !important;
+        color: #0f172a !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        min-height: 0 !important;
+        height: auto !important;
+        width: auto !important;
+      }
       .no-print { display: none !important; }
       .print-only { display: block !important; }
-      .print-page { page-break-after: always; }
-      .print-page:last-child { page-break-after: auto; }
-      .band-card { break-inside: avoid; box-shadow: none; border-radius: 0; }
+      #print-root { margin: 0; padding: 0; }
+      .print-page {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        break-after: page;
+        page-break-after: always;
+      }
+      .print-page:last-child {
+        break-after: auto;
+        page-break-after: auto;
+      }
+      .print-cards { page: player-card; }
+      .print-key { page: coach-sheet; }
+      .band-card,
+      .coach-sheet-page {
+        break-inside: avoid;
+        box-shadow: none !important;
+        border-radius: 0;
+      }
     }
   </style>
 </head>
@@ -235,7 +235,7 @@
         <div class="grid gap-1.5 text-sm sm:col-span-2">
           Size
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" data-size="wrist" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">4 × 2 in</button>
+            <button type="button" data-size="wrist" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">3.25 × 2 in</button>
             <button type="button" data-size="softball" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">3.5 × 2.25 in</button>
             <button type="button" data-size="large" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">5 × 3 in</button>
             <button type="button" data-size="custom" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">Custom</button>
@@ -389,6 +389,7 @@
         <div class="grid gap-1.5 text-sm">
           Size
           <div class="flex flex-wrap items-center gap-2">
+            <button type="button" data-sheet-size="card" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">3.5 × 5.5 in</button>
             <button type="button" data-sheet-size="letter" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">8.5 × 11 in</button>
             <button type="button" data-sheet-size="half" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">8.5 × 5.5 in</button>
             <button type="button" data-sheet-size="index" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">5 × 8 in</button>
@@ -514,7 +515,7 @@
       orange: "#ea580c"
     };
     const SIZE_PRESETS = {
-      wrist: { widthIn: 4, heightIn: 2 },
+      wrist: { widthIn: 3.25, heightIn: 2 },
       softball: { widthIn: 3.5, heightIn: 2.25 },
       large: { widthIn: 5, heightIn: 3 }
     };
@@ -641,7 +642,7 @@
     }
 
     function defaultCardSize() {
-      return { preset: "wrist", widthIn: 4, heightIn: 2 };
+      return { preset: "wrist", widthIn: 3.25, heightIn: 2 };
     }
 
     function cardSize() {
@@ -649,7 +650,7 @@
       if (size.preset === "wrist" || size.preset === "softball" || size.preset === "large") {
         return { preset: size.preset, widthIn: SIZE_PRESETS[size.preset].widthIn, heightIn: SIZE_PRESETS[size.preset].heightIn };
       }
-      const widthIn = Math.min(8.5, Math.max(1, Number(size.widthIn) || 4));
+      const widthIn = Math.min(8.5, Math.max(1, Number(size.widthIn) || 3.25));
       const heightIn = Math.min(11, Math.max(1, Number(size.heightIn) || 2));
       return { preset: "custom", widthIn: widthIn, heightIn: heightIn };
     }
@@ -729,28 +730,29 @@
     }
 
     const SHEET_SIZE_PRESETS = {
+      card: { widthIn: 3.5, heightIn: 5.5 },
       letter: { widthIn: 8.5, heightIn: 11 },
       half: { widthIn: 8.5, heightIn: 5.5 },
       index: { widthIn: 5, heightIn: 8 }
     };
 
     function defaultSheet() {
-      return { cols: 15, rows: 1, preset: "letter", widthIn: 8.5, heightIn: 11 };
+      return { cols: 15, rows: 1, preset: "card", widthIn: 3.5, heightIn: 5.5 };
     }
 
     function sheetOf() {
       const sheet = book && book.sheet ? book.sheet : defaultSheet();
       const cols = clampInt(sheet.cols, 15, 4, 20);
       const rows = clampInt(sheet.rows, 1, 1, 8);
-      if (sheet.preset === "letter" || sheet.preset === "half" || sheet.preset === "index") {
+      if (SHEET_SIZE_PRESETS[sheet.preset]) {
         return { cols: cols, rows: rows, preset: sheet.preset, widthIn: SHEET_SIZE_PRESETS[sheet.preset].widthIn, heightIn: SHEET_SIZE_PRESETS[sheet.preset].heightIn };
       }
       return {
         cols: cols,
         rows: rows,
         preset: "custom",
-        widthIn: Math.min(8.5, Math.max(2, Number(sheet.widthIn) || 8.5)),
-        heightIn: Math.min(11, Math.max(2, Number(sheet.heightIn) || 11))
+        widthIn: Math.min(8.5, Math.max(2, Number(sheet.widthIn) || 3.5)),
+        heightIn: Math.min(11, Math.max(2, Number(sheet.heightIn) || 5.5))
       };
     }
 
@@ -1232,10 +1234,10 @@
       const halves = bottomCount > 0 ? 2 : 1;
       const maxAcross = Math.max(topCount, bottomCount, 1);
       const gap = 0.006;
-      const bannerH = Math.max(0.065, Math.min(0.08, size.heightIn * 0.036));
       const headRow = Math.max(0.1, Math.min(0.115, size.heightIn * 0.05));
       const rowCol = Math.max(0.09, Math.min(0.11, size.widthIn * 0.024));
-      const halfH = (size.heightIn - bannerH) / halves;
+      const halfGap = halves > 1 ? gap : 0;
+      const halfH = (size.heightIn - halfGap) / halves;
       const blockW = (size.widthIn - gap * Math.max(0, maxAcross - 1)) / maxAcross;
       const playH = Math.max(0.07, (halfH - headRow) / layout.rows);
       const playW = Math.max(0.07, (blockW - rowCol) / layout.cols);
@@ -1243,13 +1245,12 @@
       return {
         topCount: topCount,
         gap: gap,
-        bannerH: bannerH,
+        halfGap: halfGap,
         headRow: headRow,
         rowCol: rowCol,
         cellSize: cellSize,
         colHeadSize: Math.max(8, Math.min(16, headRow * 96 * 0.9, playW * 96 * 0.52)),
         rowHeadSize: Math.max(8, Math.min(16, playH * 96 * 0.82, rowCol * 96 * 0.88)),
-        bannerSize: Math.max(5.5, Math.min(8, bannerH * 96 * 0.78)),
         labelSize: function (label) {
           const chars = Math.max(1, String(label || "").length);
           return Math.max(8, Math.min(22, playH * 96 * 0.9, playW * 96 / Math.max(chars * 0.5, 1)));
@@ -1308,16 +1309,9 @@
           '</div>'
         );
       }
-      const banner =
-        '<div class="band-banner" style="background:' + theme.band + ';color:' + theme.ink +
-          ';flex:0 0 ' + metrics.bannerH + 'in;height:' + metrics.bannerH + 'in;max-height:' + metrics.bannerH +
-          'in;min-height:0;font-size:' + metrics.bannerSize + 'px">' +
-          '<span class="band-banner-text">' + escapeHtml(bandTitle()) + '</span>' +
-        '</div>';
       return (
-        '<div class="band-card ' + (extraClass || "") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+        '<div class="band-card ' + (extraClass || "") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in;gap:' + metrics.halfGap + 'in">' +
           halfHtml(groups[0]) +
-          banner +
           halfHtml(groups[1]) +
         '</div>'
       );
@@ -1398,11 +1392,11 @@
       const headerPx = headerH * 96;
       const codePx = codeH * 96;
       const colPx = (innerW / Math.max(1, sheet.cols)) * 96;
-      const codeSize = Math.max(10, Math.min(codePx * 0.9, colPx * 0.52));
+      const codeSize = Math.max(10, Math.min(codePx * 0.88, colPx * 0.6));
       const playSize = Math.max(11, Math.min(48, headerPx * 0.88));
       const bannerSize = Math.max(11, Math.min(headerPx * 0.82, innerW * 96 * 0.028));
       const headerStyle = "height:" + headerH + "in";
-      const codeStyle = "height:" + (codeSize / 96) + "in";
+      const codeStyle = "height:" + codeH + "in";
       const body = blocks.map(function (block) {
         const playRow =
           '<tr style="' + headerStyle + '"><th class="sheet-play" colspan="' + sheet.cols + '" style="font-size:' + playSize + 'px">' +
@@ -1441,6 +1435,36 @@
       mount.innerHTML = coachSheetHtml(version);
     }
 
+    function inchSize(value, fallback) {
+      const n = Number(value);
+      return (Number.isFinite(n) && n > 0 ? n : fallback) + "in";
+    }
+
+    function applyPrintPageStyle(mode) {
+      const card = cardSize();
+      const sheet = sheetOf();
+      let style = document.getElementById("print-page-style");
+      if (!style) {
+        style = document.createElement("style");
+        style.id = "print-page-style";
+        document.head.appendChild(style);
+      }
+      const cardSizeCss = inchSize(card.widthIn, 3.25) + " " + inchSize(card.heightIn, 2);
+      const sheetSizeCss = inchSize(sheet.widthIn, 3.5) + " " + inchSize(sheet.heightIn, 5.5);
+      if (mode === "cards") {
+        style.textContent = "@media print { @page { size: " + cardSizeCss + "; margin: 0; } @page player-card { size: " + cardSizeCss + "; margin: 0; } @page coach-sheet { size: " + cardSizeCss + "; margin: 0; } }";
+      } else if (mode === "key") {
+        style.textContent = "@media print { @page { size: " + sheetSizeCss + "; margin: 0; } @page player-card { size: " + sheetSizeCss + "; margin: 0; } @page coach-sheet { size: " + sheetSizeCss + "; margin: 0; } }";
+      } else {
+        style.textContent =
+          "@media print {" +
+            "@page { size: " + cardSizeCss + "; margin: 0; }" +
+            "@page player-card { size: " + cardSizeCss + "; margin: 0; }" +
+            "@page coach-sheet { size: " + sheetSizeCss + "; margin: 0; }" +
+          "}";
+      }
+    }
+
     function renderPrint() {
       const version = activeVersion();
       const root = document.getElementById("print-root");
@@ -1448,39 +1472,18 @@
         root.innerHTML = "";
         return;
       }
-      const size = cardSize();
-      const usableW = 8.5 - 0.9;
-      const usableH = 11 - 1.15;
-      const gap = 0.16;
-      const cols = Math.max(1, Math.floor((usableW + gap) / (size.widthIn + gap)));
-      const rows = Math.max(1, Math.floor((usableH + gap) / (size.heightIn + gap)));
-      const count = cols * rows;
-      const cards = [];
-      for (let i = 0; i < count; i += 1) cards.push(wristCardHtml(version, false, ""));
       const cardPage =
         '<section class="print-page print-cards">' +
-          '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
-            'Player cards · ' + size.widthIn + ' × ' + size.heightIn + ' in · ' +
-            escapeHtml(bandTitle()) + ' · ' + escapeHtml(version.name) + '</p>' +
-          '<div style="display:flex;flex-wrap:wrap;gap:' + gap + 'in">' + cards.join("") + '</div>' +
+          wristCardHtml(version, false, "") +
         '</section>';
-      const sheet = sheetOf();
-      const sheetGap = 0.16;
-      const sheetCols = Math.max(1, Math.floor((usableW + sheetGap) / (sheet.widthIn + sheetGap)));
-      const sheetRows = Math.max(1, Math.floor((usableH + sheetGap) / (sheet.heightIn + sheetGap)));
-      const sheetCount = sheetCols * sheetRows;
-      const sheets = [];
-      for (let i = 0; i < sheetCount; i += 1) sheets.push(coachSheetHtml(version));
       const keyPage =
-        '<section class="print-page print-key" style="color:#0f172a">' +
-          '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
-            'Coach sheet · ' + sheet.widthIn + ' × ' + sheet.heightIn + ' in · ' +
-            escapeHtml(bandTitle()) + ' · ' + escapeHtml(version.name) + '</p>' +
-          '<div style="display:flex;flex-wrap:wrap;gap:' + sheetGap + 'in">' + sheets.join("") + '</div>' +
+        '<section class="print-page print-key">' +
+          coachSheetHtml(version) +
         '</section>';
       if (printMode === "cards") root.innerHTML = cardPage;
       else if (printMode === "key") root.innerHTML = keyPage;
       else root.innerHTML = cardPage + keyPage;
+      applyPrintPageStyle(printMode);
     }
 
     function renderSizeControls() {
@@ -1574,6 +1577,7 @@
       renderCard();
       renderVersions();
       renderCoachKey();
+      renderPrint();
     }
 
     function addCall(kind, name, short) {
@@ -1609,6 +1613,7 @@
       renderThemeControls();
       renderCard();
       renderCoachKey();
+      renderPrint();
       scheduleSave();
     }
 
@@ -1623,12 +1628,13 @@
       };
       renderSheetControls();
       renderCoachKey();
+      renderPrint();
       scheduleSave();
     }
 
     function applySheetSize(preset) {
       const current = sheetOf();
-      if (preset === "letter" || preset === "half" || preset === "index") {
+      if (SHEET_SIZE_PRESETS[preset]) {
         book.sheet = {
           cols: current.cols,
           rows: current.rows,
@@ -1647,6 +1653,7 @@
       }
       renderSheetControls();
       renderCoachKey();
+      renderPrint();
       scheduleSave();
     }
 
@@ -1658,11 +1665,12 @@
         cols: current.cols,
         rows: current.rows,
         preset: "custom",
-        widthIn: Number.isFinite(w) && w > 0 ? Math.min(8.5, Math.max(2, w)) : 8.5,
-        heightIn: Number.isFinite(h) && h > 0 ? Math.min(11, Math.max(2, h)) : 11
+        widthIn: Number.isFinite(w) && w > 0 ? Math.min(8.5, Math.max(2, w)) : 3.5,
+        heightIn: Number.isFinite(h) && h > 0 ? Math.min(11, Math.max(2, h)) : 5.5
       };
       renderSheetControls();
       renderCoachKey();
+      renderPrint();
       scheduleSave();
     }
 
@@ -1720,7 +1728,7 @@
     document.getElementById("sheet-rows").addEventListener("change", applySheet);
     document.querySelectorAll(".sheet-size-btn").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        applySheetSize(btn.getAttribute("data-sheet-size") || "letter");
+        applySheetSize(btn.getAttribute("data-sheet-size") || "card");
       });
     });
     document.getElementById("sheet-w").addEventListener("change", applyCustomSheetSize);
@@ -1922,7 +1930,7 @@
       const h = Number(document.getElementById("card-h").value);
       book.cardSize = {
         preset: "custom",
-        widthIn: Number.isFinite(w) && w > 0 ? Math.min(8.5, Math.max(1, w)) : 4,
+        widthIn: Number.isFinite(w) && w > 0 ? Math.min(8.5, Math.max(1, w)) : 3.25,
         heightIn: Number.isFinite(h) && h > 0 ? Math.min(11, Math.max(1, h)) : 2
       };
       render();

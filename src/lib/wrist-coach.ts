@@ -52,7 +52,7 @@ export function callColors(call?: Pick<WristCall, "fill" | "ink"> | null) {
 
 export const CARD_SIZE_PRESETS = {
   softball: { widthIn: 3.5, heightIn: 2.25 },
-  wrist: { widthIn: 4, heightIn: 2 },
+  wrist: { widthIn: 3.25, heightIn: 2 },
   large: { widthIn: 5, heightIn: 3 },
 } as const;
 
@@ -180,12 +180,18 @@ export function withVersionCells(
 }
 
 export const SHEET_SIZE_PRESETS = {
+  card: { widthIn: 3.5, heightIn: 5.5 },
   letter: { widthIn: 8.5, heightIn: 11 },
   half: { widthIn: 8.5, heightIn: 5.5 },
   index: { widthIn: 5, heightIn: 8 },
 } as const;
 
-export type SheetSizePreset = "letter" | "half" | "index" | "custom";
+export type NamedSheetSizePreset = keyof typeof SHEET_SIZE_PRESETS;
+export type SheetSizePreset = NamedSheetSizePreset | "custom";
+
+function isNamedSheetPreset(value: unknown): value is NamedSheetSizePreset {
+  return typeof value === "string" && value in SHEET_SIZE_PRESETS;
+}
 
 export type WristSheet = {
   cols: number;
@@ -231,8 +237,8 @@ export function defaultSheet(): WristSheet {
   return {
     cols: DEFAULT_SHEET_COLS,
     rows: DEFAULT_SHEET_ROWS,
-    preset: "letter",
-    ...SHEET_SIZE_PRESETS.letter,
+    preset: "card",
+    ...SHEET_SIZE_PRESETS.card,
   };
 }
 
@@ -241,7 +247,7 @@ export function normalizeSheet(raw: unknown): WristSheet {
   const cols = clampInt(item.cols, DEFAULT_SHEET_COLS, 4, 20);
   const rows = clampInt(item.rows, DEFAULT_SHEET_ROWS, 1, 8);
   const preset = item.preset;
-  if (preset === "letter" || preset === "half" || preset === "index") {
+  if (isNamedSheetPreset(preset)) {
     return { cols, rows, preset, ...SHEET_SIZE_PRESETS[preset] };
   }
   if (preset === "custom" || item.widthIn != null || item.heightIn != null) {
@@ -249,11 +255,11 @@ export function normalizeSheet(raw: unknown): WristSheet {
       cols,
       rows,
       preset: "custom",
-      widthIn: clampInches(item.widthIn, SHEET_SIZE_PRESETS.letter.widthIn, 2, 8.5),
-      heightIn: clampInches(item.heightIn, SHEET_SIZE_PRESETS.letter.heightIn, 2, 11),
+      widthIn: clampInches(item.widthIn, SHEET_SIZE_PRESETS.card.widthIn, 2, 8.5),
+      heightIn: clampInches(item.heightIn, SHEET_SIZE_PRESETS.card.heightIn, 2, 11),
     };
   }
-  return { cols, rows, preset: "letter", ...SHEET_SIZE_PRESETS.letter };
+  return { cols, rows, preset: "card", ...SHEET_SIZE_PRESETS.card };
 }
 
 export function defaultTheme(): WristTheme {
