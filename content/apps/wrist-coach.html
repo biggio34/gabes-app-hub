@@ -144,6 +144,8 @@
     .coach-sheet .sheet-code {
       font-variant-numeric: tabular-nums;
       letter-spacing: 0.05em;
+      padding-top: 0;
+      padding-bottom: 0;
     }
     .swatch {
       width: 14px;
@@ -1387,7 +1389,7 @@
       const playSize = Math.max(11, Math.min(48, headerPx * 0.88));
       const bannerSize = Math.max(11, Math.min(headerPx * 0.82, innerW * 96 * 0.028));
       const headerStyle = "height:" + headerH + "in";
-      const codeStyle = "height:" + codeH + "in";
+      const codeStyle = "height:" + (codeSize / 96) + "in";
       const body = blocks.map(function (block) {
         const playRow =
           '<tr style="' + headerStyle + '"><th class="sheet-play" colspan="' + sheet.cols + '" style="font-size:' + playSize + 'px">' +
