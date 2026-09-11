@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
     body { font-family: Inter, system-ui, sans-serif; }
     .title-font { font-family: 'Space Grotesk', Inter, sans-serif; letter-spacing: -0.03em; }
     .color-pick {
@@ -76,7 +76,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 800;
+      font-weight: 600;
       line-height: 1;
       padding: 0;
       overflow: hidden;
@@ -85,15 +85,18 @@
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    .bs-head, .bs-rownum {
+      letter-spacing: 0.04em;
+    }
     .bs-cell {
-      letter-spacing: -0.03em;
+      letter-spacing: 0.06em;
       border: 1px solid #cbd5e1;
       box-sizing: border-box;
     }
     .bs-fit {
       line-height: 1;
       white-space: nowrap;
-      font-weight: 800;
+      font-weight: 600;
     }
     .bs-cell .bs-fit { font-size: min(90cqh, 62cqw); }
     .bs-cell[data-len="1"] .bs-fit { font-size: min(90cqh, 88cqw); }
