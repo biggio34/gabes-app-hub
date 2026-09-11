@@ -120,6 +120,7 @@
       font-variant-numeric: tabular-nums;
       letter-spacing: 0;
       padding: 0;
+      overflow: hidden;
     }
     .swatch {
       width: 14px;
@@ -1378,7 +1379,7 @@
       const headerPx = headerH * 96;
       const codePx = codeH * 96;
       const colPx = (innerW / Math.max(1, sheet.cols)) * 96;
-      const codeSize = Math.max(10, Math.min(codePx * 0.88, colPx * 0.78));
+      const codeSize = Math.max(10, Math.min(codePx * 0.88, colPx * 0.6));
       const playSize = Math.max(11, Math.min(48, headerPx * 0.88));
       const bannerSize = Math.max(11, Math.min(headerPx * 0.82, innerW * 96 * 0.028));
       const headerStyle = "height:" + headerH + "in";
@@ -1599,6 +1600,7 @@
       renderThemeControls();
       renderCard();
       renderCoachKey();
+      renderPrint();
       scheduleSave();
     }
 
@@ -1613,6 +1615,7 @@
       };
       renderSheetControls();
       renderCoachKey();
+      renderPrint();
       scheduleSave();
     }
 
@@ -1637,6 +1640,7 @@
       }
       renderSheetControls();
       renderCoachKey();
+      renderPrint();
       scheduleSave();
     }
 
@@ -1653,6 +1657,7 @@
       };
       renderSheetControls();
       renderCoachKey();
+      renderPrint();
       scheduleSave();
     }
 
