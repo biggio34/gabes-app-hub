@@ -24,7 +24,7 @@
     .band-card {
       background: #fff;
       color: #0f172a;
-      border: 1px solid #cbd5e1;
+      border: 1px solid #000;
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
@@ -38,6 +38,9 @@
       min-height: 0;
       gap: 1px;
       padding: 0;
+      background: #000;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     .band-banner {
       flex: 0 0 auto;
@@ -69,10 +72,14 @@
       min-width: 0;
       min-height: 0;
       display: grid;
-      gap: 1px;
+      gap: 0;
+      border-top: 1px solid #000;
+      border-left: 1px solid #000;
       font-family: "Barlow Condensed", "Arial Narrow", Inter, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
-    .bs-head, .bs-rownum, .bs-cell {
+    .bs-head, .bs-rownum, .bs-cell, .bs-corner {
       display: flex;
       align-items: center;
       justify-content: center;
@@ -81,17 +88,23 @@
       padding: 0;
       overflow: hidden;
       white-space: nowrap;
-      container-type: size;
+      box-sizing: border-box;
+      border-right: 1px solid #000;
+      border-bottom: 1px solid #000;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
+    }
+    .bs-head, .bs-rownum, .bs-cell {
+      container-type: size;
+    }
+    .bs-corner {
+      background: #fff;
     }
     .bs-head, .bs-rownum {
       letter-spacing: 0.04em;
     }
     .bs-cell {
       letter-spacing: 0.06em;
-      border: 1px solid #cbd5e1;
-      box-sizing: border-box;
     }
     .bs-fit {
       line-height: 1;
@@ -1253,7 +1266,7 @@
       const groups = [ [], [] ];
       for (let g = 0; g < layout.grids; g += 1) groups[g < metrics.topCount ? 0 : 1].push(g);
       function blockHtml(grid) {
-        const cells = ['<div></div>'];
+        const cells = ['<div class="bs-corner"></div>'];
         for (let col = 0; col < layout.cols; col += 1) {
           cells.push(
             '<div class="bs-head" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + metrics.colHeadSize + 'px">' +
