@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
     body { font-family: Inter, system-ui, sans-serif; }
     .title-font { font-family: 'Space Grotesk', Inter, sans-serif; letter-spacing: -0.03em; }
     .color-pick {
@@ -34,21 +34,35 @@
     }
     .band-half {
       display: flex;
-      flex: 1;
+      flex: 1 1 0;
       min-height: 0;
-      gap: 0.05in;
-      padding: 0.04in 0.05in;
+      gap: 1px;
+      padding: 0;
     }
     .band-banner {
       flex: 0 0 auto;
-      text-align: center;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+      max-height: 0.08in;
+      overflow: hidden;
+      padding: 0 0.03in;
+      font-family: "Barlow Condensed", "Arial Narrow", Inter, sans-serif;
       font-weight: 800;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
-      line-height: 1.1;
-      padding: 0.035in 0.06in;
+      line-height: 1;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
+    }
+    .band-banner-text {
+      display: block;
+      max-width: 100%;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
     }
     .bs-block {
       flex: 1;
@@ -56,28 +70,37 @@
       min-height: 0;
       display: grid;
       gap: 1px;
+      font-family: "Barlow Condensed", "Arial Narrow", Inter, sans-serif;
     }
-    .bs-head, .bs-rownum {
+    .bs-head, .bs-rownum, .bs-cell {
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 800;
       line-height: 1;
+      padding: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      container-type: size;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
     .bs-cell {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 800;
-      line-height: 1;
-      overflow: hidden;
+      letter-spacing: -0.03em;
       border: 1px solid #cbd5e1;
       box-sizing: border-box;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
     }
+    .bs-fit {
+      line-height: 1;
+      white-space: nowrap;
+      font-weight: 800;
+    }
+    .bs-cell .bs-fit { font-size: min(90cqh, 62cqw); }
+    .bs-cell[data-len="1"] .bs-fit { font-size: min(90cqh, 88cqw); }
+    .bs-cell[data-len="2"] .bs-fit { font-size: min(90cqh, 72cqw); }
+    .bs-cell[data-len="4"] .bs-fit { font-size: min(90cqh, 46cqw); }
+    .bs-head .bs-fit { font-size: min(86cqh, 48cqw); }
+    .bs-rownum .bs-fit { font-size: min(80cqh, 86cqw); }
     .coach-sheet-page {
       background: #fff;
       box-sizing: border-box;
@@ -142,7 +165,7 @@
       .print-only { display: block !important; }
       .print-page { page-break-after: always; }
       .print-page:last-child { page-break-after: auto; }
-      .band-card { break-inside: avoid; box-shadow: none; }
+      .band-card { break-inside: avoid; box-shadow: none; border-radius: 0; }
     }
   </style>
 </head>
@@ -1182,60 +1205,96 @@
       }) || null;
     }
 
+    function playerCardMetrics(size, layout) {
+      const topCount = layout.grids <= 3 ? layout.grids : Math.ceil(layout.grids / 2);
+      const bottomCount = Math.max(0, layout.grids - topCount);
+      const halves = bottomCount > 0 ? 2 : 1;
+      const maxAcross = Math.max(topCount, bottomCount, 1);
+      const gap = 0.006;
+      const bannerH = Math.max(0.065, Math.min(0.08, size.heightIn * 0.036));
+      const headRow = Math.max(0.1, Math.min(0.115, size.heightIn * 0.05));
+      const rowCol = Math.max(0.09, Math.min(0.11, size.widthIn * 0.024));
+      const halfH = (size.heightIn - bannerH) / halves;
+      const blockW = (size.widthIn - gap * Math.max(0, maxAcross - 1)) / maxAcross;
+      const playH = Math.max(0.07, (halfH - headRow) / layout.rows);
+      const playW = Math.max(0.07, (blockW - rowCol) / layout.cols);
+      const cellSize = Math.max(8, Math.min(22, playH * 96 * 0.9, playW * 96 * 0.62));
+      return {
+        topCount: topCount,
+        gap: gap,
+        bannerH: bannerH,
+        headRow: headRow,
+        rowCol: rowCol,
+        cellSize: cellSize,
+        colHeadSize: Math.max(8, Math.min(16, headRow * 96 * 0.9, playW * 96 * 0.52)),
+        rowHeadSize: Math.max(8, Math.min(16, playH * 96 * 0.82, rowCol * 96 * 0.88)),
+        bannerSize: Math.max(5.5, Math.min(8, bannerH * 96 * 0.78)),
+        labelSize: function (label) {
+          const chars = Math.max(1, String(label || "").length);
+          return Math.max(8, Math.min(22, playH * 96 * 0.9, playW * 96 / Math.max(chars * 0.5, 1)));
+        }
+      };
+    }
+
     function wristCardHtml(version, coachView, extraClass) {
       if (!version) return "";
       const layout = layoutOf(book);
       const size = cardSize();
       const theme = themeOf();
-      const topCount = layout.grids <= 3 ? layout.grids : Math.ceil(layout.grids / 2);
+      const metrics = playerCardMetrics(size, layout);
       const groups = [ [], [] ];
-      for (let g = 0; g < layout.grids; g += 1) groups[g < topCount ? 0 : 1].push(g);
-      const headSize = Math.max(6, Math.min(9, size.widthIn * 2.1));
-      const cellSize = Math.max(5.5, Math.min(8.5, size.widthIn * 1.9));
+      for (let g = 0; g < layout.grids; g += 1) groups[g < metrics.topCount ? 0 : 1].push(g);
       function blockHtml(grid) {
         const cells = ['<div></div>'];
         for (let col = 0; col < layout.cols; col += 1) {
           cells.push(
-            '<div class="bs-head" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + headSize + 'px">' +
-              escapeHtml(columnCode(grid, col, layout.signStart)) +
+            '<div class="bs-head" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + metrics.colHeadSize + 'px">' +
+              '<span class="bs-fit">' + escapeHtml(columnCode(grid, col, layout.signStart)) + '</span>' +
             '</div>'
           );
         }
         for (let row = 0; row < layout.rows; row += 1) {
           cells.push(
-            '<div class="bs-rownum" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + headSize + 'px">' +
-              escapeHtml(rowCode(row, layout.rowStart)) +
+            '<div class="bs-rownum" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + metrics.rowHeadSize + 'px">' +
+              '<span class="bs-fit">' + escapeHtml(rowCode(row, layout.rowStart)) + '</span>' +
             '</div>'
           );
           for (let col = 0; col < layout.cols; col += 1) {
             const cell = cellAt(version, grid, row, col);
             const call = cell ? callById(cell.callId) : null;
             const paint = cellPaint(call);
-            const label = call ? escapeHtml(call.short) : "";
+            const short = call ? call.short : "";
+            const label = escapeHtml(short);
             const title = coachView && call ? escapeHtml(call.name) : (cell ? escapeHtml(cell.code) : "");
             cells.push(
-              '<div class="bs-cell" title="' + title + '" style="background:' + paint.background + ';color:' + paint.color + ';font-size:' + cellSize + 'px">' +
-                label +
+              '<div class="bs-cell" data-len="' + String(short).length + '" title="' + title + '" style="background:' + paint.background + ';color:' + paint.color + ';font-size:' + metrics.labelSize(short) + 'px">' +
+                '<span class="bs-fit">' + label + '</span>' +
               '</div>'
             );
           }
         }
         return (
-          '<div class="bs-block" style="grid-template-columns:0.18in repeat(' + layout.cols + ',minmax(0,1fr));grid-template-rows:0.16in repeat(' + layout.rows + ',minmax(0,1fr))">' +
+          '<div class="bs-block" style="grid-template-columns:' + metrics.rowCol + 'in repeat(' + layout.cols + ',minmax(0,1fr));grid-template-rows:' + metrics.headRow + 'in repeat(' + layout.rows + ',minmax(0,1fr))">' +
             cells.join("") +
           '</div>'
         );
       }
       function halfHtml(grids) {
         if (!grids.length) return "";
-        return '<div class="band-half">' + grids.map(blockHtml).join("") + '</div>';
+        return (
+          '<div class="band-half" style="gap:' + metrics.gap + 'in">' +
+            grids.map(blockHtml).join("") +
+          '</div>'
+        );
       }
       const banner =
-        '<div class="band-banner" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + Math.max(8, Math.min(12, size.widthIn * 2.6)) + 'px">' +
-          escapeHtml(bandTitle()) +
+        '<div class="band-banner" style="background:' + theme.band + ';color:' + theme.ink +
+          ';flex:0 0 ' + metrics.bannerH + 'in;height:' + metrics.bannerH + 'in;max-height:' + metrics.bannerH +
+          'in;min-height:0;font-size:' + metrics.bannerSize + 'px">' +
+          '<span class="band-banner-text">' + escapeHtml(bandTitle()) + '</span>' +
         '</div>';
       return (
-        '<div class="band-card rounded-xl ' + (extraClass || "") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+        '<div class="band-card ' + (extraClass || "") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           halfHtml(groups[0]) +
           banner +
           halfHtml(groups[1]) +
