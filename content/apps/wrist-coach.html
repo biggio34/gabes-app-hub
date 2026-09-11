@@ -1373,17 +1373,24 @@
       });
       const innerH = Math.max(1, sheet.heightIn - 0.24);
       const innerW = Math.max(1, sheet.widthIn - 0.24);
-      const totalRows = Math.max(1, bodyRows + 1);
-      const rowIn = innerH / totalRows;
-      const rowPx = rowIn * 96;
+      const headerCount = 1 + blocks.length;
+      const codeCount = Math.max(0, bodyRows - blocks.length);
+      const headerScale = 0.72;
+      const codeH = codeCount > 0
+        ? innerH / (headerCount * headerScale + codeCount)
+        : innerH / headerCount;
+      const headerH = codeCount > 0 ? codeH * headerScale : codeH;
+      const headerPx = headerH * 96;
+      const codePx = codeH * 96;
       const colPx = (innerW / Math.max(1, sheet.cols)) * 96;
-      const codeSize = Math.max(10, Math.min(rowPx * 0.9, colPx * 0.52));
-      const playSize = Math.max(11, Math.min(48, rowPx * 0.78));
-      const bannerSize = Math.max(11, Math.min(rowPx * 0.72, innerW * 96 * 0.028));
-      const rowStyle = 'height:' + rowIn + 'in';
+      const codeSize = Math.max(10, Math.min(codePx * 0.9, colPx * 0.52));
+      const playSize = Math.max(11, Math.min(48, headerPx * 0.88));
+      const bannerSize = Math.max(11, Math.min(headerPx * 0.82, innerW * 96 * 0.028));
+      const headerStyle = "height:" + headerH + "in";
+      const codeStyle = "height:" + codeH + "in";
       const body = blocks.map(function (block) {
         const playRow =
-          '<tr style="' + rowStyle + '"><th class="sheet-play" colspan="' + sheet.cols + '" style="font-size:' + playSize + 'px">' +
+          '<tr style="' + headerStyle + '"><th class="sheet-play" colspan="' + sheet.cols + '" style="font-size:' + playSize + 'px">' +
             escapeHtml(block.group.name + " (" + block.group.short + ")") +
           '</th></tr>';
         const codeRows = [];
@@ -1393,14 +1400,14 @@
             const code = block.group.codes[r * sheet.cols + c] || "";
             cells.push('<td class="sheet-code" style="font-size:' + codeSize + 'px">' + escapeHtml(code) + '</td>');
           }
-          codeRows.push('<tr style="' + rowStyle + '">' + cells.join("") + '</tr>');
+          codeRows.push('<tr style="' + codeStyle + '">' + cells.join("") + '</tr>');
         }
         return playRow + codeRows.join("");
       }).join("");
       return (
         '<div class="coach-sheet-page shadow-xl" style="width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;padding:0.12in">' +
           '<table class="coach-sheet">' +
-            '<thead><tr style="' + rowStyle + '"><th class="sheet-banner" colspan="' + sheet.cols + '" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + bannerSize + 'px">' +
+            '<thead><tr style="' + headerStyle + '"><th class="sheet-banner" colspan="' + sheet.cols + '" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + bannerSize + 'px">' +
               banner +
             '</th></tr></thead>' +
             '<tbody>' + body + '</tbody>' +
