@@ -155,32 +155,12 @@
     }
     .print-only { display: none; }
     @media print {
-      @page { margin: 0; }
-      html, body {
-        background: #fff !important;
-        color: #0f172a !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        min-height: 0 !important;
-        height: auto !important;
-        width: auto !important;
-      }
+      @page { size: letter; margin: 0.45in; }
+      body { background: #fff !important; color: #0f172a !important; }
       .no-print { display: none !important; }
       .print-only { display: block !important; }
-      #print-root { margin: 0; padding: 0; }
-      .print-page {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-        break-after: page;
-        page-break-after: always;
-      }
-      .print-page:last-child {
-        break-after: auto;
-        page-break-after: auto;
-      }
-      .print-cards { page: player-card; }
-      .print-key { page: coach-sheet; }
+      .print-page { page-break-after: always; }
+      .print-page:last-child { page-break-after: auto; }
       .band-card,
       .coach-sheet-page {
         break-inside: avoid;
@@ -1435,34 +1415,12 @@
       mount.innerHTML = coachSheetHtml(version);
     }
 
-    function inchSize(value, fallback) {
-      const n = Number(value);
-      return (Number.isFinite(n) && n > 0 ? n : fallback) + "in";
-    }
-
-    function applyPrintPageStyle(mode) {
-      const card = cardSize();
-      const sheet = sheetOf();
-      let style = document.getElementById("print-page-style");
-      if (!style) {
-        style = document.createElement("style");
-        style.id = "print-page-style";
-        document.head.appendChild(style);
-      }
-      const cardSizeCss = inchSize(card.widthIn, 3.25) + " " + inchSize(card.heightIn, 2);
-      const sheetSizeCss = inchSize(sheet.widthIn, 3.5) + " " + inchSize(sheet.heightIn, 5.5);
-      if (mode === "cards") {
-        style.textContent = "@media print { @page { size: " + cardSizeCss + "; margin: 0; } @page player-card { size: " + cardSizeCss + "; margin: 0; } @page coach-sheet { size: " + cardSizeCss + "; margin: 0; } }";
-      } else if (mode === "key") {
-        style.textContent = "@media print { @page { size: " + sheetSizeCss + "; margin: 0; } @page player-card { size: " + sheetSizeCss + "; margin: 0; } @page coach-sheet { size: " + sheetSizeCss + "; margin: 0; } }";
-      } else {
-        style.textContent =
-          "@media print {" +
-            "@page { size: " + cardSizeCss + "; margin: 0; }" +
-            "@page player-card { size: " + cardSizeCss + "; margin: 0; }" +
-            "@page coach-sheet { size: " + sheetSizeCss + "; margin: 0; }" +
-          "}";
-      }
+    function tilesOnLetter(widthIn, heightIn, gap) {
+      const usableW = 8.5 - 0.9;
+      const usableH = 11 - 1.15;
+      const cols = Math.max(1, Math.floor((usableW + gap) / (widthIn + gap)));
+      const rows = Math.max(1, Math.floor((usableH + gap) / (heightIn + gap)));
+      return cols * rows;
     }
 
     function renderPrint() {
@@ -1472,18 +1430,33 @@
         root.innerHTML = "";
         return;
       }
+      const size = cardSize();
+      const gap = 0.16;
+      const cards = [];
+      const cardCount = tilesOnLetter(size.widthIn, size.heightIn, gap);
+      for (let i = 0; i < cardCount; i += 1) cards.push(wristCardHtml(version, false, ""));
       const cardPage =
         '<section class="print-page print-cards">' +
-          wristCardHtml(version, false, "") +
+          '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
+            'Player cards · ' + size.widthIn + ' × ' + size.heightIn + ' in · ' +
+            escapeHtml(bandTitle()) + ' · ' + escapeHtml(version.name) + '</p>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:' + gap + 'in">' + cards.join("") + '</div>' +
         '</section>';
+      const sheet = sheetOf();
+      const sheetGap = 0.16;
+      const sheets = [];
+      const sheetCount = tilesOnLetter(sheet.widthIn, sheet.heightIn, sheetGap);
+      for (let i = 0; i < sheetCount; i += 1) sheets.push(coachSheetHtml(version));
       const keyPage =
-        '<section class="print-page print-key">' +
-          coachSheetHtml(version) +
+        '<section class="print-page print-key" style="color:#0f172a">' +
+          '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
+            'Coach sheet · ' + sheet.widthIn + ' × ' + sheet.heightIn + ' in · ' +
+            escapeHtml(bandTitle()) + ' · ' + escapeHtml(version.name) + '</p>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:' + sheetGap + 'in">' + sheets.join("") + '</div>' +
         '</section>';
       if (printMode === "cards") root.innerHTML = cardPage;
       else if (printMode === "key") root.innerHTML = keyPage;
       else root.innerHTML = cardPage + keyPage;
-      applyPrintPageStyle(printMode);
     }
 
     function renderSizeControls() {
