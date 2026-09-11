@@ -118,6 +118,7 @@
       background: #fff;
       color: #111;
       table-layout: fixed;
+      font-family: "Barlow Condensed", "Arial Narrow", Inter, sans-serif;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -125,9 +126,10 @@
     .coach-sheet td {
       border: 1px solid #111;
       text-align: center;
-      font-weight: 800;
-      line-height: 1.15;
-      padding: 5px 2px;
+      font-weight: 600;
+      line-height: 1;
+      padding: 1px 2px;
+      vertical-align: middle;
     }
     .coach-sheet .sheet-banner {
       letter-spacing: 0.08em;
@@ -136,11 +138,12 @@
     .coach-sheet .sheet-play {
       background: #fff;
       color: #111;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
     }
     .coach-sheet .sheet-code {
       font-variant-numeric: tabular-nums;
+      letter-spacing: 0.05em;
     }
     .swatch {
       width: 14px;
@@ -1362,28 +1365,39 @@
       const theme = themeOf();
       const groups = sheetGroups(version);
       const banner = escapeHtml(bandTitle() + " - CALLS ARE TOP + LEFT");
-      const body = groups.map(function (group) {
+      let bodyRows = 0;
+      const blocks = groups.map(function (group) {
         const needed = Math.max(sheet.rows, Math.ceil(group.codes.length / sheet.cols) || 1);
+        bodyRows += 1 + needed;
+        return { group: group, needed: needed };
+      });
+      const innerH = Math.max(1, sheet.heightIn - 0.24);
+      const innerW = Math.max(1, sheet.widthIn - 0.24);
+      const rowPx = (innerH / Math.max(1, bodyRows + 1)) * 96;
+      const colPx = (innerW / Math.max(1, sheet.cols)) * 96;
+      const codeSize = Math.max(10, Math.min(32, rowPx * 0.82, colPx * 0.5));
+      const playSize = Math.max(11, Math.min(30, rowPx * 0.78));
+      const bannerSize = Math.max(11, Math.min(26, rowPx * 0.72, innerW * 96 * 0.032));
+      const body = blocks.map(function (block) {
         const playRow =
-          '<tr><th class="sheet-play" colspan="' + sheet.cols + '">' +
-            escapeHtml(group.name + " (" + group.short + ")") +
+          '<tr><th class="sheet-play" colspan="' + sheet.cols + '" style="font-size:' + playSize + 'px">' +
+            escapeHtml(block.group.name + " (" + block.group.short + ")") +
           '</th></tr>';
         const codeRows = [];
-        for (let r = 0; r < needed; r += 1) {
+        for (let r = 0; r < block.needed; r += 1) {
           const cells = [];
           for (let c = 0; c < sheet.cols; c += 1) {
-            const code = group.codes[r * sheet.cols + c] || "";
-            cells.push('<td class="sheet-code">' + escapeHtml(code) + '</td>');
+            const code = block.group.codes[r * sheet.cols + c] || "";
+            cells.push('<td class="sheet-code" style="font-size:' + codeSize + 'px">' + escapeHtml(code) + '</td>');
           }
           codeRows.push('<tr>' + cells.join("") + '</tr>');
         }
         return playRow + codeRows.join("");
       }).join("");
-      const font = Math.max(6, Math.min(11, sheet.widthIn * 1.15));
       return (
-        '<div class="coach-sheet-page shadow-xl" style="width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;padding:0.12in;font-size:' + font + 'px">' +
+        '<div class="coach-sheet-page shadow-xl" style="width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;padding:0.12in">' +
           '<table class="coach-sheet">' +
-            '<thead><tr><th class="sheet-banner" colspan="' + sheet.cols + '" style="background:' + theme.band + ';color:' + theme.ink + '">' +
+            '<thead><tr><th class="sheet-banner" colspan="' + sheet.cols + '" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + bannerSize + 'px">' +
               banner +
             '</th></tr></thead>' +
             '<tbody>' + body + '</tbody>' +
