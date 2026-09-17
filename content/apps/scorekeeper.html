@@ -204,10 +204,9 @@
       return name;
     }
 
-    function clampScore(value) {
+    function parseScore(value) {
       const n = parseInt(value, 10);
-      if (!Number.isFinite(n) || n < 0) return 0;
-      return Math.min(n, 99);
+      return Number.isFinite(n) ? n : 0;
     }
 
     function cleanName(value) {
@@ -224,8 +223,8 @@
           games: Array.isArray(parsed && parsed.games) ? parsed.games : [],
         };
         if (store.live) {
-          store.live.homeScore = clampScore(store.live.homeScore);
-          store.live.awayScore = clampScore(store.live.awayScore);
+          store.live.homeScore = parseScore(store.live.homeScore);
+          store.live.awayScore = parseScore(store.live.awayScore);
         }
       } catch (err) {
         store = { live: null, last: null, games: [] };
@@ -294,10 +293,6 @@
       document.getElementById("live-away-name").textContent = live.away;
       document.getElementById("live-home-score").textContent = String(live.homeScore);
       document.getElementById("live-away-score").textContent = String(live.awayScore);
-      document.querySelectorAll('[data-delta="-1"]').forEach(function (btn) {
-        const score = btn.getAttribute("data-side") === "home" ? live.homeScore : live.awayScore;
-        btn.disabled = score <= 0;
-      });
     }
 
     function renderSaved(game) {
@@ -309,7 +304,7 @@
     function bump(side, delta) {
       if (!store.live) return;
       const key = side === "home" ? "homeScore" : "awayScore";
-      store.live[key] = clampScore(store.live[key] + delta);
+      store.live[key] = parseScore(store.live[key] + delta);
       saveStore();
       renderLive();
     }
