@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#020617">
+  <title>Scorekeeper</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+
+    :root {
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      font-family: Inter, system-ui, sans-serif;
+      background: #020617;
+      color: #e2e8f0;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .title-font {
+      font-family: "Space Grotesk", Inter, sans-serif;
+      letter-spacing: -0.03em;
+    }
+
+    input, textarea {
+      user-select: text;
+      -webkit-user-select: text;
+      font-size: 16px;
+    }
+
+    .score-num {
+      font-family: "Space Grotesk", Inter, sans-serif;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      line-height: 0.9;
+      letter-spacing: -0.06em;
+      font-size: clamp(4.75rem, 22vw, 8.5rem);
+    }
+
+    .tap {
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    .tap:active:not(:disabled) {
+      transform: scale(0.97);
+      filter: brightness(0.9);
+    }
+
+    .plus-btn {
+      min-height: 5.75rem;
+      font-size: 2.35rem;
+      font-weight: 800;
+    }
+
+    .minus-btn {
+      min-height: 3.4rem;
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .plus-btn:disabled,
+    .minus-btn:disabled {
+      opacity: 0.35;
+      transform: none;
+    }
+
+    .board {
+      min-height: 0;
+    }
+
+    @media (max-height: 700px) {
+      .plus-btn { min-height: 4.5rem; font-size: 2rem; }
+      .score-num { font-size: clamp(3.75rem, 18vw, 6.5rem); }
+    }
+  </style>
+</head>
+<body class="min-h-dvh">
+  <div class="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4" style="padding-top: max(12px, var(--safe-top)); padding-bottom: max(12px, var(--safe-bottom));">
+    <header class="flex items-center justify-between gap-3 py-2">
+      <a href="/" class="tap flex items-center gap-1.5 rounded-xl px-2 py-2 text-sm font-medium text-slate-400 hover:text-red-400">
+        <i class="fa-solid fa-arrow-left"></i>
+        Hub
+      </a>
+      <h1 class="title-font text-lg font-semibold tracking-tight">Scorekeeper</h1>
+      <span class="w-12"></span>
+    </header>
+
+    <section id="view-setup" class="flex flex-1 flex-col gap-4 pb-4">
+      <p class="text-sm text-slate-400">Type both team names, then keep score. It starts 0–0.</p>
+      <form id="start-form" class="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-4">
+        <label class="grid gap-1.5 text-sm font-semibold">
+          Us
+          <input id="home-name" name="home" maxlength="40" autocomplete="off" placeholder="16U Fransen"
+                 class="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3.5 text-base font-semibold outline-none focus:border-red-500">
+        </label>
+        <label class="grid gap-1.5 text-sm font-semibold">
+          Opponent
+          <input id="away-name" name="away" maxlength="40" autocomplete="off" placeholder="Team name"
+                 class="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3.5 text-base font-semibold outline-none focus:border-red-500">
+        </label>
+        <p id="start-error" class="hidden text-sm text-red-400"></p>
+        <button type="submit" class="tap rounded-2xl bg-red-700 px-4 py-4 text-lg font-extrabold tracking-wide hover:bg-red-600">
+          Start game
+        </button>
+      </form>
+      <div class="flex-1">
+        <h2 class="mb-2 text-xs font-semibold tracking-[0.16em] text-slate-500 uppercase">Saved games</h2>
+        <ol id="history-list" class="grid gap-2"></ol>
+      </div>
+    </section>
+
+    <section id="view-game" class="hidden min-h-0 flex-1 flex-col gap-3 pb-3">
+      <div class="board grid min-h-0 flex-1 grid-cols-2 gap-3">
+        <article class="flex min-h-0 flex-col rounded-3xl border border-red-900/70 bg-red-950/40 p-3">
+          <p id="live-home-name" class="min-h-[2.5rem] text-center text-sm font-bold leading-tight text-red-100"></p>
+          <p id="live-home-score" class="score-num my-auto text-center text-white">0</p>
+          <button type="button" data-side="home" data-delta="1" class="tap plus-btn rounded-2xl bg-red-600 text-white hover:bg-red-500">+1</button>
+          <button type="button" data-side="home" data-delta="-1" class="tap minus-btn mt-2 rounded-2xl bg-red-950 text-red-200 ring-1 ring-red-800 hover:bg-red-900">−1</button>
+        </article>
+        <article class="flex min-h-0 flex-col rounded-3xl border border-slate-700 bg-slate-900 p-3">
+          <p id="live-away-name" class="min-h-[2.5rem] text-center text-sm font-bold leading-tight text-slate-200"></p>
+          <p id="live-away-score" class="score-num my-auto text-center text-white">0</p>
+          <button type="button" data-side="away" data-delta="1" class="tap plus-btn rounded-2xl bg-slate-100 text-slate-950 hover:bg-white">+1</button>
+          <button type="button" data-side="away" data-delta="-1" class="tap minus-btn mt-2 rounded-2xl bg-slate-950 text-slate-300 ring-1 ring-slate-700 hover:bg-slate-800">−1</button>
+        </article>
+      </div>
+      <button type="button" id="game-over-btn" class="tap rounded-2xl bg-slate-800 px-4 py-4 text-lg font-extrabold tracking-wide hover:bg-slate-700">
+        Game over
+      </button>
+    </section>
+
+    <section id="view-saved" class="hidden flex-1 flex-col gap-4 pb-4">
+      <div class="rounded-3xl border border-slate-800 bg-slate-900 p-5 text-center">
+        <p class="text-xs font-semibold tracking-[0.16em] text-slate-500 uppercase">Final</p>
+        <p id="final-matchup" class="mt-2 text-sm font-semibold text-slate-300"></p>
+        <p id="final-score" class="score-num mt-4 text-white">0–0</p>
+        <p class="mt-3 text-sm text-emerald-400">Score saved</p>
+      </div>
+      <button type="button" id="new-game-btn" class="tap rounded-2xl bg-red-700 px-4 py-4 text-lg font-extrabold tracking-wide hover:bg-red-600">
+        New game
+      </button>
+      <div>
+        <h2 class="mb-2 text-xs font-semibold tracking-[0.16em] text-slate-500 uppercase">Saved games</h2>
+        <ol id="saved-history-list" class="grid gap-2"></ol>
+      </div>
+    </section>
+  </div>
+
+  <div id="confirm" class="hidden fixed inset-0 z-50 items-end justify-center bg-black/70 p-4 sm:items-center" style="padding-bottom: max(16px, var(--safe-bottom));">
+    <div class="w-full max-w-lg rounded-3xl border border-slate-700 bg-slate-900 p-5">
+      <h2 class="title-font text-xl font-semibold">End this game?</h2>
+      <p id="confirm-copy" class="mt-2 text-sm text-slate-300"></p>
+      <div class="mt-5 grid gap-2">
+        <button type="button" id="confirm-save" class="tap rounded-2xl bg-red-700 px-4 py-4 text-base font-extrabold hover:bg-red-600">
+          Save score
+        </button>
+        <button type="button" id="confirm-cancel" class="tap rounded-2xl bg-slate-800 px-4 py-3.5 text-base font-semibold hover:bg-slate-700">
+          Keep scoring
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_PREFIX = "scorekeeper:";
+    const MAX_GAMES = 40;
+
+    const setupView = document.getElementById("view-setup");
+    const gameView = document.getElementById("view-game");
+    const savedView = document.getElementById("view-saved");
+    const confirmEl = document.getElementById("confirm");
+    const homeInput = document.getElementById("home-name");
+    const awayInput = document.getElementById("away-name");
+    const startError = document.getElementById("start-error");
+
+    let store = { live: null, last: null, games: [] };
+
+    function storageKey() {
+      const hub = window.HUB_SOFTBALL || {};
+      return STORAGE_PREFIX + (hub.userId || "local");
+    }
+
+    function defaultHomeName() {
+      const hub = window.HUB_SOFTBALL || {};
+      const name = String(hub.teamName || "").trim();
+      if (!name || name === "Any / all players" || name === "Not assigned") return "";
+      return name;
+    }
+
+    function clampScore(value) {
+      const n = parseInt(value, 10);
+      if (!Number.isFinite(n) || n < 0) return 0;
+      return Math.min(n, 99);
+    }
+
+    function cleanName(value) {
+      return String(value || "").replace(/\s+/g, " ").trim();
+    }
+
+    function loadStore() {
+      try {
+        const raw = localStorage.getItem(storageKey());
+        const parsed = raw ? JSON.parse(raw) : null;
+        store = {
+          live: parsed && parsed.live ? parsed.live : null,
+          last: parsed && parsed.last ? parsed.last : null,
+          games: Array.isArray(parsed && parsed.games) ? parsed.games : [],
+        };
+        if (store.live) {
+          store.live.homeScore = clampScore(store.live.homeScore);
+          store.live.awayScore = clampScore(store.live.awayScore);
+        }
+      } catch (err) {
+        store = { live: null, last: null, games: [] };
+      }
+    }
+
+    function saveStore() {
+      localStorage.setItem(storageKey(), JSON.stringify(store));
+    }
+
+    function show(view) {
+      [
+        ["setup", setupView],
+        ["game", gameView],
+        ["saved", savedView],
+      ].forEach(function (item) {
+        const on = view === item[0];
+        item[1].classList.toggle("hidden", !on);
+        item[1].classList.toggle("flex", on);
+      });
+    }
+
+    function formatWhen(ms) {
+      if (!ms) return "";
+      return new Date(ms).toLocaleString("en-US", {
+        timeZone: "America/Chicago",
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    }
+
+    function gameLine(game) {
+      return escapeHtml(game.home) + " " + game.homeScore + " – " + game.awayScore + " " + escapeHtml(game.away);
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function renderHistory(mount) {
+      if (!store.games.length) {
+        mount.innerHTML = '<li class="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-500">No saved games yet.</li>';
+        return;
+      }
+      mount.innerHTML = store.games.map(function (game) {
+        return (
+          '<li class="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3">' +
+            '<p class="text-sm font-semibold text-slate-100">' + gameLine(game) + "</p>" +
+            '<p class="mt-0.5 text-xs text-slate-500">' + escapeHtml(formatWhen(game.endedAt)) + "</p>" +
+          "</li>"
+        );
+      }).join("");
+    }
+
+    function renderLive() {
+      const live = store.live;
+      if (!live) return;
+      document.getElementById("live-home-name").textContent = live.home;
+      document.getElementById("live-away-name").textContent = live.away;
+      document.getElementById("live-home-score").textContent = String(live.homeScore);
+      document.getElementById("live-away-score").textContent = String(live.awayScore);
+      document.querySelectorAll('[data-delta="-1"]').forEach(function (btn) {
+        const score = btn.getAttribute("data-side") === "home" ? live.homeScore : live.awayScore;
+        btn.disabled = score <= 0;
+      });
+    }
+
+    function renderSaved(game) {
+      document.getElementById("final-matchup").textContent = game.home + " vs " + game.away;
+      document.getElementById("final-score").textContent = game.homeScore + "–" + game.awayScore;
+      renderHistory(document.getElementById("saved-history-list"));
+    }
+
+    function bump(side, delta) {
+      if (!store.live) return;
+      const key = side === "home" ? "homeScore" : "awayScore";
+      store.live[key] = clampScore(store.live[key] + delta);
+      saveStore();
+      renderLive();
+    }
+
+    function startGame(home, away) {
+      store.live = {
+        home: home,
+        away: away,
+        homeScore: 0,
+        awayScore: 0,
+        startedAt: Date.now(),
+      };
+      store.last = null;
+      saveStore();
+      renderLive();
+      show("game");
+    }
+
+    function endGame() {
+      if (!store.live) return;
+      const game = {
+        id: "game-" + Date.now(),
+        home: store.live.home,
+        away: store.live.away,
+        homeScore: store.live.homeScore,
+        awayScore: store.live.awayScore,
+        startedAt: store.live.startedAt,
+        endedAt: Date.now(),
+      };
+      store.games = [game].concat(store.games).slice(0, MAX_GAMES);
+      store.last = game;
+      store.live = null;
+      saveStore();
+      renderSaved(game);
+      show("saved");
+    }
+
+    function goSetup() {
+      store.live = null;
+      store.last = null;
+      saveStore();
+      startError.classList.add("hidden");
+      homeInput.value = defaultHomeName();
+      awayInput.value = "";
+      renderHistory(document.getElementById("history-list"));
+      show("setup");
+    }
+
+    document.getElementById("start-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      const home = cleanName(homeInput.value);
+      const away = cleanName(awayInput.value);
+      if (!home || !away) {
+        startError.textContent = "Enter both team names.";
+        startError.classList.remove("hidden");
+        return;
+      }
+      startError.classList.add("hidden");
+      startGame(home, away);
+    });
+
+    document.querySelectorAll("#view-game [data-delta]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        bump(btn.getAttribute("data-side"), Number(btn.getAttribute("data-delta")));
+      });
+    });
+
+    document.getElementById("game-over-btn").addEventListener("click", function () {
+      if (!store.live) return;
+      document.getElementById("confirm-copy").textContent =
+        store.live.home + " " + store.live.homeScore + " – " + store.live.awayScore + " " + store.live.away;
+      confirmEl.classList.remove("hidden");
+      confirmEl.classList.add("flex");
+    });
+
+    document.getElementById("confirm-cancel").addEventListener("click", function () {
+      confirmEl.classList.add("hidden");
+      confirmEl.classList.remove("flex");
+    });
+
+    document.getElementById("confirm-save").addEventListener("click", function () {
+      confirmEl.classList.add("hidden");
+      confirmEl.classList.remove("flex");
+      endGame();
+    });
+
+    document.getElementById("new-game-btn").addEventListener("click", function () {
+      goSetup();
+    });
+
+    confirmEl.addEventListener("click", function (event) {
+      if (event.target === confirmEl) {
+        confirmEl.classList.add("hidden");
+        confirmEl.classList.remove("flex");
+      }
+    });
+
+    loadStore();
+    if (store.live && store.live.home && store.live.away) {
+      renderLive();
+      show("game");
+    } else if (store.last) {
+      renderSaved(store.last);
+      show("saved");
+    } else {
+      goSetup();
+    }
+  </script>
+</body>
+</html>

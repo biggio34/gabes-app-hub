@@ -52,6 +52,14 @@ export const hubApps: HubApp[] = [
     area: "softball",
   },
   {
+    slug: "scorekeeper",
+    file: "scorekeeper.html",
+    title: "Scorekeeper",
+    description:
+      "Big-button live score for your phone. Type the team names, tap +1 or −1, then save when the game is over.",
+    area: "softball",
+  },
+  {
     slug: "team-formation",
     file: "team-formation.html",
     title: "Team Formation",
@@ -123,6 +131,8 @@ export const pathRewrites: Record<string, string> = {
   "/minnesota-elks-practice-planner": "/apps/practice-planner",
   "/elks-lineup/": "/apps/lineup",
   "/elks-lineup": "/apps/lineup",
+  "/scorekeeper/": "/apps/scorekeeper",
+  "/scorekeeper": "/apps/scorekeeper",
   "/mn-elks-team-formation/": "/apps/team-formation",
   "/mn-elks-team-formation": "/apps/team-formation",
   "/softball-tryout-evaluator/": "/apps/tryout-evaluator",
