@@ -458,10 +458,12 @@ export default function PeoplePage() {
           <p className="text-sm text-slate-400">
             Give someone a login, pick Financial / Softball / Luna Haus, then
             put them on a club or team. Wrist Coach is its own row under each
-            person — tap it to turn it on (that also turns on Softball). Teams
-            you add here show in Team Roster, Lineup, Team Formation, Tryouts,
-            and Practice Planner. You can also change a username or set a new
-            password. Saved passwords cannot be shown again.
+            person — tap it to turn it on (that also turns on Softball).
+            Scorekeeper is on for every Softball login, same as Cage Crush —
+            no extra checkbox. Teams you add here show in Team Roster, Lineup,
+            Team Formation, Tryouts, and Practice Planner. You can also change
+            a username or set a new password. Saved passwords cannot be shown
+            again.
           </p>
         </div>
 
