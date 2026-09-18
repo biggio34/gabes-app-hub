@@ -99,8 +99,10 @@
         Hub
       </a>
       <h1 class="title-font text-lg font-semibold tracking-tight">Scorekeeper</h1>
-      <span class="w-12"></span>
+      <p id="save-status" class="w-16 text-right text-[11px] leading-tight text-slate-500"> </p>
     </header>
+
+    <p id="load-error" class="hidden pb-2 text-sm text-red-400"></p>
 
     <section id="view-setup" class="flex flex-1 flex-col gap-4 pb-4">
       <p class="text-sm text-slate-400">Type both team names, then keep score. It starts 0–0.</p>
@@ -190,11 +192,16 @@
     const awayInput = document.getElementById("away-name");
     const startError = document.getElementById("start-error");
 
-    let store = { live: null, last: null, games: [] };
+    let store = { userId: "", live: null, last: null, games: [], updatedAt: 0 };
+    let saveTimer = 0;
+    let saveSeq = 0;
+
+    function hubUserId() {
+      return String((window.HUB_SOFTBALL && HUB_SOFTBALL.userId) || "");
+    }
 
     function storageKey() {
-      const hub = window.HUB_SOFTBALL || {};
-      return STORAGE_PREFIX + (hub.userId || "local");
+      return STORAGE_PREFIX + (hubUserId() || "local");
     }
 
     function defaultHomeName() {
@@ -213,26 +220,133 @@
       return String(value || "").replace(/\s+/g, " ").trim();
     }
 
-    function loadStore() {
+    function setStatus(message) {
+      const el = document.getElementById("save-status");
+      if (el) el.textContent = message || "";
+    }
+
+    function setError(message) {
+      const el = document.getElementById("load-error");
+      if (!el) return;
+      el.textContent = message || "";
+      el.classList.toggle("hidden", !message);
+    }
+
+    function cacheKeyList() {
+      const keys = [storageKey()];
+      if (hubUserId()) keys.push(STORAGE_PREFIX + "local");
+      return keys;
+    }
+
+    function readLegacyCache() {
+      for (const key of cacheKeyList()) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) continue;
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") return parsed;
+        } catch (err) {}
+      }
+      return null;
+    }
+
+    function writeCache() {
       try {
-        const raw = localStorage.getItem(storageKey());
-        const parsed = raw ? JSON.parse(raw) : null;
-        store = {
-          live: parsed && parsed.live ? parsed.live : null,
-          last: parsed && parsed.last ? parsed.last : null,
-          games: Array.isArray(parsed && parsed.games) ? parsed.games : [],
-        };
-        if (store.live) {
-          store.live.homeScore = parseScore(store.live.homeScore);
-          store.live.awayScore = parseScore(store.live.awayScore);
-        }
-      } catch (err) {
-        store = { live: null, last: null, games: [] };
+        localStorage.setItem(storageKey(), JSON.stringify(store));
+      } catch (err) {}
+    }
+
+    function clearLegacyCache() {
+      cacheKeyList().forEach(function (key) {
+        try { localStorage.removeItem(key); } catch (err) {}
+      });
+    }
+
+    function applyStore(next) {
+      store = {
+        userId: hubUserId(),
+        live: next && next.live ? next.live : null,
+        last: next && next.last ? next.last : null,
+        games: Array.isArray(next && next.games) ? next.games.slice(0, MAX_GAMES) : [],
+        updatedAt: (next && next.updatedAt) || Date.now(),
+      };
+      if (store.live) {
+        store.live.homeScore = parseScore(store.live.homeScore);
+        store.live.awayScore = parseScore(store.live.awayScore);
       }
     }
 
-    function saveStore() {
-      localStorage.setItem(storageKey(), JSON.stringify(store));
+    function storeLooksEmpty(value) {
+      return !value || (!value.live && !value.last && !(value.games && value.games.length));
+    }
+
+    async function saveNow() {
+      const seq = ++saveSeq;
+      store.updatedAt = Date.now();
+      writeCache();
+      setStatus("Saving…");
+      try {
+        const response = await fetch("/api/softball/scorekeeper", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ store: store }),
+        });
+        const data = await response.json().catch(function () { return {}; });
+        if (seq !== saveSeq) return;
+        if (!response.ok) {
+          setError(data.error || "Could not save the score. It is still on this phone.");
+          setStatus("");
+          return;
+        }
+        if (data.store) applyStore(data.store);
+        setError("");
+        setStatus("Saved");
+      } catch (err) {
+        if (seq !== saveSeq) return;
+        setError("Could not save the score. It is still on this phone.");
+        setStatus("");
+      }
+    }
+
+    function persist() {
+      store.updatedAt = Date.now();
+      writeCache();
+      clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(saveNow, 180);
+    }
+
+    async function loadStore() {
+      let server = null;
+      try {
+        const response = await fetch("/api/softball/scorekeeper");
+        const data = await response.json().catch(function () { return {}; });
+        if (!response.ok) {
+          setError(data.error || "Could not load saved scores.");
+        } else {
+          server = data.store || null;
+        }
+      } catch (err) {
+        setError("Could not load saved scores.");
+      }
+
+      const legacy = readLegacyCache();
+      let next = server;
+      let usedLegacy = false;
+      if (storeLooksEmpty(server) && legacy && !storeLooksEmpty(legacy)) {
+        next = legacy;
+        usedLegacy = true;
+      } else if (server && legacy && !storeLooksEmpty(legacy)) {
+        next = {
+          live: server.live || legacy.live,
+          last: server.last || legacy.last,
+          games: (server.games || []).concat(legacy.games || []),
+          updatedAt: Math.max(server.updatedAt || 0, legacy.updatedAt || 0, Date.now()),
+        };
+        usedLegacy = !server.live && !!legacy.live;
+      }
+      applyStore(next || { live: null, last: null, games: [], updatedAt: Date.now() });
+      writeCache();
+      if (usedLegacy) await saveNow();
     }
 
     function show(view) {
@@ -305,7 +419,7 @@
       if (!store.live) return;
       const key = side === "home" ? "homeScore" : "awayScore";
       store.live[key] = parseScore(store.live[key] + delta);
-      saveStore();
+      persist();
       renderLive();
     }
 
@@ -318,7 +432,7 @@
         startedAt: Date.now(),
       };
       store.last = null;
-      saveStore();
+      saveNow();
       renderLive();
       show("game");
     }
@@ -337,7 +451,7 @@
       store.games = [game].concat(store.games).slice(0, MAX_GAMES);
       store.last = game;
       store.live = null;
-      saveStore();
+      saveNow();
       renderSaved(game);
       show("saved");
     }
@@ -345,7 +459,7 @@
     function goSetup() {
       store.live = null;
       store.last = null;
-      saveStore();
+      saveNow();
       startError.classList.add("hidden");
       homeInput.value = defaultHomeName();
       awayInput.value = "";
@@ -402,16 +516,24 @@
       }
     });
 
-    loadStore();
-    if (store.live && store.live.home && store.live.away) {
-      renderLive();
-      show("game");
-    } else if (store.last) {
-      renderSaved(store.last);
-      show("saved");
-    } else {
-      goSetup();
-    }
+    loadStore().then(function () {
+      if (store.live && store.live.home && store.live.away) {
+        renderLive();
+        show("game");
+      } else if (store.last) {
+        renderSaved(store.last);
+        show("saved");
+      } else {
+        goSetup();
+      }
+    });
+
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "hidden") saveNow();
+    });
+    window.addEventListener("pagehide", function () {
+      saveNow();
+    });
   </script>
 </body>
 </html>
