@@ -109,7 +109,7 @@
       <form id="start-form" class="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-4">
         <label class="grid gap-1.5 text-sm font-semibold">
           Us
-          <input id="home-name" name="home" maxlength="40" autocomplete="off" placeholder="16U Fransen"
+          <input id="home-name" name="home" maxlength="40" autocomplete="off" placeholder="Team name"
                  class="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3.5 text-base font-semibold outline-none focus:border-red-500">
         </label>
         <label class="grid gap-1.5 text-sm font-semibold">
@@ -202,13 +202,6 @@
 
     function storageKey() {
       return STORAGE_PREFIX + (hubUserId() || "local");
-    }
-
-    function defaultHomeName() {
-      const hub = window.HUB_SOFTBALL || {};
-      const name = String(hub.teamName || "").trim();
-      if (!name || name === "Any / all players" || name === "Not assigned") return "";
-      return name;
     }
 
     function parseScore(value) {
@@ -467,7 +460,7 @@
       store.last = null;
       saveNow();
       startError.classList.add("hidden");
-      homeInput.value = defaultHomeName();
+      homeInput.value = "";
       awayInput.value = "";
       renderHistory(document.getElementById("history-list"));
       show("setup");
