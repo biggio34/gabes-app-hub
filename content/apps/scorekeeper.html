@@ -282,7 +282,8 @@
 
     async function saveNow() {
       const seq = ++saveSeq;
-      store.updatedAt = Date.now();
+      const sentUpdatedAt = Date.now();
+      store.updatedAt = sentUpdatedAt;
       writeCache();
       setStatus("Saving…");
       try {
@@ -298,7 +299,12 @@
           setStatus("");
           return;
         }
-        if (data.store) applyStore(data.store);
+        if (data.store && store.updatedAt === sentUpdatedAt) {
+          applyStore(data.store);
+        } else if (store.updatedAt !== sentUpdatedAt) {
+          persist();
+          return;
+        }
         setError("");
         setStatus("Saved");
       } catch (err) {
