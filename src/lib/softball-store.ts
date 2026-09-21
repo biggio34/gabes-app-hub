@@ -9,7 +9,10 @@ import {
   normalizeSeasons,
   personIdentityKey,
 } from "@/lib/player-identity";
+import { mergeLineupMaps, payloadWithLineup } from "@/lib/lineup-merge";
 import { isoTimestamp, isMissingSchemaError, missingPlayerColumn } from "@/lib/softball-write-helpers";
+
+export { mergeLineupMaps, payloadWithLineup };
 
 type JsonPlayer = Record<string, unknown> & { id?: string };
 
@@ -370,34 +373,6 @@ export function filterPracticesForViewer(
   return list.filter((item) => allowed.has(practiceAssignedTeamId(item)));
 }
 
-export function mergeLineupMaps(current: unknown, incoming: unknown) {
-  const left =
-    current && typeof current === "object" && !Array.isArray(current)
-      ? (current as Record<string, Record<string, unknown>>)
-      : {};
-  const right =
-    incoming && typeof incoming === "object" && !Array.isArray(incoming)
-      ? (incoming as Record<string, Record<string, unknown>>)
-      : {};
-  const next: Record<string, Record<string, unknown>> = {};
-  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-  for (const teamId of keys) {
-    const local = left[teamId] || {};
-    const remote = right[teamId] || {};
-    next[teamId] = {
-      version: 2,
-      games: mergeRecordListsById(local.games, remote.games),
-      currentGameId: remote.currentGameId || local.currentGameId || null,
-      teamName: remote.teamName || local.teamName || "",
-      lastUpdated: Math.max(
-        recordUpdatedAt(local as JsonRecord),
-        recordUpdatedAt(remote as JsonRecord),
-      ),
-    };
-  }
-  return next;
-}
-
 export function filterLineupsForViewer(
   lineups: unknown,
   viewer: { role: string; teams: { id: string }[] },
@@ -415,75 +390,164 @@ export function filterLineupsForViewer(
   return next;
 }
 
-export async function writeSoftballState(
-  clubId: string,
-  teamId: string,
-  incoming: Record<string, unknown>,
-  opts?: { canEditCoachNotes?: boolean },
-) {
-  const payload = { ...incoming };
-  const current = await readSoftballState(clubId, teamId);
-  if (asPlayers(payload.players).length === 0 && asPlayers(current.state?.players).length > 0) {
-    payload.players = current.state?.players;
-    if ((!Array.isArray(payload.teams) || payload.teams.length === 0) && current.state?.teams) {
-      payload.teams = current.state.teams;
-    }
-  }
-  payload.practices = dropUnassignedPractices(
-    mergeRecordListsById(current.state?.practices, payload.practices),
-  );
-  payload.drills = mergeRecordListsById(current.state?.drills, payload.drills);
-  payload.templates = mergeRecordListsById(current.state?.templates, payload.templates);
-  payload.tryouts = mergeRecordListsById(current.state?.tryouts, payload.tryouts);
-  payload.lineups = mergeLineupMaps(current.state?.lineups, payload.lineups);
-  if (payload.currentTryoutId == null && current.state?.currentTryoutId) {
-    payload.currentTryoutId = current.state.currentTryoutId;
-  }
-  const now = new Date().toISOString();
-  payload.updatedAt = Date.now();
-  dropRemovedPlayersFromPayload(payload);
-  try {
-    Object.assign(
-      payload,
-      applyIdentityOnWrite(current.state, payload, {
-        canEditCoachNotes: opts?.canEditCoachNotes === true,
-      }),
-    );
-  } catch {
-    // Roster fields including card notes must still save if identity processing fails.
-  }
-  dropRemovedPlayersFromPayload(payload);
+function schemaSaveError(message: string) {
+  return /does not exist|schema cache/i.test(message)
+    ? "Run supabase/hub.sql and supabase/hub-players-identity.sql in the SQL editor so softball data can save."
+    : message;
+}
 
-  if (isSupabaseConfigured()) {
-    const supabase = getSupabase();
-    if (!supabase) throw new Error("Supabase is not configured.");
-    const result = await supabase.from("hub_softball_state").upsert({
-      team_id: clubId,
+let softballWriteTail: Promise<unknown> = Promise.resolve();
+
+function enqueueSoftballWrite<T>(work: () => Promise<T>): Promise<T> {
+  const run = softballWriteTail.then(work, work);
+  softballWriteTail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+async function commitSupabaseBlob(
+  clubId: string,
+  payload: Record<string, unknown>,
+  expectedUpdatedAt: string | null,
+) {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const now = new Date().toISOString();
+  if (!expectedUpdatedAt) {
+    const inserted = await supabase
+      .from("hub_softball_state")
+      .insert({
+        team_id: clubId,
+        payload,
+        updated_at: now,
+      })
+      .select("team_id");
+    if (!inserted.error) return "written" as const;
+    if (/duplicate|unique|23505/i.test(inserted.error.message || "")) return "conflict" as const;
+    throw new Error(schemaSaveError(inserted.error.message));
+  }
+  const updated = await supabase
+    .from("hub_softball_state")
+    .update({
       payload,
       updated_at: now,
-    });
-    if (result.error) {
-      throw new Error(
-        /does not exist|schema cache/i.test(result.error.message)
-          ? "Run supabase/hub.sql and supabase/hub-players-identity.sql in the SQL editor so softball data can save."
-          : result.error.message,
-      );
-    }
-    if (asPlayers(payload.players).length > 0) {
-      await upsertSupabasePlayers(clubId, asPlayers(payload.players));
-    }
-    return { ok: true as const, stored: "supabase" as const };
-  }
+    })
+    .eq("team_id", clubId)
+    .eq("updated_at", expectedUpdatedAt)
+    .select("team_id");
+  if (updated.error) throw new Error(schemaSaveError(updated.error.message));
+  if (updated.data && updated.data.length > 0) return "written" as const;
+  return "conflict" as const;
+}
 
+async function commitSqliteBlob(clubId: string, payload: Record<string, unknown>) {
   const db = await readyDb();
+  const now = new Date().toISOString();
   await db.delete(softballState).where(eq(softballState.clubId, clubId));
   await db.insert(softballState).values({
     clubId,
     payload: JSON.stringify(payload),
     updatedAt: now,
   });
-  if (asPlayers(payload.players).length > 0) {
-    await upsertSqlitePlayers(clubId, asPlayers(payload.players));
+  return "written" as const;
+}
+
+async function writeMergedBlob(
+  clubId: string,
+  teamId: string,
+  merge: (current: Record<string, unknown> | null) => Record<string, unknown>,
+  opts?: { upsertPlayers?: boolean },
+) {
+  return enqueueSoftballWrite(async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const current = await readSoftballState(clubId, teamId);
+      const payload = merge(current.state);
+      const outcome = isSupabaseConfigured()
+        ? await commitSupabaseBlob(clubId, payload, current.updatedAt)
+        : await commitSqliteBlob(clubId, payload);
+      if (outcome === "conflict") continue;
+      if (opts?.upsertPlayers !== false && asPlayers(payload.players).length > 0) {
+        if (isSupabaseConfigured()) await upsertSupabasePlayers(clubId, asPlayers(payload.players));
+        else await upsertSqlitePlayers(clubId, asPlayers(payload.players));
+      }
+      return {
+        ok: true as const,
+        stored: isSupabaseConfigured() ? ("supabase" as const) : ("sqlite" as const),
+        payload,
+      };
+    }
+    throw new Error("Could not save softball data. Try again.");
+  });
+}
+
+export async function writeSoftballState(
+  clubId: string,
+  teamId: string,
+  incoming: Record<string, unknown>,
+  opts?: { canEditCoachNotes?: boolean },
+) {
+  const result = await writeMergedBlob(clubId, teamId, (currentState) => {
+    const payload = { ...incoming };
+    if (asPlayers(payload.players).length === 0 && asPlayers(currentState?.players).length > 0) {
+      payload.players = currentState?.players;
+      if ((!Array.isArray(payload.teams) || payload.teams.length === 0) && currentState?.teams) {
+        payload.teams = currentState.teams;
+      }
+    }
+    payload.practices = dropUnassignedPractices(
+      mergeRecordListsById(currentState?.practices, payload.practices),
+    );
+    payload.drills = mergeRecordListsById(currentState?.drills, payload.drills);
+    payload.templates = mergeRecordListsById(currentState?.templates, payload.templates);
+    payload.tryouts = mergeRecordListsById(currentState?.tryouts, payload.tryouts);
+    payload.lineups = mergeLineupMaps(currentState?.lineups, payload.lineups);
+    if (payload.currentTryoutId == null && currentState?.currentTryoutId) {
+      payload.currentTryoutId = currentState.currentTryoutId;
+    }
+    payload.updatedAt = Date.now();
+    dropRemovedPlayersFromPayload(payload);
+    try {
+      Object.assign(
+        payload,
+        applyIdentityOnWrite(currentState, payload, {
+          canEditCoachNotes: opts?.canEditCoachNotes === true,
+        }),
+      );
+    } catch {
+      // Roster fields including card notes must still save if identity processing fails.
+    }
+    dropRemovedPlayersFromPayload(payload);
+    return payload;
+  });
+  return { ok: true as const, stored: result.stored };
+}
+
+export async function writeLineupForTeam(
+  clubId: string,
+  teamId: string,
+  lineupTeamId: string,
+  lineup: unknown,
+) {
+  const key = String(lineupTeamId || "").trim();
+  if (!key) throw new Error("Missing team for this lineup.");
+  if (!lineup || typeof lineup !== "object" || Array.isArray(lineup)) {
+    throw new Error("Missing lineup.");
   }
-  return { ok: true as const, stored: "sqlite" as const };
+  const result = await writeMergedBlob(
+    clubId,
+    teamId,
+    (currentState) => payloadWithLineup(currentState, key, lineup),
+    { upsertPlayers: false },
+  );
+  const lineups =
+    result.payload.lineups && typeof result.payload.lineups === "object"
+      ? (result.payload.lineups as Record<string, unknown>)
+      : {};
+  return {
+    ok: true as const,
+    stored: result.stored,
+    lineup: lineups[key] || null,
+  };
 }
