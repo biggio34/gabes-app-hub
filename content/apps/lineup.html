@@ -746,7 +746,22 @@
       return (state.players || []).filter((p) => !isUnavailable(p.id));
     }
 
+    function lineupReferencesPlayers() {
+      if ((state.battingOrder || []).length) return true;
+      if ((state.unavailableIds || []).length) return true;
+      return (state.inningDefenses || []).some((defense) => Object.values(defense || {}).some(Boolean))
+        || Object.values(state.defensivePositions || {}).some(Boolean);
+    }
+
+    // An empty roster means "not loaded yet", not "every girl was cut".
+    // Pruning in that window deletes the whole inning plan, and the next save stores the blank.
+    function rosterReadyForLineupPrune() {
+      if ((state.players || []).length > 0) return true;
+      return !lineupReferencesPlayers();
+    }
+
     function stripUnavailableFromLineup() {
+      if (!rosterReadyForLineupPrune()) return;
       const ids = new Set((state.players || []).map((p) => p.id));
       state.unavailableIds = (state.unavailableIds || []).filter((id) => ids.has(id));
       state.battingOrder = (state.battingOrder || []).filter((id) => !isUnavailable(id));
@@ -921,6 +936,7 @@
       if (!currentGameId) return;
       const game = getCurrentGame();
       if (!game) return;
+      if (!rosterReadyForLineupPrune()) return;
       const before = lineupContentKey(game);
       const plan = snapshotInningPlan();
       game.name = state.gameInfo || "Untitled Game";
@@ -1249,7 +1265,7 @@
       if (changed) ElksData.save(shared);
     }
 
-    function syncRosterFromShared() {
+    function loadRosterPlayers() {
       if (!window.ElksData) return;
       if (window.ElksData.applySelectedHubTeam) ElksData.applySelectedHubTeam();
       const shared = ElksData.load();
@@ -1258,6 +1274,12 @@
       state.players = ElksData.playersForTeam
         ? ElksData.playersForTeam(shared, teamId).map(ElksData.toLineupPlayer)
         : ElksData.lineupPlayers(shared);
+      applyHubTeamName();
+    }
+
+    function syncRosterFromShared() {
+      loadRosterPlayers();
+      if (!rosterReadyForLineupPrune()) return;
       const ids = new Set(state.players.map((p) => p.id));
       state.battingOrder = (state.battingOrder || []).filter((id) => ids.has(id));
       state.unavailableIds = (state.unavailableIds || []).filter((id) => ids.has(id));
@@ -1276,7 +1298,7 @@
 
     function loadState() {
       const adopted = adoptAllPlayersLineup();
-      applyHubTeamName();
+      loadRosterPlayers();
       const shared = window.ElksData ? ElksData.load() : null;
       const fromShared = shared && shared.lineups && shared.lineups[lineupTeamKey()];
       if (fromShared && Array.isArray(fromShared.games) && fromShared.games.length) {
@@ -2298,6 +2320,7 @@
     }
 
     function clearDefenseForPlayersNotInBatting() {
+      if (!rosterReadyForLineupPrune()) return;
       const inBatting = new Set(state.battingOrder);
       const defenses = Array.isArray(state.inningDefenses) && state.inningDefenses.length
         ? state.inningDefenses
