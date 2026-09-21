@@ -843,6 +843,47 @@
     return [...byId.values()].concat(noId);
   }
 
+  function gameContentUpdatedAt(item) {
+    if (!item) return 0;
+    const raw = item.contentUpdatedAt;
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw;
+    const asNum = Number(raw);
+    if (Number.isFinite(asNum) && asNum > 0) return asNum;
+    return recordUpdatedAt(item);
+  }
+
+  function removedGameIdsOf(record) {
+    const ids = record && Array.isArray(record.removedGameIds) ? record.removedGameIds : [];
+    return ids.map(function (id) { return String(id || ''); }).filter(Boolean);
+  }
+
+  function mergeGameLists(current, incoming, removed) {
+    const byId = new Map();
+    const noId = [];
+    const seenNoId = new Set();
+    function ingest(list) {
+      (list || []).forEach(function (item) {
+        if (!item || typeof item !== 'object') return;
+        const id = item.id != null ? String(item.id) : '';
+        if (id && removed.has(id)) return;
+        if (!id) {
+          const key = noIdRecordKey(item);
+          if (key && seenNoId.has(key)) return;
+          if (key) seenNoId.add(key);
+          noId.push(item);
+          return;
+        }
+        const existing = byId.get(id);
+        if (!existing || gameContentUpdatedAt(item) >= gameContentUpdatedAt(existing)) {
+          byId.set(id, item);
+        }
+      });
+    }
+    ingest(current);
+    ingest(incoming);
+    return Array.from(byId.values()).concat(noId);
+  }
+
   function mergeLineupMaps(left, right) {
     const localMap = left && typeof left === 'object' && !Array.isArray(left) ? left : {};
     const remoteMap = right && typeof right === 'object' && !Array.isArray(right) ? right : {};
@@ -851,12 +892,23 @@
     keys.forEach(function (teamId) {
       const local = localMap[teamId] || {};
       const remote = remoteMap[teamId] || {};
+      const localAt = recordUpdatedAt(local);
+      const remoteAt = recordUpdatedAt(remote);
+      const newer = remoteAt >= localAt ? remote : local;
+      const older = newer === remote ? local : remote;
+      const removed = new Set(removedGameIdsOf(local).concat(removedGameIdsOf(remote)));
+      const games = mergeGameLists(local.games, remote.games, removed);
+      let currentGameId = newer.currentGameId || older.currentGameId || null;
+      if (currentGameId && !games.some(function (game) { return String(game.id) === String(currentGameId); })) {
+        currentGameId = games[0] && games[0].id ? games[0].id : null;
+      }
       next[teamId] = {
         version: 2,
-        games: mergeRecordListsById(local.games, remote.games),
-        currentGameId: remote.currentGameId || local.currentGameId || null,
-        teamName: remote.teamName || local.teamName || '',
-        lastUpdated: Math.max(recordUpdatedAt(local), recordUpdatedAt(remote)),
+        games: games,
+        currentGameId: currentGameId,
+        removedGameIds: Array.from(removed),
+        teamName: newer.teamName || older.teamName || '',
+        lastUpdated: Math.max(localAt, remoteAt),
       };
     });
     return next;
@@ -873,6 +925,7 @@
       const remote = remoteMap[teamId] || {};
       if (recordListsDiffer(local.games, remote.games)) differ = true;
       if ((local.currentGameId || '') !== (remote.currentGameId || '')) differ = true;
+      if (removedGameIdsOf(local).slice().sort().join(',') !== removedGameIdsOf(remote).slice().sort().join(',')) differ = true;
     });
     return differ;
   }
@@ -1280,6 +1333,18 @@
       }
       player.assignedTeamId = canonical;
     });
+    if (state.lineups && typeof state.lineups === 'object' && !Array.isArray(state.lineups)) {
+      Object.keys(teamIdAliases).forEach(function (oldId) {
+        const canonical = teamIdAliases[oldId];
+        if (!canonical || canonical === oldId || !state.lineups[oldId]) return;
+        const folded = mergeLineupMaps(
+          { team: state.lineups[canonical] },
+          { team: state.lineups[oldId] },
+        );
+        if (folded.team) state.lineups[canonical] = folded.team;
+        delete state.lineups[oldId];
+      });
+    }
     return state;
   }
 
@@ -1526,7 +1591,12 @@
     const extraTeams = opts && opts.extraTeams;
     const teams = pickerTeams(extraTeams);
     const light = opts && opts.theme === 'light';
-    const showSpecials = hub.role === 'owner' || (opts && opts.allTeams) || teams.length > 1;
+    const realOnly = !!(opts && opts.realTeamsOnly);
+    if (realOnly && teams.length && (isAllTeamsId(hub.teamId) || isUnassignedId(hub.teamId))) {
+      setCurrentHubTeam(teams[0].id);
+      return mountTeamPicker(el, opts);
+    }
+    const showSpecials = !realOnly && (hub.role === 'owner' || (opts && opts.allTeams) || teams.length > 1);
     if (!showSpecials && teams.length <= 1) {
       const only = teams[0];
       el.textContent = only
@@ -1726,8 +1796,30 @@
     return (state.players || []).map(toLineupPlayer);
   }
 
+  let pullChain = null;
+  let pullQueued = false;
+
   function connectCloud() {
-    pullFromCloud();
+    if (pullChain) {
+      pullQueued = true;
+      return pullChain;
+    }
+    pullChain = runPulls();
+    return pullChain;
+  }
+
+  async function runPulls() {
+    try {
+      do {
+        pullQueued = false;
+        await pullFromCloud();
+      } while (pullQueued);
+    } finally {
+      const again = pullQueued;
+      pullChain = null;
+      pullQueued = false;
+      if (again) connectCloud();
+    }
   }
 
   function emitDataUpdated() {
