@@ -132,19 +132,28 @@ export default async function HubHome() {
                       rel={app.external ? "noopener" : undefined}
                       className={
                         supplyTile
-                          ? "so-hub-card rounded-3xl border p-5 transition hover:-translate-y-0.5"
+                          ? "so-hub-card flex items-center justify-between gap-3 rounded-3xl border p-5 transition hover:-translate-y-0.5"
                           : "rounded-3xl border border-slate-800 bg-slate-900 p-5 transition hover:-translate-y-0.5 hover:border-red-500"
                       }
                     >
-                      <h2 className="text-lg font-semibold">{app.title}</h2>
-                      <p className="mt-2 text-sm text-slate-400">{app.description}</p>
-                      <span
-                        className={`mt-4 inline-flex text-sm font-semibold ${
-                          supplyTile ? "so-hub-launch" : "text-red-400"
-                        }`}
-                      >
-                        {app.external ? "Open" : "Launch"}
-                      </span>
+                      {supplyTile ? (
+                        <span className="min-w-0">
+                          <h2 className="text-lg font-semibold">{app.title}</h2>
+                          <p className="mt-2 text-sm text-slate-400">{app.description}</p>
+                          <span className="so-hub-launch mt-4 inline-flex text-sm font-semibold">
+                            Launch
+                          </span>
+                        </span>
+                      ) : (
+                        <>
+                          <h2 className="text-lg font-semibold">{app.title}</h2>
+                          <p className="mt-2 text-sm text-slate-400">{app.description}</p>
+                          <span className="mt-4 inline-flex text-sm font-semibold text-red-400">
+                            {app.external ? "Open" : "Launch"}
+                          </span>
+                        </>
+                      )}
+                      {supplyTile ? <SalonLogo tone="espresso" className="so-hub-logo" /> : null}
                     </a>
                   );
                 })}
