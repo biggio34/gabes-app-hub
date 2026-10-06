@@ -1,7 +1,11 @@
 import type { SessionUser } from "./auth";
 
-/** Purchasing logins that may mark lines ordered. Owner is always allowed. */
-const BUILTIN_ORDER_LOGINS = ["lhp"];
+/**
+ * Purchasing logins that may mark lines ordered. Owner is always allowed.
+ * lhp-test is the preview-only purchasing login. A real hub user with that
+ * username or id would get the same permission.
+ */
+const BUILTIN_ORDER_LOGINS = ["lhp", "lhp-test", "user-lhp-test"];
 
 /**
  * Extra usernames or user ids, comma-separated.

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { CheckInView } from "./check-in-view";
 import { SalonLogo } from "./salon-logo";
 import {
@@ -13,13 +13,22 @@ import {
   productTitle,
 } from "@/lib/salon-check-in";
 import {
+  bulkStatusRowPlan,
   canRevertToPending,
   findPendingDuplicate,
+  goingInQty,
   isSettableStatus,
   itemVendor,
   leftoverLabel,
   monthLabel,
   nextYearMonth,
+  requestedQtyFromDraft,
+  rollButtonLabel,
+  sharedVendorOrderNumber,
+  showRollToNextMonth,
+  splitBulkRowSave,
+  summarizeOpenCarry,
+  withUnsavedRowFields,
   ORDER_STATUSES,
   prevYearMonth,
   remainderQty,
@@ -27,6 +36,7 @@ import {
   statusLabel,
   type Leftover,
   type OrderStatus,
+  type RowDraft,
   type SalonOrder,
   type SalonOrderItem,
   type SalonSuggestions,
@@ -39,6 +49,7 @@ type View = {
   today: { year: number; month: number };
   order: SalonOrder | null;
   items: SalonOrderItem[];
+  nextItems?: SalonOrderItem[];
   months: SalonOrder[];
   suggestions: SalonSuggestions;
   isOwner: boolean;
@@ -71,6 +82,45 @@ function writeStoredLayout(layout: ListLayout) {
 const field =
   "so-paper w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-rose-500";
 
+const CARRY_UNDO_MS = 20_000;
+const CARRY_UNDO_TICK_MS = 1_000;
+
+function stopCarryUndoTimer(timer: { current: number | null }) {
+  if (timer.current != null) {
+    window.clearTimeout(timer.current);
+    timer.current = null;
+  }
+}
+
+function tickCarryUndo(
+  hideAt: { current: number },
+  timer: { current: number | null },
+  hide: () => void,
+) {
+  const remaining = hideAt.current - Date.now();
+  if (remaining <= 0) {
+    timer.current = null;
+    hide();
+    return;
+  }
+  timer.current = window.setTimeout(
+    () => tickCarryUndo(hideAt, timer, hide),
+    Math.min(CARRY_UNDO_TICK_MS, remaining),
+  );
+}
+
+function showCarryUndo(
+  hideAt: { current: number },
+  timer: { current: number | null },
+  hide: () => void,
+  show: () => void,
+) {
+  stopCarryUndoTimer(timer);
+  hideAt.current = Date.now() + CARRY_UNDO_MS;
+  show();
+  tickCarryUndo(hideAt, timer, hide);
+}
+
 const statusClass: Record<OrderStatus, string> = {
   pending: "so-status so-status-pending",
   in_cart: "so-status so-status-in_cart",
@@ -78,17 +128,27 @@ const statusClass: Record<OrderStatus, string> = {
   partial: "so-status so-status-partial",
   received: "so-status so-status-received",
   out_of_stock: "so-status so-status-out_of_stock",
+  moved: "so-moved",
 };
 
 function StatusBadge({
   status,
   receivedQty,
   requestedQty,
+  movedTo,
 }: {
   status: OrderStatus;
   receivedQty?: number;
   requestedQty?: number;
+  movedTo?: string;
 }) {
+  if (status === "moved") {
+    return (
+      <span className="so-moved inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold">
+        Moved to {movedTo}
+      </span>
+    );
+  }
   const count =
     (status === "partial" || status === "received") &&
     receivedQty !== undefined &&
@@ -116,11 +176,13 @@ function StatusSelect({
   onChange,
   disabled,
   statuses = SETTABLE_STATUSES,
+  testId,
 }: {
   value: SettableStatus;
   onChange: (status: SettableStatus) => void;
   disabled?: boolean;
   statuses?: readonly SettableStatus[];
+  testId?: string;
 }) {
   const selected = statuses.includes(value) ? value : statuses[0];
   return (
@@ -128,6 +190,7 @@ function StatusSelect({
       className={field}
       value={selected}
       disabled={disabled}
+      data-testid={testId}
       onChange={(event) => onChange(event.target.value as SettableStatus)}
     >
       {statuses.map((status) => (
@@ -176,6 +239,13 @@ export function SupplyOrdersClient({
   } | null>(null);
   const [bulkOrderNumber, setBulkOrderNumber] = useState("");
   const [checkInOpen, setCheckInOpen] = useState(initialCheckIn);
+  const [carryConfirm, setCarryConfirm] = useState(false);
+  const [carryUndo, setCarryUndo] = useState<{ token: string; label: string } | null>(null);
+  const carryUndoTimer = useRef<number | null>(null);
+  const carryUndoHideAt = useRef(0);
+  const draftsRef = useRef(new Map<string, RowDraft>());
+  const [orderedDrafts, setOrderedDrafts] = useState<Record<string, string>>({});
+  const saveQueue = useRef(Promise.resolve());
 
   async function load(year?: string, month?: string) {
     const params = new URLSearchParams();
@@ -261,6 +331,11 @@ export function SupplyOrdersClient({
     }).filter((group) => group.vendors.length > 0);
     return byStatus;
   }, [visibleItems]);
+
+  const carryPreview = useMemo(
+    () => summarizeOpenCarry(view?.items ?? [], view?.nextItems ?? []),
+    [view],
+  );
 
   const duplicatePending = useMemo(() => {
     if (!view || !form.product.trim()) return null;
@@ -369,21 +444,45 @@ export function SupplyOrdersClient({
     }
   }
 
+  function enqueue(job: () => Promise<void>) {
+    const run = saveQueue.current.then(job, job);
+    saveQueue.current = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  async function postItem(id: string, patch: Record<string, unknown>) {
+    await readError(
+      await fetch("/api/salon/orders/items", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, ...patch }),
+      }),
+      "Could not update that request.",
+    );
+  }
+
+  function rememberDraft(id: string, draft: RowDraft) {
+    draftsRef.current.set(id, draft);
+    setOrderedDrafts((current) =>
+      current[id] === draft.orderedQty ? current : { ...current, [id]: draft.orderedQty },
+    );
+  }
+
   async function patchItem(id: string, patch: Record<string, unknown>) {
-    setError("");
-    try {
-      await readError(
-        await fetch("/api/salon/orders/items", {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ id, ...patch }),
-        }),
-        "Could not update that request.",
-      );
-      if (view) await load(String(view.year), String(view.month));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update that request.");
-    }
+    const year = view?.year;
+    const month = view?.month;
+    await enqueue(async () => {
+      setError("");
+      try {
+        await postItem(id, patch);
+        if (year && month) await load(String(year), String(month));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not update that request.");
+      }
+    });
   }
 
   async function removeItem(id: string) {
@@ -424,42 +523,86 @@ export function SupplyOrdersClient({
         return;
       }
     }
+    const affected = view.items.filter((item) => {
+      if (itemVendor(item).toLowerCase() !== vendor.trim().toLowerCase()) return false;
+      if (fromStatus && item.status !== fromStatus) return false;
+      return true;
+    });
+    const plans = affected.map((item) => ({
+      item,
+      plan: bulkStatusRowPlan(item, draftsRef.current.get(item.id), status),
+    }));
+    const blocked = plans.find((row) => row.plan.blocked);
+    if (blocked?.plan.blocked) {
+      setError(blocked.plan.blocked);
+      return;
+    }
+    const year = view.year;
+    const month = view.month;
+    const orderNumber = sharedVendorOrderNumber(vendorOrderNumber);
+    await enqueue(async () => {
+      setError("");
+      try {
+        for (const { item, plan } of plans) {
+          const { before } = splitBulkRowSave(plan.save);
+          if (Object.keys(before).length > 0) await postItem(item.id, before);
+        }
+        await readError(
+          await fetch("/api/salon/orders/actions", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              action: "bulk-status",
+              year,
+              month,
+              vendor,
+              status,
+              fromStatus,
+              ...(orderNumber ? { vendorOrderNumber: orderNumber } : {}),
+            }),
+          }),
+          "Could not update those items.",
+        );
+        for (const { item, plan } of plans) {
+          const { vendor: vendorFields } = splitBulkRowSave(plan.save);
+          if (Object.keys(vendorFields).length > 0) await postItem(item.id, vendorFields);
+        }
+        setBulkOrderPrompt(null);
+        setBulkOrderNumber("");
+        await load(String(year), String(month));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not update those items.");
+        await load(String(year), String(month));
+      }
+    });
+  }
+
+  async function rollItem(id: string) {
+    if (!view) return;
+    setBusy(true);
     setError("");
+    setNotice("");
     try {
       await readError(
         await fetch("/api/salon/orders/actions", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            action: "bulk-status",
-            year: view.year,
-            month: view.month,
-            vendor,
-            status,
-            fromStatus,
-            vendorOrderNumber,
-          }),
+          body: JSON.stringify({ action: "roll-item", id }),
         }),
-        "Could not update those items.",
+        "Could not roll that item.",
       );
-      setBulkOrderPrompt(null);
-      setBulkOrderNumber("");
       await load(String(view.year), String(view.month));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update those items.");
+      setError(err instanceof Error ? err.message : "Could not roll that item.");
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function moveOutOfStock() {
+  async function confirmCarry() {
     if (!view) return;
     const next = nextYearMonth(view.year, view.month);
-    if (
-      !confirm(
-        `Roll leftover from unordered out of stock items to ${monthLabel(next.year, next.month)} as Pending? Lines that already have a partial order stay this month until you roll that row.`,
-      )
-    ) {
-      return;
-    }
+    const label = monthLabel(next.year, next.month);
     setBusy(true);
     setError("");
     setNotice("");
@@ -469,19 +612,54 @@ export function SupplyOrdersClient({
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            action: "move-out-of-stock",
+            action: "move-open",
             year: view.year,
             month: view.month,
           }),
         }),
         "Could not move those items.",
-      )) as { moved?: number; nextYear?: number; nextMonth?: number };
-      setNotice(
-        `Rolled leftover from ${data.moved} item${data.moved === 1 ? "" : "s"} to ${monthLabel(next.year, next.month)}. This month’s rows stayed.`,
-      );
-      goToMonth(data.nextYear ?? next.year, data.nextMonth ?? next.month);
+      )) as { moved?: number; undoToken?: string };
+      setCarryConfirm(false);
+      const moved = data.moved ?? 0;
+      if (moved === 0) {
+        setNotice(`Nothing new to move. Open items are already on ${label}.`);
+      } else if (data.undoToken) {
+        const token = data.undoToken;
+        showCarryUndo(carryUndoHideAt, carryUndoTimer, () => setCarryUndo(null), () =>
+          setCarryUndo({
+            token,
+            label: `Moved ${moved} open item${moved === 1 ? "" : "s"} to ${label}`,
+          }),
+        );
+      }
+      await load(String(view.year), String(view.month));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not move those items.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function undoCarry() {
+    if (!view || !carryUndo) return;
+    const token = carryUndo.token;
+    stopCarryUndoTimer(carryUndoTimer);
+    carryUndoHideAt.current = 0;
+    setCarryUndo(null);
+    setBusy(true);
+    setError("");
+    try {
+      await readError(
+        await fetch("/api/salon/orders/actions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "undo-carry", token }),
+        }),
+        "Could not undo that move.",
+      );
+      await load(String(view.year), String(view.month));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not undo that move.");
     } finally {
       setBusy(false);
     }
@@ -499,11 +677,29 @@ export function SupplyOrdersClient({
   const next = nextYearMonth(view.year, view.month);
   const isCurrent =
     view.year === view.today.year && view.month === view.today.month;
-  const outOfStockCount = counts.out_of_stock;
   const suggestions = view.suggestions;
+  const nextItems = view.nextItems ?? [];
 
   return (
-    <div className="so-page min-h-dvh min-w-0">
+    <div className={`so-page min-h-dvh min-w-0 ${carryUndo ? "pt-20" : ""}`}>
+      {carryUndo ? (
+        <div
+          data-testid="carry-undo"
+          className="fixed inset-x-0 top-0 z-40 border-b border-emerald-800 bg-emerald-950 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-lg"
+        >
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+            <p className="text-sm text-emerald-100">{carryUndo.label}</p>
+            <button
+              type="button"
+              disabled={busy}
+              className="min-h-12 rounded-2xl bg-white px-4 text-base font-semibold text-emerald-950 disabled:opacity-60"
+              onClick={() => void undoCarry()}
+            >
+              Undo
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div
         className={`mx-auto grid w-full min-w-0 gap-6 px-4 py-8 sm:px-6 ${
           listLayout === "table" ? "max-w-6xl" : "max-w-5xl"
@@ -786,17 +982,69 @@ export function SupplyOrdersClient({
           </datalist>
         </form>
 
-        {outOfStockCount > 0 ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void moveOutOfStock()}
-            className="rounded-2xl border border-rose-800 bg-rose-950/50 px-4 py-3 text-left text-sm hover:border-rose-600 disabled:opacity-60"
-          >
-            Roll leftover from {outOfStockCount} unordered out of stock item
-            {outOfStockCount === 1 ? "" : "s"} to {monthLabel(next.year, next.month)} as
-            Pending. Partial leftovers stay on this month until you roll that row.
-          </button>
+        {view.canMarkOrdered && carryPreview.total > 0 ? (
+          <div className="rounded-2xl border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm">
+            {carryConfirm ? (
+              <div data-testid="carry-confirm" className="grid gap-3">
+                <p className="font-semibold">
+                  Move {carryPreview.total} open item{carryPreview.total === 1 ? "" : "s"} to{" "}
+                  {monthLabel(next.year, next.month)}?
+                </p>
+                <ul className="grid gap-1 text-slate-300">
+                  {(
+                    [
+                      ["pending", "Pending"],
+                      ["in_cart", "Added to cart"],
+                      ["ordered", "Ordered"],
+                      ["out_of_stock", "Out of stock"],
+                      ["partial", "Partial, missing qty only"],
+                    ] as const
+                  )
+                    .filter(([key]) => carryPreview[key] > 0)
+                    .map(([key, label]) => (
+                      <li key={key}>
+                        {carryPreview[key]} {label}
+                      </li>
+                    ))}
+                </ul>
+                <p className="text-slate-400">
+                  This month keeps each row as history. Ordered items that have not arrived
+                  stay Ordered next month, with the same vendor and order number. Pending,
+                  cart, and out of stock open as Pending. A second tap will not add them again.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    data-testid="carry-confirm-move"
+                    className="rounded-xl bg-rose-700 px-3 py-2 text-sm font-semibold hover:bg-rose-600 disabled:opacity-60"
+                    onClick={() => void confirmCarry()}
+                  >
+                    {busy ? "Moving…" : "Confirm move"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="so-soft rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 disabled:opacity-60"
+                    onClick={() => setCarryConfirm(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={busy}
+                data-testid="move-open-items"
+                onClick={() => setCarryConfirm(true)}
+                className="text-left hover:text-rose-200 disabled:opacity-60"
+              >
+                Move {carryPreview.total} open item{carryPreview.total === 1 ? "" : "s"} to{" "}
+                {monthLabel(next.year, next.month)}
+              </button>
+            )}
+          </div>
         ) : null}
 
         <div className="grid gap-3">
@@ -811,7 +1059,8 @@ export function SupplyOrdersClient({
                 }`}
                 onClick={() => setFilter("all")}
               />
-              {ORDER_STATUSES.map((status) => (
+              {ORDER_STATUSES.filter((status) => status !== "moved" || counts.moved > 0).map(
+                (status) => (
                 <FilterChip
                   key={status}
                   active={filter === status}
@@ -819,7 +1068,8 @@ export function SupplyOrdersClient({
                   label={`${statusLabel[status]} ${counts[status]}`}
                   onClick={() => setFilter(status)}
                 />
-              ))}
+                ),
+              )}
             </div>
             <div
               className="so-soft flex rounded-full bg-slate-800 p-0.5"
@@ -987,6 +1237,9 @@ export function SupplyOrdersClient({
             isOwner={view.isOwner}
             canMarkOrdered={view.canMarkOrdered}
             nextMonthLabel={monthLabel(next.year, next.month)}
+            nextItems={nextItems}
+            busy={busy}
+            onRoll={(id) => void rollItem(id)}
             onToggle={(id) =>
               setExpandedId((current) => (current === id ? null : id))
             }
@@ -994,6 +1247,8 @@ export function SupplyOrdersClient({
               setEditingId((current) => (current === id ? null : id))
             }
             onPatch={(id, patch) => void patchItem(id, patch)}
+            onDraft={rememberDraft}
+            orderedQtyDrafts={orderedDrafts}
             onDelete={(id) => void removeItem(id)}
           />
         ) : (
@@ -1094,10 +1349,15 @@ export function SupplyOrdersClient({
                         isOwner={view.isOwner}
                         canMarkOrdered={view.canMarkOrdered}
                         nextMonthLabel={monthLabel(next.year, next.month)}
+                        nextItems={nextItems}
+                        busy={busy}
+                        onRoll={() => void rollItem(item.id)}
                         onEdit={() =>
                           setEditingId((current) => (current === item.id ? null : item.id))
                         }
                         onPatch={(patch) => void patchItem(item.id, patch)}
+                        onDraft={(draft) => rememberDraft(item.id, draft)}
+                        initialOrderedQty={orderedDrafts[item.id]}
                         onDelete={() => void removeItem(item.id)}
                       />
                     ))}
@@ -1160,9 +1420,14 @@ function CompactItemsTable({
   isOwner,
   canMarkOrdered,
   nextMonthLabel,
+  nextItems,
+  busy,
+  onRoll,
   onToggle,
   onEdit,
   onPatch,
+  onDraft,
+  orderedQtyDrafts,
   onDelete,
 }: {
   items: SalonOrderItem[];
@@ -1171,9 +1436,14 @@ function CompactItemsTable({
   isOwner: boolean;
   canMarkOrdered: boolean;
   nextMonthLabel: string;
+  nextItems: SalonOrderItem[];
+  busy: boolean;
+  onRoll: (id: string) => void;
   onToggle: (id: string) => void;
   onEdit: (id: string) => void;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
+  onDraft: (id: string, draft: RowDraft) => void;
+  orderedQtyDrafts: Record<string, string>;
   onDelete: (id: string) => void;
 }) {
   return (
@@ -1241,6 +1511,7 @@ function CompactItemsTable({
                         status={item.status}
                         receivedQty={item.receivedQty}
                         requestedQty={item.qty}
+                        movedTo={nextMonthLabel}
                       />
                     </div>
                   </td>
@@ -1278,6 +1549,17 @@ function CompactItemsTable({
                         Leftover and receive stay on this row. Size and shade stay
                         visible above for scanning.
                       </p>
+                      {showRollToNextMonth(item, nextItems) ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          data-testid="roll-to-next-month"
+                          className="mb-3 rounded-xl bg-rose-700 px-3 py-2 text-xs font-semibold hover:bg-rose-600 disabled:opacity-60"
+                          onClick={() => onRoll(item.id)}
+                        >
+                          {rollButtonLabel(item)}
+                        </button>
+                      ) : null}
                       <ItemFulfillment
                         item={item}
                         editing={editingId === item.id}
@@ -1286,6 +1568,8 @@ function CompactItemsTable({
                         nextMonthLabel={nextMonthLabel}
                         onEdit={() => onEdit(item.id)}
                         onPatch={(patch) => onPatch(item.id, patch)}
+                        onDraft={(draft) => onDraft(item.id, draft)}
+                        initialOrderedQty={orderedQtyDrafts[item.id]}
                         onDelete={() => onDelete(item.id)}
                       />
                     </td>
@@ -1318,6 +1602,13 @@ function LeftoverMenu({
     return (
       <p className="text-sm text-slate-400">
         Leftover rolled to {nextMonthLabel}. This month stays as history.
+      </p>
+    );
+  }
+  if (leftover === "moved") {
+    return (
+      <p className="text-sm text-slate-400">
+        Moved to {nextMonthLabel}. This month stays as history.
       </p>
     );
   }
@@ -1359,8 +1650,13 @@ function ItemCard({
   isOwner,
   canMarkOrdered,
   nextMonthLabel,
+  nextItems,
+  busy,
+  onRoll,
   onEdit,
   onPatch,
+  onDraft,
+  initialOrderedQty,
   onDelete,
 }: {
   item: SalonOrderItem;
@@ -1368,8 +1664,13 @@ function ItemCard({
   isOwner: boolean;
   canMarkOrdered: boolean;
   nextMonthLabel: string;
+  nextItems: SalonOrderItem[];
+  busy: boolean;
+  onRoll: () => void;
   onEdit: () => void;
   onPatch: (patch: Record<string, unknown>) => void;
+  onDraft: (draft: RowDraft) => void;
+  initialOrderedQty?: string;
   onDelete: () => void;
 }) {
   const hasOrdered = item.orderedQty > 0;
@@ -1409,11 +1710,25 @@ function ItemCard({
             </p>
           ) : null}
         </div>
-        <StatusBadge
-          status={item.status}
-          receivedQty={item.receivedQty}
-          requestedQty={item.qty}
-        />
+        <div className="flex flex-col items-end gap-2">
+          <StatusBadge
+            status={item.status}
+            receivedQty={item.receivedQty}
+            requestedQty={item.qty}
+            movedTo={nextMonthLabel}
+          />
+          {showRollToNextMonth(item, nextItems) ? (
+            <button
+              type="button"
+              disabled={busy}
+              data-testid="roll-to-next-month"
+              className="rounded-xl bg-rose-700 px-3 py-2 text-xs font-semibold hover:bg-rose-600 disabled:opacity-60"
+              onClick={onRoll}
+            >
+              {rollButtonLabel(item)}
+            </button>
+          ) : null}
+        </div>
       </div>
       <ItemFulfillment
         item={item}
@@ -1423,6 +1738,8 @@ function ItemCard({
         nextMonthLabel={nextMonthLabel}
         onEdit={onEdit}
         onPatch={onPatch}
+        onDraft={onDraft}
+        initialOrderedQty={initialOrderedQty}
         onDelete={onDelete}
       />
     </li>
@@ -1437,6 +1754,8 @@ function ItemFulfillment({
   nextMonthLabel,
   onEdit,
   onPatch,
+  onDraft,
+  initialOrderedQty,
   onDelete,
 }: {
   item: SalonOrderItem;
@@ -1446,6 +1765,8 @@ function ItemFulfillment({
   nextMonthLabel: string;
   onEdit: () => void;
   onPatch: (patch: Record<string, unknown>) => void;
+  onDraft: (draft: RowDraft) => void;
+  initialOrderedQty?: string;
   onDelete: () => void;
 }) {
   const hasOrdered = item.orderedQty > 0;
@@ -1463,10 +1784,21 @@ function ItemFulfillment({
     vendorOrderNumber: item.vendorOrderNumber,
   });
   const [orderedDraft, setOrderedDraft] = useState(
-    String(item.orderedQty > 0 ? item.orderedQty : item.qty),
+    item.orderedQty > 0 ? String(item.orderedQty) : initialOrderedQty || String(item.qty),
   );
   const [receivedDraft, setReceivedDraft] = useState(String(item.receivedQty));
   const [localError, setLocalError] = useState("");
+  const requested = requestedQtyFromDraft(item, draft);
+
+  useEffect(() => {
+    onDraft({ ...draft, orderedQty: orderedDraft });
+  }, [draft, orderedDraft, onDraft]);
+
+  function commit(patch: Record<string, unknown>) {
+    const next = withUnsavedRowFields(item, { ...draft, orderedQty: orderedDraft }, patch);
+    if (Object.keys(next).length === 0) return;
+    onPatch(next);
+  }
 
   function saveDetails() {
     const patch: Record<string, unknown> = {
@@ -1485,37 +1817,39 @@ function ItemFulfillment({
     onEdit();
   }
 
-  function goingInQty() {
-    const orderedQty = Number(orderedDraft);
-    if (!Number.isInteger(orderedQty) || orderedQty < 1) return null;
-    return orderedQty;
-  }
-
   const leftoverRemainder = hasOrdered
     ? remainder
     : (() => {
-        const goingIn = goingInQty();
-        if (goingIn !== null && goingIn < item.qty) return item.qty - goingIn;
-        if (item.leftover) return item.qty;
+        const goingIn = goingInQty(orderedDraft);
+        if (goingIn !== null && goingIn < requested) return requested - goingIn;
+        if (item.leftover) return requested;
         return 0;
       })();
 
   function markOrdered() {
-    const orderedQty = goingInQty();
+    const orderedQty = goingInQty(orderedDraft);
     if (orderedQty === null) {
       setLocalError("Ordered qty is the amount that actually went in.");
       return;
     }
-    if (orderedQty < item.qty && item.leftover !== "wait" && item.leftover !== "oos" && item.leftover !== "rolled") {
+    if (
+      orderedQty < requested &&
+      item.leftover !== "wait" &&
+      item.leftover !== "oos" &&
+      item.leftover !== "rolled"
+    ) {
       setLocalError("Choose wait, out of stock, or roll for the leftover before marking Ordered.");
       return;
     }
     setLocalError("");
     const patch: Record<string, unknown> = { status: "ordered", orderedQty };
-    if (orderedQty < item.qty && (item.leftover === "wait" || item.leftover === "oos" || item.leftover === "rolled")) {
+    if (
+      orderedQty < requested &&
+      (item.leftover === "wait" || item.leftover === "oos" || item.leftover === "rolled")
+    ) {
       patch.leftover = item.leftover;
     }
-    onPatch(patch);
+    commit(patch);
   }
 
   function handleStatus(status: SettableStatus) {
@@ -1525,27 +1859,27 @@ function ItemFulfillment({
       return;
     }
     if (status === "out_of_stock") {
-      const orderedQty = goingInQty();
-      if (canMarkOrdered && orderedQty !== null && orderedQty < item.qty) {
+      const orderedQty = goingInQty(orderedDraft);
+      if (canMarkOrdered && orderedQty !== null && orderedQty < requested) {
         setLocalError("");
-        onPatch({ leftover: "oos", orderedQty });
+        commit({ leftover: "oos", orderedQty });
         return;
       }
     }
     setLocalError("");
-    onPatch({ status });
+    commit({ status });
   }
 
   function applyLeftover(leftover: Exclude<Leftover, "">) {
     const patch: Record<string, unknown> = { leftover };
     if (canMarkOrdered && !hasOrdered) {
-      const orderedQty = goingInQty();
-      if (orderedQty !== null && orderedQty < item.qty) {
+      const orderedQty = goingInQty(orderedDraft);
+      if (orderedQty !== null && orderedQty < requested) {
         patch.orderedQty = orderedQty;
       }
     }
     setLocalError("");
-    onPatch(patch);
+    commit(patch);
   }
 
   function saveReceived() {
@@ -1555,7 +1889,7 @@ function ItemFulfillment({
       return;
     }
     setLocalError("");
-    onPatch({ receivedQty });
+    commit({ receivedQty });
   }
 
   return (
@@ -1570,11 +1904,7 @@ function ItemFulfillment({
             onChange={(event) =>
               setDraft((current) => ({ ...current, actualVendor: event.target.value }))
             }
-            onBlur={() => {
-              if (draft.actualVendor.trim() !== item.actualVendor) {
-                onPatch({ actualVendor: draft.actualVendor });
-              }
-            }}
+            onBlur={() => commit({})}
           />
         </label>
         {hasOrdered ? (
@@ -1587,6 +1917,13 @@ function ItemFulfillment({
                 : " Leftover already rolled to next month, so this line can't go back to Pending."}
             </span>
           </p>
+        ) : item.status === "moved" ? (
+          <p className="grid gap-1.5 text-sm">
+            Status
+            <span className="text-slate-400">
+              Moved to {nextMonthLabel}. This month stays as history.
+            </span>
+          </p>
         ) : (
           <label className="grid gap-1.5 text-sm">
             Status
@@ -1594,6 +1931,7 @@ function ItemFulfillment({
               value={isSettableStatus(item.status) ? item.status : "pending"}
               statuses={orderStatuses(canMarkOrdered)}
               onChange={handleStatus}
+              testId="row-status"
             />
           </label>
         )}
@@ -1606,26 +1944,19 @@ function ItemFulfillment({
             onChange={(event) =>
               setDraft((current) => ({ ...current, sku: event.target.value }))
             }
-            onBlur={() => {
-              if (draft.sku.trim() !== item.sku) {
-                onPatch({ sku: draft.sku });
-              }
-            }}
+            onBlur={() => commit({})}
           />
         </label>
         <label className="grid gap-1.5 text-sm">
           Vendor order #
           <input
+            data-testid="row-vendor-order"
             className={field}
             value={draft.vendorOrderNumber}
             onChange={(event) =>
               setDraft((current) => ({ ...current, vendorOrderNumber: event.target.value }))
             }
-            onBlur={() => {
-              if (draft.vendorOrderNumber.trim() !== item.vendorOrderNumber) {
-                onPatch({ vendorOrderNumber: draft.vendorOrderNumber });
-              }
-            }}
+            onBlur={() => commit({})}
           />
         </label>
         {hasOrdered || !canMarkOrdered ? null : (
@@ -1651,6 +1982,7 @@ function ItemFulfillment({
               onChange={(event) => setReceivedDraft(event.target.value)}
               onBlur={() => {
                 if (Number(receivedDraft) !== item.receivedQty) saveReceived();
+                else commit({});
               }}
             />
           </label>
@@ -1675,7 +2007,7 @@ function ItemFulfillment({
               ) {
                 return;
               }
-              onPatch({ status: "pending" });
+              commit({ status: "pending" });
             }}
           >
             Move back to Pending
