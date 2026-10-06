@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   deliveriesStillOpenLabel,
   displayText,
@@ -53,6 +53,45 @@ type CheckInPayload = {
 type Draft = { qty: number; choice: "roll" | "wait"; short: boolean; receivedQty: number };
 
 const UNDO_BAR_MS = 20_000;
+const UNDO_BAR_TICK_MS = 1_000;
+
+function stopUndoTimer(timer: { current: number | null }) {
+  if (timer.current != null) {
+    window.clearTimeout(timer.current);
+    timer.current = null;
+  }
+}
+
+function tickUndoBar(
+  hideAt: { current: number },
+  timer: { current: number | null },
+  hide: () => void,
+) {
+  const remaining = hideAt.current - Date.now();
+  if (remaining <= 0) {
+    timer.current = null;
+    hide();
+    return;
+  }
+  // Phones often delay one long timeout toward 30s. Short ticks keep the
+  // deadline that was set when the bar appeared.
+  timer.current = window.setTimeout(
+    () => tickUndoBar(hideAt, timer, hide),
+    Math.min(UNDO_BAR_TICK_MS, remaining),
+  );
+}
+
+function showUndoBar(
+  hideAt: { current: number },
+  timer: { current: number | null },
+  hide: () => void,
+  show: () => void,
+) {
+  stopUndoTimer(timer);
+  hideAt.current = Date.now() + UNDO_BAR_MS;
+  show();
+  tickUndoBar(hideAt, timer, hide);
+}
 
 function freshDraft(item: DeliveryLine): Draft {
   return {
@@ -86,6 +125,8 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
   const [error, setError] = useState("");
   const [busyKey, setBusyKey] = useState("");
   const [undo, setUndo] = useState<{ token: string; title: string } | null>(null);
+  const undoHideAt = useRef(0);
+  const undoTimer = useRef<number | null>(null);
 
   async function load() {
     const response = await fetch("/api/salon/orders/check-in");
@@ -115,11 +156,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
     void load();
   }, []);
 
-  useEffect(() => {
-    if (!undo) return;
-    const timer = window.setTimeout(() => setUndo(null), UNDO_BAR_MS);
-    return () => window.clearTimeout(timer);
-  }, [undo]);
+  useEffect(() => () => stopUndoTimer(undoTimer), []);
 
   function draftFor(item: DeliveryLine): Draft {
     const current = drafts[item.id];
@@ -168,7 +205,12 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
         undoToken?: string;
       };
       if (!response.ok) throw new Error(data.error || "Could not check in that box.");
-      if (data.undoToken) setUndo({ token: data.undoToken, title: group.title });
+      if (data.undoToken) {
+        const token = data.undoToken;
+        showUndoBar(undoHideAt, undoTimer, () => setUndo(null), () =>
+          setUndo({ token, title: group.title }),
+        );
+      }
       await load();
       onActivity();
     } catch (err) {
@@ -183,6 +225,8 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
     setBusyKey("undo");
     setError("");
     const token = undo.token;
+    stopUndoTimer(undoTimer);
+    undoHideAt.current = 0;
     setUndo(null);
     try {
       const response = await fetch("/api/salon/orders/check-in", {
@@ -414,15 +458,14 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
           </section>
         ))
       )}
-      {payload.undoToday.length > 0 ? (
-        <section className="grid gap-2">
-          <h2 className="text-sm font-semibold tracking-wide text-slate-400 uppercase">
-            Your check-ins today
-          </h2>
-          <p className="text-sm text-slate-400">
-            Undo stays available for the rest of today after the bar is gone.
-          </p>
-          <ul className="grid gap-3">
+      <section className="grid gap-2">
+        <h2 className="text-sm font-semibold text-slate-400">Your check-ins today</h2>
+        {payload.undoToday.length > 0 ? (
+          <>
+            <p className="text-sm text-slate-400">
+              Undo stays available for the rest of today after the bar is gone.
+            </p>
+            <ul className="grid gap-3">
             {payload.undoToday.map((group) => (
               <li
                 key={group.key}
@@ -462,9 +505,10 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                 </ul>
               </li>
             ))}
-          </ul>
-        </section>
-      ) : null}
+            </ul>
+          </>
+        ) : null}
+      </section>
       {undo ? (
         <div className="fixed inset-x-0 top-0 z-40 border-b border-emerald-800 bg-emerald-950 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-lg">
           <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
