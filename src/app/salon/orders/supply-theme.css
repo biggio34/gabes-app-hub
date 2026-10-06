@@ -1,0 +1,440 @@
+/*
+  Supply Orders only. Tokens come from the Luna Haus GlossGenius theme
+  (lunahaussalon.glossgenius.com). Status chips use stronger hues on purpose:
+  a soft brand wash made Partial and Received hard to tell apart.
+  #95887B (textTertiary) is 2.88:1 on #F8E8D9, so muted copy uses #6B574C.
+  White on #CDAA96 is 2.15:1, so buttons use #432F24 with white or cream type.
+*/
+
+.supply-theme {
+  --so-bg: #f8e8d9;
+  --so-surface: #f5f0e7;
+  --so-paper: #fffbf6;
+  --so-blush: #e0bfb0;
+  --so-accent: #cdaa96;
+  --so-taupe: #ae9780;
+  --so-text: #432f24;
+  --so-muted: #6b574c;
+  --so-border: #7a6558;
+  --so-btn: #432f24;
+  --so-btn-hover: #2c1e16;
+  --so-on-btn: #ffffff;
+  --so-error: #8f0000;
+  --so-success: #146c43;
+  --so-warn-bg: #f8e7b0;
+  --so-warn-text: #3a2800;
+  --so-warn-border: #7a5c00;
+  --so-pending-bg: #f6d34a;
+  --so-pending-text: #3a2800;
+  --so-pending-edge: #7a5c00;
+  --so-cart-bg: #0369a1;
+  --so-cart-text: #ffffff;
+  --so-ordered-bg: #6d28d9;
+  --so-ordered-text: #ffffff;
+  --so-partial-bg: #fc4400;
+  --so-partial-text: #2a0e00;
+  --so-received-bg: #146c43;
+  --so-received-text: #ffffff;
+  --so-oos-bg: #8f0000;
+  --so-oos-text: #ffffff;
+  background-color: var(--so-bg);
+  color: var(--so-text);
+  color-scheme: light;
+  font-family: var(--font-supply-body), "Archivo Narrow", "Arial Narrow", sans-serif;
+}
+
+.supply-theme h1,
+.supply-theme .so-title {
+  font-family: var(--font-supply-heading), Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.supply-theme input,
+.supply-theme select,
+.supply-theme textarea {
+  background-color: var(--so-paper);
+  color: var(--so-text);
+  border-color: var(--so-border);
+}
+
+.supply-theme input:focus,
+.supply-theme select:focus,
+.supply-theme textarea:focus {
+  border-color: var(--so-text);
+  outline: 2px solid var(--so-text);
+  outline-offset: 1px;
+}
+
+.supply-theme input::placeholder,
+.supply-theme textarea::placeholder {
+  color: var(--so-muted);
+  opacity: 1;
+}
+
+.supply-theme [class~="bg-slate-950"] {
+  background-color: var(--so-paper);
+}
+
+.supply-theme [class~="bg-slate-900"] {
+  background-color: var(--so-surface);
+}
+
+.supply-theme [class~="bg-slate-800"] {
+  background-color: var(--so-blush);
+  color: var(--so-text);
+}
+
+.supply-theme [class~="bg-slate-950/80"] {
+  background-color: #efe2d4;
+}
+
+.supply-theme [class~="bg-slate-800/40"] {
+  background-color: #ead3c4;
+}
+
+.supply-theme [class~="hover:bg-slate-700"]:hover,
+.supply-theme [class~="hover:bg-slate-800/50"]:hover {
+  background-color: var(--so-accent);
+  color: var(--so-text);
+}
+
+.supply-theme [class~="border-slate-800"],
+.supply-theme [class~="border-slate-700"] {
+  border-color: var(--so-border);
+}
+
+.supply-theme [class~="text-slate-100"],
+.supply-theme [class~="text-slate-200"],
+.supply-theme [class~="text-slate-300"] {
+  color: var(--so-text);
+}
+
+.supply-theme [class~="text-slate-400"],
+.supply-theme [class~="text-slate-500"],
+.supply-theme [class~="text-slate-600"] {
+  color: var(--so-muted);
+}
+
+.supply-theme [class~="bg-rose-700"],
+.supply-theme [class~="bg-rose-800"],
+.supply-theme [class~="bg-rose-600"] {
+  background-color: var(--so-btn);
+  color: var(--so-on-btn);
+}
+
+.supply-theme [class~="hover:bg-rose-600"]:hover,
+.supply-theme [class~="hover:bg-rose-700"]:hover,
+.supply-theme [class~="hover:bg-rose-500"]:hover {
+  background-color: var(--so-btn-hover);
+  color: var(--so-on-btn);
+}
+
+.supply-theme [class~="text-rose-100"] {
+  color: var(--so-blush);
+}
+
+.supply-theme [class~="text-rose-300"] {
+  color: var(--so-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.supply-theme [class~="hover:text-rose-300"]:hover,
+.supply-theme [class~="hover:text-rose-200"]:hover {
+  color: var(--so-text);
+}
+
+.supply-theme [class~="border-rose-800"] {
+  border-color: var(--so-accent);
+}
+
+.supply-theme [class~="bg-rose-950/50"],
+.supply-theme [class~="bg-rose-950/40"] {
+  background-color: #f3e6dc;
+  color: var(--so-text);
+}
+
+.supply-theme [class~="hover:border-rose-600"]:hover,
+.supply-theme [class~="focus:border-rose-500"]:focus {
+  border-color: var(--so-text);
+}
+
+.supply-theme [class~="text-red-400"],
+.supply-theme [class~="hover:text-red-400"]:hover {
+  color: var(--so-error);
+}
+
+.supply-theme [class~="text-emerald-300"],
+.supply-theme [class~="text-emerald-400"],
+.supply-theme [class~="text-emerald-950"] {
+  color: var(--so-success);
+}
+
+.supply-theme [class~="bg-emerald-950"] {
+  background-color: var(--so-success);
+  color: var(--so-on-btn);
+  border-color: #0e5133;
+}
+
+.supply-theme [class~="text-emerald-100"] {
+  color: var(--so-on-btn);
+}
+
+.supply-theme [class~="bg-emerald-950"] [class~="text-emerald-300"],
+.supply-theme [class~="bg-emerald-950"] [class~="text-emerald-400"] {
+  color: var(--so-on-btn);
+}
+
+.supply-theme [class~="border-emerald-800"] {
+  border-color: #0e5133;
+}
+
+.supply-theme [class~="text-amber-200"] {
+  color: var(--so-warn-text);
+}
+
+.supply-theme [class~="bg-amber-950/40"] {
+  background-color: var(--so-warn-bg);
+}
+
+.supply-theme [class~="border-amber-700/60"] {
+  border-color: var(--so-warn-border);
+}
+
+/* Fallback if a badge still uses the old dark-theme utilities. */
+.supply-theme [class~="bg-amber-500/15"] {
+  background-color: var(--so-pending-bg);
+  color: var(--so-pending-text);
+  border-color: var(--so-pending-edge);
+}
+
+.supply-theme [class~="bg-sky-500/15"] {
+  background-color: var(--so-cart-bg);
+  color: var(--so-cart-text);
+  border-color: #0c4a6e;
+}
+
+.supply-theme [class~="bg-violet-500/15"] {
+  background-color: var(--so-ordered-bg);
+  color: var(--so-ordered-text);
+  border-color: #5b21b6;
+}
+
+.supply-theme [class~="bg-orange-500/15"] {
+  background-color: var(--so-partial-bg);
+  color: var(--so-partial-text);
+  border-color: #9a2800;
+}
+
+.supply-theme [class~="bg-emerald-500/15"] {
+  background-color: var(--so-received-bg);
+  color: var(--so-received-text);
+  border-color: #0e5133;
+}
+
+.supply-theme [class~="bg-rose-500/15"] {
+  background-color: var(--so-oos-bg);
+  color: var(--so-oos-text);
+  border-color: #6b0000;
+}
+
+.so-status {
+  border-width: 2px;
+  border-style: solid;
+}
+
+.so-status-pending {
+  background-color: var(--so-pending-bg, #f6d34a);
+  color: var(--so-pending-text, #3a2800);
+  border-color: var(--so-pending-edge, #7a5c00);
+}
+
+.so-status-in_cart {
+  background-color: var(--so-cart-bg, #0369a1);
+  color: var(--so-cart-text, #ffffff);
+  border-color: #0c4a6e;
+}
+
+.so-status-ordered {
+  background-color: var(--so-ordered-bg, #6d28d9);
+  color: var(--so-ordered-text, #ffffff);
+  border-color: #5b21b6;
+}
+
+.so-status-partial {
+  background-color: var(--so-partial-bg, #fc4400);
+  color: var(--so-partial-text, #2a0e00);
+  border-color: #9a2800;
+}
+
+.so-status-received {
+  background-color: var(--so-received-bg, #146c43);
+  color: var(--so-received-text, #ffffff);
+  border-color: #0e5133;
+}
+
+.so-status-out_of_stock {
+  background-color: var(--so-oos-bg, #8f0000);
+  color: var(--so-oos-text, #ffffff);
+  border-color: #6b0000;
+}
+
+.so-swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: none;
+  border-radius: 999px;
+  border: 2px solid transparent;
+}
+
+.so-swatch-pending {
+  background: #f6d34a;
+  border-color: #7a5c00;
+}
+
+.so-swatch-in_cart {
+  background: #0369a1;
+  border-color: #0c4a6e;
+}
+
+.so-swatch-ordered {
+  background: #6d28d9;
+  border-color: #5b21b6;
+}
+
+.so-swatch-partial {
+  background: #fc4400;
+  border-color: #9a2800;
+}
+
+.so-swatch-received {
+  background: #146c43;
+  border-color: #0e5133;
+}
+
+.so-swatch-out_of_stock {
+  background: #8f0000;
+  border-color: #6b0000;
+}
+
+.so-filter {
+  border-radius: 999px;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.so-filter-all {
+  background: var(--so-blush, #e0bfb0);
+  color: var(--so-text, #432f24);
+  border: 2px solid transparent;
+}
+
+.so-filter-all.so-filter-on {
+  background: var(--so-btn, #432f24);
+  color: var(--so-on-btn, #ffffff);
+}
+
+.so-filter-on {
+  outline: 2px solid var(--so-text, #432f24);
+  outline-offset: 2px;
+}
+
+.supply-theme .so-checkin {
+  background-color: var(--so-btn);
+  color: var(--so-on-btn);
+  box-shadow: 0 10px 24px rgba(67, 47, 36, 0.18);
+}
+
+.supply-theme .so-checkin:hover {
+  background-color: var(--so-btn-hover);
+}
+
+.supply-theme .so-item[data-status] {
+  border-left-width: 6px;
+}
+
+.supply-theme .so-item[data-status="pending"] {
+  border-left-color: #8a6800;
+}
+
+.supply-theme .so-item[data-status="in_cart"] {
+  border-left-color: #0369a1;
+}
+
+.supply-theme .so-item[data-status="ordered"] {
+  border-left-color: #6d28d9;
+}
+
+.supply-theme .so-item[data-status="partial"] {
+  border-left-color: #c2410c;
+}
+
+.supply-theme .so-item[data-status="received"] {
+  border-left-color: #146c43;
+}
+
+.supply-theme .so-item[data-status="out_of_stock"] {
+  border-left-color: #8f0000;
+}
+
+.supply-theme tr[data-status="pending"] {
+  box-shadow: inset 4px 0 0 #8a6800;
+}
+
+.supply-theme tr[data-status="in_cart"] {
+  box-shadow: inset 4px 0 0 #0369a1;
+}
+
+.supply-theme tr[data-status="ordered"] {
+  box-shadow: inset 4px 0 0 #6d28d9;
+}
+
+.supply-theme tr[data-status="partial"] {
+  box-shadow: inset 4px 0 0 #c2410c;
+}
+
+.supply-theme tr[data-status="received"] {
+  box-shadow: inset 4px 0 0 #146c43;
+}
+
+.supply-theme tr[data-status="out_of_stock"] {
+  box-shadow: inset 4px 0 0 #8f0000;
+}
+
+/* Hub home stays dark. Only these two Luna Haus entries pick up the brand. */
+.so-hub-checkin {
+  background: #f8e8d9;
+  color: #432f24;
+  border: 2px solid #432f24;
+  box-shadow: 0 12px 28px rgba(248, 232, 217, 0.22);
+}
+
+.so-hub-checkin:hover {
+  background: #fffbf6;
+}
+
+.so-hub-checkin-note {
+  color: #432f24;
+}
+
+.so-hub-card {
+  background: #f5f0e7;
+  color: #432f24;
+  border: 1px solid #cdaa96;
+}
+
+.so-hub-card:hover {
+  border-color: #432f24;
+}
+
+.so-hub-card p {
+  color: #6b574c;
+}
+
+.so-hub-card .so-hub-launch {
+  color: #432f24;
+}

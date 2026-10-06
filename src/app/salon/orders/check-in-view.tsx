@@ -317,7 +317,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
             <button
               type="button"
               disabled={busyKey !== ""}
-              className={`${tap} bg-rose-600 text-white hover:bg-rose-500`}
+              className={`${tap} so-checkin bg-rose-600 text-white hover:bg-rose-500`}
               onClick={() => void checkIn(group)}
             >
               {busyKey === group.key
