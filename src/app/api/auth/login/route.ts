@@ -7,6 +7,11 @@ import {
   previewBrookeSession,
   previewRequestHost,
 } from "@/lib/preview-brooke";
+import {
+  isPreviewLhpUsername,
+  previewLhpPasswordMatches,
+  previewLhpSession,
+} from "@/lib/preview-lhp";
 import { findUserByUsername, matchesOwnerPassword } from "@/lib/users";
 
 export const runtime = "nodejs";
@@ -26,19 +31,29 @@ export async function POST(request: Request) {
       );
     }
 
-    if (
-      previewBrookeLoginEnabled(previewRequestHost(request)) &&
-      isPreviewBrookeUsername(username)
-    ) {
-      if (!(await previewBrookePasswordMatches(password))) {
-        return NextResponse.json(
-          { error: "That username or password is wrong." },
-          { status: 401 },
-        );
+    if (previewBrookeLoginEnabled(previewRequestHost(request))) {
+      if (isPreviewBrookeUsername(username)) {
+        if (!(await previewBrookePasswordMatches(password))) {
+          return NextResponse.json(
+            { error: "That username or password is wrong." },
+            { status: 401 },
+          );
+        }
+        const token = await createSessionToken(previewBrookeSession());
+        const response = NextResponse.json({ ok: true });
+        return applySessionCookie(response, token);
       }
-      const token = await createSessionToken(previewBrookeSession());
-      const response = NextResponse.json({ ok: true });
-      return applySessionCookie(response, token);
+      if (isPreviewLhpUsername(username)) {
+        if (!(await previewLhpPasswordMatches(password))) {
+          return NextResponse.json(
+            { error: "That username or password is wrong." },
+            { status: 401 },
+          );
+        }
+        const token = await createSessionToken(previewLhpSession());
+        const response = NextResponse.json({ ok: true });
+        return applySessionCookie(response, token);
+      }
     }
 
     const user = await findUserByUsername(username);

@@ -14,6 +14,14 @@ describe("canMarkOrdered", () => {
     assert.equal(canMarkOrdered({ role: "owner", username: "gabe", id: "user-gabe" }), true);
     assert.equal(canMarkOrdered({ role: "member", username: "lhp", id: "user-lhp" }), true);
     assert.equal(canMarkOrdered({ role: "member", username: "LHP", id: "user-lhp" }), true);
+    assert.equal(
+      canMarkOrdered({ role: "member", username: "lhp-test", id: "user-lhp-test" }),
+      true,
+    );
+    assert.equal(
+      canMarkOrdered({ role: "member", username: "someone", id: "user-lhp-test" }),
+      true,
+    );
   });
 
   it("blocks Brooke until her username is added in the environment", () => {

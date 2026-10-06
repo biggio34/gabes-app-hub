@@ -19,6 +19,7 @@ import {
   type ShortChoice,
 } from "./salon-check-in";
 import { signCheckInUndo } from "./salon-check-in-token";
+import { readCarryUndo, signCarryUndo, type CarryUndoLine } from "./salon-carry-token";
 import { patchSetsOrderedQty } from "./salon-order-permission";
 import {
   appendMoveNote,
@@ -31,7 +32,9 @@ import {
   itemVendor,
   monthLabel,
   nextYearMonth,
+  findExistingCarry,
   isUnorderedOutOfStock,
+  planCarryOver,
   remainderQty,
   shoppingStage,
   unorderForPending,
@@ -303,12 +306,15 @@ export async function getMonthView(year: number, month: number) {
     listOrders(),
     getSuggestions(),
   ]);
+  const next = nextYearMonth(year, month);
+  const nextOrder = await getOrderByYearMonth(next.year, next.month);
   return {
     year,
     month,
     today: currentYearMonth(),
     order,
     items: order ? await listItems(order.id) : [],
+    nextItems: nextOrder ? await listItems(nextOrder.id) : [],
     months,
     suggestions,
     deliveryWaiting: groupDeliveries(await loadWaitingLines()).length,
@@ -571,7 +577,15 @@ export async function updateItem(
   if (patch.leftover !== undefined) {
     if (!isLeftover(patch.leftover)) throw new Error("That leftover choice is not valid.");
     if (patch.leftover === "rolled") {
-      await rollRemainder(current);
+      if (current.leftover !== "rolled") {
+        const plan = planCarryOver(current);
+        const nextItems = await listNextMonthItems(current);
+        if (plan.action === "pending" && findExistingCarry(current, nextItems)) {
+          current.leftover = "rolled";
+        } else {
+          await rollRemainder(current);
+        }
+      }
     } else if (current.leftover === "rolled") {
       throw new Error("Leftover already rolled to next month.");
     } else {
@@ -679,36 +693,193 @@ export async function bulkUpdateStatus(
   return updated;
 }
 
-export async function moveOutOfStockToNextMonth(year: number, month: number) {
-  const order = await getOrderByYearMonth(year, month);
-  if (!order) throw new Error("There is nothing out of stock this month.");
-  const items = (await listItems(order.id)).filter((item) => {
-    if (item.leftover === "rolled") return false;
-    return isUnorderedOutOfStock(item);
-  });
-  if (items.length === 0) {
-    throw new Error("There is nothing out of stock this month.");
+async function listNextMonthItems(item: SalonOrderItem) {
+  const order = await getOrderById(item.orderId);
+  if (!order) return [];
+  const next = nextYearMonth(order.year, order.month);
+  const nextOrder = await getOrderByYearMonth(next.year, next.month);
+  return nextOrder ? listItems(nextOrder.id) : [];
+}
+
+function carriedOrderedItem(source: SalonOrderItem, orderId: string, now: string): SalonOrderItem {
+  return {
+    id: itemId(),
+    orderId,
+    preferredVendor: source.preferredVendor,
+    brand: source.brand,
+    product: source.product,
+    size: source.size,
+    shade: source.shade,
+    qty: source.qty,
+    orderedQty: source.orderedQty,
+    receivedQty: 0,
+    leftover: "",
+    sku: source.sku,
+    note: source.note,
+    actualVendor: source.actualVendor,
+    vendorOrderNumber: source.vendorOrderNumber,
+    status: "ordered",
+    requestedByUserId: source.requestedByUserId,
+    requestedByName: source.requestedByName,
+    ...emptyReceiveRecord(),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+async function closeCarriedSource(item: SalonOrderItem, kind: "pending" | "ordered") {
+  item.leftover = "rolled";
+  if (kind === "ordered") item.orderedQty = item.receivedQty;
+  refreshStatus(item);
+  item.updatedAt = new Date().toISOString();
+  await persistItem(item);
+}
+
+export async function rollOpenItem(id: string) {
+  const current = await loadItem(id);
+  if (current.leftover === "rolled") {
+    return { rolled: false, createdItemId: null as string | null, kind: null as "pending" | "ordered" | null };
+  }
+  const plan = planCarryOver(current);
+  if (plan.action === "skip") {
+    throw new Error(
+      plan.reason === "received"
+        ? "Received lines stay in this month."
+        : "There is nothing to roll to next month.",
+    );
+  }
+  const order = await getOrderById(current.orderId);
+  if (!order) throw new Error("Request not found.");
+  const next = nextYearMonth(order.year, order.month);
+  const nextExisting = await getOrderByYearMonth(next.year, next.month);
+  const nextItems = nextExisting ? await listItems(nextExisting.id) : [];
+  const existing = findExistingCarry(current, nextItems);
+  if (existing) {
+    await closeCarriedSource(current, plan.action);
+    return { rolled: false, createdItemId: existing.id, kind: null };
+  }
+  const fresh = await loadItem(id);
+  if (fresh.leftover === "rolled") {
+    return { rolled: false, createdItemId: null, kind: null };
+  }
+
+  if (plan.action === "ordered") {
+    const nextOrder = await getOrCreateOrder(next.year, next.month);
+    const raced = findExistingCarry(fresh, await listItems(nextOrder.id));
+    if (raced) {
+      await closeCarriedSource(fresh, "ordered");
+      return { rolled: false, createdItemId: raced.id, kind: null };
+    }
+    const now = new Date().toISOString();
+    const created = carriedOrderedItem(fresh, nextOrder.id, now);
+    await persistNewItem(created);
+    await closeCarriedSource(fresh, "ordered");
+    return { rolled: true, createdItemId: created.id, kind: "ordered" as const };
+  }
+
+  const createdId = await rollRemainder(fresh);
+  if (!createdId) return { rolled: false, createdItemId: null, kind: null };
+  refreshStatus(fresh);
+  fresh.updatedAt = new Date().toISOString();
+  await persistItem(fresh);
+  return { rolled: true, createdItemId: createdId, kind: "pending" as const };
+}
+
+export async function moveOpenItemsToNextMonth(
+  year: number,
+  month: number,
+  actor: { canMarkOrdered: boolean; id: string },
+) {
+  if (!actor.canMarkOrdered) {
+    throw new Error("Only purchasing can move a whole month.");
   }
   const next = nextYearMonth(year, month);
-  const nextOrder = await getOrCreateOrder(next.year, next.month);
+  const order = await getOrderByYearMonth(year, month);
+  if (!order) {
+    return { moved: 0, undoToken: "", nextYear: next.year, nextMonth: next.month };
+  }
+  const undoLines: CarryUndoLine[] = [];
+  for (const item of await listItems(order.id)) {
+    const before = await loadItemOptional(item.id);
+    if (!before || planCarryOver(before).action === "skip") continue;
+    const prevOrderedQty = before.orderedQty;
+    const prevLeftover = before.leftover;
+    const prevStatus = before.status;
+    const result = await rollOpenItem(before.id);
+    if (result.rolled && result.createdItemId && result.kind) {
+      undoLines.push({
+        id: before.id,
+        prevOrderedQty,
+        prevLeftover,
+        prevStatus,
+        createdItemId: result.createdItemId,
+        createdKind: result.kind,
+      });
+    }
+  }
+  const undoToken =
+    undoLines.length > 0 ? await signCarryUndo(actor.id, undoLines) : "";
+  return {
+    moved: undoLines.length,
+    undoToken,
+    nextYear: next.year,
+    nextMonth: next.month,
+  };
+}
+
+export async function undoMonthCarry(token: string, userId: string) {
+  const lines = await readCarryUndo(token, userId);
+  if (lines.length === 0) throw new Error("There is nothing to undo.");
+  const created = [];
+  for (const line of lines) {
+    const row = await loadItemOptional(line.createdItemId);
+    if (!row) continue;
+    if (row.receivedQty > 0) {
+      throw new Error("That move can't be undone because a rolled item was already received.");
+    }
+    if (line.createdKind === "pending" && row.orderedQty > 0) {
+      throw new Error("That move can't be undone because a rolled item was marked ordered.");
+    }
+    created.push(row);
+  }
+  for (const row of created) {
+    if (isSupabaseConfigured()) await supabaseSalon.removeItem(row.id);
+    else await removeItemSqlite(row.id);
+  }
   const now = new Date().toISOString();
+  for (const line of lines) {
+    const source = await loadItemOptional(line.id);
+    if (!source) continue;
+    source.orderedQty = line.prevOrderedQty;
+    source.leftover = line.prevLeftover === "wait" || line.prevLeftover === "oos" || line.prevLeftover === "rolled"
+      ? line.prevLeftover
+      : "";
+    const shopping = line.prevStatus === "in_cart" ? "in_cart" : line.prevStatus === "pending" ? "pending" : undefined;
+    refreshStatus(source, shopping);
+    source.updatedAt = now;
+    await persistItem(source);
+  }
+}
+
+export async function moveOutOfStockToNextMonth(year: number, month: number) {
+  const next = nextYearMonth(year, month);
+  const order = await getOrderByYearMonth(year, month);
+  const nextName = monthLabel(next.year, next.month);
+  if (!order) {
+    return { moved: 0, nextYear: next.year, nextMonth: next.month, nextName };
+  }
   let moved = 0;
-  for (const item of items) {
-    if (remainderQty(item) < 1) continue;
-    await rollRemainder(item);
-    refreshStatus(item);
-    item.updatedAt = now;
-    await persistItem(item);
-    moved += 1;
+  for (const item of await listItems(order.id)) {
+    if (item.leftover === "rolled" || !isUnorderedOutOfStock(item)) continue;
+    const result = await rollOpenItem(item.id);
+    if (result.rolled) moved += 1;
   }
-  if (moved === 0) {
-    throw new Error("There is nothing out of stock this month.");
-  }
+  const nextOrder = await getOrderByYearMonth(next.year, next.month);
   return {
     moved,
     nextYear: next.year,
     nextMonth: next.month,
-    nextName: nextOrder.name,
+    nextName: nextOrder?.name ?? nextName,
   };
 }
 

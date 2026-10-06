@@ -249,3 +249,143 @@ export function appendMoveNote(note: string) {
   if (trimmed.includes(MOVE_NOTE)) return trimmed;
   return `${trimmed} · ${MOVE_NOTE}`;
 }
+
+export type CarryPlan =
+  | { action: "skip"; reason: "rolled" | "received" | "empty" }
+  | { action: "pending"; qty: number }
+  | { action: "ordered"; qty: number; orderedQty: number };
+
+export type CarryBucket = "pending" | "in_cart" | "ordered" | "out_of_stock" | "partial";
+
+/** Fields the month banner and the server both need. No database access. */
+export type CarryItem = {
+  qty: number;
+  orderedQty: number;
+  receivedQty: number;
+  leftover: Leftover;
+  status?: OrderStatus;
+  brand: string;
+  product: string;
+  size: string;
+  shade: string;
+  note: string;
+  actualVendor: string;
+  vendorOrderNumber: string;
+};
+
+export type CarrySummary = Record<CarryBucket | "total", number>;
+
+/**
+ * What a roll would open next month.
+ * Already-rolled rows skip. Received rows skip. A short box rolls only the
+ * missing qty as Pending. An ordered line that has not arrived keeps Ordered.
+ */
+export function planCarryOver(item: {
+  qty: number;
+  orderedQty: number;
+  receivedQty: number;
+  leftover: Leftover;
+}): CarryPlan {
+  if (item.leftover === "rolled") return { action: "skip", reason: "rolled" };
+  if (item.qty < 1) return { action: "skip", reason: "empty" };
+  if (item.receivedQty >= item.qty) return { action: "skip", reason: "received" };
+  if (item.receivedQty > 0) {
+    const qty = item.qty - item.receivedQty;
+    if (qty < 1) return { action: "skip", reason: "empty" };
+    return { action: "pending", qty };
+  }
+  if (item.orderedQty > 0) {
+    return { action: "ordered", qty: item.qty, orderedQty: item.orderedQty };
+  }
+  return { action: "pending", qty: item.qty };
+}
+
+function sameCarryText(left: string, right: string) {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+/**
+ * A next-month row that already came from this line.
+ * Pending carries are the rows whose note has the move line. Ordered carries
+ * match the shipment: same product, qty, vendor, and order number.
+ */
+export function findExistingCarry<T extends CarryItem>(source: CarryItem, nextItems: T[]): T | null {
+  const plan = planCarryOver(source);
+  if (plan.action === "skip") return null;
+  const key = productKey(source);
+  if (plan.action === "ordered") {
+    return (
+      nextItems.find(
+        (row) =>
+          productKey(row) === key &&
+          row.receivedQty === 0 &&
+          row.qty === source.qty &&
+          row.orderedQty === source.orderedQty &&
+          sameCarryText(row.actualVendor, source.actualVendor) &&
+          sameCarryText(row.vendorOrderNumber, source.vendorOrderNumber) &&
+          row.orderedQty > 0,
+      ) ?? null
+    );
+  }
+  return (
+    nextItems.find(
+      (row) =>
+        productKey(row) === key &&
+        row.orderedQty === 0 &&
+        row.receivedQty === 0 &&
+        row.qty === plan.qty &&
+        row.note.includes(MOVE_NOTE),
+    ) ?? null
+  );
+}
+
+export function carryBucket(item: CarryItem): CarryBucket | null {
+  const plan = planCarryOver(item);
+  if (plan.action === "skip") return null;
+  if (plan.action === "ordered") return "ordered";
+  if (item.receivedQty > 0) return "partial";
+  if (item.status === "in_cart") return "in_cart";
+  if (item.status === "out_of_stock" || item.leftover === "oos") return "out_of_stock";
+  return "pending";
+}
+
+export function isEligibleCarry(item: CarryItem, nextItems: CarryItem[]) {
+  if (planCarryOver(item).action === "skip") return false;
+  return findExistingCarry(item, nextItems) == null;
+}
+
+export function summarizeOpenCarry(items: CarryItem[], nextItems: CarryItem[]): CarrySummary {
+  const counts: CarrySummary = {
+    total: 0,
+    pending: 0,
+    in_cart: 0,
+    ordered: 0,
+    out_of_stock: 0,
+    partial: 0,
+  };
+  for (const item of items) {
+    if (!isEligibleCarry(item, nextItems)) continue;
+    const bucket = carryBucket(item);
+    if (!bucket) continue;
+    counts[bucket] += 1;
+    counts.total += 1;
+  }
+  return counts;
+}
+
+/** Per-row button. Partial and unordered out of stock keep the leftover menu. */
+export function showRollToNextMonth(item: CarryItem, nextItems: CarryItem[]) {
+  if (!isEligibleCarry(item, nextItems)) return false;
+  const plan = planCarryOver(item);
+  if (plan.action === "ordered") return true;
+  if (item.orderedQty !== 0 || item.receivedQty !== 0) return false;
+  if (item.status === "out_of_stock" || item.leftover === "oos") return false;
+  return true;
+}
+
+export function rollButtonLabel(item: { qty: number; orderedQty: number; receivedQty: number }) {
+  if (item.orderedQty > 0 && item.receivedQty === 0 && remainderQty(item) >= 1) {
+    return "Roll this order to next month";
+  }
+  return "Roll to next month";
+}
