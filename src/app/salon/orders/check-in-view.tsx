@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatReceivedStamp } from "@/lib/salon-check-in";
+import { displayText, formatReceivedStamp, joinDisplay } from "@/lib/salon-check-in";
 import { monthLabel } from "@/lib/salon-order-model";
 
 type DeliveryLine = {
@@ -27,6 +27,7 @@ type Group = {
   title: string;
   vendor: string;
   vendorOrderNumber: string;
+  orderNumbers?: string[];
   items: DeliveryLine[];
 };
 
@@ -43,7 +44,7 @@ const tap =
   "min-h-12 rounded-2xl px-4 text-base font-semibold disabled:opacity-60";
 
 function lineTitle(item: DeliveryLine) {
-  return [item.brand, item.product].filter(Boolean).join(" ");
+  return joinDisplay([item.brand, item.product], " ");
 }
 
 function clock(iso: string) {
@@ -215,8 +216,13 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
             key={group.key}
             className="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-4"
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="grid gap-1">
               <h2 className="text-lg font-semibold leading-snug">{group.title}</h2>
+              {(group.orderNumbers ?? []).length > 1 ? (
+                <p className="text-xs leading-snug break-words text-slate-400">
+                  {(group.orderNumbers ?? []).join(" · ")}
+                </p>
+              ) : null}
             </div>
             <button
               type="button"
@@ -232,18 +238,19 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                 const arrived = draft.short ? draft.qty : item.orderedQty;
                 const missing = item.orderedQty - arrived;
                 const stamp = formatReceivedStamp(item.receivedByName, item.receivedAt);
+                const details = joinDisplay([
+                  item.shade,
+                  item.size,
+                  displayText(item.sku) ? `SKU ${displayText(item.sku)}` : "",
+                ]);
                 return (
                   <li
                     key={item.id}
                     className="grid gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-3"
                   >
                     <div>
-                      <p className="text-lg font-semibold leading-snug">{lineTitle(item)}</p>
-                      <p className="text-base text-slate-200">
-                        {[item.shade, item.size, item.sku ? `SKU ${item.sku}` : ""]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
+                      <p className="text-lg font-semibold leading-snug">{lineTitle(item) || item.product}</p>
+                      {details ? <p className="text-base text-slate-200">{details}</p> : null}
                       <p className="text-sm text-slate-400">
                         Ordered {item.orderedQty}
                         {item.receivedQty > 0 ? ` · already in ${item.receivedQty}` : ""}

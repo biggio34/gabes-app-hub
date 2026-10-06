@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { CheckInView } from "./check-in-view";
-import { formatReceivedStamp } from "@/lib/salon-check-in";
+import { displayText, formatReceivedStamp, joinDisplay } from "@/lib/salon-check-in";
 import {
   canRevertToPending,
   findPendingDuplicate,
@@ -259,6 +259,19 @@ export function SupplyOrdersClient({
     if (!view || !form.product.trim()) return null;
     return findPendingDuplicate(view.items, form);
   }, [view, form]);
+
+  function openCheckIn() {
+    if (!view) return;
+    setCheckInOpen(true);
+    const params = new URLSearchParams();
+    const onThisMonth = view.year === view.today.year && view.month === view.today.month;
+    if (!onThisMonth) {
+      params.set("year", String(view.year));
+      params.set("month", String(view.month));
+    }
+    params.set("checkin", "1");
+    router.push(`/salon/orders?${params}`);
+  }
 
   function goToMonth(year: number, month: number) {
     setVendorFilter("all");
@@ -532,18 +545,7 @@ export function SupplyOrdersClient({
         <button
           type="button"
           className="rounded-3xl bg-rose-700 px-5 py-4 text-left text-white hover:bg-rose-600"
-          onClick={() => {
-            setCheckInOpen(true);
-            const params = new URLSearchParams();
-            const onThisMonth =
-              view.year === view.today.year && view.month === view.today.month;
-            if (!onThisMonth) {
-              params.set("year", String(view.year));
-              params.set("month", String(view.month));
-            }
-            params.set("checkin", "1");
-            router.push(`/salon/orders?${params}`);
-          }}
+          onClick={openCheckIn}
         >
           <span className="block text-lg font-semibold">Check in delivery</span>
           <span className="block text-sm text-rose-100">
@@ -949,11 +951,24 @@ export function SupplyOrdersClient({
         {notice ? <p className="text-sm text-emerald-400">{notice}</p> : null}
 
         {visibleItems.length === 0 ? (
-          <p className="rounded-3xl border border-slate-800 bg-slate-900 px-6 py-12 text-center text-slate-400">
-            {view.items.length === 0
-              ? "No requests this month yet. Add one above."
-              : "No requests match these filters."}
-          </p>
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 px-6 py-12 text-center text-slate-400">
+            <p>
+              {view.items.length === 0
+                ? "No requests this month yet. Add one above."
+                : "No requests match these filters."}
+            </p>
+            {view.deliveryWaiting > 0 ? (
+              <button
+                type="button"
+                className="mt-3 text-sm font-semibold text-rose-300 hover:text-rose-200"
+                onClick={openCheckIn}
+              >
+                {view.deliveryWaiting === 1
+                  ? "1 delivery waiting to check in"
+                  : `${view.deliveryWaiting} deliveries waiting to check in`}
+              </button>
+            ) : null}
+          </div>
         ) : listLayout === "table" ? (
           <CompactItemsTable
             items={grouped.flatMap((group) =>
@@ -1119,7 +1134,7 @@ function CellText({
   value: string;
   emphasize?: boolean;
 }) {
-  if (!value.trim()) {
+  if (!displayText(value)) {
     return <span className="text-slate-600">—</span>;
   }
   return (
@@ -1353,14 +1368,15 @@ function ItemCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-medium">
-            {item.brand ? `${item.brand} · ` : ""}
-            {item.product}
+            {joinDisplay([item.brand, item.product], " · ") || item.product}
           </p>
           <p className="text-sm text-slate-400">
-            {qtyLine}
-            {item.size ? ` · ${item.size}` : ""}
-            {item.shade ? ` · ${item.shade}` : ""}
-            {item.sku ? ` · SKU ${item.sku}` : ""}
+            {joinDisplay([
+              qtyLine,
+              item.size,
+              item.shade,
+              displayText(item.sku) ? `SKU ${displayText(item.sku)}` : "",
+            ])}
           </p>
           <p className="mt-1 text-xs text-slate-500">
             Asked by {item.requestedByName}

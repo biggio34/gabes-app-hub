@@ -5,6 +5,8 @@ import { isSupabaseConfigured } from "./db/supabase";
 import * as supabaseSalon from "./db/supabase-salon";
 import {
   deliveryGroupTitle,
+  deliveryOrderIds,
+  displayText,
   groupDeliveries,
   isAwaitingDelivery,
   isSameChicagoDay,
@@ -777,11 +779,16 @@ async function loadItemOptional(id: string) {
     : getItemByIdSqlite(id);
 }
 
+export async function countWaitingDeliveries() {
+  return groupDeliveries(await loadWaitingLines()).length;
+}
+
 export async function getCheckInView(userId: string) {
   const lines = await loadWaitingLines();
   const groups = groupDeliveries(lines).map((group) => ({
     ...group,
     title: deliveryGroupTitle(group.vendor, group.vendorOrderNumber, group.items.length),
+    orderNumbers: deliveryOrderIds(group.vendor, group.vendorOrderNumber),
   }));
   const receiveMeta = await receiveMetaOn();
   return {
@@ -802,7 +809,10 @@ async function listUndoToday(userId: string) {
       if (!parseCheckInUndo(item.checkinUndo)) continue;
       rows.push({
         id: item.id,
-        label: [item.brand, item.product, item.shade].filter(Boolean).join(" · "),
+        label: [item.brand, item.product, item.shade]
+          .map((part) => displayText(part))
+          .filter(Boolean)
+          .join(" · "),
         receivedAt: item.receivedAt,
       });
     }

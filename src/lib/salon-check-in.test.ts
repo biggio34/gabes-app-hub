@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   deliveryGroupTitle,
+  deliveryOrderIds,
+  displayText,
   formatReceivedStamp,
   groupDeliveries,
   isAwaitingDelivery,
+  joinDisplay,
   planCheckIn,
 } from "./salon-check-in.ts";
 
@@ -53,6 +56,86 @@ describe("groupDeliveries", () => {
       deliveryGroupTitle("Cosmo Prof", "609579103", 9),
       "Cosmo Prof #609579103, 9 items",
     );
+  });
+
+  it("puts the oldest created line first, even when its month is later", () => {
+    const groups = groupDeliveries([
+      {
+        id: "newer",
+        vendor: "Amazon",
+        vendorOrderNumber: "later",
+        year: 2026,
+        month: 2,
+        createdAt: "2026-08-01T00:00:00.000Z",
+      },
+      {
+        id: "older",
+        vendor: "Amazon",
+        vendorOrderNumber: "earlier",
+        year: 2026,
+        month: 10,
+        createdAt: "2026-01-15T00:00:00.000Z",
+      },
+    ]);
+    assert.deepEqual(
+      groups.map((group) => group.vendorOrderNumber),
+      ["earlier", "later"],
+    );
+  });
+
+  it("breaks timestamp ties by vendor, order number, then id", () => {
+    const createdAt = "2026-09-01T00:00:00.000Z";
+    const groups = groupDeliveries([
+      { id: "c", vendor: "B", vendorOrderNumber: "2", year: 2026, month: 9, createdAt },
+      { id: "a", vendor: "A", vendorOrderNumber: "2", year: 2026, month: 9, createdAt },
+      { id: "b", vendor: "A", vendorOrderNumber: "1", year: 2026, month: 9, createdAt },
+    ]);
+    assert.deepEqual(
+      groups.map((group) => `${group.vendor}#${group.vendorOrderNumber}`),
+      ["A#1", "A#2", "B#2"],
+    );
+  });
+});
+
+describe("delivery group titles", () => {
+  it("shows the vendor once and drops a repeated name or hash", () => {
+    assert.equal(
+      deliveryGroupTitle("Marlo Beauty", "Marlo #1663832-0 (9/24)", 9),
+      "Marlo Beauty #1663832-0 (9/24), 9 items",
+    );
+    assert.equal(
+      deliveryGroupTitle("Marlo Beauty", "#Marlo #1663832-0 (9/24)", 1),
+      "Marlo Beauty #1663832-0 (9/24), 1 item",
+    );
+    assert.deepEqual(deliveryOrderIds("Cosmo Prof", "609579103"), ["609579103"]);
+  });
+
+  it("shortens a list of order ids and keeps the full list", () => {
+    const raw = [
+      "111-1234567-7654321",
+      "112-1234567-7654321",
+      "113-1234567-7654321",
+      "114-1234567-7654321",
+    ].join(", ");
+    assert.equal(
+      deliveryGroupTitle("Amazon", raw, 4),
+      "Amazon #111-1234567-7654321 +3 more, 4 items",
+    );
+    assert.deepEqual(deliveryOrderIds("Amazon", raw), [
+      "111-1234567-7654321",
+      "112-1234567-7654321",
+      "113-1234567-7654321",
+      "114-1234567-7654321",
+    ]);
+  });
+});
+
+describe("joinDisplay", () => {
+  it("skips blank placeholders", () => {
+    assert.equal(displayText("-"), "");
+    assert.equal(displayText("—"), "");
+    assert.equal(joinDisplay(["-", "28.2oz"]), "28.2oz");
+    assert.equal(joinDisplay(["", "28.2oz", "SKU 12"]), "28.2oz · SKU 12");
   });
 });
 

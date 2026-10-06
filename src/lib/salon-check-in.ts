@@ -8,6 +8,7 @@ export function isAwaitingDelivery(item: { orderedQty: number; receivedQty: numb
 }
 
 export type DeliverySort = {
+  id?: string;
   vendor: string;
   vendorOrderNumber: string;
   year: number;
@@ -15,13 +16,37 @@ export type DeliverySort = {
   createdAt: string;
 };
 
+/** "-" and similar placeholders are blank, not a shade or size. */
+export function displayText(value: string) {
+  const text = value.trim();
+  if (/^(?:|[-–—]+|n\/a|na|none|null)$/i.test(text)) return "";
+  return text;
+}
+
+export function joinDisplay(parts: string[], separator = " · ") {
+  return parts.map((part) => displayText(part)).filter(Boolean).join(separator);
+}
+
 export function deliveryGroupKey(vendor: string, vendorOrderNumber: string) {
   return `${vendor.trim().toLowerCase()}\u0000${vendorOrderNumber.trim().toLowerCase()}`;
 }
 
-function ageKey(line: DeliverySort) {
-  const month = String(line.month).padStart(2, "0");
-  return `${line.year}-${month}-${line.createdAt}`;
+function timeKey(line: DeliverySort) {
+  const created = line.createdAt.trim();
+  if (created) return created;
+  return `${line.year}-${String(line.month).padStart(2, "0")}`;
+}
+
+function compareDelivery(a: DeliverySort, b: DeliverySort) {
+  const byTime = timeKey(a).localeCompare(timeKey(b));
+  if (byTime !== 0) return byTime;
+  const byVendor = a.vendor.localeCompare(b.vendor, undefined, { sensitivity: "base" });
+  if (byVendor !== 0) return byVendor;
+  const byOrder = a.vendorOrderNumber.localeCompare(b.vendorOrderNumber, undefined, {
+    sensitivity: "base",
+  });
+  if (byOrder !== 0) return byOrder;
+  return (a.id ?? "").localeCompare(b.id ?? "");
 }
 
 export function groupDeliveries<T extends DeliverySort>(lines: T[]) {
@@ -34,7 +59,7 @@ export function groupDeliveries<T extends DeliverySort>(lines: T[]) {
   }
   return [...groups.entries()]
     .map(([key, items]) => {
-      const sorted = [...items].sort((a, b) => ageKey(a).localeCompare(ageKey(b)));
+      const sorted = [...items].sort(compareDelivery);
       const first = sorted[0];
       return {
         key,
@@ -43,13 +68,53 @@ export function groupDeliveries<T extends DeliverySort>(lines: T[]) {
         items: sorted,
       };
     })
-    .sort((a, b) => ageKey(a.items[0]).localeCompare(ageKey(b.items[0])));
+    .sort((a, b) => compareDelivery(a.items[0], b.items[0]) || a.key.localeCompare(b.key));
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripRepeatedVendor(value: string, vendor: string) {
+  let text = value.trim();
+  if (!text) return "";
+  const firstWord = vendor.trim().split(/\s+/)[0] ?? "";
+  const tokens = [vendor.trim(), firstWord]
+    .filter((token, index, all) => token.length >= 3 && all.indexOf(token) === index)
+    .sort((a, b) => b.length - a.length);
+  for (let guard = 0; guard < 4; guard += 1) {
+    const before = text;
+    text = text.replace(/^#+\s*/, "").trim();
+    for (const token of tokens) {
+      const re = new RegExp(`^${escapeRegExp(token)}(?=$|[\\s#:,-])`, "i");
+      if (!re.test(text)) continue;
+      text = text.replace(re, "").replace(/^[\s#:,-]+/, "").trim();
+      if (!text) return "";
+    }
+    if (text === before) break;
+  }
+  return text.replace(/^#+\s*/, "").trim();
+}
+
+/** Split a pasted order-number field into the ids worth showing. */
+export function deliveryOrderIds(vendor: string, vendorOrderNumber: string) {
+  const stripped = stripRepeatedVendor(vendorOrderNumber, vendor);
+  if (!stripped) return [];
+  return stripped.split(/\s*(?:,|;|\n|\|)\s*/).flatMap((chunk) => {
+    const amazon = chunk.match(/\d{3}-\d{7}-\d{7}/g);
+    if (amazon && amazon.length > 1) return amazon;
+    const cleaned = stripRepeatedVendor(chunk, vendor);
+    return cleaned ? [cleaned] : [];
+  });
 }
 
 export function deliveryGroupTitle(vendor: string, vendorOrderNumber: string, count: number) {
-  const name = vendorOrderNumber.trim() ? `${vendor} #${vendorOrderNumber.trim()}` : vendor;
+  const ids = deliveryOrderIds(vendor, vendorOrderNumber);
+  const name = vendor.trim() || "No vendor";
   const noun = count === 1 ? "item" : "items";
-  return `${name}, ${count} ${noun}`;
+  if (ids.length === 0) return `${name}, ${count} ${noun}`;
+  const idLabel = ids.length === 1 ? ids[0] : `${ids[0]} +${ids.length - 1} more`;
+  return `${name} #${idLabel}, ${count} ${noun}`;
 }
 
 export type CheckInPlan =
