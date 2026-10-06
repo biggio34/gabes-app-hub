@@ -361,7 +361,13 @@ async function persistNewItem(item: SalonOrderItem) {
   else await insertItemSqlite(item);
 }
 
-function rolledItem(source: SalonOrderItem, orderId: string, qty: number, now: string): SalonOrderItem {
+function rolledItem(
+  source: SalonOrderItem,
+  orderId: string,
+  qty: number,
+  now: string,
+  withMoveNote: boolean,
+): SalonOrderItem {
   return {
     id: itemId(),
     orderId,
@@ -375,7 +381,7 @@ function rolledItem(source: SalonOrderItem, orderId: string, qty: number, now: s
     receivedQty: 0,
     leftover: "",
     sku: source.sku,
-    note: appendMoveNote(source.note),
+    note: withMoveNote ? appendMoveNote(source.note) : source.note,
     actualVendor: "",
     vendorOrderNumber: "",
     status: "pending",
@@ -387,24 +393,24 @@ function rolledItem(source: SalonOrderItem, orderId: string, qty: number, now: s
   };
 }
 
-async function rollRemainder(item: SalonOrderItem) {
-  if (item.leftover === "rolled") return null;
+async function rollRemainder(item: SalonOrderItem, mark: "rolled" | "moved" = "rolled") {
+  if (item.leftover === "rolled" || item.leftover === "moved") return null;
   const remainder = remainderQty(item);
   if (remainder < 1) {
     throw new Error("There is no leftover to roll to next month.");
   }
-  const created = await createRolledItem(item, remainder);
-  item.leftover = "rolled";
+  const created = await createRolledItem(item, remainder, mark === "rolled" && isUnorderedOutOfStock(item));
+  item.leftover = mark;
   return created.id;
 }
 
-async function createRolledItem(item: SalonOrderItem, qty: number) {
+async function createRolledItem(item: SalonOrderItem, qty: number, withMoveNote = false) {
   const order = await getOrderById(item.orderId);
   if (!order) throw new Error("Request not found.");
   const next = nextYearMonth(order.year, order.month);
   const nextOrder = await getOrCreateOrder(next.year, next.month);
   const now = new Date().toISOString();
-  const rolled = rolledItem(item, nextOrder.id, qty, now);
+  const rolled = rolledItem(item, nextOrder.id, qty, now, withMoveNote);
   await persistNewItem(rolled);
   return rolled;
 }
@@ -556,7 +562,7 @@ export async function updateItem(
     if (patch.status === "ordered" && current.orderedQty < 1) {
       current.orderedQty = current.qty;
     }
-    if (patch.status === "out_of_stock" && current.leftover !== "rolled") {
+    if (patch.status === "out_of_stock" && current.leftover !== "rolled" && current.leftover !== "moved") {
       current.leftover = "oos";
     }
   }
@@ -577,7 +583,7 @@ export async function updateItem(
   if (patch.leftover !== undefined) {
     if (!isLeftover(patch.leftover)) throw new Error("That leftover choice is not valid.");
     if (patch.leftover === "rolled") {
-      if (current.leftover !== "rolled") {
+      if (current.leftover !== "rolled" && current.leftover !== "moved") {
         const plan = planCarryOver(current);
         const nextItems = await listNextMonthItems(current);
         if (plan.action === "pending" && findExistingCarry(current, nextItems)) {
@@ -586,7 +592,7 @@ export async function updateItem(
           await rollRemainder(current);
         }
       }
-    } else if (current.leftover === "rolled") {
+    } else if (current.leftover === "rolled" || current.leftover === "moved") {
       throw new Error("Leftover already rolled to next month.");
     } else {
       current.leftover = patch.leftover;
@@ -653,7 +659,7 @@ export async function bulkUpdateStatus(
     if (input.status === "pending" && item.orderedQty > 0) {
       const targetingOrdered =
         fromStatus === "ordered" || fromStatus === "partial" || fromStatus === "received";
-      if (!targetingOrdered || item.leftover === "rolled") continue;
+      if (!targetingOrdered || item.leftover === "rolled" || item.leftover === "moved") continue;
       const reverted = unorderForPending(item);
       item.orderedQty = reverted.orderedQty;
       item.receivedQty = reverted.receivedQty;
@@ -663,7 +669,7 @@ export async function bulkUpdateStatus(
     if (input.status === "ordered" && item.orderedQty < 1) {
       item.orderedQty = item.qty;
     }
-    if (input.status === "out_of_stock" && item.leftover !== "rolled") {
+    if (input.status === "out_of_stock" && item.leftover !== "rolled" && item.leftover !== "moved") {
       item.leftover = "oos";
     }
     if (
@@ -727,9 +733,16 @@ function carriedOrderedItem(source: SalonOrderItem, orderId: string, now: string
   };
 }
 
+function carriedHistoryLeftover(item: SalonOrderItem, kind: "pending" | "ordered"): Leftover {
+  if (kind === "ordered") return "moved";
+  if (item.receivedQty > 0 || isUnorderedOutOfStock(item)) return "rolled";
+  return "moved";
+}
+
 async function closeCarriedSource(item: SalonOrderItem, kind: "pending" | "ordered") {
-  item.leftover = "rolled";
+  const leftover = carriedHistoryLeftover(item, kind);
   if (kind === "ordered") item.orderedQty = item.receivedQty;
+  item.leftover = leftover;
   refreshStatus(item);
   item.updatedAt = new Date().toISOString();
   await persistItem(item);
@@ -737,7 +750,7 @@ async function closeCarriedSource(item: SalonOrderItem, kind: "pending" | "order
 
 export async function rollOpenItem(id: string) {
   const current = await loadItem(id);
-  if (current.leftover === "rolled") {
+  if (current.leftover === "rolled" || current.leftover === "moved") {
     return { rolled: false, createdItemId: null as string | null, kind: null as "pending" | "ordered" | null };
   }
   const plan = planCarryOver(current);
@@ -759,7 +772,7 @@ export async function rollOpenItem(id: string) {
     return { rolled: false, createdItemId: existing.id, kind: null };
   }
   const fresh = await loadItem(id);
-  if (fresh.leftover === "rolled") {
+  if (fresh.leftover === "rolled" || fresh.leftover === "moved") {
     return { rolled: false, createdItemId: null, kind: null };
   }
 
@@ -777,7 +790,8 @@ export async function rollOpenItem(id: string) {
     return { rolled: true, createdItemId: created.id, kind: "ordered" as const };
   }
 
-  const createdId = await rollRemainder(fresh);
+  const mark = fresh.receivedQty > 0 || isUnorderedOutOfStock(fresh) ? "rolled" : "moved";
+  const createdId = await rollRemainder(fresh, mark);
   if (!createdId) return { rolled: false, createdItemId: null, kind: null };
   refreshStatus(fresh);
   fresh.updatedAt = new Date().toISOString();
@@ -870,7 +884,7 @@ export async function moveOutOfStockToNextMonth(year: number, month: number) {
   }
   let moved = 0;
   for (const item of await listItems(order.id)) {
-    if (item.leftover === "rolled" || !isUnorderedOutOfStock(item)) continue;
+    if (item.leftover === "rolled" || item.leftover === "moved" || !isUnorderedOutOfStock(item)) continue;
     const result = await rollOpenItem(item.id);
     if (result.rolled) moved += 1;
   }
@@ -1146,7 +1160,9 @@ async function finishCheckIn(
     restoredAdded,
   };
   current.receivedQty = plan.receivedQty;
-  if (plan.setWait && current.leftover !== "rolled") current.leftover = "wait";
+  if (plan.setWait && current.leftover !== "rolled" && current.leftover !== "moved") {
+    current.leftover = "wait";
+  }
   if (plan.rollRemainder) {
     snapshot.createdItemId = await rollRemainder(current);
   }

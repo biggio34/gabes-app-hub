@@ -114,4 +114,25 @@ describe("summarizeOpenCarry", () => {
     assert.equal(summary.out_of_stock, 0);
     assert.equal(summary.total, 4);
   });
+
+  it("does not count a moved pending carry as out of stock", () => {
+    const summary = summarizeOpenCarry(
+      [
+        line({ leftover: "moved", status: "moved", shade: "treatment" }),
+        line({ leftover: "rolled", status: "out_of_stock", shade: "06R" }),
+        line({
+          leftover: "rolled",
+          status: "partial",
+          shade: "magnetics",
+          qty: 4,
+          orderedQty: 4,
+          receivedQty: 3,
+        }),
+      ],
+      [],
+    );
+    assert.equal(summary.total, 0);
+    assert.equal(summary.out_of_stock, 0);
+    assert.equal(summary.partial, 0);
+  });
 });

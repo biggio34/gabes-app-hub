@@ -5,6 +5,7 @@ export const ORDER_STATUSES = [
   "partial",
   "received",
   "out_of_stock",
+  "moved",
 ] as const;
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
@@ -20,7 +21,8 @@ export type SettableStatus = (typeof SETTABLE_STATUSES)[number];
 
 export const LEFTOVERS = ["", "wait", "oos", "rolled"] as const;
 
-export type Leftover = (typeof LEFTOVERS)[number];
+/** "moved" is history for a pending, cart, or ordered carry. Not a menu choice. */
+export type Leftover = (typeof LEFTOVERS)[number] | "moved";
 
 export const statusLabel: Record<OrderStatus, string> = {
   pending: "Pending",
@@ -29,9 +31,10 @@ export const statusLabel: Record<OrderStatus, string> = {
   partial: "Partial",
   received: "Received",
   out_of_stock: "Out of stock",
+  moved: "Moved",
 };
 
-export const leftoverLabel: Record<Exclude<Leftover, "">, string> = {
+export const leftoverLabel: Record<Exclude<Leftover, "" | "moved">, string> = {
   wait: "Wait",
   oos: "Out of stock",
   rolled: "Roll to next month",
@@ -138,6 +141,9 @@ export function deriveStatus(item: {
   if (item.receivedQty >= item.qty && item.qty > 0) return "received";
   if (item.receivedQty > 0) return "partial";
   if (item.orderedQty > 0) return "ordered";
+  // Carried pending, cart, and ordered lines are history, not out of stock.
+  // A real out-of-stock leftover stays "rolled" and keeps that status.
+  if (item.leftover === "moved") return "moved";
   // Line-level Out of stock is only when nothing went in. Leftover OOS on
   // a missing 1 after Ordered 1 of 2 stays on this month as leftover.
   if (item.leftover === "oos" || item.leftover === "rolled") return "out_of_stock";
@@ -153,7 +159,7 @@ export function canRevertToPending(item: {
   orderedQty: number;
   leftover: Leftover;
 }) {
-  return item.orderedQty > 0 && item.leftover !== "rolled";
+  return item.orderedQty > 0 && item.leftover !== "rolled" && item.leftover !== "moved";
 }
 
 export function unorderForPending(item: { leftover: Leftover }): {
@@ -161,7 +167,7 @@ export function unorderForPending(item: { leftover: Leftover }): {
   receivedQty: number;
   leftover: Leftover;
 } {
-  if (item.leftover === "rolled") {
+  if (item.leftover === "rolled" || item.leftover === "moved") {
     throw new Error(
       "Leftover already rolled to next month, so this line can't go back to Pending.",
     );
@@ -286,7 +292,9 @@ export function planCarryOver(item: {
   receivedQty: number;
   leftover: Leftover;
 }): CarryPlan {
-  if (item.leftover === "rolled") return { action: "skip", reason: "rolled" };
+  if (item.leftover === "rolled" || item.leftover === "moved") {
+    return { action: "skip", reason: "rolled" };
+  }
   if (item.qty < 1) return { action: "skip", reason: "empty" };
   if (item.receivedQty >= item.qty) return { action: "skip", reason: "received" };
   if (item.receivedQty > 0) {
@@ -306,8 +314,8 @@ function sameCarryText(left: string, right: string) {
 
 /**
  * A next-month row that already came from this line.
- * Pending carries are the rows whose note has the move line. Ordered carries
- * match the shipment: same product, qty, vendor, and order number.
+ * Real out-of-stock carries are the rows whose note has the move line.
+ * Other pending carries copy the note as it was. Ordered carries match the shipment.
  */
 export function findExistingCarry<T extends CarryItem>(source: CarryItem, nextItems: T[]): T | null {
   const plan = planCarryOver(source);
@@ -327,15 +335,14 @@ export function findExistingCarry<T extends CarryItem>(source: CarryItem, nextIt
       ) ?? null
     );
   }
+  const outOfStockCarry = source.leftover === "oos" || source.status === "out_of_stock";
   return (
-    nextItems.find(
-      (row) =>
-        productKey(row) === key &&
-        row.orderedQty === 0 &&
-        row.receivedQty === 0 &&
-        row.qty === plan.qty &&
-        row.note.includes(MOVE_NOTE),
-    ) ?? null
+    nextItems.find((row) => {
+      if (productKey(row) !== key || row.orderedQty !== 0 || row.receivedQty !== 0) return false;
+      if (row.qty !== plan.qty) return false;
+      if (outOfStockCarry) return row.note.includes(MOVE_NOTE);
+      return row.note.trim() === source.note.trim();
+    }) ?? null
   );
 }
 

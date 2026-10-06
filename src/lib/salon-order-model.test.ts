@@ -43,6 +43,30 @@ describe("unorderForPending", () => {
   });
 });
 
+describe("deriveStatus", () => {
+  it("keeps a rolled out-of-stock leftover out of stock and a partial partial", () => {
+    assert.equal(
+      deriveStatus({ qty: 1, orderedQty: 0, receivedQty: 0, leftover: "rolled" }),
+      "out_of_stock",
+    );
+    assert.equal(
+      deriveStatus({ qty: 4, orderedQty: 4, receivedQty: 3, leftover: "rolled" }),
+      "partial",
+    );
+  });
+
+  it("treats a pending, cart, or ordered carry as moved, not out of stock", () => {
+    assert.equal(
+      deriveStatus({ qty: 1, orderedQty: 0, receivedQty: 0, leftover: "moved" }),
+      "moved",
+    );
+    assert.notEqual(
+      deriveStatus({ qty: 2, orderedQty: 0, receivedQty: 0, leftover: "moved" }),
+      "out_of_stock",
+    );
+  });
+});
+
 describe("canRevertToPending", () => {
   it("is true for an ordered line that has not been rolled", () => {
     assert.equal(canRevertToPending({ orderedQty: 2, leftover: "" }), true);

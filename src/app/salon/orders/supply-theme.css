@@ -317,6 +317,14 @@
   text-decoration-thickness: 2px;
 }
 
+.so-moved,
+.so-status-moved {
+  background-color: transparent;
+  color: var(--so-muted, #6b574c);
+  border-color: var(--so-blush, #e0bfb0);
+  text-decoration: none;
+}
+
 .so-swatch {
   display: inline-block;
   width: 0.7rem;
@@ -354,6 +362,11 @@
 .so-swatch-out_of_stock {
   background: #3a3532;
   border-color: #2a2624;
+}
+
+.so-swatch-moved {
+  background: transparent;
+  border-color: var(--so-blush, #e0bfb0);
 }
 
 .so-filter {

@@ -121,17 +121,27 @@ const statusClass: Record<OrderStatus, string> = {
   partial: "so-status so-status-partial",
   received: "so-status so-status-received",
   out_of_stock: "so-status so-status-out_of_stock",
+  moved: "so-moved",
 };
 
 function StatusBadge({
   status,
   receivedQty,
   requestedQty,
+  movedTo,
 }: {
   status: OrderStatus;
   receivedQty?: number;
   requestedQty?: number;
+  movedTo?: string;
 }) {
+  if (status === "moved") {
+    return (
+      <span className="so-moved inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold">
+        Moved to {movedTo}
+      </span>
+    );
+  }
   const count =
     (status === "partial" || status === "received") &&
     receivedQty !== undefined &&
@@ -984,7 +994,8 @@ export function SupplyOrdersClient({
                 }`}
                 onClick={() => setFilter("all")}
               />
-              {ORDER_STATUSES.map((status) => (
+              {ORDER_STATUSES.filter((status) => status !== "moved" || counts.moved > 0).map(
+                (status) => (
                 <FilterChip
                   key={status}
                   active={filter === status}
@@ -992,7 +1003,8 @@ export function SupplyOrdersClient({
                   label={`${statusLabel[status]} ${counts[status]}`}
                   onClick={() => setFilter(status)}
                 />
-              ))}
+                ),
+              )}
             </div>
             <div
               className="so-soft flex rounded-full bg-slate-800 p-0.5"
@@ -1426,6 +1438,7 @@ function CompactItemsTable({
                         status={item.status}
                         receivedQty={item.receivedQty}
                         requestedQty={item.qty}
+                        movedTo={nextMonthLabel}
                       />
                     </div>
                   </td>
@@ -1513,7 +1526,14 @@ function LeftoverMenu({
   if (leftover === "rolled") {
     return (
       <p className="text-sm text-slate-400">
-        Rolled to {nextMonthLabel}. This month stays as history.
+        Leftover rolled to {nextMonthLabel}. This month stays as history.
+      </p>
+    );
+  }
+  if (leftover === "moved") {
+    return (
+      <p className="text-sm text-slate-400">
+        Moved to {nextMonthLabel}. This month stays as history.
       </p>
     );
   }
@@ -1616,6 +1636,7 @@ function ItemCard({
             status={item.status}
             receivedQty={item.receivedQty}
             requestedQty={item.qty}
+            movedTo={nextMonthLabel}
           />
           {showRollToNextMonth(item, nextItems) ? (
             <button
@@ -1800,6 +1821,13 @@ function ItemFulfillment({
               {canRevertToPending(item)
                 ? " Use Move back to Pending if this was marked Ordered by mistake."
                 : " Leftover already rolled to next month, so this line can't go back to Pending."}
+            </span>
+          </p>
+        ) : item.status === "moved" ? (
+          <p className="grid gap-1.5 text-sm">
+            Status
+            <span className="text-slate-400">
+              Moved to {nextMonthLabel}. This month stays as history.
             </span>
           </p>
         ) : (

@@ -55,7 +55,8 @@ describe("month-end carry-over", () => {
     assert.equal(first.kind, "ordered");
     const history = (await orders.getMonthView(2026, 3)).items.find((row) => row.id === item.id);
     assert.ok(history);
-    assert.equal(history.leftover, "rolled");
+    assert.equal(history.leftover, "moved");
+    assert.equal(history.status, "moved");
     assert.equal(history.orderedQty, 0);
     assert.equal(history.qty, 2);
     assert.equal(history.actualVendor, "BeautyBell");
@@ -132,7 +133,8 @@ describe("month-end carry-over", () => {
     assert.equal(march.status, "pending");
     assert.equal(march.qty, 3);
     assert.equal(march.orderedQty, 0);
-    assert.match(march.note, /Last months out of stock/);
+    assert.equal(march.note.includes("Last months out of stock"), false);
+    assert.match(march.note, /back bar/);
     const ids = (await orders.getCheckInView("user-brooke")).groups.flatMap((group) =>
       group.items.map((row) => row.id),
     );
@@ -245,20 +247,30 @@ describe("month-end carry-over", () => {
     assert.equal(gloss.sku, "PG");
     assert.equal(gloss.preferredVendor, "SalonCentric");
     assert.equal(gloss.requestedByName, "Brooke");
-    assert.match(gloss.note, new RegExp(MOVE_NOTE));
+    assert.equal(gloss.note, "please");
+    assert.equal(gloss.note.includes(MOVE_NOTE), false);
     assert.equal(gloss.receivedByName, "");
     assert.equal(july.items.find((row) => row.product === "Cart oil")?.status, "pending");
+    assert.equal(july.items.find((row) => row.product === "Cart oil")?.note.includes(MOVE_NOTE), false);
     const cream = july.items.find((row) => row.product === "Ordered cream");
     assert.equal(cream?.status, "ordered");
     assert.equal(cream?.vendorOrderNumber, "G-9");
     assert.equal(cream?.note.includes(MOVE_NOTE), false);
-    assert.equal(july.items.find((row) => row.product === "Missing powder")?.status, "pending");
+    const powder = july.items.find((row) => row.product === "Missing powder");
+    assert.equal(powder?.status, "pending");
+    assert.match(powder?.note ?? "", new RegExp(MOVE_NOTE));
     assert.equal(july.items.some((row) => row.product === "Already here"), false);
     const june = await orders.getMonthView(2026, 6);
+    const powderHistory = june.items.find((row) => row.id === oos.id);
+    assert.equal(powderHistory?.status, "out_of_stock");
+    assert.equal(powderHistory?.leftover, "rolled");
     const history = june.items.find((row) => row.id === ordered.id);
     assert.equal(history?.orderedQty, 0);
-    assert.equal(history?.leftover, "rolled");
-    assert.equal(june.items.find((row) => row.id === pending.id)?.leftover, "rolled");
+    assert.equal(history?.leftover, "moved");
+    assert.equal(history?.status, "moved");
+    const pendingHistory = june.items.find((row) => row.id === pending.id);
+    assert.equal(pendingHistory?.leftover, "moved");
+    assert.equal(pendingHistory?.status, "moved");
 
     const again = await orders.moveOpenItemsToNextMonth(2026, 6, purchasing);
     assert.equal(again.moved, 0);
