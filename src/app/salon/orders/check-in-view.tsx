@@ -495,7 +495,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                       <button
                         type="button"
                         disabled={busyKey !== ""}
-                        className={`${tap} shrink-0 bg-slate-950`}
+                        className={`${tap} shrink-0 border border-slate-700 bg-slate-950`}
                         onClick={() => void undoSaved(row.id)}
                       >
                         Undo
