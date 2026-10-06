@@ -71,12 +71,12 @@ const field =
   "w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-rose-500";
 
 const statusClass: Record<OrderStatus, string> = {
-  pending: "border-amber-500/30 bg-amber-500/15 text-amber-200",
-  in_cart: "border-sky-500/30 bg-sky-500/15 text-sky-200",
-  ordered: "border-violet-500/30 bg-violet-500/15 text-violet-200",
-  partial: "border-orange-500/30 bg-orange-500/15 text-orange-200",
-  received: "border-emerald-500/30 bg-emerald-500/15 text-emerald-200",
-  out_of_stock: "border-rose-500/30 bg-rose-500/15 text-rose-200",
+  pending: "so-status so-status-pending",
+  in_cart: "so-status so-status-in_cart",
+  ordered: "so-status so-status-ordered",
+  partial: "so-status so-status-partial",
+  received: "so-status so-status-received",
+  out_of_stock: "so-status so-status-out_of_stock",
 };
 
 function StatusBadge({
@@ -488,7 +488,7 @@ export function SupplyOrdersClient({
 
   if (!view) {
     return (
-      <div className="min-h-dvh bg-slate-950 px-6 py-10 text-slate-300">
+      <div className="min-h-dvh px-6 py-10">
         {error || "Loading supply orders…"}
       </div>
     );
@@ -502,7 +502,7 @@ export function SupplyOrdersClient({
   const suggestions = view.suggestions;
 
   return (
-    <div className="min-h-dvh bg-slate-950 text-slate-200">
+    <div className="min-h-dvh">
       <div
         className={`mx-auto grid w-full gap-6 px-4 py-8 sm:px-6 ${
           listLayout === "table" ? "max-w-6xl" : "max-w-5xl"
@@ -513,7 +513,7 @@ export function SupplyOrdersClient({
             <Link href="/" className="text-sm text-slate-400 hover:text-rose-300">
               ← Hub
             </Link>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Supply Orders</h1>
+            <h1 className="mt-2 text-3xl tracking-tight">Supply Orders</h1>
             <p className="text-sm text-slate-400">
               Luna Haus requests. Purchasing marks lines ordered. Anyone here can check
               in what arrives.
@@ -540,7 +540,7 @@ export function SupplyOrdersClient({
             >
               ← Supply orders
             </button>
-            <h2 className="mb-4 text-2xl font-semibold">Check in delivery</h2>
+            <h2 className="so-title mb-4 text-2xl">Check in delivery</h2>
             <CheckInView
               onActivity={() => void load(String(view.year), String(view.month))}
             />
@@ -550,7 +550,7 @@ export function SupplyOrdersClient({
         {checkInOpen ? null : (
         <button
           type="button"
-          className="rounded-3xl bg-rose-700 px-5 py-4 text-left text-white hover:bg-rose-600"
+          className="so-checkin rounded-3xl bg-rose-700 px-5 py-4 text-left text-white hover:bg-rose-600"
           onClick={openCheckIn}
         >
           <span className="block text-lg font-semibold">Check in delivery</span>
@@ -808,6 +808,7 @@ export function SupplyOrdersClient({
                 <FilterChip
                   key={status}
                   active={filter === status}
+                  status={status}
                   label={`${statusLabel[status]} ${counts[status]}`}
                   onClick={() => setFilter(status)}
                 />
@@ -992,6 +993,7 @@ export function SupplyOrdersClient({
           grouped.map((group) => (
             <section key={group.status} className="grid gap-3">
               <h2 className="flex items-center gap-2 text-sm font-semibold tracking-[0.14em] text-slate-400 uppercase">
+                <span className={`so-swatch so-swatch-${group.status}`} aria-hidden="true" />
                 {statusLabel[group.status]}
               </h2>
               {group.vendors.map(([vendor, items]) => (
@@ -1109,18 +1111,20 @@ function FilterChip({
   active,
   label,
   onClick,
+  status,
 }: {
   active: boolean;
   label: string;
   onClick: () => void;
+  status?: OrderStatus;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-        active ? "bg-rose-700 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-      }`}
+      className={`so-filter ${
+        status ? `so-status so-status-${status}` : "so-filter-all"
+      } ${active ? "so-filter-on" : ""}`}
     >
       {label}
     </button>
@@ -1209,6 +1213,7 @@ function CompactItemsTable({
             return (
               <Fragment key={`${item.id}-${item.updatedAt}`}>
                 <tr
+                  data-status={item.status}
                   className={`cursor-pointer border-t border-slate-800 hover:bg-slate-800/50 ${
                     open ? "bg-slate-800/40" : ""
                   }`}
@@ -1371,7 +1376,10 @@ function ItemCard({
     : `Qty ${item.qty}`;
 
   return (
-    <li className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+    <li
+      data-status={item.status}
+      className="so-item rounded-2xl border border-slate-800 bg-slate-950 p-4"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-medium">

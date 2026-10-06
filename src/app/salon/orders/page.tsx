@@ -12,7 +12,7 @@ export default async function SupplyOrdersPage({
   if (!session) redirect("/login");
   if (!canAccessArea(session, "luna-haus")) {
     return (
-      <div className="min-h-dvh bg-slate-950 px-6 py-10 text-slate-200">
+      <div className="min-h-dvh px-6 py-10">
         <Link href="/" className="text-sm text-slate-400 hover:text-rose-300">
           ← Hub
         </Link>

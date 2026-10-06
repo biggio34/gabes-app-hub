@@ -1,4 +1,5 @@
 import Link from "next/link";
+import "./salon/orders/supply-theme.css";
 import { redirect } from "next/navigation";
 import { areaMeta, AREAS } from "@/lib/areas";
 import { canAccessArea, getSession, wristCoachAllowed } from "@/lib/auth";
@@ -96,10 +97,10 @@ export default async function HubHome() {
               {area === "luna-haus" && showCheckIn ? (
                 <Link
                   href="/salon/orders?checkin=1"
-                  className="mb-4 block rounded-3xl bg-rose-700 px-5 py-4 text-white transition hover:bg-rose-600"
+                  className="so-hub-checkin mb-4 block rounded-3xl px-5 py-4 transition"
                 >
                   <span className="block text-lg font-semibold">Check in delivery</span>
-                  <span className="block text-sm text-rose-100">
+                  <span className="so-hub-checkin-note block text-sm font-semibold">
                     {deliveryWaiting === null
                       ? "Open check-in"
                       : deliveriesStillOpenLabel(deliveryWaiting)}
@@ -118,17 +119,26 @@ export default async function HubHome() {
                   })
                   .map((app) => {
                   const href = app.href || `/apps/${app.slug}`;
+                  const supplyTile = app.slug === "supply-orders";
                   return (
                     <a
                       key={app.slug}
                       href={href}
                       target={app.external ? "_blank" : undefined}
                       rel={app.external ? "noopener" : undefined}
-                      className="rounded-3xl border border-slate-800 bg-slate-900 p-5 transition hover:-translate-y-0.5 hover:border-red-500"
+                      className={
+                        supplyTile
+                          ? "so-hub-card rounded-3xl border p-5 transition hover:-translate-y-0.5"
+                          : "rounded-3xl border border-slate-800 bg-slate-900 p-5 transition hover:-translate-y-0.5 hover:border-red-500"
+                      }
                     >
                       <h2 className="text-lg font-semibold">{app.title}</h2>
                       <p className="mt-2 text-sm text-slate-400">{app.description}</p>
-                      <span className="mt-4 inline-flex text-sm font-semibold text-red-400">
+                      <span
+                        className={`mt-4 inline-flex text-sm font-semibold ${
+                          supplyTile ? "so-hub-launch" : "text-red-400"
+                        }`}
+                      >
                         {app.external ? "Open" : "Launch"}
                       </span>
                     </a>
