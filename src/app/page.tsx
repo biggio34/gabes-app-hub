@@ -4,6 +4,7 @@ import { areaMeta, AREAS } from "@/lib/areas";
 import { canAccessArea, getSession, wristCoachAllowed } from "@/lib/auth";
 import { hubApps } from "@/lib/catalog";
 import { labelsForUser } from "@/lib/clubs";
+import { deliveriesStillOpenLabel } from "@/lib/salon-check-in";
 import { countWaitingDeliveries } from "@/lib/salon-orders";
 import { findUserById } from "@/lib/users";
 
@@ -101,11 +102,7 @@ export default async function HubHome() {
                   <span className="block text-sm text-rose-100">
                     {deliveryWaiting === null
                       ? "Open check-in"
-                      : deliveryWaiting === 1
-                        ? "1 order waiting"
-                        : deliveryWaiting
-                          ? `${deliveryWaiting} orders waiting`
-                          : "No orders waiting"}
+                      : deliveriesStillOpenLabel(deliveryWaiting)}
                   </span>
                 </Link>
               ) : null}

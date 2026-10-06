@@ -48,6 +48,36 @@ export function joinDisplay(parts: string[], separator = " · ") {
   return parts.map((part) => displayText(part)).filter(Boolean).join(separator);
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Brand as its own word or phrase, not a piece of a longer word. */
+export function containsWholePhrase(text: string, phrase: string) {
+  const needle = phrase.trim();
+  if (!needle) return false;
+  const pattern = new RegExp(
+    `(?:^|[^\\p{L}\\p{N}])${escapeRegExp(needle)}(?=$|[^\\p{L}\\p{N}])`,
+    "iu",
+  );
+  return pattern.test(text);
+}
+
+/** Show the brand once. Keep it when it only appears inside another word. */
+export function productTitle(brand: string, product: string, separator = " ") {
+  const name = displayText(product);
+  const label = displayText(brand);
+  if (!label) return name;
+  if (!name || containsWholePhrase(name, label)) return name || label;
+  return `${label}${separator}${name}`;
+}
+
+export function deliveriesStillOpenLabel(count: number) {
+  if (count === 1) return "1 delivery still open";
+  if (count === 0) return "No deliveries still open";
+  return `${count} deliveries still open`;
+}
+
 export function deliveryGroupKey(vendor: string, vendorOrderNumber: string) {
   return `${vendor.trim().toLowerCase()}\u0000${vendorOrderNumber.trim().toLowerCase()}`;
 }
@@ -90,10 +120,6 @@ export function groupDeliveries<T extends DeliverySort>(lines: T[]) {
       };
     })
     .sort((a, b) => compareDelivery(a.items[0], b.items[0]) || a.key.localeCompare(b.key));
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Drop a leading # or an exact copy of the full vendor name. Never a partial word. */

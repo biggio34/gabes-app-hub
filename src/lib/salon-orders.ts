@@ -11,6 +11,7 @@ import {
   isAwaitingDelivery,
   isSameChicagoDay,
   parseCheckInUndo,
+  productTitle,
   planCheckIn,
   snapshotFromItem,
   type CheckInUndoSnapshot,
@@ -799,25 +800,59 @@ export async function getCheckInView(userId: string) {
   };
 }
 
-async function listUndoToday(userId: string) {
+export type UndoTodayGroup = {
+  key: string;
+  title: string;
+  receivedAt: string;
+  items: { id: string; label: string; receivedAt: string }[];
+};
+
+async function listUndoToday(userId: string): Promise<UndoTodayGroup[]> {
   const orders = await listOrders();
-  const rows: { id: string; label: string; receivedAt: string }[] = [];
+  const lines: {
+    id: string;
+    label: string;
+    receivedAt: string;
+    vendor: string;
+    vendorOrderNumber: string;
+    year: number;
+    month: number;
+    createdAt: string;
+  }[] = [];
   for (const order of orders) {
     for (const item of await listItems(order.id)) {
       if (item.receivedByUserId !== userId) continue;
       if (!item.receivedAt || !isSameChicagoDay(item.receivedAt)) continue;
       if (!parseCheckInUndo(item.checkinUndo)) continue;
-      rows.push({
+      lines.push({
         id: item.id,
-        label: [item.brand, item.product, item.shade]
-          .map((part) => displayText(part))
+        label: [productTitle(item.brand, item.product), displayText(item.shade)]
           .filter(Boolean)
           .join(" · "),
         receivedAt: item.receivedAt,
+        vendor: itemVendor(item),
+        vendorOrderNumber: item.vendorOrderNumber,
+        year: order.year,
+        month: order.month,
+        createdAt: item.receivedAt,
       });
     }
   }
-  return rows.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+  return groupDeliveries(lines)
+    .map((group) => {
+      const items = [...group.items].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+      return {
+        key: group.key,
+        title: deliveryGroupTitle(group.vendor, group.vendorOrderNumber, items.length),
+        receivedAt: items[0]?.receivedAt ?? "",
+        items: items.map((item) => ({
+          id: item.id,
+          label: item.label,
+          receivedAt: item.receivedAt,
+        })),
+      };
+    })
+    .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
 }
 
 export async function checkInDeliveries(input: {
@@ -1043,6 +1078,16 @@ async function applyUndoSnapshot(line: CheckInUndoSnapshot) {
   refreshStatus(current);
   current.updatedAt = new Date().toISOString();
   await persistItem(current);
+}
+
+export async function undoSavedDelivery(key: string, userId: string) {
+  const group = (await listUndoToday(userId)).find((row) => row.key === key);
+  if (!group || group.items.length === 0) {
+    throw new Error("That delivery can't be undone.");
+  }
+  for (const item of group.items) {
+    await undoSavedCheckIn(item.id, userId);
+  }
 }
 
 export async function undoSavedCheckIn(id: string, userId: string) {

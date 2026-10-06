@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  containsWholePhrase,
+  deliveriesStillOpenLabel,
   deliveryGroupTitle,
   deliveryOrderIds,
   displayText,
@@ -10,6 +12,7 @@ import {
   joinDisplay,
   orderedStillComing,
   planCheckIn,
+  productTitle,
 } from "./salon-check-in.ts";
 
 describe("isAwaitingDelivery", () => {
@@ -158,6 +161,21 @@ describe("delivery group titles", () => {
       "113-1234567-7654321",
       "114-1234567-7654321",
     ]);
+  });
+});
+
+describe("productTitle", () => {
+  it("shows a brand once when the product already contains it", () => {
+    assert.equal(productTitle("TEST", "TEST item D"), "TEST item D");
+    assert.equal(productTitle("Malibu C", "Malibu C Un-Do-Goo"), "Malibu C Un-Do-Goo");
+    assert.equal(productTitle("malibu c", "Malibu C spray"), "Malibu C spray");
+    assert.equal(productTitle("Redken", "Shades EQ"), "Redken Shades EQ");
+    assert.equal(productTitle("Redken", "Shades EQ", " · "), "Redken · Shades EQ");
+    assert.equal(productTitle("Malibu", "MalibuC spray"), "Malibu MalibuC spray");
+    assert.equal(containsWholePhrase("Redken", "ken"), false);
+    assert.equal(deliveriesStillOpenLabel(0), "No deliveries still open");
+    assert.equal(deliveriesStillOpenLabel(1), "1 delivery still open");
+    assert.equal(deliveriesStillOpenLabel(8), "8 deliveries still open");
   });
 });
 

@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { CheckInView } from "./check-in-view";
-import { displayText, formatReceivedStamp, joinDisplay } from "@/lib/salon-check-in";
+import {
+  deliveriesStillOpenLabel,
+  displayText,
+  formatReceivedStamp,
+  joinDisplay,
+  productTitle,
+} from "@/lib/salon-check-in";
 import {
   canRevertToPending,
   findPendingDuplicate,
@@ -549,11 +555,7 @@ export function SupplyOrdersClient({
         >
           <span className="block text-lg font-semibold">Check in delivery</span>
           <span className="block text-sm text-rose-100">
-            {view.deliveryWaiting === 1
-              ? "1 order waiting"
-              : view.deliveryWaiting
-                ? `${view.deliveryWaiting} orders waiting`
-                : "No orders waiting"}
+            {deliveriesStillOpenLabel(view.deliveryWaiting)}
           </span>
         </button>
         )}
@@ -963,9 +965,7 @@ export function SupplyOrdersClient({
                 className="mt-3 text-sm font-semibold text-rose-300 hover:text-rose-200"
                 onClick={openCheckIn}
               >
-                {view.deliveryWaiting === 1
-                  ? "1 delivery waiting to check in"
-                  : `${view.deliveryWaiting} deliveries waiting to check in`}
+                {deliveriesStillOpenLabel(view.deliveryWaiting)}
               </button>
             ) : null}
           </div>
@@ -1232,7 +1232,14 @@ function CompactItemsTable({
                   <td className="px-2 py-2">
                     <CellText value={item.brand} />
                   </td>
-                  <td className="px-2 py-2">{item.product}</td>
+                  <td className="px-2 py-2">
+                    {item.product}
+                    {formatReceivedStamp(item.receivedByName, item.receivedAt) ? (
+                      <span className="mt-1 block text-xs text-emerald-300">
+                        {formatReceivedStamp(item.receivedByName, item.receivedAt)}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="px-2 py-2 whitespace-nowrap">
                     <CellText value={item.size} />
                   </td>
@@ -1368,7 +1375,7 @@ function ItemCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-medium">
-            {joinDisplay([item.brand, item.product], " · ") || item.product}
+            {productTitle(item.brand, item.product, " · ") || item.product}
           </p>
           <p className="text-sm text-slate-400">
             {joinDisplay([
@@ -1384,6 +1391,11 @@ function ItemCard({
             {item.vendorOrderNumber ? ` · Order # ${item.vendorOrderNumber}` : ""}
           </p>
           {item.note ? <p className="mt-1 text-sm text-slate-300">{item.note}</p> : null}
+          {formatReceivedStamp(item.receivedByName, item.receivedAt) ? (
+            <p className="mt-1 text-sm text-emerald-300">
+              {formatReceivedStamp(item.receivedByName, item.receivedAt)}
+            </p>
+          ) : null}
         </div>
         <StatusBadge
           status={item.status}
@@ -1534,13 +1546,8 @@ function ItemFulfillment({
     onPatch({ receivedQty });
   }
 
-  const receivedStamp = formatReceivedStamp(item.receivedByName, item.receivedAt);
-
   return (
     <div>
-      {receivedStamp ? (
-        <p className="mt-3 text-sm text-emerald-300">{receivedStamp}</p>
-      ) : null}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="grid gap-1.5 text-sm">
           Actual vendor

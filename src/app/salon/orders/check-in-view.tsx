@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { displayText, formatReceivedStamp, joinDisplay, orderedStillComing } from "@/lib/salon-check-in";
+import {
+  deliveriesStillOpenLabel,
+  displayText,
+  formatReceivedStamp,
+  joinDisplay,
+  orderedStillComing,
+  productTitle,
+} from "@/lib/salon-check-in";
 import { monthLabel } from "@/lib/salon-order-model";
 
 type DeliveryLine = {
@@ -34,7 +41,12 @@ type Group = {
 type CheckInPayload = {
   waitingOrders: number;
   groups: Group[];
-  undoToday: { id: string; label: string; receivedAt: string }[];
+  undoToday: {
+    key: string;
+    title: string;
+    receivedAt: string;
+    items: { id: string; label: string; receivedAt: string }[];
+  }[];
   receiveMeta: boolean;
 };
 
@@ -55,7 +67,7 @@ const tap =
   "min-h-12 rounded-2xl px-4 text-base font-semibold disabled:opacity-60";
 
 function lineTitle(item: DeliveryLine) {
-  return joinDisplay([item.brand, item.product], " ");
+  return productTitle(item.brand, item.product);
 }
 
 function clock(iso: string) {
@@ -189,6 +201,26 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
     }
   }
 
+  async function undoDelivery(key: string) {
+    setBusyKey(key);
+    setError("");
+    try {
+      const response = await fetch("/api/salon/orders/check-in", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "undo-delivery", key }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "Could not undo that delivery.");
+      await load();
+      onActivity();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not undo that delivery.");
+    } finally {
+      setBusyKey("");
+    }
+  }
+
   async function undoSaved(id: string) {
     setBusyKey(id);
     setError("");
@@ -216,11 +248,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
   return (
     <div className={`grid gap-4 ${undo ? "pt-24" : ""}`}>
       <p className="text-sm text-slate-400">
-        {payload.waitingOrders === 0
-          ? "No orders waiting."
-          : payload.waitingOrders === 1
-            ? "1 order waiting."
-            : `${payload.waitingOrders} orders waiting.`}
+        {`${deliveriesStillOpenLabel(payload.waitingOrders)}.`}
       </p>
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
       {payload.groups.length === 0 ? (
@@ -394,24 +422,44 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
           <p className="text-sm text-slate-400">
             Undo stays available for the rest of today after the bar is gone.
           </p>
-          <ul className="grid gap-2">
-            {payload.undoToday.map((row) => (
+          <ul className="grid gap-3">
+            {payload.undoToday.map((group) => (
               <li
-                key={row.id}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 px-3 py-2"
+                key={group.key}
+                className="grid gap-2 rounded-2xl border border-slate-800 bg-slate-900 px-3 py-3"
               >
-                <p className="text-sm">
-                  {row.label}
-                  <span className="block text-slate-400">{clock(row.receivedAt)}</span>
-                </p>
-                <button
-                  type="button"
-                  disabled={busyKey !== ""}
-                  className={`${tap} bg-slate-800`}
-                  onClick={() => void undoSaved(row.id)}
-                >
-                  Undo
-                </button>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold leading-snug">
+                    {group.title}
+                    <span className="block font-normal text-slate-400">{clock(group.receivedAt)}</span>
+                  </p>
+                  <button
+                    type="button"
+                    disabled={busyKey !== ""}
+                    className={`${tap} shrink-0 bg-slate-800`}
+                    onClick={() => void undoDelivery(group.key)}
+                  >
+                    Undo delivery
+                  </button>
+                </div>
+                <ul className="grid gap-2">
+                  {group.items.map((row) => (
+                    <li key={row.id} className="flex items-center justify-between gap-3">
+                      <p className="text-sm">
+                        {row.label}
+                        <span className="block text-slate-400">{clock(row.receivedAt)}</span>
+                      </p>
+                      <button
+                        type="button"
+                        disabled={busyKey !== ""}
+                        className={`${tap} shrink-0 bg-slate-950`}
+                        onClick={() => void undoSaved(row.id)}
+                      >
+                        Undo
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
           </ul>

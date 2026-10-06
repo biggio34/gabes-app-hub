@@ -129,4 +129,78 @@ describe("supply check-in", () => {
     assert.ok(still);
     assert.equal(still.orderedQty - still.receivedQty, 2);
   });
+
+  it("undoes a whole delivery and does not duplicate the rollover on redo", async () => {
+    const orders = await import("./salon-orders.ts");
+    const actor = { id: "user-brooke-test", name: "Brooke (Test)" };
+    const ordered = { canMarkOrdered: true, id: "user-lhp", name: "lhp" };
+    const first = await orders.addItem({
+      year: 2026,
+      month: 7,
+      brand: "TEST",
+      product: "TEST item D",
+      qty: 2,
+      preferredVendor: "TEST Vendor",
+      requestedByUserId: "user-lhp",
+      requestedByName: "lhp",
+    });
+    const second = await orders.addItem({
+      year: 2026,
+      month: 7,
+      brand: "TEST",
+      product: "TEST item E",
+      qty: 1,
+      preferredVendor: "TEST Vendor",
+      requestedByUserId: "user-lhp",
+      requestedByName: "lhp",
+    });
+    await orders.updateItem(
+      first.id,
+      { status: "ordered", orderedQty: 2, actualVendor: "TEST Vendor", vendorOrderNumber: "WHOLE-UNDO" },
+      ordered,
+    );
+    await orders.updateItem(
+      second.id,
+      { status: "ordered", orderedQty: 1, actualVendor: "TEST Vendor", vendorOrderNumber: "WHOLE-UNDO" },
+      ordered,
+    );
+    await orders.checkInDeliveries({
+      actor,
+      lines: [
+        { id: first.id, receivedQty: 1, choice: "roll" },
+        { id: second.id, receivedQty: 1, choice: "roll" },
+      ],
+    });
+    const rolledOnce = (await orders.getMonthView(2026, 8)).items.filter(
+      (row) => row.product === "TEST item D",
+    );
+    assert.equal(rolledOnce.length, 1);
+    assert.equal(rolledOnce[0].qty, 1);
+    const view = await orders.getCheckInView(actor.id);
+    const group = view.undoToday.find((row) => row.title.includes("WHOLE-UNDO"));
+    assert.ok(group);
+    assert.equal(group.items.length, 2);
+    assert.deepEqual(
+      group.items.map((item) => item.label).sort(),
+      ["TEST item D", "TEST item E"],
+    );
+    await orders.undoSavedDelivery(group.key, actor.id);
+    const restored = (await orders.getMonthView(2026, 7)).items.find((row) => row.id === first.id);
+    assert.equal(restored?.receivedQty, 0);
+    assert.equal(restored?.status, "ordered");
+    assert.equal(restored?.leftover, "");
+    assert.equal(
+      (await orders.getMonthView(2026, 8)).items.filter((row) => row.product === "TEST item D").length,
+      0,
+    );
+    await orders.checkInDeliveries({
+      actor,
+      lines: [{ id: first.id, receivedQty: 1, choice: "roll" }],
+    });
+    const rolledAgain = (await orders.getMonthView(2026, 8)).items.filter(
+      (row) => row.product === "TEST item D",
+    );
+    assert.equal(rolledAgain.length, 1);
+    assert.equal(rolledAgain[0].qty, 1);
+  });
 });

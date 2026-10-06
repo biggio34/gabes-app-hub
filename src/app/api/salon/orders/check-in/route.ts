@@ -6,6 +6,7 @@ import {
   getCheckInView,
   undoCheckInSnapshots,
   undoSavedCheckIn,
+  undoSavedDelivery,
 } from "@/lib/salon-orders";
 
 export const runtime = "nodejs";
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
     lines?: { id: string; receivedQty: unknown; choice?: string }[];
     token?: string;
     id?: string;
+    key?: string;
   } | null;
   try {
     if (body?.action === "check-in") {
@@ -50,6 +52,11 @@ export async function POST(request: Request) {
     if (body?.action === "undo-saved") {
       if (!body.id) throw new Error("Missing request.");
       await undoSavedCheckIn(body.id, session.id);
+      return NextResponse.json({ ok: true });
+    }
+    if (body?.action === "undo-delivery") {
+      if (!body.key) throw new Error("Missing delivery.");
+      await undoSavedDelivery(body.key, session.id);
       return NextResponse.json({ ok: true });
     }
     return NextResponse.json({ error: "Unknown action." }, { status: 400 });
