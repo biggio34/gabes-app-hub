@@ -1,8 +1,8 @@
 import { verifyPassword } from "./auth";
 import type { SessionUser } from "./auth";
-import { previewBrookeLoginEnabled } from "./preview-brooke-gate";
+import { previewBrookeLoginEnabled, previewRequestHost } from "./preview-brooke-gate";
 
-export { previewBrookeLoginEnabled };
+export { previewBrookeLoginEnabled, previewRequestHost };
 
 /**
  * Preview-only stand-in for Brooke. Not a row in hub_users, so it never

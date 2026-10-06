@@ -5,6 +5,7 @@ import {
   previewBrookeLoginEnabled,
   previewBrookePasswordMatches,
   previewBrookeSession,
+  previewRequestHost,
 } from "@/lib/preview-brooke";
 import { findUserByUsername, matchesOwnerPassword } from "@/lib/users";
 
@@ -25,7 +26,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (previewBrookeLoginEnabled() && isPreviewBrookeUsername(username)) {
+    if (
+      previewBrookeLoginEnabled(previewRequestHost(request)) &&
+      isPreviewBrookeUsername(username)
+    ) {
       if (!(await previewBrookePasswordMatches(password))) {
         return NextResponse.json(
           { error: "That username or password is wrong." },
