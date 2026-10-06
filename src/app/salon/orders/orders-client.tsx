@@ -13,16 +13,22 @@ import {
   productTitle,
 } from "@/lib/salon-check-in";
 import {
+  bulkStatusRowPlan,
   canRevertToPending,
   findPendingDuplicate,
+  goingInQty,
   isSettableStatus,
   itemVendor,
   leftoverLabel,
   monthLabel,
   nextYearMonth,
+  requestedQtyFromDraft,
   rollButtonLabel,
+  sharedVendorOrderNumber,
   showRollToNextMonth,
+  splitBulkRowSave,
   summarizeOpenCarry,
+  withUnsavedRowFields,
   ORDER_STATUSES,
   prevYearMonth,
   remainderQty,
@@ -30,6 +36,7 @@ import {
   statusLabel,
   type Leftover,
   type OrderStatus,
+  type RowDraft,
   type SalonOrder,
   type SalonOrderItem,
   type SalonSuggestions,
@@ -169,11 +176,13 @@ function StatusSelect({
   onChange,
   disabled,
   statuses = SETTABLE_STATUSES,
+  testId,
 }: {
   value: SettableStatus;
   onChange: (status: SettableStatus) => void;
   disabled?: boolean;
   statuses?: readonly SettableStatus[];
+  testId?: string;
 }) {
   const selected = statuses.includes(value) ? value : statuses[0];
   return (
@@ -181,6 +190,7 @@ function StatusSelect({
       className={field}
       value={selected}
       disabled={disabled}
+      data-testid={testId}
       onChange={(event) => onChange(event.target.value as SettableStatus)}
     >
       {statuses.map((status) => (
@@ -233,6 +243,9 @@ export function SupplyOrdersClient({
   const [carryUndo, setCarryUndo] = useState<{ token: string; label: string } | null>(null);
   const carryUndoTimer = useRef<number | null>(null);
   const carryUndoHideAt = useRef(0);
+  const draftsRef = useRef(new Map<string, RowDraft>());
+  const [orderedDrafts, setOrderedDrafts] = useState<Record<string, string>>({});
+  const saveQueue = useRef(Promise.resolve());
 
   async function load(year?: string, month?: string) {
     const params = new URLSearchParams();
@@ -431,21 +444,45 @@ export function SupplyOrdersClient({
     }
   }
 
+  function enqueue(job: () => Promise<void>) {
+    const run = saveQueue.current.then(job, job);
+    saveQueue.current = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  async function postItem(id: string, patch: Record<string, unknown>) {
+    await readError(
+      await fetch("/api/salon/orders/items", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, ...patch }),
+      }),
+      "Could not update that request.",
+    );
+  }
+
+  function rememberDraft(id: string, draft: RowDraft) {
+    draftsRef.current.set(id, draft);
+    setOrderedDrafts((current) =>
+      current[id] === draft.orderedQty ? current : { ...current, [id]: draft.orderedQty },
+    );
+  }
+
   async function patchItem(id: string, patch: Record<string, unknown>) {
-    setError("");
-    try {
-      await readError(
-        await fetch("/api/salon/orders/items", {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ id, ...patch }),
-        }),
-        "Could not update that request.",
-      );
-      if (view) await load(String(view.year), String(view.month));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update that request.");
-    }
+    const year = view?.year;
+    const month = view?.month;
+    await enqueue(async () => {
+      setError("");
+      try {
+        await postItem(id, patch);
+        if (year && month) await load(String(year), String(month));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not update that request.");
+      }
+    });
   }
 
   async function removeItem(id: string) {
@@ -486,30 +523,58 @@ export function SupplyOrdersClient({
         return;
       }
     }
-    setError("");
-    try {
-      await readError(
-        await fetch("/api/salon/orders/actions", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            action: "bulk-status",
-            year: view.year,
-            month: view.month,
-            vendor,
-            status,
-            fromStatus,
-            vendorOrderNumber,
-          }),
-        }),
-        "Could not update those items.",
-      );
-      setBulkOrderPrompt(null);
-      setBulkOrderNumber("");
-      await load(String(view.year), String(view.month));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update those items.");
+    const affected = view.items.filter((item) => {
+      if (itemVendor(item).toLowerCase() !== vendor.trim().toLowerCase()) return false;
+      if (fromStatus && item.status !== fromStatus) return false;
+      return true;
+    });
+    const plans = affected.map((item) => ({
+      item,
+      plan: bulkStatusRowPlan(item, draftsRef.current.get(item.id), status),
+    }));
+    const blocked = plans.find((row) => row.plan.blocked);
+    if (blocked?.plan.blocked) {
+      setError(blocked.plan.blocked);
+      return;
     }
+    const year = view.year;
+    const month = view.month;
+    const orderNumber = sharedVendorOrderNumber(vendorOrderNumber);
+    await enqueue(async () => {
+      setError("");
+      try {
+        for (const { item, plan } of plans) {
+          const { before } = splitBulkRowSave(plan.save);
+          if (Object.keys(before).length > 0) await postItem(item.id, before);
+        }
+        await readError(
+          await fetch("/api/salon/orders/actions", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              action: "bulk-status",
+              year,
+              month,
+              vendor,
+              status,
+              fromStatus,
+              ...(orderNumber ? { vendorOrderNumber: orderNumber } : {}),
+            }),
+          }),
+          "Could not update those items.",
+        );
+        for (const { item, plan } of plans) {
+          const { vendor: vendorFields } = splitBulkRowSave(plan.save);
+          if (Object.keys(vendorFields).length > 0) await postItem(item.id, vendorFields);
+        }
+        setBulkOrderPrompt(null);
+        setBulkOrderNumber("");
+        await load(String(year), String(month));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not update those items.");
+        await load(String(year), String(month));
+      }
+    });
   }
 
   async function rollItem(id: string) {
@@ -1182,6 +1247,8 @@ export function SupplyOrdersClient({
               setEditingId((current) => (current === id ? null : id))
             }
             onPatch={(id, patch) => void patchItem(id, patch)}
+            onDraft={rememberDraft}
+            orderedQtyDrafts={orderedDrafts}
             onDelete={(id) => void removeItem(id)}
           />
         ) : (
@@ -1289,6 +1356,8 @@ export function SupplyOrdersClient({
                           setEditingId((current) => (current === item.id ? null : item.id))
                         }
                         onPatch={(patch) => void patchItem(item.id, patch)}
+                        onDraft={(draft) => rememberDraft(item.id, draft)}
+                        initialOrderedQty={orderedDrafts[item.id]}
                         onDelete={() => void removeItem(item.id)}
                       />
                     ))}
@@ -1357,6 +1426,8 @@ function CompactItemsTable({
   onToggle,
   onEdit,
   onPatch,
+  onDraft,
+  orderedQtyDrafts,
   onDelete,
 }: {
   items: SalonOrderItem[];
@@ -1371,6 +1442,8 @@ function CompactItemsTable({
   onToggle: (id: string) => void;
   onEdit: (id: string) => void;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
+  onDraft: (id: string, draft: RowDraft) => void;
+  orderedQtyDrafts: Record<string, string>;
   onDelete: (id: string) => void;
 }) {
   return (
@@ -1495,6 +1568,8 @@ function CompactItemsTable({
                         nextMonthLabel={nextMonthLabel}
                         onEdit={() => onEdit(item.id)}
                         onPatch={(patch) => onPatch(item.id, patch)}
+                        onDraft={(draft) => onDraft(item.id, draft)}
+                        initialOrderedQty={orderedQtyDrafts[item.id]}
                         onDelete={() => onDelete(item.id)}
                       />
                     </td>
@@ -1580,6 +1655,8 @@ function ItemCard({
   onRoll,
   onEdit,
   onPatch,
+  onDraft,
+  initialOrderedQty,
   onDelete,
 }: {
   item: SalonOrderItem;
@@ -1592,6 +1669,8 @@ function ItemCard({
   onRoll: () => void;
   onEdit: () => void;
   onPatch: (patch: Record<string, unknown>) => void;
+  onDraft: (draft: RowDraft) => void;
+  initialOrderedQty?: string;
   onDelete: () => void;
 }) {
   const hasOrdered = item.orderedQty > 0;
@@ -1659,6 +1738,8 @@ function ItemCard({
         nextMonthLabel={nextMonthLabel}
         onEdit={onEdit}
         onPatch={onPatch}
+        onDraft={onDraft}
+        initialOrderedQty={initialOrderedQty}
         onDelete={onDelete}
       />
     </li>
@@ -1673,6 +1754,8 @@ function ItemFulfillment({
   nextMonthLabel,
   onEdit,
   onPatch,
+  onDraft,
+  initialOrderedQty,
   onDelete,
 }: {
   item: SalonOrderItem;
@@ -1682,6 +1765,8 @@ function ItemFulfillment({
   nextMonthLabel: string;
   onEdit: () => void;
   onPatch: (patch: Record<string, unknown>) => void;
+  onDraft: (draft: RowDraft) => void;
+  initialOrderedQty?: string;
   onDelete: () => void;
 }) {
   const hasOrdered = item.orderedQty > 0;
@@ -1699,10 +1784,21 @@ function ItemFulfillment({
     vendorOrderNumber: item.vendorOrderNumber,
   });
   const [orderedDraft, setOrderedDraft] = useState(
-    String(item.orderedQty > 0 ? item.orderedQty : item.qty),
+    item.orderedQty > 0 ? String(item.orderedQty) : initialOrderedQty || String(item.qty),
   );
   const [receivedDraft, setReceivedDraft] = useState(String(item.receivedQty));
   const [localError, setLocalError] = useState("");
+  const requested = requestedQtyFromDraft(item, draft);
+
+  useEffect(() => {
+    onDraft({ ...draft, orderedQty: orderedDraft });
+  }, [draft, orderedDraft, onDraft]);
+
+  function commit(patch: Record<string, unknown>) {
+    const next = withUnsavedRowFields(item, { ...draft, orderedQty: orderedDraft }, patch);
+    if (Object.keys(next).length === 0) return;
+    onPatch(next);
+  }
 
   function saveDetails() {
     const patch: Record<string, unknown> = {
@@ -1721,37 +1817,39 @@ function ItemFulfillment({
     onEdit();
   }
 
-  function goingInQty() {
-    const orderedQty = Number(orderedDraft);
-    if (!Number.isInteger(orderedQty) || orderedQty < 1) return null;
-    return orderedQty;
-  }
-
   const leftoverRemainder = hasOrdered
     ? remainder
     : (() => {
-        const goingIn = goingInQty();
-        if (goingIn !== null && goingIn < item.qty) return item.qty - goingIn;
-        if (item.leftover) return item.qty;
+        const goingIn = goingInQty(orderedDraft);
+        if (goingIn !== null && goingIn < requested) return requested - goingIn;
+        if (item.leftover) return requested;
         return 0;
       })();
 
   function markOrdered() {
-    const orderedQty = goingInQty();
+    const orderedQty = goingInQty(orderedDraft);
     if (orderedQty === null) {
       setLocalError("Ordered qty is the amount that actually went in.");
       return;
     }
-    if (orderedQty < item.qty && item.leftover !== "wait" && item.leftover !== "oos" && item.leftover !== "rolled") {
+    if (
+      orderedQty < requested &&
+      item.leftover !== "wait" &&
+      item.leftover !== "oos" &&
+      item.leftover !== "rolled"
+    ) {
       setLocalError("Choose wait, out of stock, or roll for the leftover before marking Ordered.");
       return;
     }
     setLocalError("");
     const patch: Record<string, unknown> = { status: "ordered", orderedQty };
-    if (orderedQty < item.qty && (item.leftover === "wait" || item.leftover === "oos" || item.leftover === "rolled")) {
+    if (
+      orderedQty < requested &&
+      (item.leftover === "wait" || item.leftover === "oos" || item.leftover === "rolled")
+    ) {
       patch.leftover = item.leftover;
     }
-    onPatch(patch);
+    commit(patch);
   }
 
   function handleStatus(status: SettableStatus) {
@@ -1761,27 +1859,27 @@ function ItemFulfillment({
       return;
     }
     if (status === "out_of_stock") {
-      const orderedQty = goingInQty();
-      if (canMarkOrdered && orderedQty !== null && orderedQty < item.qty) {
+      const orderedQty = goingInQty(orderedDraft);
+      if (canMarkOrdered && orderedQty !== null && orderedQty < requested) {
         setLocalError("");
-        onPatch({ leftover: "oos", orderedQty });
+        commit({ leftover: "oos", orderedQty });
         return;
       }
     }
     setLocalError("");
-    onPatch({ status });
+    commit({ status });
   }
 
   function applyLeftover(leftover: Exclude<Leftover, "">) {
     const patch: Record<string, unknown> = { leftover };
     if (canMarkOrdered && !hasOrdered) {
-      const orderedQty = goingInQty();
-      if (orderedQty !== null && orderedQty < item.qty) {
+      const orderedQty = goingInQty(orderedDraft);
+      if (orderedQty !== null && orderedQty < requested) {
         patch.orderedQty = orderedQty;
       }
     }
     setLocalError("");
-    onPatch(patch);
+    commit(patch);
   }
 
   function saveReceived() {
@@ -1791,7 +1889,7 @@ function ItemFulfillment({
       return;
     }
     setLocalError("");
-    onPatch({ receivedQty });
+    commit({ receivedQty });
   }
 
   return (
@@ -1806,11 +1904,7 @@ function ItemFulfillment({
             onChange={(event) =>
               setDraft((current) => ({ ...current, actualVendor: event.target.value }))
             }
-            onBlur={() => {
-              if (draft.actualVendor.trim() !== item.actualVendor) {
-                onPatch({ actualVendor: draft.actualVendor });
-              }
-            }}
+            onBlur={() => commit({})}
           />
         </label>
         {hasOrdered ? (
@@ -1837,6 +1931,7 @@ function ItemFulfillment({
               value={isSettableStatus(item.status) ? item.status : "pending"}
               statuses={orderStatuses(canMarkOrdered)}
               onChange={handleStatus}
+              testId="row-status"
             />
           </label>
         )}
@@ -1849,26 +1944,19 @@ function ItemFulfillment({
             onChange={(event) =>
               setDraft((current) => ({ ...current, sku: event.target.value }))
             }
-            onBlur={() => {
-              if (draft.sku.trim() !== item.sku) {
-                onPatch({ sku: draft.sku });
-              }
-            }}
+            onBlur={() => commit({})}
           />
         </label>
         <label className="grid gap-1.5 text-sm">
           Vendor order #
           <input
+            data-testid="row-vendor-order"
             className={field}
             value={draft.vendorOrderNumber}
             onChange={(event) =>
               setDraft((current) => ({ ...current, vendorOrderNumber: event.target.value }))
             }
-            onBlur={() => {
-              if (draft.vendorOrderNumber.trim() !== item.vendorOrderNumber) {
-                onPatch({ vendorOrderNumber: draft.vendorOrderNumber });
-              }
-            }}
+            onBlur={() => commit({})}
           />
         </label>
         {hasOrdered || !canMarkOrdered ? null : (
@@ -1894,6 +1982,7 @@ function ItemFulfillment({
               onChange={(event) => setReceivedDraft(event.target.value)}
               onBlur={() => {
                 if (Number(receivedDraft) !== item.receivedQty) saveReceived();
+                else commit({});
               }}
             />
           </label>
@@ -1918,7 +2007,7 @@ function ItemFulfillment({
               ) {
                 return;
               }
-              onPatch({ status: "pending" });
+              commit({ status: "pending" });
             }}
           >
             Move back to Pending

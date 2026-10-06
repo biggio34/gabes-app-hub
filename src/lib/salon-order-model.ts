@@ -396,3 +396,129 @@ export function rollButtonLabel(item: { qty: number; orderedQty: number; receive
   }
   return "Roll to next month";
 }
+
+/** What the row inputs currently hold. orderedQty is "Qty going in this order". */
+export type RowDraft = {
+  preferredVendor: string;
+  brand: string;
+  product: string;
+  size: string;
+  shade: string;
+  qty: string;
+  sku: string;
+  note: string;
+  actualVendor: string;
+  vendorOrderNumber: string;
+  orderedQty: string;
+};
+
+export type RowDraftItem = {
+  preferredVendor: string;
+  brand: string;
+  product: string;
+  size: string;
+  shade: string;
+  qty: number;
+  orderedQty: number;
+  leftover: Leftover;
+  sku: string;
+  note: string;
+  actualVendor: string;
+  vendorOrderNumber: string;
+};
+
+const ROW_TEXT_FIELDS = [
+  "preferredVendor",
+  "brand",
+  "product",
+  "size",
+  "shade",
+  "sku",
+  "note",
+  "actualVendor",
+  "vendorOrderNumber",
+] as const;
+
+/** Text and requested qty the user changed but has not saved yet. */
+export function unsavedRowFields(item: RowDraftItem, draft: RowDraft) {
+  const patch: Record<string, string | number> = {};
+  for (const key of ROW_TEXT_FIELDS) {
+    const next = draft[key].trim();
+    if (next !== item[key].trim()) patch[key] = next;
+  }
+  if (item.orderedQty < 1) {
+    const qty = Number(draft.qty);
+    if (Number.isInteger(qty) && qty >= 1 && qty !== item.qty) patch.qty = qty;
+  }
+  return patch;
+}
+
+/** Immediate saves (status, leftover, receive) keep the unsaved row text. */
+export function withUnsavedRowFields(
+  item: RowDraftItem,
+  draft: RowDraft,
+  patch: Record<string, unknown>,
+) {
+  return { ...unsavedRowFields(item, draft), ...patch };
+}
+
+export function requestedQtyFromDraft(
+  item: { qty: number; orderedQty: number },
+  draft: Pick<RowDraft, "qty">,
+) {
+  if (item.orderedQty > 0) return item.qty;
+  const qty = Number(draft.qty);
+  if (Number.isInteger(qty) && qty >= 1) return qty;
+  return item.qty;
+}
+
+export function goingInQty(value: string) {
+  const orderedQty = Number(value);
+  if (!Number.isInteger(orderedQty) || orderedQty < 1) return null;
+  return orderedQty;
+}
+
+/**
+ * Fields to write before a vendor-group status change.
+ * A partial "qty going in" is included only when Mark as Ordered would accept it.
+ * A blocked plan saves nothing, so the inputs stay as typed.
+ */
+export function bulkStatusRowPlan(
+  item: RowDraftItem,
+  draft: RowDraft | undefined,
+  status: SettableStatus,
+) {
+  const save = draft ? unsavedRowFields(item, draft) : {};
+  if (status !== "ordered" || item.orderedQty > 0 || !draft) {
+    return { save, blocked: null as string | null };
+  }
+  const orderedQty = goingInQty(draft.orderedQty);
+  const requested = requestedQtyFromDraft(item, draft);
+  if (orderedQty === null || orderedQty >= requested) {
+    return { save, blocked: null as string | null };
+  }
+  if (item.leftover !== "wait" && item.leftover !== "oos" && item.leftover !== "rolled") {
+    return {
+      save: {} as Record<string, string | number>,
+      blocked: `Choose wait, out of stock, or roll for the leftover on ${item.product} before marking the group Ordered.`,
+    };
+  }
+  return { save: { ...save, orderedQty }, blocked: null as string | null };
+}
+
+/** Vendor names decide which group a row is in, so they are saved after the group update. */
+export function splitBulkRowSave(save: Record<string, string | number>) {
+  const before: Record<string, string | number> = {};
+  const vendor: Record<string, string | number> = {};
+  for (const [key, value] of Object.entries(save)) {
+    if (key === "actualVendor" || key === "preferredVendor") vendor[key] = value;
+    else before[key] = value;
+  }
+  return { before, vendor };
+}
+
+/** Blank group order # must not wipe numbers already typed on each row. */
+export function sharedVendorOrderNumber(value: string | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return trimmed || undefined;
+}
