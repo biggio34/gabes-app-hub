@@ -474,6 +474,22 @@
   box-shadow: 0 12px 28px rgba(67, 47, 36, 0.45);
 }
 
+.supply-theme .so-logo {
+  display: block;
+  height: 2.5rem;
+  width: auto;
+  max-width: 11rem;
+  flex-shrink: 0;
+}
+
+.so-hub-logo {
+  display: block;
+  height: 2rem;
+  width: auto;
+  max-width: 7.25rem;
+  flex-shrink: 0;
+}
+
 .so-hub-checkin:hover {
   background: #2c1e16;
   color: #f8e8d9;

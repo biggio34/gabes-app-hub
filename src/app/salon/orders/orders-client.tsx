@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { CheckInView } from "./check-in-view";
+import { SalonLogo } from "./salon-logo";
 import {
   deliveriesStillOpenLabel,
   displayText,
@@ -508,38 +509,42 @@ export function SupplyOrdersClient({
           listLayout === "table" ? "max-w-6xl" : "max-w-5xl"
         }`}
       >
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+        <header>
+          <div className="flex items-center justify-between gap-3">
             <Link href="/" className="text-sm text-slate-400 hover:text-rose-300">
               ← Hub
             </Link>
-            <h1 className="mt-2 text-3xl tracking-tight">Supply Orders</h1>
-            <p className="text-sm text-slate-400">
-              Luna Haus requests. Purchasing marks lines ordered. Anyone here can check
-              in what arrives.
-            </p>
+            <SalonLogo />
           </div>
+          <h1 className="mt-2 text-3xl tracking-tight">Supply Orders</h1>
+          <p className="text-sm text-slate-400">
+            Luna Haus requests. Purchasing marks lines ordered. Anyone here can check
+            in what arrives.
+          </p>
         </header>
 
         {checkInOpen ? (
           <div className="mx-auto w-full max-w-lg">
-            <button
-              type="button"
-              className="mb-4 text-sm text-slate-400 hover:text-rose-300"
-              onClick={() => {
-                setCheckInOpen(false);
-                const onThisMonth =
-                  view.year === view.today.year && view.month === view.today.month;
-                router.push(
-                  onThisMonth
-                    ? "/salon/orders"
-                    : `/salon/orders?year=${view.year}&month=${view.month}`,
-                );
-                void load(String(view.year), String(view.month));
-              }}
-            >
-              ← Supply orders
-            </button>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                className="text-sm text-slate-400 hover:text-rose-300"
+                onClick={() => {
+                  setCheckInOpen(false);
+                  const onThisMonth =
+                    view.year === view.today.year && view.month === view.today.month;
+                  router.push(
+                    onThisMonth
+                      ? "/salon/orders"
+                      : `/salon/orders?year=${view.year}&month=${view.month}`,
+                  );
+                  void load(String(view.year), String(view.month));
+                }}
+              >
+                ← Supply orders
+              </button>
+              <SalonLogo />
+            </div>
             <h2 className="so-title mb-4 text-2xl">Check in delivery</h2>
             <CheckInView
               onActivity={() => void load(String(view.year), String(view.month))}
