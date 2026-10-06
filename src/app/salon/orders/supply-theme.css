@@ -35,12 +35,47 @@
   --so-partial-text: #2a0e00;
   --so-received-bg: #146c43;
   --so-received-text: #ffffff;
-  --so-oos-bg: #8f0000;
-  --so-oos-text: #ffffff;
+  --so-oos-bg: #3a3532;
+  --so-oos-text: #fffbf6;
   background-color: var(--so-bg);
   color: var(--so-text);
   color-scheme: light;
   font-family: var(--font-supply-body), "Archivo Narrow", "Arial Narrow", sans-serif;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Paint cream directly. Minifiers unquote [class~="bg-slate-950"], and some
+   browsers then drop that remap, leaving the navy Tailwind fill. */
+.supply-theme .so-page {
+  background-color: var(--so-bg);
+  max-width: 100%;
+  min-width: 0;
+}
+
+.supply-theme .so-panel {
+  background-color: var(--so-surface);
+  color: var(--so-text);
+  max-width: 100%;
+  min-width: 0;
+}
+
+.supply-theme .so-item,
+.supply-theme .so-paper {
+  background-color: var(--so-paper);
+  color: var(--so-text);
+}
+
+.supply-theme .so-soft {
+  background-color: var(--so-blush);
+  color: var(--so-text);
+}
+
+.supply-theme .so-status-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background-color: var(--so-surface);
 }
 
 .supply-theme h1,
@@ -236,7 +271,7 @@
 .supply-theme [class~="bg-rose-500/15"] {
   background-color: var(--so-oos-bg);
   color: var(--so-oos-text);
-  border-color: #6b0000;
+  border-color: #2a2624;
 }
 
 .so-status {
@@ -275,9 +310,11 @@
 }
 
 .so-status-out_of_stock {
-  background-color: var(--so-oos-bg, #8f0000);
-  color: var(--so-oos-text, #ffffff);
-  border-color: #6b0000;
+  background-color: var(--so-oos-bg, #3a3532);
+  color: var(--so-oos-text, #fffbf6);
+  border-color: #2a2624;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
 }
 
 .so-swatch {
@@ -315,8 +352,8 @@
 }
 
 .so-swatch-out_of_stock {
-  background: #8f0000;
-  border-color: #6b0000;
+  background: #3a3532;
+  border-color: #2a2624;
 }
 
 .so-filter {
@@ -378,10 +415,14 @@
 }
 
 .supply-theme .so-item[data-status="out_of_stock"] {
-  border-left-color: #8f0000;
+  border-left-color: #3a3532;
 }
 
 .supply-theme tr[data-status="pending"] {
+  box-shadow: inset 4px 0 0 #8a6800;
+}
+
+.supply-theme tr[data-status="pending"] > .so-status-col {
   box-shadow: inset 4px 0 0 #8a6800;
 }
 
@@ -389,7 +430,15 @@
   box-shadow: inset 4px 0 0 #0369a1;
 }
 
+.supply-theme tr[data-status="in_cart"] > .so-status-col {
+  box-shadow: inset 4px 0 0 #0369a1;
+}
+
 .supply-theme tr[data-status="ordered"] {
+  box-shadow: inset 4px 0 0 #6d28d9;
+}
+
+.supply-theme tr[data-status="ordered"] > .so-status-col {
   box-shadow: inset 4px 0 0 #6d28d9;
 }
 
@@ -397,28 +446,57 @@
   box-shadow: inset 4px 0 0 #c2410c;
 }
 
+.supply-theme tr[data-status="partial"] > .so-status-col {
+  box-shadow: inset 4px 0 0 #c2410c;
+}
+
 .supply-theme tr[data-status="received"] {
   box-shadow: inset 4px 0 0 #146c43;
 }
 
+.supply-theme tr[data-status="received"] > .so-status-col {
+  box-shadow: inset 4px 0 0 #146c43;
+}
+
 .supply-theme tr[data-status="out_of_stock"] {
-  box-shadow: inset 4px 0 0 #8f0000;
+  box-shadow: inset 4px 0 0 #3a3532;
+}
+
+.supply-theme tr[data-status="out_of_stock"] > .so-status-col {
+  box-shadow: inset 4px 0 0 #3a3532;
 }
 
 /* Hub home stays dark. Only these two Luna Haus entries pick up the brand. */
 .so-hub-checkin {
-  background: #f8e8d9;
-  color: #432f24;
-  border: 2px solid #432f24;
-  box-shadow: 0 12px 28px rgba(248, 232, 217, 0.22);
+  background: #432f24;
+  color: #f8e8d9;
+  border: 2px solid #f8e8d9;
+  box-shadow: 0 12px 28px rgba(67, 47, 36, 0.45);
+}
+
+.supply-theme .so-logo {
+  display: block;
+  height: 2.5rem;
+  width: auto;
+  max-width: 11rem;
+  flex-shrink: 0;
+}
+
+.so-hub-logo {
+  display: block;
+  height: 2rem;
+  width: auto;
+  max-width: 7.25rem;
+  flex-shrink: 0;
 }
 
 .so-hub-checkin:hover {
-  background: #fffbf6;
+  background: #2c1e16;
+  color: #f8e8d9;
 }
 
 .so-hub-checkin-note {
-  color: #432f24;
+  color: #e0bfb0;
 }
 
 .so-hub-card {

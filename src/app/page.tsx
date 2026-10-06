@@ -5,6 +5,7 @@ import { areaMeta, AREAS } from "@/lib/areas";
 import { canAccessArea, getSession, wristCoachAllowed } from "@/lib/auth";
 import { hubApps } from "@/lib/catalog";
 import { labelsForUser } from "@/lib/clubs";
+import { SalonLogo } from "@/app/salon/orders/salon-logo";
 import { deliveriesStillOpenLabel } from "@/lib/salon-check-in";
 import { countWaitingDeliveries } from "@/lib/salon-orders";
 import { findUserById } from "@/lib/users";
@@ -97,14 +98,17 @@ export default async function HubHome() {
               {area === "luna-haus" && showCheckIn ? (
                 <Link
                   href="/salon/orders?checkin=1"
-                  className="so-hub-checkin mb-4 block rounded-3xl px-5 py-4 transition"
+                  className="so-hub-checkin mb-4 flex items-center justify-between gap-3 rounded-3xl px-5 py-4 transition"
                 >
-                  <span className="block text-lg font-semibold">Check in delivery</span>
-                  <span className="so-hub-checkin-note block text-sm font-semibold">
-                    {deliveryWaiting === null
-                      ? "Open check-in"
-                      : deliveriesStillOpenLabel(deliveryWaiting)}
+                  <span className="min-w-0">
+                    <span className="block text-lg font-semibold">Check in delivery</span>
+                    <span className="so-hub-checkin-note block text-sm font-semibold">
+                      {deliveryWaiting === null
+                        ? "Open check-in"
+                        : deliveriesStillOpenLabel(deliveryWaiting)}
+                    </span>
                   </span>
+                  <SalonLogo tone="warmwhite" className="so-hub-logo" />
                 </Link>
               ) : null}
               <div className="grid gap-4 md:grid-cols-2">
@@ -128,19 +132,28 @@ export default async function HubHome() {
                       rel={app.external ? "noopener" : undefined}
                       className={
                         supplyTile
-                          ? "so-hub-card rounded-3xl border p-5 transition hover:-translate-y-0.5"
+                          ? "so-hub-card flex items-center justify-between gap-3 rounded-3xl border p-5 transition hover:-translate-y-0.5"
                           : "rounded-3xl border border-slate-800 bg-slate-900 p-5 transition hover:-translate-y-0.5 hover:border-red-500"
                       }
                     >
-                      <h2 className="text-lg font-semibold">{app.title}</h2>
-                      <p className="mt-2 text-sm text-slate-400">{app.description}</p>
-                      <span
-                        className={`mt-4 inline-flex text-sm font-semibold ${
-                          supplyTile ? "so-hub-launch" : "text-red-400"
-                        }`}
-                      >
-                        {app.external ? "Open" : "Launch"}
-                      </span>
+                      {supplyTile ? (
+                        <span className="min-w-0">
+                          <h2 className="text-lg font-semibold">{app.title}</h2>
+                          <p className="mt-2 text-sm text-slate-400">{app.description}</p>
+                          <span className="so-hub-launch mt-4 inline-flex text-sm font-semibold">
+                            Launch
+                          </span>
+                        </span>
+                      ) : (
+                        <>
+                          <h2 className="text-lg font-semibold">{app.title}</h2>
+                          <p className="mt-2 text-sm text-slate-400">{app.description}</p>
+                          <span className="mt-4 inline-flex text-sm font-semibold text-red-400">
+                            {app.external ? "Open" : "Launch"}
+                          </span>
+                        </>
+                      )}
+                      {supplyTile ? <SalonLogo tone="espresso" className="so-hub-logo" /> : null}
                     </a>
                   );
                 })}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { CheckInView } from "./check-in-view";
+import { SalonLogo } from "./salon-logo";
 import {
   deliveriesStillOpenLabel,
   displayText,
@@ -68,7 +69,7 @@ function writeStoredLayout(layout: ListLayout) {
 }
 
 const field =
-  "w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-rose-500";
+  "so-paper w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-rose-500";
 
 const statusClass: Record<OrderStatus, string> = {
   pending: "so-status so-status-pending",
@@ -488,7 +489,7 @@ export function SupplyOrdersClient({
 
   if (!view) {
     return (
-      <div className="min-h-dvh px-6 py-10">
+      <div className="so-page min-h-dvh min-w-0 px-6 py-10">
         {error || "Loading supply orders…"}
       </div>
     );
@@ -502,44 +503,50 @@ export function SupplyOrdersClient({
   const suggestions = view.suggestions;
 
   return (
-    <div className="min-h-dvh">
+    <div className="so-page min-h-dvh min-w-0">
       <div
-        className={`mx-auto grid w-full gap-6 px-4 py-8 sm:px-6 ${
+        className={`mx-auto grid w-full min-w-0 gap-6 px-4 py-8 sm:px-6 ${
           listLayout === "table" ? "max-w-6xl" : "max-w-5xl"
         }`}
       >
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+        {checkInOpen ? null : (
+        <header>
+          <div className="flex items-center justify-between gap-3">
             <Link href="/" className="text-sm text-slate-400 hover:text-rose-300">
               ← Hub
             </Link>
-            <h1 className="mt-2 text-3xl tracking-tight">Supply Orders</h1>
-            <p className="text-sm text-slate-400">
-              Luna Haus requests. Purchasing marks lines ordered. Anyone here can check
-              in what arrives.
-            </p>
+            <SalonLogo />
           </div>
+          <h1 className="mt-2 text-3xl tracking-tight">Supply Orders</h1>
+          <p className="text-sm text-slate-400">
+            Luna Haus requests. Purchasing marks lines ordered. Anyone here can check
+            in what arrives.
+          </p>
         </header>
+        )}
 
         {checkInOpen ? (
           <div className="mx-auto w-full max-w-lg">
-            <button
-              type="button"
-              className="mb-4 text-sm text-slate-400 hover:text-rose-300"
-              onClick={() => {
-                setCheckInOpen(false);
-                const onThisMonth =
-                  view.year === view.today.year && view.month === view.today.month;
-                router.push(
-                  onThisMonth
-                    ? "/salon/orders"
-                    : `/salon/orders?year=${view.year}&month=${view.month}`,
-                );
-                void load(String(view.year), String(view.month));
-              }}
-            >
-              ← Supply orders
-            </button>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                className="text-sm text-slate-400 hover:text-rose-300"
+                onClick={() => {
+                  setCheckInOpen(false);
+                  const onThisMonth =
+                    view.year === view.today.year && view.month === view.today.month;
+                  router.push(
+                    onThisMonth
+                      ? "/salon/orders"
+                      : `/salon/orders?year=${view.year}&month=${view.month}`,
+                  );
+                  void load(String(view.year), String(view.month));
+                }}
+              >
+                ← Supply orders
+              </button>
+              <SalonLogo />
+            </div>
             <h2 className="so-title mb-4 text-2xl">Check in delivery</h2>
             <CheckInView
               onActivity={() => void load(String(view.year), String(view.month))}
@@ -563,11 +570,11 @@ export function SupplyOrdersClient({
         {checkInOpen ? null : (
         <>
 
-        <section className="rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
+        <section className="so-panel rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className="rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+              className="so-soft rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
               onClick={() => goToMonth(previous.year, previous.month)}
             >
               ← {monthLabel(previous.year, previous.month)}
@@ -598,7 +605,7 @@ export function SupplyOrdersClient({
             )}
             <button
               type="button"
-              className="rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+              className="so-soft rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
               onClick={() => goToMonth(next.year, next.month)}
             >
               {monthLabel(next.year, next.month)} →
@@ -640,7 +647,7 @@ export function SupplyOrdersClient({
 
         <form
           onSubmit={(event) => void addRequest(event)}
-          className="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5"
+          className="grid gap-3 so-panel rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5"
         >
           <div>
             <h2 className="font-semibold">Add a request</h2>
@@ -815,7 +822,7 @@ export function SupplyOrdersClient({
               ))}
             </div>
             <div
-              className="flex rounded-full bg-slate-800 p-0.5"
+              className="so-soft flex rounded-full bg-slate-800 p-0.5"
               role="group"
               aria-label="List layout"
             >
@@ -870,7 +877,7 @@ export function SupplyOrdersClient({
         </div>
 
         {vendorFilter !== "all" && visibleItems.length > 0 ? (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+          <div className="so-panel rounded-2xl border border-slate-800 bg-slate-900 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm">
                 {visibleItems.length} {vendorFilter} item
@@ -880,7 +887,7 @@ export function SupplyOrdersClient({
               <label className="flex items-center gap-2 text-sm text-slate-400">
                 Set all to
                 <select
-                  className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-rose-500"
+                  className="so-paper rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-rose-500"
                   defaultValue=""
                   onChange={(event) => {
                     const value = event.target.value as SettableStatus | "";
@@ -937,7 +944,7 @@ export function SupplyOrdersClient({
                 </button>
                 <button
                   type="button"
-                  className="self-end rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+                  className="self-end so-soft rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
                   onClick={() => {
                     setBulkOrderPrompt(null);
                     setBulkOrderNumber("");
@@ -954,7 +961,7 @@ export function SupplyOrdersClient({
         {notice ? <p className="text-sm text-emerald-400">{notice}</p> : null}
 
         {visibleItems.length === 0 ? (
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 px-6 py-12 text-center text-slate-400">
+          <div className="so-panel rounded-3xl border border-slate-800 bg-slate-900 px-6 py-12 text-center text-slate-400">
             <p>
               {view.items.length === 0
                 ? "No requests this month yet. Add one above."
@@ -999,7 +1006,7 @@ export function SupplyOrdersClient({
               {group.vendors.map(([vendor, items]) => (
                 <div
                   key={`${group.status}-${vendor}`}
-                  className="rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5"
+                  className="so-panel rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5"
                 >
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <p className="font-medium">
@@ -1011,7 +1018,7 @@ export function SupplyOrdersClient({
                     <label className="flex items-center gap-2 text-xs text-slate-400">
                       Set all to
                       <select
-                        className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-rose-500"
+                        className="so-paper rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-rose-500"
                         defaultValue=""
                         onChange={(event) => {
                           const value = event.target.value as SettableStatus | "";
@@ -1068,7 +1075,7 @@ export function SupplyOrdersClient({
                       </button>
                       <button
                         type="button"
-                        className="self-end rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+                        className="self-end so-soft rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
                         onClick={() => {
                           setBulkOrderPrompt(null);
                           setBulkOrderNumber("");
@@ -1170,16 +1177,16 @@ function CompactItemsTable({
   onDelete: (id: string) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900">
+    <div className="so-panel min-w-0 max-w-full overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900">
       <table className="w-full min-w-[56rem] border-collapse text-left text-sm">
         <caption className="sr-only">
           Compact supply order list. Shade is on each row. Open a row for leftover
           and receive.
         </caption>
-        <thead className="bg-slate-950/80 text-xs tracking-wide text-slate-400 uppercase">
+        <thead className="so-panel bg-slate-950/80 text-xs tracking-wide text-slate-400 uppercase">
           <tr>
-            <th className="w-8 px-2 py-2.5" scope="col">
-              <span className="sr-only">Open</span>
+            <th className="so-status-col px-2 py-2.5 font-semibold" scope="col">
+              Status
             </th>
             <th className="px-2 py-2.5 font-semibold" scope="col">
               Vendor
@@ -1202,9 +1209,6 @@ function CompactItemsTable({
             <th className="px-2 py-2.5 font-semibold" scope="col">
               Qty
             </th>
-            <th className="px-2 py-2.5 font-semibold" scope="col">
-              Status
-            </th>
           </tr>
         </thead>
         <tbody>
@@ -1219,19 +1223,26 @@ function CompactItemsTable({
                   }`}
                   onClick={() => onToggle(item.id)}
                 >
-                  <td className="px-2 py-2 text-slate-400">
-                    <button
-                      type="button"
-                      className="rounded px-1 text-xs"
-                      aria-expanded={open}
-                      aria-label={`${open ? "Hide" : "Show"} leftover and receive for ${item.product}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onToggle(item.id);
-                      }}
-                    >
-                      {open ? "▾" : "▸"}
-                    </button>
+                  <td className="so-status-col px-2 py-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="rounded px-1 text-xs text-slate-400"
+                        aria-expanded={open}
+                        aria-label={`${open ? "Hide" : "Show"} leftover and receive for ${item.product}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onToggle(item.id);
+                        }}
+                      >
+                        {open ? "▾" : "▸"}
+                      </button>
+                      <StatusBadge
+                        status={item.status}
+                        receivedQty={item.receivedQty}
+                        requestedQty={item.qty}
+                      />
+                    </div>
                   </td>
                   <td className="px-2 py-2 whitespace-nowrap">{itemVendor(item)}</td>
                   <td className="px-2 py-2">
@@ -1255,18 +1266,11 @@ function CompactItemsTable({
                     <CellText value={item.sku} />
                   </td>
                   <td className="px-2 py-2 whitespace-nowrap tabular-nums">{item.qty}</td>
-                  <td className="px-2 py-2">
-                    <StatusBadge
-                      status={item.status}
-                      receivedQty={item.receivedQty}
-                      requestedQty={item.qty}
-                    />
-                  </td>
                 </tr>
                 {open ? (
-                  <tr className="border-t border-slate-800 bg-slate-950">
+                  <tr className="so-paper border-t border-slate-800 bg-slate-950">
                     <td
-                      colSpan={9}
+                      colSpan={8}
                       className="px-3 py-3"
                       onClick={(event) => event.stopPropagation()}
                     >
@@ -1338,7 +1342,7 @@ function LeftoverMenu({
             className={`rounded-xl px-3 py-2 text-xs font-semibold disabled:opacity-60 ${
               leftover === choice
                 ? "bg-rose-700 text-white"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                : "so-soft bg-slate-800 text-slate-300 hover:bg-slate-700"
             }`}
           >
             {leftoverLabel[choice]}
@@ -1378,7 +1382,7 @@ function ItemCard({
   return (
     <li
       data-status={item.status}
-      className="so-item rounded-2xl border border-slate-800 bg-slate-950 p-4"
+      className="so-item so-paper rounded-2xl border border-slate-800 bg-slate-950 p-4"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -1662,7 +1666,7 @@ function ItemFulfillment({
         canRevertToPending(item) ? (
           <button
             type="button"
-            className="mt-3 rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700"
+            className="mt-3 so-soft rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700"
             onClick={() => {
               if (
                 !confirm(
@@ -1776,7 +1780,7 @@ function ItemFulfillment({
             </button>
             <button
               type="button"
-              className="rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
+              className="so-soft rounded-xl bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
               onClick={onEdit}
             >
               Cancel
@@ -1787,7 +1791,7 @@ function ItemFulfillment({
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
-            className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700"
+            className="so-soft rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700"
             onClick={onEdit}
           >
             Edit details
