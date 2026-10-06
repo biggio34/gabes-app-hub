@@ -82,16 +82,15 @@ function isMissingReceiveMeta(message: string) {
 }
 
 export async function receiveMetaAvailable() {
-  if (receiveMeta !== null) return receiveMeta;
+  // Remember only a successful probe. A miss stays uncached so a deploy that
+  // just gained the received-by columns starts stamping on the next check-in.
+  if (receiveMeta === true) return true;
   const result = await client().from("hub_salon_order_items").select("received_by_name").limit(1);
   if (!result.error) {
     receiveMeta = true;
     return true;
   }
-  if (isMissingReceiveMeta(result.error.message)) {
-    receiveMeta = false;
-    return false;
-  }
+  if (isMissingReceiveMeta(result.error.message)) return false;
   throw new Error(result.error.message);
 }
 
@@ -226,7 +225,7 @@ export async function insertItem(item: SalonOrderItem) {
   const first = await client().from("hub_salon_order_items").insert(insertPayload(item, withMeta));
   if (!first.error) return;
   if (withMeta && isMissingReceiveMeta(first.error.message)) {
-    receiveMeta = false;
+    receiveMeta = null;
     salonError("Could not add that request.")(
       await client().from("hub_salon_order_items").insert(insertPayload(item, false)),
     );
@@ -244,7 +243,7 @@ export async function saveItem(item: SalonOrderItem) {
   const first = await client().from("hub_salon_order_items").update(payload).eq("id", item.id);
   if (!first.error) return;
   if (withMeta && isMissingReceiveMeta(first.error.message)) {
-    receiveMeta = false;
+    receiveMeta = null;
     salonError("Could not update that request.")(
       await client().from("hub_salon_order_items").update(coreItemPayload(item)).eq("id", item.id),
     );

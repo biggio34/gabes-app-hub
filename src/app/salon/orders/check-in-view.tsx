@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { displayText, formatReceivedStamp, joinDisplay } from "@/lib/salon-check-in";
+import { displayText, formatReceivedStamp, joinDisplay, orderedStillComing } from "@/lib/salon-check-in";
 import { monthLabel } from "@/lib/salon-order-model";
 
 type DeliveryLine = {
@@ -38,7 +38,18 @@ type CheckInPayload = {
   receiveMeta: boolean;
 };
 
-type Draft = { qty: number; choice: "roll" | "wait"; short: boolean };
+type Draft = { qty: number; choice: "roll" | "wait"; short: boolean; receivedQty: number };
+
+const UNDO_BAR_MS = 20_000;
+
+function freshDraft(item: DeliveryLine): Draft {
+  return {
+    qty: orderedStillComing(item),
+    choice: "roll",
+    short: false,
+    receivedQty: item.receivedQty,
+  };
+}
 
 const tap =
   "min-h-12 rounded-2xl px-4 text-base font-semibold disabled:opacity-60";
@@ -78,11 +89,9 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
       const next: Record<string, Draft> = {};
       for (const group of data.groups) {
         for (const item of group.items) {
-          next[item.id] = current[item.id] ?? {
-            qty: item.orderedQty,
-            choice: "roll",
-            short: false,
-          };
+          const kept = current[item.id];
+          next[item.id] =
+            kept && kept.receivedQty === item.receivedQty ? kept : freshDraft(item);
         }
       }
       return next;
@@ -96,22 +105,29 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
 
   useEffect(() => {
     if (!undo) return;
-    const timer = window.setTimeout(() => setUndo(null), 10_000);
+    const timer = window.setTimeout(() => setUndo(null), UNDO_BAR_MS);
     return () => window.clearTimeout(timer);
   }, [undo]);
 
   function draftFor(item: DeliveryLine): Draft {
-    return drafts[item.id] ?? { qty: item.orderedQty, choice: "roll", short: false };
+    const current = drafts[item.id];
+    if (!current || current.receivedQty !== item.receivedQty) return freshDraft(item);
+    return current;
   }
 
   function patchDraft(id: string, patch: Partial<Draft>) {
     setDrafts((current) => {
       const item = payload?.groups.flatMap((group) => group.items).find((row) => row.id === id);
-      const base = current[id] ?? {
-        qty: item?.orderedQty ?? 1,
-        choice: "roll" as const,
-        short: false,
-      };
+      const base = item
+        ? current[id] && current[id].receivedQty === item.receivedQty
+          ? current[id]
+          : freshDraft(item)
+        : (current[id] ?? {
+            qty: 1,
+            choice: "roll" as const,
+            short: false,
+            receivedQty: 0,
+          });
       return { ...current, [id]: { ...base, ...patch } };
     });
   }
@@ -122,9 +138,11 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
     try {
       const lines = group.items.map((item) => {
         const draft = draftFor(item);
+        const due = orderedStillComing(item);
+        const arrived = draft.short ? Math.min(draft.qty, due) : due;
         return {
           id: item.id,
-          receivedQty: draft.short ? draft.qty : item.orderedQty,
+          receivedQty: item.receivedQty + arrived,
           choice: draft.choice,
         };
       });
@@ -196,7 +214,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
   }
 
   return (
-    <div className={`grid gap-4 ${undo ? "pb-28" : ""}`}>
+    <div className={`grid gap-4 ${undo ? "pt-24" : ""}`}>
       <p className="text-sm text-slate-400">
         {payload.waitingOrders === 0
           ? "No orders waiting."
@@ -230,13 +248,18 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
               className={`${tap} bg-rose-600 text-white hover:bg-rose-500`}
               onClick={() => void checkIn(group)}
             >
-              {busyKey === group.key ? "Checking in…" : "All here"}
+              {busyKey === group.key
+                ? "Checking in…"
+                : group.items.some((item) => draftFor(item).short)
+                  ? "Save check-in"
+                  : "All here"}
             </button>
             <ul className="grid gap-3">
               {group.items.map((item) => {
                 const draft = draftFor(item);
-                const arrived = draft.short ? draft.qty : item.orderedQty;
-                const missing = item.orderedQty - arrived;
+                const due = orderedStillComing(item);
+                const arrived = draft.short ? Math.min(draft.qty, due) : due;
+                const missing = due - arrived;
                 const stamp = formatReceivedStamp(item.receivedByName, item.receivedAt);
                 const details = joinDisplay([
                   item.shade,
@@ -252,8 +275,9 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                       <p className="text-lg font-semibold leading-snug">{lineTitle(item) || item.product}</p>
                       {details ? <p className="text-base text-slate-200">{details}</p> : null}
                       <p className="text-sm text-slate-400">
-                        Ordered {item.orderedQty}
-                        {item.receivedQty > 0 ? ` · already in ${item.receivedQty}` : ""}
+                        {item.receivedQty > 0
+                          ? `${due} still coming`
+                          : `Ordered ${item.orderedQty}`}
                         {" · "}
                         {monthLabel(item.year, item.month)}
                       </p>
@@ -283,7 +307,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                           <p className="min-w-16 text-center text-2xl font-semibold tabular-nums">
                             {draft.qty}
                             <span className="block text-xs font-normal text-slate-400">
-                              of {item.orderedQty}
+                              of {due}
                             </span>
                           </p>
                           <button
@@ -291,10 +315,10 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                             aria-label={`More of ${lineTitle(item)}`}
                             className="h-14 w-14 rounded-2xl bg-slate-800 text-2xl font-semibold"
                             onClick={() => {
-                              const qty = Math.min(item.orderedQty, draft.qty + 1);
+                              const qty = Math.min(due, draft.qty + 1);
                               patchDraft(item.id, {
                                 qty,
-                                short: qty < item.orderedQty,
+                                short: qty < due,
                               });
                             }}
                           >
@@ -337,14 +361,16 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                       </div>
                     ) : (
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm text-slate-300">All {item.orderedQty} in this box</p>
+                        {item.receivedQty > 0 ? null : (
+                          <p className="text-sm text-slate-300">All {due} in this box</p>
+                        )}
                         <button
                           type="button"
-                          className={`${tap} bg-slate-800`}
+                          className={`${tap} ml-auto bg-slate-800`}
                           onClick={() =>
                             patchDraft(item.id, {
                               short: true,
-                              qty: Math.max(0, item.orderedQty - 1),
+                              qty: Math.max(0, due - 1),
                               choice: "roll",
                             })
                           }
@@ -365,6 +391,9 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
           <h2 className="text-sm font-semibold tracking-wide text-slate-400 uppercase">
             Your check-ins today
           </h2>
+          <p className="text-sm text-slate-400">
+            Undo stays available for the rest of today after the bar is gone.
+          </p>
           <ul className="grid gap-2">
             {payload.undoToday.map((row) => (
               <li
@@ -389,7 +418,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
         </section>
       ) : null}
       {undo ? (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-emerald-800 bg-emerald-950 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="fixed inset-x-0 top-0 z-40 border-b border-emerald-800 bg-emerald-950 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-lg">
           <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
             <p className="text-sm text-emerald-100">Checked in {undo.title}</p>
             <button

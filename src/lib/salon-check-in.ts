@@ -2,9 +2,30 @@ import type { Leftover, SalonOrderItem } from "./salon-order-model";
 
 export type ShortChoice = "roll" | "wait";
 
+/**
+ * Ordered quantity that still belongs on the check-in list.
+ * A short line whose missing qty was rolled or marked out of stock is finished.
+ * Wait stays, but only for the quantity that has not arrived yet.
+ * A purchasing roll before anything arrives (received 0) does not close the order.
+ */
+export function orderedStillComing(item: {
+  orderedQty: number;
+  receivedQty: number;
+  leftover?: string;
+}) {
+  const still = Math.max(0, item.orderedQty - item.receivedQty);
+  if (still <= 0) return 0;
+  if (item.receivedQty > 0 && (item.leftover === "rolled" || item.leftover === "oos")) return 0;
+  return still;
+}
+
 /** Some of the ordered quantity has not been checked in yet. */
-export function isAwaitingDelivery(item: { orderedQty: number; receivedQty: number }) {
-  return item.orderedQty > 0 && item.receivedQty < item.orderedQty;
+export function isAwaitingDelivery(item: {
+  orderedQty: number;
+  receivedQty: number;
+  leftover?: string;
+}) {
+  return orderedStillComing(item) > 0;
 }
 
 export type DeliverySort = {
@@ -75,35 +96,25 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function stripRepeatedVendor(value: string, vendor: string) {
-  let text = value.trim();
-  if (!text) return "";
-  const firstWord = vendor.trim().split(/\s+/)[0] ?? "";
-  const tokens = [vendor.trim(), firstWord]
-    .filter((token, index, all) => token.length >= 3 && all.indexOf(token) === index)
-    .sort((a, b) => b.length - a.length);
-  for (let guard = 0; guard < 4; guard += 1) {
-    const before = text;
-    text = text.replace(/^#+\s*/, "").trim();
-    for (const token of tokens) {
-      const re = new RegExp(`^${escapeRegExp(token)}(?=$|[\\s#:,-])`, "i");
-      if (!re.test(text)) continue;
-      text = text.replace(re, "").replace(/^[\s#:,-]+/, "").trim();
-      if (!text) return "";
-    }
-    if (text === before) break;
-  }
-  return text.replace(/^#+\s*/, "").trim();
+/** Drop a leading # or an exact copy of the full vendor name. Never a partial word. */
+function cleanOrderNumber(value: string, vendor: string) {
+  const text = value.trim().replace(/^#+\s*/, "").trim();
+  const full = vendor.trim();
+  if (!full) return text;
+  const repeated = new RegExp(`^${escapeRegExp(full)}(?:\\s*#+\\s*|\\s+|$)`, "i");
+  const match = repeated.exec(text);
+  if (!match) return text;
+  return text.slice(match[0].length).trim().replace(/^#+\s*/, "").trim();
 }
 
 /** Split a pasted order-number field into the ids worth showing. */
 export function deliveryOrderIds(vendor: string, vendorOrderNumber: string) {
-  const stripped = stripRepeatedVendor(vendorOrderNumber, vendor);
-  if (!stripped) return [];
-  return stripped.split(/\s*(?:,|;|\n|\|)\s*/).flatMap((chunk) => {
+  const raw = vendorOrderNumber.trim();
+  if (!raw) return [];
+  return raw.split(/\s*(?:,|;|\n|\|)\s*/).flatMap((chunk) => {
     const amazon = chunk.match(/\d{3}-\d{7}-\d{7}/g);
     if (amazon && amazon.length > 1) return amazon;
-    const cleaned = stripRepeatedVendor(chunk, vendor);
+    const cleaned = cleanOrderNumber(chunk, vendor);
     return cleaned ? [cleaned] : [];
   });
 }

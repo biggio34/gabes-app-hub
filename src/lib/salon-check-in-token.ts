@@ -10,7 +10,7 @@ export async function signCheckInUndo(userId: string, lines: CheckInUndoSnapshot
   return new SignJWT({ userId, lines })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("20s")
+    .setExpirationTime("2m")
     .sign(secret());
 }
 

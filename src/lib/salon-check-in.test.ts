@@ -8,6 +8,7 @@ import {
   groupDeliveries,
   isAwaitingDelivery,
   joinDisplay,
+  orderedStillComing,
   planCheckIn,
 } from "./salon-check-in.ts";
 
@@ -17,6 +18,23 @@ describe("isAwaitingDelivery", () => {
     assert.equal(isAwaitingDelivery({ orderedQty: 3, receivedQty: 2 }), true);
     assert.equal(isAwaitingDelivery({ orderedQty: 3, receivedQty: 3 }), false);
     assert.equal(isAwaitingDelivery({ orderedQty: 0, receivedQty: 0 }), false);
+    assert.equal(
+      isAwaitingDelivery({ orderedQty: 2, receivedQty: 1, leftover: "rolled" }),
+      false,
+    );
+    assert.equal(
+      isAwaitingDelivery({ orderedQty: 2, receivedQty: 1, leftover: "oos" }),
+      false,
+    );
+    assert.equal(
+      isAwaitingDelivery({ orderedQty: 2, receivedQty: 1, leftover: "wait" }),
+      true,
+    );
+    assert.equal(orderedStillComing({ orderedQty: 2, receivedQty: 1, leftover: "wait" }), 1);
+    assert.equal(
+      isAwaitingDelivery({ orderedQty: 2, receivedQty: 0, leftover: "rolled" }),
+      true,
+    );
   });
 });
 
@@ -98,16 +116,29 @@ describe("groupDeliveries", () => {
 });
 
 describe("delivery group titles", () => {
-  it("shows the vendor once and drops a repeated name or hash", () => {
+  it("strips only an exact vendor name or a leading hash", () => {
+    assert.equal(
+      deliveryGroupTitle("TEST Vendor", "TEST-CHECKIN", 3),
+      "TEST Vendor #TEST-CHECKIN, 3 items",
+    );
     assert.equal(
       deliveryGroupTitle("Marlo Beauty", "Marlo #1663832-0 (9/24)", 9),
-      "Marlo Beauty #1663832-0 (9/24), 9 items",
+      "Marlo Beauty #Marlo #1663832-0 (9/24), 9 items",
     );
     assert.equal(
-      deliveryGroupTitle("Marlo Beauty", "#Marlo #1663832-0 (9/24)", 1),
+      deliveryGroupTitle("Marlo Beauty", "Marlo Beauty #1663832-0 (9/24)", 1),
       "Marlo Beauty #1663832-0 (9/24), 1 item",
     );
+    assert.equal(
+      deliveryGroupTitle("Cosmo Prof", "609579103", 9),
+      "Cosmo Prof #609579103, 9 items",
+    );
+    assert.equal(
+      deliveryGroupTitle("Cosmo Prof", "#609579103", 1),
+      "Cosmo Prof #609579103, 1 item",
+    );
     assert.deepEqual(deliveryOrderIds("Cosmo Prof", "609579103"), ["609579103"]);
+    assert.deepEqual(deliveryOrderIds("TEST Vendor", "TEST-CHECKIN"), ["TEST-CHECKIN"]);
   });
 
   it("shortens a list of order ids and keeps the full list", () => {

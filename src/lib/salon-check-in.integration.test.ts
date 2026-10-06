@@ -70,6 +70,8 @@ describe("supply check-in", () => {
     assert.equal(next.items.length, 1);
     assert.equal(next.items[0].qty, 2);
     assert.equal(next.items[0].status, "pending");
+    assert.equal((await orders.getCheckInView("user-brooke-test")).waitingOrders, 0);
+    assert.equal(month.deliveryWaiting, 0);
 
     const { readCheckInUndo } = await import("./salon-check-in-token.ts");
     const snapshots = await readCheckInUndo(checked.undoToken, "user-brooke-test");
@@ -122,5 +124,9 @@ describe("supply check-in", () => {
     assert.equal(saved?.leftover, "wait");
     assert.equal(saved?.receivedQty, 1);
     assert.equal((await orders.getMonthView(2026, 9)).items.length, 0);
+    const waiting = await orders.getCheckInView("user-brooke-test");
+    const still = waiting.groups.flatMap((group) => group.items).find((row) => row.id === item.id);
+    assert.ok(still);
+    assert.equal(still.orderedQty - still.receivedQty, 2);
   });
 });
