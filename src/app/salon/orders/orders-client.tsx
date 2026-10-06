@@ -509,6 +509,7 @@ export function SupplyOrdersClient({
           listLayout === "table" ? "max-w-6xl" : "max-w-5xl"
         }`}
       >
+        {checkInOpen ? null : (
         <header>
           <div className="flex items-center justify-between gap-3">
             <Link href="/" className="text-sm text-slate-400 hover:text-rose-300">
@@ -522,6 +523,7 @@ export function SupplyOrdersClient({
             in what arrives.
           </p>
         </header>
+        )}
 
         {checkInOpen ? (
           <div className="mx-auto w-full max-w-lg">
