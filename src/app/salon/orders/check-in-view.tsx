@@ -296,7 +296,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
       </p>
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
       {payload.groups.length === 0 ? (
-        <p className="rounded-3xl border border-slate-800 bg-slate-900 px-5 py-10 text-center text-slate-400">
+        <p className="so-panel rounded-3xl border border-slate-800 bg-slate-900 px-5 py-10 text-center text-slate-400">
           Nothing is waiting on a box. Ordered lines show up here until the ordered
           quantity is checked in.
         </p>
@@ -304,10 +304,10 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
         payload.groups.map((group) => (
           <section
             key={group.key}
-            className="grid gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-4"
+            className="grid gap-3 so-panel rounded-3xl border border-slate-800 bg-slate-900 p-4"
           >
             <div className="grid gap-1">
-              <h2 className="text-lg font-semibold leading-snug">{group.title}</h2>
+              <h2 className="text-lg font-semibold leading-snug break-words">{group.title}</h2>
               {(group.orderNumbers ?? []).length > 1 ? (
                 <p className="text-xs leading-snug break-words text-slate-400">
                   {(group.orderNumbers ?? []).join(" · ")}
@@ -341,7 +341,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                 return (
                   <li
                     key={item.id}
-                    className="grid gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-3"
+                    className="so-item so-paper grid gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-3"
                   >
                     <div>
                       <p className="text-lg font-semibold leading-snug">{lineTitle(item) || item.product}</p>
@@ -355,7 +355,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                       </p>
                     </div>
                     {item.note ? (
-                      <p className="rounded-2xl bg-slate-900 px-3 py-2 text-sm text-slate-300">
+                      <p className="so-panel rounded-2xl bg-slate-900 px-3 py-2 text-sm text-slate-300">
                         {item.note}
                       </p>
                     ) : null}
@@ -366,7 +366,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                           <button
                             type="button"
                             aria-label={`Less of ${lineTitle(item)}`}
-                            className="h-14 w-14 rounded-2xl bg-slate-800 text-2xl font-semibold"
+                            className="h-14 w-14 rounded-2xl so-soft bg-slate-800 text-2xl font-semibold"
                             onClick={() =>
                               patchDraft(item.id, {
                                 qty: Math.max(0, draft.qty - 1),
@@ -385,7 +385,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                           <button
                             type="button"
                             aria-label={`More of ${lineTitle(item)}`}
-                            className="h-14 w-14 rounded-2xl bg-slate-800 text-2xl font-semibold"
+                            className="h-14 w-14 rounded-2xl so-soft bg-slate-800 text-2xl font-semibold"
                             onClick={() => {
                               const qty = Math.min(due, draft.qty + 1);
                               patchDraft(item.id, {
@@ -405,7 +405,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                               </p>
                               <button
                                 type="button"
-                                className={`${tap} bg-slate-800`}
+                                className={`${tap} so-soft bg-slate-800`}
                                 onClick={() => patchDraft(item.id, { choice: "roll" })}
                               >
                                 Roll to next month
@@ -418,7 +418,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                               </p>
                               <button
                                 type="button"
-                                className={`${tap} bg-slate-800`}
+                                className={`${tap} so-soft bg-slate-800`}
                                 onClick={() => patchDraft(item.id, { choice: "wait" })}
                               >
                                 Wait
@@ -438,7 +438,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                         )}
                         <button
                           type="button"
-                          className={`${tap} ml-auto bg-slate-800`}
+                          className={`${tap} ml-auto so-soft bg-slate-800`}
                           onClick={() =>
                             patchDraft(item.id, {
                               short: true,
@@ -469,7 +469,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
             {payload.undoToday.map((group) => (
               <li
                 key={group.key}
-                className="grid gap-2 rounded-2xl border border-slate-800 bg-slate-900 px-3 py-3"
+                className="so-panel grid gap-2 rounded-2xl border border-slate-800 bg-slate-900 px-3 py-3"
               >
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold leading-snug">
@@ -479,7 +479,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                   <button
                     type="button"
                     disabled={busyKey !== ""}
-                    className={`${tap} shrink-0 bg-slate-800`}
+                    className={`${tap} shrink-0 so-soft bg-slate-800`}
                     onClick={() => void undoDelivery(group.key)}
                   >
                     Undo delivery
@@ -495,7 +495,7 @@ export function CheckInView({ onActivity }: { onActivity: () => void }) {
                       <button
                         type="button"
                         disabled={busyKey !== ""}
-                        className={`${tap} shrink-0 border border-slate-700 bg-slate-950`}
+                        className={`${tap} so-paper shrink-0 border border-slate-700 bg-slate-950`}
                         onClick={() => void undoSaved(row.id)}
                       >
                         Undo

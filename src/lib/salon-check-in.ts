@@ -122,6 +122,35 @@ export function groupDeliveries<T extends DeliverySort>(lines: T[]) {
     .sort((a, b) => compareDelivery(a.items[0], b.items[0]) || a.key.localeCompare(b.key));
 }
 
+/** Split on commas and the other separators, but not inside parentheses. */
+function splitOrderChunks(raw: string) {
+  const chunks: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const char of raw) {
+    if (char === "(") {
+      depth += 1;
+      current += char;
+      continue;
+    }
+    if (char === ")" && depth > 0) {
+      depth -= 1;
+      current += char;
+      continue;
+    }
+    if (depth === 0 && (char === "," || char === ";" || char === "\n" || char === "|")) {
+      const piece = current.trim();
+      if (piece) chunks.push(piece);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  const piece = current.trim();
+  if (piece) chunks.push(piece);
+  return chunks;
+}
+
 /** Drop a leading # or an exact copy of the full vendor name. Never a partial word. */
 function cleanOrderNumber(value: string, vendor: string) {
   const text = value.trim().replace(/^#+\s*/, "").trim();
@@ -137,7 +166,13 @@ function cleanOrderNumber(value: string, vendor: string) {
 export function deliveryOrderIds(vendor: string, vendorOrderNumber: string) {
   const raw = vendorOrderNumber.trim();
   if (!raw) return [];
-  return raw.split(/\s*(?:,|;|\n|\|)\s*/).flatMap((chunk) => {
+  return splitOrderChunks(raw).flatMap((chunk) => {
+    // A parenthetical note can contain commas and several Amazon ids.
+    // Keep that phrase intact, including its closing parenthesis.
+    if (chunk.includes("(") || chunk.includes(")")) {
+      const cleaned = cleanOrderNumber(chunk, vendor);
+      return cleaned ? [cleaned] : [];
+    }
     const amazon = chunk.match(/\d{3}-\d{7}-\d{7}/g);
     if (amazon && amazon.length > 1) return amazon;
     const cleaned = cleanOrderNumber(chunk, vendor);

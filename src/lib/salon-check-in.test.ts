@@ -162,6 +162,18 @@ describe("delivery group titles", () => {
       "114-1234567-7654321",
     ]);
   });
+
+  it("keeps a parenthetical order note intact, including the closing parenthesis", () => {
+    const raw =
+      "Amazon 9/24 (orders 111-6174559-2019432, 111-1734040-1328251, 111-4656507-6612217, 111-1581614-1720226)";
+    assert.equal(
+      deliveryGroupTitle("Amazon", raw, 5),
+      "Amazon #9/24 (orders 111-6174559-2019432, 111-1734040-1328251, 111-4656507-6612217, 111-1581614-1720226), 5 items",
+    );
+    assert.deepEqual(deliveryOrderIds("Amazon", raw), [
+      "9/24 (orders 111-6174559-2019432, 111-1734040-1328251, 111-4656507-6612217, 111-1581614-1720226)",
+    ]);
+  });
 });
 
 describe("productTitle", () => {
