@@ -3,6 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { CheckInView } from "./check-in-view";
+import {
+  deliveriesStillOpenLabel,
+  displayText,
+  formatReceivedStamp,
+  joinDisplay,
+  productTitle,
+} from "@/lib/salon-check-in";
 import {
   canRevertToPending,
   findPendingDuplicate,
@@ -33,6 +41,8 @@ type View = {
   months: SalonOrder[];
   suggestions: SalonSuggestions;
   isOwner: boolean;
+  canMarkOrdered: boolean;
+  deliveryWaiting: number;
 };
 
 type ListLayout = "cards" | "table";
@@ -94,23 +104,32 @@ function StatusBadge({
   );
 }
 
+function orderStatuses(canMarkOrdered: boolean) {
+  return canMarkOrdered
+    ? SETTABLE_STATUSES
+    : SETTABLE_STATUSES.filter((status) => status !== "ordered");
+}
+
 function StatusSelect({
   value,
   onChange,
   disabled,
+  statuses = SETTABLE_STATUSES,
 }: {
   value: SettableStatus;
   onChange: (status: SettableStatus) => void;
   disabled?: boolean;
+  statuses?: readonly SettableStatus[];
 }) {
+  const selected = statuses.includes(value) ? value : statuses[0];
   return (
     <select
       className={field}
-      value={value}
+      value={selected}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value as SettableStatus)}
     >
-      {SETTABLE_STATUSES.map((status) => (
+      {statuses.map((status) => (
         <option key={status} value={status}>
           {statusLabel[status]}
         </option>
@@ -122,9 +141,11 @@ function StatusSelect({
 export function SupplyOrdersClient({
   initialYear,
   initialMonth,
+  initialCheckIn = false,
 }: {
   initialYear?: string;
   initialMonth?: string;
+  initialCheckIn?: boolean;
 }) {
   const router = useRouter();
   const [view, setView] = useState<View | null>(null);
@@ -153,6 +174,7 @@ export function SupplyOrdersClient({
     fromStatus?: OrderStatus;
   } | null>(null);
   const [bulkOrderNumber, setBulkOrderNumber] = useState("");
+  const [checkInOpen, setCheckInOpen] = useState(initialCheckIn);
 
   async function load(year?: string, month?: string) {
     const params = new URLSearchParams();
@@ -173,6 +195,11 @@ export function SupplyOrdersClient({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch month on mount and when the URL month changes
     void load(initialYear, initialMonth);
   }, [initialYear, initialMonth]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- follow the check-in query from the address bar
+    setCheckInOpen(initialCheckIn);
+  }, [initialCheckIn]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- restore Cards/Table after mount to avoid hydration mismatch
@@ -238,6 +265,19 @@ export function SupplyOrdersClient({
     if (!view || !form.product.trim()) return null;
     return findPendingDuplicate(view.items, form);
   }, [view, form]);
+
+  function openCheckIn() {
+    if (!view) return;
+    setCheckInOpen(true);
+    const params = new URLSearchParams();
+    const onThisMonth = view.year === view.today.year && view.month === view.today.month;
+    if (!onThisMonth) {
+      params.set("year", String(view.year));
+      params.set("month", String(view.month));
+    }
+    params.set("checkin", "1");
+    router.push(`/salon/orders?${params}`);
+  }
 
   function goToMonth(year: number, month: number) {
     setVendorFilter("all");
@@ -475,11 +515,53 @@ export function SupplyOrdersClient({
             </Link>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">Supply Orders</h1>
             <p className="text-sm text-slate-400">
-              Luna Haus requests. Default is this month; anyone with access can update
-              vendor and status.
+              Luna Haus requests. Purchasing marks lines ordered. Anyone here can check
+              in what arrives.
             </p>
           </div>
         </header>
+
+        {checkInOpen ? (
+          <div className="mx-auto w-full max-w-lg">
+            <button
+              type="button"
+              className="mb-4 text-sm text-slate-400 hover:text-rose-300"
+              onClick={() => {
+                setCheckInOpen(false);
+                const onThisMonth =
+                  view.year === view.today.year && view.month === view.today.month;
+                router.push(
+                  onThisMonth
+                    ? "/salon/orders"
+                    : `/salon/orders?year=${view.year}&month=${view.month}`,
+                );
+                void load(String(view.year), String(view.month));
+              }}
+            >
+              ← Supply orders
+            </button>
+            <h2 className="mb-4 text-2xl font-semibold">Check in delivery</h2>
+            <CheckInView
+              onActivity={() => void load(String(view.year), String(view.month))}
+            />
+          </div>
+        ) : null}
+
+        {checkInOpen ? null : (
+        <button
+          type="button"
+          className="rounded-3xl bg-rose-700 px-5 py-4 text-left text-white hover:bg-rose-600"
+          onClick={openCheckIn}
+        >
+          <span className="block text-lg font-semibold">Check in delivery</span>
+          <span className="block text-sm text-rose-100">
+            {deliveriesStillOpenLabel(view.deliveryWaiting)}
+          </span>
+        </button>
+        )}
+
+        {checkInOpen ? null : (
+        <>
 
         <section className="rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-2">
@@ -813,7 +895,7 @@ export function SupplyOrdersClient({
                   }}
                 >
                   <option value="">Choose…</option>
-                  {SETTABLE_STATUSES.map((status) => (
+                  {orderStatuses(view.canMarkOrdered).map((status) => (
                     <option key={status} value={status}>
                       {statusLabel[status]}
                     </option>
@@ -821,7 +903,7 @@ export function SupplyOrdersClient({
                 </select>
               </label>
             </div>
-            {bulkOrderPrompt &&
+            {view.canMarkOrdered && bulkOrderPrompt &&
             bulkOrderPrompt.vendor === vendorFilter &&
             bulkOrderPrompt.fromStatus === (filter === "all" ? undefined : filter) ? (
               <form
@@ -871,11 +953,22 @@ export function SupplyOrdersClient({
         {notice ? <p className="text-sm text-emerald-400">{notice}</p> : null}
 
         {visibleItems.length === 0 ? (
-          <p className="rounded-3xl border border-slate-800 bg-slate-900 px-6 py-12 text-center text-slate-400">
-            {view.items.length === 0
-              ? "No requests this month yet. Add one above."
-              : "No requests match these filters."}
-          </p>
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 px-6 py-12 text-center text-slate-400">
+            <p>
+              {view.items.length === 0
+                ? "No requests this month yet. Add one above."
+                : "No requests match these filters."}
+            </p>
+            {view.deliveryWaiting > 0 ? (
+              <button
+                type="button"
+                className="mt-3 text-sm font-semibold text-rose-300 hover:text-rose-200"
+                onClick={openCheckIn}
+              >
+                {deliveriesStillOpenLabel(view.deliveryWaiting)}
+              </button>
+            ) : null}
+          </div>
         ) : listLayout === "table" ? (
           <CompactItemsTable
             items={grouped.flatMap((group) =>
@@ -884,6 +977,7 @@ export function SupplyOrdersClient({
             expandedId={expandedId}
             editingId={editingId}
             isOwner={view.isOwner}
+            canMarkOrdered={view.canMarkOrdered}
             nextMonthLabel={monthLabel(next.year, next.month)}
             onToggle={(id) =>
               setExpandedId((current) => (current === id ? null : id))
@@ -930,7 +1024,7 @@ export function SupplyOrdersClient({
                         }}
                       >
                         <option value="">Choose…</option>
-                        {SETTABLE_STATUSES.map((status) => (
+                        {orderStatuses(view.canMarkOrdered).map((status) => (
                           <option key={status} value={status}>
                             {statusLabel[status]}
                           </option>
@@ -938,7 +1032,8 @@ export function SupplyOrdersClient({
                       </select>
                     </label>
                   </div>
-                  {bulkOrderPrompt &&
+                  {view.canMarkOrdered &&
+                  bulkOrderPrompt &&
                   bulkOrderPrompt.vendor === vendor &&
                   bulkOrderPrompt.fromStatus === group.status ? (
                     <form
@@ -988,6 +1083,7 @@ export function SupplyOrdersClient({
                         item={item}
                         editing={editingId === item.id}
                         isOwner={view.isOwner}
+                        canMarkOrdered={view.canMarkOrdered}
                         nextMonthLabel={monthLabel(next.year, next.month)}
                         onEdit={() =>
                           setEditingId((current) => (current === item.id ? null : item.id))
@@ -1001,6 +1097,8 @@ export function SupplyOrdersClient({
               ))}
             </section>
           ))
+        )}
+        </>
         )}
       </div>
     </div>
@@ -1036,7 +1134,7 @@ function CellText({
   value: string;
   emphasize?: boolean;
 }) {
-  if (!value.trim()) {
+  if (!displayText(value)) {
     return <span className="text-slate-600">—</span>;
   }
   return (
@@ -1049,6 +1147,7 @@ function CompactItemsTable({
   expandedId,
   editingId,
   isOwner,
+  canMarkOrdered,
   nextMonthLabel,
   onToggle,
   onEdit,
@@ -1059,6 +1158,7 @@ function CompactItemsTable({
   expandedId: string | null;
   editingId: string | null;
   isOwner: boolean;
+  canMarkOrdered: boolean;
   nextMonthLabel: string;
   onToggle: (id: string) => void;
   onEdit: (id: string) => void;
@@ -1132,7 +1232,14 @@ function CompactItemsTable({
                   <td className="px-2 py-2">
                     <CellText value={item.brand} />
                   </td>
-                  <td className="px-2 py-2">{item.product}</td>
+                  <td className="px-2 py-2">
+                    {item.product}
+                    {formatReceivedStamp(item.receivedByName, item.receivedAt) ? (
+                      <span className="mt-1 block text-xs text-emerald-300">
+                        {formatReceivedStamp(item.receivedByName, item.receivedAt)}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="px-2 py-2 whitespace-nowrap">
                     <CellText value={item.size} />
                   </td>
@@ -1166,6 +1273,7 @@ function CompactItemsTable({
                         item={item}
                         editing={editingId === item.id}
                         isOwner={isOwner}
+                        canMarkOrdered={canMarkOrdered}
                         nextMonthLabel={nextMonthLabel}
                         onEdit={() => onEdit(item.id)}
                         onPatch={(patch) => onPatch(item.id, patch)}
@@ -1240,6 +1348,7 @@ function ItemCard({
   item,
   editing,
   isOwner,
+  canMarkOrdered,
   nextMonthLabel,
   onEdit,
   onPatch,
@@ -1248,6 +1357,7 @@ function ItemCard({
   item: SalonOrderItem;
   editing: boolean;
   isOwner: boolean;
+  canMarkOrdered: boolean;
   nextMonthLabel: string;
   onEdit: () => void;
   onPatch: (patch: Record<string, unknown>) => void;
@@ -1265,14 +1375,15 @@ function ItemCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-medium">
-            {item.brand ? `${item.brand} · ` : ""}
-            {item.product}
+            {productTitle(item.brand, item.product, " · ") || item.product}
           </p>
           <p className="text-sm text-slate-400">
-            {qtyLine}
-            {item.size ? ` · ${item.size}` : ""}
-            {item.shade ? ` · ${item.shade}` : ""}
-            {item.sku ? ` · SKU ${item.sku}` : ""}
+            {joinDisplay([
+              qtyLine,
+              item.size,
+              item.shade,
+              displayText(item.sku) ? `SKU ${displayText(item.sku)}` : "",
+            ])}
           </p>
           <p className="mt-1 text-xs text-slate-500">
             Asked by {item.requestedByName}
@@ -1280,6 +1391,11 @@ function ItemCard({
             {item.vendorOrderNumber ? ` · Order # ${item.vendorOrderNumber}` : ""}
           </p>
           {item.note ? <p className="mt-1 text-sm text-slate-300">{item.note}</p> : null}
+          {formatReceivedStamp(item.receivedByName, item.receivedAt) ? (
+            <p className="mt-1 text-sm text-emerald-300">
+              {formatReceivedStamp(item.receivedByName, item.receivedAt)}
+            </p>
+          ) : null}
         </div>
         <StatusBadge
           status={item.status}
@@ -1291,6 +1407,7 @@ function ItemCard({
         item={item}
         editing={editing}
         isOwner={isOwner}
+        canMarkOrdered={canMarkOrdered}
         nextMonthLabel={nextMonthLabel}
         onEdit={onEdit}
         onPatch={onPatch}
@@ -1304,6 +1421,7 @@ function ItemFulfillment({
   item,
   editing,
   isOwner,
+  canMarkOrdered,
   nextMonthLabel,
   onEdit,
   onPatch,
@@ -1312,6 +1430,7 @@ function ItemFulfillment({
   item: SalonOrderItem;
   editing: boolean;
   isOwner: boolean;
+  canMarkOrdered: boolean;
   nextMonthLabel: string;
   onEdit: () => void;
   onPatch: (patch: Record<string, unknown>) => void;
@@ -1389,12 +1508,13 @@ function ItemFulfillment({
 
   function handleStatus(status: SettableStatus) {
     if (status === "ordered") {
+      if (!canMarkOrdered) return;
       markOrdered();
       return;
     }
     if (status === "out_of_stock") {
       const orderedQty = goingInQty();
-      if (orderedQty !== null && orderedQty < item.qty) {
+      if (canMarkOrdered && orderedQty !== null && orderedQty < item.qty) {
         setLocalError("");
         onPatch({ leftover: "oos", orderedQty });
         return;
@@ -1406,7 +1526,7 @@ function ItemFulfillment({
 
   function applyLeftover(leftover: Exclude<Leftover, "">) {
     const patch: Record<string, unknown> = { leftover };
-    if (!hasOrdered) {
+    if (canMarkOrdered && !hasOrdered) {
       const orderedQty = goingInQty();
       if (orderedQty !== null && orderedQty < item.qty) {
         patch.orderedQty = orderedQty;
@@ -1460,6 +1580,7 @@ function ItemFulfillment({
             Status
             <StatusSelect
               value={isSettableStatus(item.status) ? item.status : "pending"}
+              statuses={orderStatuses(canMarkOrdered)}
               onChange={handleStatus}
             />
           </label>
@@ -1495,7 +1616,7 @@ function ItemFulfillment({
             }}
           />
         </label>
-        {hasOrdered ? null : (
+        {hasOrdered || !canMarkOrdered ? null : (
           <label className="grid gap-1.5 text-sm">
             Qty going in this order
             <input
@@ -1548,7 +1669,7 @@ function ItemFulfillment({
             Move back to Pending
           </button>
         ) : null
-      ) : (
+      ) : canMarkOrdered ? (
         <button
           type="button"
           className="mt-3 rounded-xl bg-rose-700 px-3 py-2 text-xs font-semibold hover:bg-rose-600"
@@ -1556,7 +1677,7 @@ function ItemFulfillment({
         >
           Mark as Ordered
         </button>
-      )}
+      ) : null}
       {localError ? <p className="mt-2 text-sm text-red-400">{localError}</p> : null}
 
       {editing ? (

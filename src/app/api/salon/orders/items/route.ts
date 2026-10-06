@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSalon } from "@/lib/salon-access";
+import { canMarkOrdered } from "@/lib/salon-order-permission";
 import { addItem, deleteItem, parseYearMonth, updateItem } from "@/lib/salon-orders";
 
 export const runtime = "nodejs";
@@ -44,8 +45,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const { error } = await requireSalon();
-  if (error) return error;
+  const { session, error } = await requireSalon();
+  if (error || !session) return error;
   const body = (await request.json().catch(() => null)) as {
     id?: string;
     preferredVendor?: string;
@@ -67,7 +68,11 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Missing request." }, { status: 400 });
   }
   try {
-    const item = await updateItem(body.id, body);
+    const item = await updateItem(body.id, body, {
+      canMarkOrdered: canMarkOrdered(session),
+      id: session.id,
+      name: session.name,
+    });
     return NextResponse.json({ item });
   } catch (err) {
     return NextResponse.json(

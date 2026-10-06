@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
 import { applySessionCookie, createSessionToken, sessionFromStored, verifyPassword } from "@/lib/auth";
+import {
+  isPreviewBrookeUsername,
+  previewBrookeLoginEnabled,
+  previewBrookePasswordMatches,
+  previewBrookeSession,
+  previewRequestHost,
+} from "@/lib/preview-brooke";
 import { findUserByUsername, matchesOwnerPassword } from "@/lib/users";
 
 export const runtime = "nodejs";
@@ -17,6 +24,21 @@ export async function POST(request: Request) {
         { error: "Enter your username and password." },
         { status: 400 },
       );
+    }
+
+    if (
+      previewBrookeLoginEnabled(previewRequestHost(request)) &&
+      isPreviewBrookeUsername(username)
+    ) {
+      if (!(await previewBrookePasswordMatches(password))) {
+        return NextResponse.json(
+          { error: "That username or password is wrong." },
+          { status: 401 },
+        );
+      }
+      const token = await createSessionToken(previewBrookeSession());
+      const response = NextResponse.json({ ok: true });
+      return applySessionCookie(response, token);
     }
 
     const user = await findUserByUsername(username);

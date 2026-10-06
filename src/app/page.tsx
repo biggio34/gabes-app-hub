@@ -4,6 +4,8 @@ import { areaMeta, AREAS } from "@/lib/areas";
 import { canAccessArea, getSession, wristCoachAllowed } from "@/lib/auth";
 import { hubApps } from "@/lib/catalog";
 import { labelsForUser } from "@/lib/clubs";
+import { deliveriesStillOpenLabel } from "@/lib/salon-check-in";
+import { countWaitingDeliveries } from "@/lib/salon-orders";
 import { findUserById } from "@/lib/users";
 
 export default async function HubHome() {
@@ -15,6 +17,15 @@ export default async function HubHome() {
     ? await labelsForUser(stored)
     : [];
   const visibleAreas = AREAS.filter((area) => canAccessArea(session, area));
+  const showCheckIn = canAccessArea(session, "luna-haus");
+  let deliveryWaiting: number | null = null;
+  if (showCheckIn) {
+    try {
+      deliveryWaiting = await countWaitingDeliveries();
+    } catch {
+      deliveryWaiting = null;
+    }
+  }
 
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-200">
@@ -81,6 +92,19 @@ export default async function HubHome() {
                   with Team Roster — one People id per girl, card plus season
                   history, jersey number per year.
                 </p>
+              ) : null}
+              {area === "luna-haus" && showCheckIn ? (
+                <Link
+                  href="/salon/orders?checkin=1"
+                  className="mb-4 block rounded-3xl bg-rose-700 px-5 py-4 text-white transition hover:bg-rose-600"
+                >
+                  <span className="block text-lg font-semibold">Check in delivery</span>
+                  <span className="block text-sm text-rose-100">
+                    {deliveryWaiting === null
+                      ? "Open check-in"
+                      : deliveriesStillOpenLabel(deliveryWaiting)}
+                  </span>
+                </Link>
               ) : null}
               <div className="grid gap-4 md:grid-cols-2">
                 {apps

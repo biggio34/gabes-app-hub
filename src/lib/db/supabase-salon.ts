@@ -28,6 +28,10 @@ type ItemRow = {
   status: string;
   requested_by_user_id: string;
   requested_by_name: string;
+  received_by_user_id?: string | null;
+  received_by_name?: string | null;
+  received_at?: string | null;
+  checkin_undo?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -62,8 +66,61 @@ function mapItem(row: ItemRow): SalonOrderItem {
     status: row.status as SalonOrderItem["status"],
     requestedByUserId: row.requested_by_user_id,
     requestedByName: row.requested_by_name,
+    receivedByUserId: row.received_by_user_id ?? "",
+    receivedByName: row.received_by_name ?? "",
+    receivedAt: row.received_at ?? null,
+    checkinUndo: row.checkin_undo ?? "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+let receiveMeta: boolean | null = null;
+
+function isMissingReceiveMeta(message: string) {
+  return /received_by_|received_at|checkin_undo/i.test(message);
+}
+
+export async function receiveMetaAvailable() {
+  // Remember only a successful probe. A miss stays uncached so a deploy that
+  // just gained the received-by columns starts stamping on the next check-in.
+  if (receiveMeta === true) return true;
+  const result = await client().from("hub_salon_order_items").select("received_by_name").limit(1);
+  if (!result.error) {
+    receiveMeta = true;
+    return true;
+  }
+  if (isMissingReceiveMeta(result.error.message)) return false;
+  throw new Error(result.error.message);
+}
+
+function coreItemPayload(item: SalonOrderItem) {
+  return {
+    order_id: item.orderId,
+    preferred_vendor: item.preferredVendor,
+    brand: item.brand,
+    product: item.product,
+    size: item.size,
+    shade: item.shade,
+    qty: item.qty,
+    ordered_qty: item.orderedQty,
+    received_qty: item.receivedQty,
+    leftover: item.leftover,
+    sku: item.sku,
+    note: item.note,
+    actual_vendor: item.actualVendor,
+    vendor_order_number: item.vendorOrderNumber,
+    status: item.status,
+    updated_at: item.updatedAt,
+  };
+}
+
+function metaItemPayload(item: SalonOrderItem) {
+  return {
+    received_by_user_id: item.receivedByUserId,
+    received_by_name: item.receivedByName,
+    received_at: item.receivedAt,
+    checkin_undo: item.checkinUndo,
   };
 }
 
@@ -152,57 +209,47 @@ export async function getItemById(id: string) {
   return rows?.[0] ? mapItem(rows[0]) : null;
 }
 
+function insertPayload(item: SalonOrderItem, withMeta: boolean) {
+  return {
+    id: item.id,
+    ...coreItemPayload(item),
+    requested_by_user_id: item.requestedByUserId,
+    requested_by_name: item.requestedByName,
+    created_at: item.createdAt,
+    ...(withMeta ? metaItemPayload(item) : {}),
+  };
+}
+
 export async function insertItem(item: SalonOrderItem) {
-  salonError("Could not add that request.")(
-    await client().from("hub_salon_order_items").insert({
-      id: item.id,
-      order_id: item.orderId,
-      preferred_vendor: item.preferredVendor,
-      brand: item.brand,
-      product: item.product,
-      size: item.size,
-      shade: item.shade,
-      qty: item.qty,
-      ordered_qty: item.orderedQty,
-      received_qty: item.receivedQty,
-      leftover: item.leftover,
-      sku: item.sku,
-      note: item.note,
-      actual_vendor: item.actualVendor,
-      vendor_order_number: item.vendorOrderNumber,
-      status: item.status,
-      requested_by_user_id: item.requestedByUserId,
-      requested_by_name: item.requestedByName,
-      created_at: item.createdAt,
-      updated_at: item.updatedAt,
-    }),
-  );
+  const withMeta = receiveMeta !== false && (await receiveMetaAvailable());
+  const first = await client().from("hub_salon_order_items").insert(insertPayload(item, withMeta));
+  if (!first.error) return;
+  if (withMeta && isMissingReceiveMeta(first.error.message)) {
+    receiveMeta = null;
+    salonError("Could not add that request.")(
+      await client().from("hub_salon_order_items").insert(insertPayload(item, false)),
+    );
+    return;
+  }
+  salonError("Could not add that request.")(first);
 }
 
 export async function saveItem(item: SalonOrderItem) {
-  salonError("Could not update that request.")(
-    await client()
-      .from("hub_salon_order_items")
-      .update({
-        order_id: item.orderId,
-        preferred_vendor: item.preferredVendor,
-        brand: item.brand,
-        product: item.product,
-        size: item.size,
-        shade: item.shade,
-        qty: item.qty,
-        ordered_qty: item.orderedQty,
-        received_qty: item.receivedQty,
-        leftover: item.leftover,
-        sku: item.sku,
-        note: item.note,
-        actual_vendor: item.actualVendor,
-        vendor_order_number: item.vendorOrderNumber,
-        status: item.status,
-        updated_at: item.updatedAt,
-      })
-      .eq("id", item.id),
-  );
+  const withMeta = receiveMeta !== false && (await receiveMetaAvailable());
+  const payload = {
+    ...coreItemPayload(item),
+    ...(withMeta ? metaItemPayload(item) : {}),
+  };
+  const first = await client().from("hub_salon_order_items").update(payload).eq("id", item.id);
+  if (!first.error) return;
+  if (withMeta && isMissingReceiveMeta(first.error.message)) {
+    receiveMeta = null;
+    salonError("Could not update that request.")(
+      await client().from("hub_salon_order_items").update(coreItemPayload(item)).eq("id", item.id),
+    );
+    return;
+  }
+  salonError("Could not update that request.")(first);
 }
 
 export async function removeItem(id: string) {

@@ -106,6 +106,10 @@ export const salonOrderItems = sqliteTable("salon_order_items", {
   status: text("status").notNull(),
   requestedByUserId: text("requested_by_user_id").notNull(),
   requestedByName: text("requested_by_name").notNull(),
+  receivedByUserId: text("received_by_user_id").notNull().default(""),
+  receivedByName: text("received_by_name").notNull().default(""),
+  receivedAt: text("received_at"),
+  checkinUndo: text("checkin_undo").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
