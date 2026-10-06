@@ -108,6 +108,10 @@ const SCHEMA_SQL = [
   `UPDATE salon_order_items SET ordered_qty = qty, received_qty = qty WHERE status = 'received' AND received_qty = 0`,
   `UPDATE salon_order_items SET ordered_qty = qty WHERE status = 'ordered' AND ordered_qty = 0`,
   `UPDATE salon_order_items SET leftover = 'oos' WHERE status = 'out_of_stock' AND leftover = ''`,
+  `ALTER TABLE salon_order_items ADD COLUMN received_by_user_id TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE salon_order_items ADD COLUMN received_by_name TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE salon_order_items ADD COLUMN received_at TEXT`,
+  `ALTER TABLE salon_order_items ADD COLUMN checkin_undo TEXT NOT NULL DEFAULT ''`,
 ];
 
 type HubDb = LibSQLDatabase<typeof schema>;

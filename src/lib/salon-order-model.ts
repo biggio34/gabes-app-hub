@@ -66,9 +66,25 @@ export type SalonOrderItem = {
   status: OrderStatus;
   requestedByUserId: string;
   requestedByName: string;
+  receivedByUserId: string;
+  receivedByName: string;
+  receivedAt: string | null;
+  checkinUndo: string;
   createdAt: string;
   updatedAt: string;
 };
+
+export function emptyReceiveRecord(): Pick<
+  SalonOrderItem,
+  "receivedByUserId" | "receivedByName" | "receivedAt" | "checkinUndo"
+> {
+  return {
+    receivedByUserId: "",
+    receivedByName: "",
+    receivedAt: null,
+    checkinUndo: "",
+  };
+}
 
 export type SalonSuggestions = {
   vendors: string[];

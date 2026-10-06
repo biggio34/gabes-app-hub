@@ -5,13 +5,14 @@ import {
   moveOutOfStockToNextMonth,
   parseYearMonth,
 } from "@/lib/salon-orders";
+import { canMarkOrdered } from "@/lib/salon-order-permission";
 import { requireSalon } from "@/lib/salon-access";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const { error } = await requireSalon();
-  if (error) return error;
+  const { session, error } = await requireSalon();
+  if (error || !session) return error;
   const body = (await request.json().catch(() => null)) as {
     action?: string;
     year?: unknown;
@@ -27,13 +28,16 @@ export async function POST(request: Request) {
       if (!body.status || !isOrderStatus(body.status)) {
         throw new Error("That status is not valid.");
       }
-      const updated = await bulkUpdateStatus({
-        ...parsed,
-        vendor: body.vendor ?? "",
-        status: body.status,
-        fromStatus: body.fromStatus,
-        vendorOrderNumber: body.vendorOrderNumber,
-      });
+      const updated = await bulkUpdateStatus(
+        {
+          ...parsed,
+          vendor: body.vendor ?? "",
+          status: body.status,
+          fromStatus: body.fromStatus,
+          vendorOrderNumber: body.vendorOrderNumber,
+        },
+        { canMarkOrdered: canMarkOrdered(session) },
+      );
       return NextResponse.json({ updated });
     }
     if (body?.action === "move-out-of-stock") {

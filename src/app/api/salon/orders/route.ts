@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSalon } from "@/lib/salon-access";
+import { canMarkOrdered } from "@/lib/salon-order-permission";
 import {
   currentYearMonth,
   getMonthView,
@@ -22,6 +23,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ...view,
       isOwner: session.role === "owner",
+      canMarkOrdered: canMarkOrdered(session),
       viewerName: session.name,
     });
   } catch (err) {

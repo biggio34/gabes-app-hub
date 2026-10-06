@@ -4,9 +4,24 @@ import { salonOrderItems, salonOrders } from "./db/schema";
 import { isSupabaseConfigured } from "./db/supabase";
 import * as supabaseSalon from "./db/supabase-salon";
 import {
+  deliveryGroupTitle,
+  groupDeliveries,
+  isAwaitingDelivery,
+  isSameChicagoDay,
+  parseCheckInUndo,
+  planCheckIn,
+  snapshotFromItem,
+  type CheckInUndoSnapshot,
+  type DeliverySort,
+  type ShortChoice,
+} from "./salon-check-in";
+import { signCheckInUndo } from "./salon-check-in-token";
+import { patchSetsOrderedQty } from "./salon-order-permission";
+import {
   appendMoveNote,
   currentYearMonth,
   deriveStatus,
+  emptyReceiveRecord,
   isLeftover,
   isOrderStatus,
   isSettableStatus,
@@ -92,6 +107,10 @@ function mapSqliteItem(row: typeof salonOrderItems.$inferSelect): SalonOrderItem
     status: row.status as OrderStatus,
     requestedByUserId: row.requestedByUserId,
     requestedByName: row.requestedByName,
+    receivedByUserId: row.receivedByUserId ?? "",
+    receivedByName: row.receivedByName ?? "",
+    receivedAt: row.receivedAt ?? null,
+    checkinUndo: row.checkinUndo ?? "",
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -188,6 +207,10 @@ async function saveItemSqlite(item: SalonOrderItem) {
       actualVendor: item.actualVendor,
       vendorOrderNumber: item.vendorOrderNumber,
       status: item.status,
+      receivedByUserId: item.receivedByUserId,
+      receivedByName: item.receivedByName,
+      receivedAt: item.receivedAt,
+      checkinUndo: item.checkinUndo,
       updatedAt: item.updatedAt,
     })
     .where(eq(salonOrderItems.id, item.id));
@@ -285,6 +308,7 @@ export async function getMonthView(year: number, month: number) {
     items: order ? await listItems(order.id) : [],
     months,
     suggestions,
+    deliveryWaiting: groupDeliveries(await loadWaitingLines()).length,
   };
 }
 
@@ -328,41 +352,78 @@ async function persistNewItem(item: SalonOrderItem) {
   else await insertItemSqlite(item);
 }
 
+function rolledItem(source: SalonOrderItem, orderId: string, qty: number, now: string): SalonOrderItem {
+  return {
+    id: itemId(),
+    orderId,
+    preferredVendor: source.preferredVendor,
+    brand: source.brand,
+    product: source.product,
+    size: source.size,
+    shade: source.shade,
+    qty,
+    orderedQty: 0,
+    receivedQty: 0,
+    leftover: "",
+    sku: source.sku,
+    note: appendMoveNote(source.note),
+    actualVendor: "",
+    vendorOrderNumber: "",
+    status: "pending",
+    requestedByUserId: source.requestedByUserId,
+    requestedByName: source.requestedByName,
+    ...emptyReceiveRecord(),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 async function rollRemainder(item: SalonOrderItem) {
-  if (item.leftover === "rolled") return;
+  if (item.leftover === "rolled") return null;
   const remainder = remainderQty(item);
   if (remainder < 1) {
     throw new Error("There is no leftover to roll to next month.");
   }
+  const created = await createRolledItem(item, remainder);
+  item.leftover = "rolled";
+  return created.id;
+}
+
+async function createRolledItem(item: SalonOrderItem, qty: number) {
   const order = await getOrderById(item.orderId);
   if (!order) throw new Error("Request not found.");
   const next = nextYearMonth(order.year, order.month);
   const nextOrder = await getOrCreateOrder(next.year, next.month);
   const now = new Date().toISOString();
-  const rolled: SalonOrderItem = {
-    id: itemId(),
-    orderId: nextOrder.id,
-    preferredVendor: item.preferredVendor,
-    brand: item.brand,
-    product: item.product,
-    size: item.size,
-    shade: item.shade,
-    qty: remainder,
-    orderedQty: 0,
-    receivedQty: 0,
-    leftover: "",
-    sku: item.sku,
-    note: appendMoveNote(item.note),
-    actualVendor: "",
-    vendorOrderNumber: "",
-    status: "pending",
-    requestedByUserId: item.requestedByUserId,
-    requestedByName: item.requestedByName,
-    createdAt: now,
-    updatedAt: now,
-  };
+  const rolled = rolledItem(item, nextOrder.id, qty, now);
   await persistNewItem(rolled);
-  item.leftover = "rolled";
+  return rolled;
+}
+
+async function addToNextMonth(item: SalonOrderItem, extra: number) {
+  const order = await getOrderById(item.orderId);
+  if (!order) throw new Error("Request not found.");
+  const next = nextYearMonth(order.year, order.month);
+  const nextOrder = await getOrCreateOrder(next.year, next.month);
+  const pending = (await listItems(nextOrder.id)).find(
+    (candidate) =>
+      candidate.status === "pending" &&
+      candidate.orderedQty === 0 &&
+      candidate.receivedQty === 0 &&
+      candidate.brand === item.brand &&
+      candidate.product === item.product &&
+      candidate.size === item.size &&
+      candidate.shade === item.shade,
+  );
+  if (pending) {
+    const prevQty = pending.qty;
+    pending.qty += extra;
+    pending.updatedAt = new Date().toISOString();
+    await persistItem(pending);
+    return { itemId: pending.id, prevQty, created: null as SalonOrderItem | null };
+  }
+  const created = await createRolledItem(item, extra);
+  return { itemId: created.id, prevQty: null as number | null, created };
 }
 
 export async function addItem(input: {
@@ -402,6 +463,7 @@ export async function addItem(input: {
     status: "pending",
     requestedByUserId: input.requestedByUserId,
     requestedByName: input.requestedByName,
+    ...emptyReceiveRecord(),
     createdAt: now,
     updatedAt: now,
   };
@@ -428,7 +490,11 @@ export async function updateItem(
     vendorOrderNumber?: string;
     status?: string;
   },
+  actor?: { canMarkOrdered: boolean; id?: string; name?: string },
 ) {
+  if (actor && !actor.canMarkOrdered && patchSetsOrderedQty(patch)) {
+    throw new Error("You can't mark items ordered.");
+  }
   const current = isSupabaseConfigured()
     ? await supabaseSalon.getItemById(id)
     : await getItemByIdSqlite(id);
@@ -490,7 +556,13 @@ export async function updateItem(
     if (current.orderedQty < 1) {
       throw new Error("Received qty is only for after a line is ordered.");
     }
-    current.receivedQty = parseCount(patch.receivedQty, "Received qty", 0);
+    const nextReceived = parseCount(patch.receivedQty, "Received qty", 0);
+    if (nextReceived !== current.receivedQty && actor?.id && actor.name) {
+      current.receivedByUserId = actor.id;
+      current.receivedByName = actor.name;
+      current.receivedAt = new Date().toISOString();
+    }
+    current.receivedQty = nextReceived;
   }
 
   if (patch.leftover !== undefined) {
@@ -522,14 +594,20 @@ export async function deleteItem(id: string) {
   else await removeItemSqlite(id);
 }
 
-export async function bulkUpdateStatus(input: {
-  year: number;
-  month: number;
-  vendor: string;
-  status: string;
-  fromStatus?: string;
-  vendorOrderNumber?: string;
-}) {
+export async function bulkUpdateStatus(
+  input: {
+    year: number;
+    month: number;
+    vendor: string;
+    status: string;
+    fromStatus?: string;
+    vendorOrderNumber?: string;
+  },
+  actor?: { canMarkOrdered: boolean },
+) {
+  if (actor && !actor.canMarkOrdered && input.status === "ordered") {
+    throw new Error("You can't mark items ordered.");
+  }
   if (!isSettableStatus(input.status)) {
     throw new Error(
       input.status === "partial" || input.status === "received"
@@ -629,4 +707,345 @@ export async function moveOutOfStockToNextMonth(year: number, month: number) {
     nextMonth: next.month,
     nextName: nextOrder.name,
   };
+}
+
+export type DeliveryLine = DeliverySort & {
+  id: string;
+  brand: string;
+  product: string;
+  size: string;
+  shade: string;
+  sku: string;
+  qty: number;
+  orderedQty: number;
+  receivedQty: number;
+  note: string;
+  receivedByName: string;
+  receivedAt: string | null;
+};
+
+function toDeliveryLine(item: SalonOrderItem, order: SalonOrder): DeliveryLine {
+  return {
+    id: item.id,
+    year: order.year,
+    month: order.month,
+    createdAt: item.createdAt,
+    vendor: itemVendor(item),
+    vendorOrderNumber: item.vendorOrderNumber,
+    brand: item.brand,
+    product: item.product,
+    size: item.size,
+    shade: item.shade,
+    sku: item.sku,
+    qty: item.qty,
+    orderedQty: item.orderedQty,
+    receivedQty: item.receivedQty,
+    note: item.note,
+    receivedByName: item.receivedByName,
+    receivedAt: item.receivedAt,
+  };
+}
+
+async function loadWaitingLines() {
+  const orders = await listOrders();
+  const lines: DeliveryLine[] = [];
+  for (const order of orders) {
+    for (const item of await listItems(order.id)) {
+      if (!isAwaitingDelivery(item)) continue;
+      lines.push(toDeliveryLine(item, order));
+    }
+  }
+  return lines;
+}
+
+async function receiveMetaOn() {
+  if (!isSupabaseConfigured()) return true;
+  return supabaseSalon.receiveMetaAvailable();
+}
+
+async function loadItem(id: string) {
+  const current = isSupabaseConfigured()
+    ? await supabaseSalon.getItemById(id)
+    : await getItemByIdSqlite(id);
+  if (!current) throw new Error("Request not found.");
+  return current;
+}
+
+async function loadItemOptional(id: string) {
+  return isSupabaseConfigured()
+    ? supabaseSalon.getItemById(id)
+    : getItemByIdSqlite(id);
+}
+
+export async function getCheckInView(userId: string) {
+  const lines = await loadWaitingLines();
+  const groups = groupDeliveries(lines).map((group) => ({
+    ...group,
+    title: deliveryGroupTitle(group.vendor, group.vendorOrderNumber, group.items.length),
+  }));
+  const receiveMeta = await receiveMetaOn();
+  return {
+    waitingOrders: groups.length,
+    groups,
+    undoToday: receiveMeta ? await listUndoToday(userId) : [],
+    receiveMeta,
+  };
+}
+
+async function listUndoToday(userId: string) {
+  const orders = await listOrders();
+  const rows: { id: string; label: string; receivedAt: string }[] = [];
+  for (const order of orders) {
+    for (const item of await listItems(order.id)) {
+      if (item.receivedByUserId !== userId) continue;
+      if (!item.receivedAt || !isSameChicagoDay(item.receivedAt)) continue;
+      if (!parseCheckInUndo(item.checkinUndo)) continue;
+      rows.push({
+        id: item.id,
+        label: [item.brand, item.product, item.shade].filter(Boolean).join(" · "),
+        receivedAt: item.receivedAt,
+      });
+    }
+  }
+  return rows.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+}
+
+export async function checkInDeliveries(input: {
+  actor: { id: string; name: string };
+  lines: { id: string; receivedQty: unknown; choice?: string }[];
+}) {
+  if (!Array.isArray(input.lines) || input.lines.length === 0) {
+    throw new Error("Nothing to check in.");
+  }
+  const meta = await receiveMetaOn();
+  const snapshots: CheckInUndoSnapshot[] = [];
+  for (const line of input.lines) {
+    if (!line?.id) throw new Error("Missing request.");
+    const snapshot = await checkInOne(
+      {
+        id: line.id,
+        receivedQty: Number(line.receivedQty),
+        choice: line.choice === "wait" ? "wait" : "roll",
+      },
+      input.actor,
+      meta,
+    );
+    if (snapshot) snapshots.push(snapshot);
+  }
+  if (snapshots.length === 0) {
+    throw new Error("Nothing to check in. Leave a quantity above zero for what arrived.");
+  }
+  return {
+    undoToken: await signCheckInUndo(input.actor.id, snapshots),
+    checkedIn: snapshots.length,
+    receiveMeta: meta,
+  };
+}
+
+async function checkInOne(
+  line: { id: string; receivedQty: number; choice: ShortChoice },
+  actor: { id: string; name: string },
+  meta: boolean,
+) {
+  let current = await loadItem(line.id);
+  const preview = planCheckIn(current, line.receivedQty, line.choice);
+  if (preview.action === "skip") return null;
+
+  let restoredRoll: CheckInUndoSnapshot["restoredRoll"] = null;
+  let restoredAdded: CheckInUndoSnapshot["restoredAdded"] = null;
+  const previous = parseCheckInUndo(current.checkinUndo);
+  if (previous && previous.id === current.id) {
+    restoredRoll = await captureRoll(previous);
+    if (previous.addedToItemId) {
+      const bumped = await loadItemOptional(previous.addedToItemId);
+      if (bumped) restoredAdded = { itemId: bumped.id, qty: bumped.qty };
+    }
+    const before = {
+      receivedQty: current.receivedQty,
+      leftover: current.leftover,
+      receivedByUserId: current.receivedByUserId,
+      receivedByName: current.receivedByName,
+      receivedAt: current.receivedAt,
+      checkinUndo: current.checkinUndo,
+    };
+    await applyUndoSnapshot(previous);
+    current = await loadItem(line.id);
+    const plan = planCheckIn(current, line.receivedQty, line.choice);
+    if (plan.action === "skip") {
+      const snapshot: CheckInUndoSnapshot = {
+        id: current.id,
+        prevReceivedQty: before.receivedQty,
+        prevLeftover: before.leftover,
+        prevReceivedByUserId: before.receivedByUserId,
+        prevReceivedByName: before.receivedByName,
+        prevReceivedAt: before.receivedAt,
+        prevCheckinUndo: before.checkinUndo,
+        createdItemId: null,
+        addedToItemId: null,
+        addedPrevQty: null,
+        restoredRoll,
+        restoredAdded,
+      };
+      if (meta) {
+        current.checkinUndo = JSON.stringify(snapshot);
+        current.updatedAt = new Date().toISOString();
+        await persistItem(current);
+      }
+      return snapshot;
+    }
+    return finishCheckIn(current, plan, actor, meta, restoredRoll, restoredAdded, before);
+  }
+
+  return finishCheckIn(current, preview, actor, meta, null, null);
+}
+
+async function finishCheckIn(
+  current: SalonOrderItem,
+  plan: Extract<ReturnType<typeof planCheckIn>, { action: "receive" }>,
+  actor: { id: string; name: string },
+  meta: boolean,
+  restoredRoll: CheckInUndoSnapshot["restoredRoll"],
+  restoredAdded: CheckInUndoSnapshot["restoredAdded"],
+  prior?: {
+    receivedQty: number;
+    leftover: Leftover;
+    receivedByUserId: string;
+    receivedByName: string;
+    receivedAt: string | null;
+    checkinUndo: string;
+  },
+) {
+  const snapshot: CheckInUndoSnapshot = {
+    id: current.id,
+    prevReceivedQty: prior?.receivedQty ?? current.receivedQty,
+    prevLeftover: prior?.leftover ?? current.leftover,
+    prevReceivedByUserId: prior?.receivedByUserId ?? current.receivedByUserId,
+    prevReceivedByName: prior?.receivedByName ?? current.receivedByName,
+    prevReceivedAt: prior?.receivedAt ?? current.receivedAt,
+    prevCheckinUndo: prior?.checkinUndo ?? current.checkinUndo,
+    createdItemId: null,
+    addedToItemId: null,
+    addedPrevQty: null,
+    restoredRoll,
+    restoredAdded,
+  };
+  current.receivedQty = plan.receivedQty;
+  if (plan.setWait && current.leftover !== "rolled") current.leftover = "wait";
+  if (plan.rollRemainder) {
+    snapshot.createdItemId = await rollRemainder(current);
+  }
+  if (plan.extraRollQty > 0) {
+    const added = await addToNextMonth(current, plan.extraRollQty);
+    if (added.created) snapshot.createdItemId = added.created.id;
+    else {
+      snapshot.addedToItemId = added.itemId;
+      snapshot.addedPrevQty = added.prevQty;
+    }
+  }
+  current.receivedByUserId = actor.id;
+  current.receivedByName = actor.name;
+  current.receivedAt = new Date().toISOString();
+  if (meta) current.checkinUndo = JSON.stringify(snapshot);
+  refreshStatus(current);
+  current.updatedAt = new Date().toISOString();
+  await persistItem(current);
+  return snapshot;
+}
+
+async function captureRoll(snapshot: CheckInUndoSnapshot) {
+  if (!snapshot.createdItemId) return snapshot.restoredRoll;
+  const rolled = await loadItemOptional(snapshot.createdItemId);
+  return rolled ? snapshotFromItem(rolled) : snapshot.restoredRoll;
+}
+
+async function deleteFreshRoll(id: string) {
+  const rolled = await loadItemOptional(id);
+  if (!rolled) return;
+  if (rolled.orderedQty > 0 || rolled.receivedQty > 0) {
+    throw new Error("The rolled leftover was already ordered, so this check-in can't be undone.");
+  }
+  if (isSupabaseConfigured()) await supabaseSalon.removeItem(id);
+  else await removeItemSqlite(id);
+}
+
+async function reinsertRoll(snap: NonNullable<CheckInUndoSnapshot["restoredRoll"]>) {
+  if (await loadItemOptional(snap.id)) return;
+  const now = new Date().toISOString();
+  const item: SalonOrderItem = {
+    id: snap.id,
+    orderId: snap.orderId,
+    preferredVendor: snap.preferredVendor,
+    brand: snap.brand,
+    product: snap.product,
+    size: snap.size,
+    shade: snap.shade,
+    qty: snap.qty,
+    orderedQty: 0,
+    receivedQty: 0,
+    leftover: "",
+    sku: snap.sku,
+    note: snap.note,
+    actualVendor: "",
+    vendorOrderNumber: "",
+    status: "pending",
+    requestedByUserId: snap.requestedByUserId,
+    requestedByName: snap.requestedByName,
+    ...emptyReceiveRecord(),
+    createdAt: snap.createdAt,
+    updatedAt: now,
+  };
+  await persistNewItem(item);
+}
+
+export async function undoCheckInSnapshots(lines: CheckInUndoSnapshot[]) {
+  for (const line of lines) await applyUndoSnapshot(line);
+}
+
+async function applyUndoSnapshot(line: CheckInUndoSnapshot) {
+  if (line.createdItemId) await deleteFreshRoll(line.createdItemId);
+  if (line.addedToItemId && line.addedPrevQty !== null) {
+    const target = await loadItemOptional(line.addedToItemId);
+    if (target && target.orderedQty === 0 && target.receivedQty === 0) {
+      if (line.addedPrevQty < 1) await deleteFreshRoll(target.id);
+      else {
+        target.qty = line.addedPrevQty;
+        target.updatedAt = new Date().toISOString();
+        await persistItem(target);
+      }
+    }
+  }
+  if (line.restoredRoll) await reinsertRoll(line.restoredRoll);
+  if (line.restoredAdded && line.restoredAdded.qty > 0) {
+    const target = await loadItemOptional(line.restoredAdded.itemId);
+    if (target) {
+      target.qty = line.restoredAdded.qty;
+      target.updatedAt = new Date().toISOString();
+      await persistItem(target);
+    }
+  }
+  const current = await loadItem(line.id);
+  current.receivedQty = line.prevReceivedQty;
+  current.leftover = line.prevLeftover;
+  current.receivedByUserId = line.prevReceivedByUserId;
+  current.receivedByName = line.prevReceivedByName;
+  current.receivedAt = line.prevReceivedAt;
+  current.checkinUndo = line.prevCheckinUndo;
+  refreshStatus(current);
+  current.updatedAt = new Date().toISOString();
+  await persistItem(current);
+}
+
+export async function undoSavedCheckIn(id: string, userId: string) {
+  if (!(await receiveMetaOn())) {
+    throw new Error(
+      "Same-day undo needs the received-by columns. Run supabase/salon-orders.sql, or use Undo right after checking in.",
+    );
+  }
+  const current = await loadItem(id);
+  if (current.receivedByUserId !== userId || !isSameChicagoDay(current.receivedAt)) {
+    throw new Error("You can undo your own check-ins from today.");
+  }
+  const snapshot = parseCheckInUndo(current.checkinUndo);
+  if (!snapshot || snapshot.id !== id) throw new Error("That check-in can't be undone.");
+  await applyUndoSnapshot(snapshot);
 }

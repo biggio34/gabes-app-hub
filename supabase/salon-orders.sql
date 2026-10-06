@@ -51,3 +51,11 @@ update hub_salon_order_items
 update hub_salon_order_items
   set leftover = 'oos'
   where status = 'out_of_stock' and leftover = '';
+
+-- Who checked a delivery in, plus the snapshot Undo needs to reverse a rollover.
+-- Safe to run more than once. Supply Orders keeps working before this is applied:
+-- it skips the name, the date, and same-day undo until these columns exist.
+alter table hub_salon_order_items add column if not exists received_by_user_id text not null default '';
+alter table hub_salon_order_items add column if not exists received_by_name text not null default '';
+alter table hub_salon_order_items add column if not exists received_at timestamptz;
+alter table hub_salon_order_items add column if not exists checkin_undo text not null default '';

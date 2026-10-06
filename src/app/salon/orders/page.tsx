@@ -6,7 +6,7 @@ import { SupplyOrdersClient } from "./orders-client";
 export default async function SupplyOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string; month?: string }>;
+  searchParams: Promise<{ year?: string; month?: string; checkin?: string }>;
 }) {
   const session = await getSession();
   if (!session) redirect("/login");
@@ -24,6 +24,10 @@ export default async function SupplyOrdersPage({
   }
   const params = await searchParams;
   return (
-    <SupplyOrdersClient initialYear={params.year} initialMonth={params.month} />
+    <SupplyOrdersClient
+      initialYear={params.year}
+      initialMonth={params.month}
+      initialCheckIn={params.checkin === "1"}
+    />
   );
 }
