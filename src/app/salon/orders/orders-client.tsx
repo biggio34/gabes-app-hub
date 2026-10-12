@@ -15,6 +15,7 @@ import {
 import {
   bulkStatusRowPlan,
   canRevertToPending,
+  editDetailsPatch,
   findPendingDuplicate,
   goingInQty,
   isSettableStatus,
@@ -22,6 +23,7 @@ import {
   leftoverLabel,
   monthLabel,
   nextYearMonth,
+  reconcileStatusChoice,
   requestedQtyFromDraft,
   rollButtonLabel,
   sharedVendorOrderNumber,
@@ -245,6 +247,8 @@ export function SupplyOrdersClient({
   const carryUndoHideAt = useRef(0);
   const draftsRef = useRef(new Map<string, RowDraft>());
   const [orderedDrafts, setOrderedDrafts] = useState<Record<string, string>>({});
+  const [statusChoices, setStatusChoices] = useState<Record<string, SettableStatus>>({});
+  const seenStatus = useRef(new Map<string, OrderStatus>());
   const saveQueue = useRef(Promise.resolve());
 
   async function load(year?: string, month?: string) {
@@ -260,6 +264,41 @@ export function SupplyOrdersClient({
     }
     setView(data);
     setOrderName(data.order?.name || monthLabel(data.year, data.month));
+    reconcileChoices(data.items);
+  }
+
+  function reconcileChoices(items: SalonOrderItem[]) {
+    const previous = new Map(seenStatus.current);
+    for (const item of items) seenStatus.current.set(item.id, item.status);
+    setStatusChoices((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const item of items) {
+        const kept = reconcileStatusChoice(next[item.id], previous.get(item.id), item.status);
+        if (kept) {
+          if (next[item.id] !== kept) {
+            next[item.id] = kept;
+            changed = true;
+          }
+        } else if (next[item.id]) {
+          delete next[item.id];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }
+
+  function chooseStatus(id: string, status: SettableStatus | null) {
+    setStatusChoices((current) => {
+      if (!status) {
+        if (!current[id]) return current;
+        const next = { ...current };
+        delete next[id];
+        return next;
+      }
+      return current[id] === status ? current : { ...current, [id]: status };
+    });
   }
 
   useEffect(() => {
@@ -1249,6 +1288,8 @@ export function SupplyOrdersClient({
             onPatch={(id, patch) => void patchItem(id, patch)}
             onDraft={rememberDraft}
             orderedQtyDrafts={orderedDrafts}
+            statusChoices={statusChoices}
+            onChooseStatus={chooseStatus}
             onDelete={(id) => void removeItem(id)}
           />
         ) : (
@@ -1358,6 +1399,8 @@ export function SupplyOrdersClient({
                         onPatch={(patch) => void patchItem(item.id, patch)}
                         onDraft={(draft) => rememberDraft(item.id, draft)}
                         initialOrderedQty={orderedDrafts[item.id]}
+                        chosenStatus={statusChoices[item.id]}
+                        onChooseStatus={(status) => chooseStatus(item.id, status)}
                         onDelete={() => void removeItem(item.id)}
                       />
                     ))}
@@ -1428,6 +1471,8 @@ function CompactItemsTable({
   onPatch,
   onDraft,
   orderedQtyDrafts,
+  statusChoices,
+  onChooseStatus,
   onDelete,
 }: {
   items: SalonOrderItem[];
@@ -1444,6 +1489,8 @@ function CompactItemsTable({
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   onDraft: (id: string, draft: RowDraft) => void;
   orderedQtyDrafts: Record<string, string>;
+  statusChoices: Record<string, SettableStatus>;
+  onChooseStatus: (id: string, status: SettableStatus | null) => void;
   onDelete: (id: string) => void;
 }) {
   return (
@@ -1570,6 +1617,8 @@ function CompactItemsTable({
                         onPatch={(patch) => onPatch(item.id, patch)}
                         onDraft={(draft) => onDraft(item.id, draft)}
                         initialOrderedQty={orderedQtyDrafts[item.id]}
+                        chosenStatus={statusChoices[item.id]}
+                        onChooseStatus={(status) => onChooseStatus(item.id, status)}
                         onDelete={() => onDelete(item.id)}
                       />
                     </td>
@@ -1657,6 +1706,8 @@ function ItemCard({
   onPatch,
   onDraft,
   initialOrderedQty,
+  chosenStatus,
+  onChooseStatus,
   onDelete,
 }: {
   item: SalonOrderItem;
@@ -1671,6 +1722,8 @@ function ItemCard({
   onPatch: (patch: Record<string, unknown>) => void;
   onDraft: (draft: RowDraft) => void;
   initialOrderedQty?: string;
+  chosenStatus?: SettableStatus;
+  onChooseStatus: (status: SettableStatus | null) => void;
   onDelete: () => void;
 }) {
   const hasOrdered = item.orderedQty > 0;
@@ -1740,6 +1793,8 @@ function ItemCard({
         onPatch={onPatch}
         onDraft={onDraft}
         initialOrderedQty={initialOrderedQty}
+        chosenStatus={chosenStatus}
+        onChooseStatus={onChooseStatus}
         onDelete={onDelete}
       />
     </li>
@@ -1756,6 +1811,8 @@ function ItemFulfillment({
   onPatch,
   onDraft,
   initialOrderedQty,
+  chosenStatus,
+  onChooseStatus,
   onDelete,
 }: {
   item: SalonOrderItem;
@@ -1767,6 +1824,8 @@ function ItemFulfillment({
   onPatch: (patch: Record<string, unknown>) => void;
   onDraft: (draft: RowDraft) => void;
   initialOrderedQty?: string;
+  chosenStatus?: SettableStatus;
+  onChooseStatus: (status: SettableStatus | null) => void;
   onDelete: () => void;
 }) {
   const hasOrdered = item.orderedQty > 0;
@@ -1801,18 +1860,10 @@ function ItemFulfillment({
   }
 
   function saveDetails() {
-    const patch: Record<string, unknown> = {
-      preferredVendor: draft.preferredVendor,
-      brand: draft.brand,
-      product: draft.product,
-      size: draft.size,
-      shade: draft.shade,
-      sku: draft.sku,
-      note: draft.note,
-      actualVendor: draft.actualVendor,
-      vendorOrderNumber: draft.vendorOrderNumber,
-    };
-    if (!hasOrdered) patch.qty = Number(draft.qty);
+    const patch = editDetailsPatch(item, { ...draft, orderedQty: orderedDraft }, {
+      canMarkOrdered,
+      status: chosenStatus,
+    });
     onPatch(patch);
     onEdit();
   }
@@ -1842,6 +1893,7 @@ function ItemFulfillment({
       return;
     }
     setLocalError("");
+    onChooseStatus("ordered");
     const patch: Record<string, unknown> = { status: "ordered", orderedQty };
     if (
       orderedQty < requested &&
@@ -1862,11 +1914,13 @@ function ItemFulfillment({
       const orderedQty = goingInQty(orderedDraft);
       if (canMarkOrdered && orderedQty !== null && orderedQty < requested) {
         setLocalError("");
+        onChooseStatus(null);
         commit({ leftover: "oos", orderedQty });
         return;
       }
     }
     setLocalError("");
+    onChooseStatus(status);
     commit({ status });
   }
 
@@ -1928,7 +1982,9 @@ function ItemFulfillment({
           <label className="grid gap-1.5 text-sm">
             Status
             <StatusSelect
-              value={isSettableStatus(item.status) ? item.status : "pending"}
+              value={
+                chosenStatus ?? (isSettableStatus(item.status) ? item.status : "pending")
+              }
               statuses={orderStatuses(canMarkOrdered)}
               onChange={handleStatus}
               testId="row-status"
