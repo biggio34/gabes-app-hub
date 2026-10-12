@@ -462,6 +462,79 @@ export function withUnsavedRowFields(
   return { ...unsavedRowFields(item, draft), ...patch };
 }
 
+/**
+ * Status Edit details should write. Only a status the user picked on this row.
+ * Leaving the menu alone must not resend the saved status: a partial Out of stock
+ * already wrote ordered qty, and sending Pending again would clear it.
+ * Ordered lines keep the status that ordered and received qty already imply.
+ * A moved or rolled source is history: Save must not turn "Moved to {month}" into Pending.
+ * The live status is the copy on next month's order.
+ */
+export function editDetailsStatus(
+  item: { status: OrderStatus; orderedQty: number; leftover: Leftover },
+  chosen: SettableStatus | undefined,
+  canMarkOrdered: boolean,
+): SettableStatus | undefined {
+  if (!chosen) return undefined;
+  if (item.orderedQty > 0) return undefined;
+  if (item.leftover === "moved" || item.leftover === "rolled" || item.status === "moved") {
+    return undefined;
+  }
+  if (chosen === "ordered" && !canMarkOrdered) return undefined;
+  return chosen;
+}
+
+/** Payload for the Edit details Save button, including the status chosen on that row. */
+export function editDetailsPatch(
+  item: RowDraftItem & { status: OrderStatus },
+  draft: RowDraft,
+  options: { canMarkOrdered: boolean; status?: SettableStatus },
+) {
+  const patch: Record<string, string | number> = {
+    preferredVendor: draft.preferredVendor,
+    brand: draft.brand,
+    product: draft.product,
+    size: draft.size,
+    shade: draft.shade,
+    sku: draft.sku,
+    note: draft.note,
+    actualVendor: draft.actualVendor,
+    vendorOrderNumber: draft.vendorOrderNumber,
+  };
+  if (item.orderedQty < 1) patch.qty = Number(draft.qty);
+  const status = editDetailsStatus(item, options.status, options.canMarkOrdered);
+  if (status) patch.status = status;
+  return patch;
+}
+
+/**
+ * Remember a status picked in the menu across the field save that reloads the row.
+ * Drop it once the saved row changes to a different status (Set all to, Mark as Ordered).
+ */
+export function reconcileStatusChoice(
+  choice: SettableStatus | undefined,
+  previous: OrderStatus | undefined,
+  next: OrderStatus,
+): SettableStatus | undefined {
+  if (!choice) return undefined;
+  if (choice === next) return choice;
+  if (previous === undefined || next === previous) return choice;
+  return undefined;
+}
+
+/**
+ * Line-level Out of stock is leftover "oos". Choosing Pending or Added to cart clears it.
+ * Rolled and moved leftovers stay, so history rows are not rewritten.
+ */
+export function leftoverAfterStatus(leftover: Leftover, status: SettableStatus): Leftover {
+  if (status === "out_of_stock") {
+    if (leftover === "rolled" || leftover === "moved") return leftover;
+    return "oos";
+  }
+  if ((status === "pending" || status === "in_cart") && leftover === "oos") return "";
+  return leftover;
+}
+
 export function requestedQtyFromDraft(
   item: { qty: number; orderedQty: number },
   draft: Pick<RowDraft, "qty">,

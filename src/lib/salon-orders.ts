@@ -34,6 +34,7 @@ import {
   nextYearMonth,
   findExistingCarry,
   isUnorderedOutOfStock,
+  leftoverAfterStatus,
   planCarryOver,
   remainderQty,
   shoppingStage,
@@ -562,8 +563,8 @@ export async function updateItem(
     if (patch.status === "ordered" && current.orderedQty < 1) {
       current.orderedQty = current.qty;
     }
-    if (patch.status === "out_of_stock" && current.leftover !== "rolled" && current.leftover !== "moved") {
-      current.leftover = "oos";
+    if (isSettableStatus(patch.status)) {
+      current.leftover = leftoverAfterStatus(current.leftover, patch.status);
     }
   }
 
@@ -638,6 +639,7 @@ export async function bulkUpdateStatus(
         : "That status is not valid.",
     );
   }
+  const status = input.status;
   const vendor = input.vendor.trim();
   if (!vendor) throw new Error("Vendor is required.");
   const fromStatus =
@@ -669,9 +671,7 @@ export async function bulkUpdateStatus(
     if (input.status === "ordered" && item.orderedQty < 1) {
       item.orderedQty = item.qty;
     }
-    if (input.status === "out_of_stock" && item.leftover !== "rolled" && item.leftover !== "moved") {
-      item.leftover = "oos";
-    }
+    item.leftover = leftoverAfterStatus(item.leftover, status);
     if (
       (input.status === "in_cart" || input.status === "ordered") &&
       !item.actualVendor.trim()

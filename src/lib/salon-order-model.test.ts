@@ -4,6 +4,10 @@ import {
   bulkStatusRowPlan,
   canRevertToPending,
   deriveStatus,
+  editDetailsPatch,
+  editDetailsStatus,
+  leftoverAfterStatus,
+  reconcileStatusChoice,
   sharedVendorOrderNumber,
   splitBulkRowSave,
   unorderForPending,
@@ -187,6 +191,87 @@ describe("bulkStatusRowPlan", () => {
     assert.equal(sharedVendorOrderNumber(""), undefined);
     assert.equal(sharedVendorOrderNumber("  "), undefined);
     assert.equal(sharedVendorOrderNumber(" SC-2 "), "SC-2");
+  });
+});
+
+describe("editDetailsPatch", () => {
+  it("sends the status chosen in Edit details with the other fields", () => {
+    const patch = editDetailsPatch(
+      draftItem(),
+      rowDraft({ actualVendor: "Cosmo", sku: "NEW", qty: "4" }),
+      { canMarkOrdered: true, status: "in_cart" },
+    );
+    assert.equal(patch.status, "in_cart");
+    assert.equal(patch.actualVendor, "Cosmo");
+    assert.equal(patch.sku, "NEW");
+    assert.equal(patch.qty, 4);
+  });
+
+  it("saves each settable status, and skips Ordered when the user cannot mark it", () => {
+    for (const status of ["pending", "in_cart", "out_of_stock", "ordered"] as const) {
+      assert.equal(editDetailsStatus(draftItem(), status, true), status);
+    }
+    assert.equal(editDetailsStatus(draftItem(), "ordered", false), undefined);
+    const denied = editDetailsPatch(draftItem(), rowDraft({ sku: "X" }), {
+      canMarkOrdered: false,
+      status: "ordered",
+    });
+    assert.equal("status" in denied, false);
+    assert.equal(denied.sku, "X");
+    const untouched = editDetailsPatch(draftItem(), rowDraft({ sku: "X" }), {
+      canMarkOrdered: true,
+    });
+    assert.equal("status" in untouched, false);
+    assert.equal(editDetailsStatus(draftItem(), undefined, true), undefined);
+  });
+
+  it("does not send a status for a moved or rolled source, or a line that is already ordered", () => {
+    assert.equal(
+      editDetailsStatus(draftItem({ leftover: "moved" }), "in_cart", true),
+      undefined,
+    );
+    assert.equal(
+      editDetailsStatus(draftItem({ leftover: "rolled" }), "pending", true),
+      undefined,
+    );
+    assert.equal(
+      editDetailsStatus(draftItem({ orderedQty: 2, qty: 2 }), "pending", true),
+      undefined,
+    );
+    const history = editDetailsPatch(
+      draftItem({ leftover: "moved", status: "moved" }),
+      rowDraft({ actualVendor: "Cosmo", sku: "SRC", qty: "5" }),
+      { canMarkOrdered: true, status: "in_cart" },
+    );
+    assert.equal("status" in history, false);
+    assert.equal(history.actualVendor, "Cosmo");
+    assert.equal(history.qty, 5);
+  });
+});
+
+describe("reconcileStatusChoice", () => {
+  it("keeps a picked status while a field save reloads the same row status", () => {
+    assert.equal(reconcileStatusChoice("in_cart", "pending", "pending"), "in_cart");
+    assert.equal(reconcileStatusChoice("in_cart", "pending", "in_cart"), "in_cart");
+  });
+
+  it("drops the pick when the saved status changes to something else", () => {
+    assert.equal(reconcileStatusChoice("in_cart", "pending", "out_of_stock"), undefined);
+    assert.equal(reconcileStatusChoice(undefined, "pending", "in_cart"), undefined);
+  });
+});
+
+describe("leftoverAfterStatus", () => {
+  it("clears line-level out of stock when Pending or Added to cart is chosen", () => {
+    assert.equal(leftoverAfterStatus("oos", "pending"), "");
+    assert.equal(leftoverAfterStatus("oos", "in_cart"), "");
+    assert.equal(leftoverAfterStatus("oos", "out_of_stock"), "oos");
+  });
+
+  it("leaves rolled and moved history alone", () => {
+    assert.equal(leftoverAfterStatus("rolled", "in_cart"), "rolled");
+    assert.equal(leftoverAfterStatus("moved", "pending"), "moved");
+    assert.equal(leftoverAfterStatus("moved", "out_of_stock"), "moved");
   });
 });
 
