@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Financial Calcs</title>
+    <title>Financial Calculators</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
@@ -28,9 +28,9 @@
         }
         
         .tab-button.active {
-            background-color: #1e2937;
-            color: white;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            background-color: var(--fc-teal-dark);
+            color: #ffffff;
+            box-shadow: none;
         }
 
         .result-card {
@@ -46,7 +46,15 @@
             font-weight: 600;
             letter-spacing: 0.05em;
             text-transform: uppercase;
-            color: #64748b;
+            color: var(--fc-muted);
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--fc-muted);
         }
 
         .input-field {
@@ -55,7 +63,8 @@
 
         .input-field:focus {
             outline: none;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+            border-color: var(--fc-teal-dark);
+            box-shadow: 0 0 0 3px var(--fc-focus);
         }
 
         .email-box {
@@ -81,11 +90,193 @@
 
         input[type="date"],
         select {
-            color-scheme: dark;
+            color-scheme: light;
+        }
+
+        :root {
+            --fc-teal: #0BB4AA;
+            --fc-teal-dark: #076C65;
+            --fc-teal-darker: #054E49;
+            --fc-text: #222222;
+            --fc-muted: #4E5964;
+            --fc-bg: #F9FAFD;
+            --fc-surface: #ffffff;
+            --fc-sunken: #F4F7FA;
+            --fc-border: #E3E7EE;
+            --fc-fed: #9F2D3A;
+            --fc-note-bg: #F8F4EC;
+            --fc-note-border: #E4D9C4;
+            --fc-note-text: #6B4E16;
+            --fc-teal-wash: #E6F6F5;
+            --fc-focus: rgba(11, 180, 170, 0.28);
+        }
+
+        body.fc-app {
+            background-color: var(--fc-bg);
+            color: var(--fc-text);
+            color-scheme: light;
+        }
+
+        .fc-app h1,
+        .fc-app h2,
+        .fc-app h3 {
+            color: var(--fc-teal-dark);
+        }
+
+        .fc-app button {
+            cursor: pointer;
+        }
+
+        .fc-app .bg-slate-900 {
+            background-color: var(--fc-surface);
+            color: var(--fc-text);
+        }
+
+        .fc-app .bg-slate-950 {
+            background-color: var(--fc-sunken);
+            color: var(--fc-text);
+        }
+
+        .fc-app input.bg-slate-950,
+        .fc-app select.bg-slate-950 {
+            background-color: #ffffff;
+            color: var(--fc-text);
+        }
+
+        .fc-app .bg-slate-800 {
+            background-color: #ffffff;
+            color: var(--fc-teal-dark);
+            border: 1px solid var(--fc-border);
+        }
+
+        .fc-app .bg-blue-600 {
+            background-color: var(--fc-teal-dark);
+            color: #ffffff;
+        }
+
+        .fc-app .bg-blue-600:hover,
+        .fc-app .hover\:bg-blue-500:hover {
+            background-color: var(--fc-teal-darker);
+            color: #ffffff;
+        }
+
+        .fc-app .bg-slate-800:hover,
+        .fc-app .hover\:bg-slate-700:hover {
+            background-color: var(--fc-teal-wash);
+            color: var(--fc-teal-dark);
+        }
+
+        .fc-app .active\:bg-blue-700:active {
+            background-color: #043f3b;
+            color: #ffffff;
+        }
+
+        .fc-app button.bg-amber-900\/70 {
+            background-color: #ffffff;
+            color: var(--fc-teal-dark);
+            border: 1px solid var(--fc-teal-dark);
+        }
+
+        .fc-app button.hover\:bg-amber-800:hover {
+            background-color: var(--fc-teal-wash);
+            color: var(--fc-teal-dark);
+        }
+
+        .fc-app .border-slate-800,
+        .fc-app .border-slate-700,
+        .fc-app .divide-slate-800 > :not([hidden]) ~ :not([hidden]) {
+            border-color: var(--fc-border);
+        }
+
+        .fc-app .border-emerald-900\/50,
+        .fc-app .border-blue-900\/40 {
+            border-color: #b7e4e0;
+        }
+
+        .fc-app .border-amber-900\/50 {
+            border-color: var(--fc-note-border);
+        }
+
+        .fc-app .bg-emerald-950\/40,
+        .fc-app .bg-blue-950\/50 {
+            background-color: var(--fc-teal-wash);
+        }
+
+        .fc-app .bg-amber-950\/40 {
+            background-color: var(--fc-note-bg);
+            color: var(--fc-note-text);
+        }
+
+        .fc-app .bg-black\/70 {
+            background-color: rgba(34, 34, 34, 0.45);
+        }
+
+        .fc-app .text-slate-200,
+        .fc-app .text-slate-300 {
+            color: var(--fc-text);
+        }
+
+        .fc-app .text-slate-400,
+        .fc-app .text-slate-500 {
+            color: var(--fc-muted);
+        }
+
+        .fc-app .text-emerald-400,
+        .fc-app .text-emerald-300,
+        .fc-app .text-blue-400,
+        .fc-app .text-purple-400,
+        .fc-app .metric-label.text-emerald-400,
+        .fc-app .metric-label.text-blue-400 {
+            color: var(--fc-teal-dark);
+        }
+
+        .fc-app .text-rose-400 {
+            color: var(--fc-fed);
+        }
+
+        .fc-app .text-amber-400,
+        .fc-app .text-amber-300,
+        .fc-app .text-amber-200 {
+            color: var(--fc-note-text);
+        }
+
+        .fc-app .hover\:text-blue-400:hover,
+        .fc-app .tab-button.hover\:text-slate-200:hover,
+        .fc-app .hover\:text-white:hover {
+            color: var(--fc-teal-dark);
+        }
+
+        .fc-app .tab-button.active,
+        .fc-app .tab-button.active:hover {
+            background-color: var(--fc-teal-dark);
+            color: #ffffff;
+        }
+
+        .fc-app .ring-emerald-900\/30,
+        .fc-app .ring-blue-900\/30,
+        .fc-app .ring-amber-900\/30 {
+            --tw-ring-color: transparent;
+            box-shadow: none;
+        }
+
+        .fc-app .tab-content > .bg-slate-900 {
+            border-top: 3px solid var(--fc-teal);
+        }
+
+        .fc-app input:focus,
+        .fc-app select:focus {
+            outline: none;
+            border-color: var(--fc-teal-dark);
+            box-shadow: 0 0 0 3px var(--fc-focus);
+        }
+
+        .fc-app .\!bg-emerald-600 {
+            background-color: #0F6E56 !important;
+            color: #ffffff !important;
         }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-200">
+<body class="fc-app bg-slate-950 text-slate-200">
     <div class="max-w-4xl mx-auto px-6 py-10">
         <script>
           // Preserve team param on back link for consistency with hub
@@ -99,28 +290,15 @@
           })();
         </script>
         <!-- Header -->
-        <div class="flex items-center justify-between mb-8">
-            <div>
-                <div class="flex items-center gap-x-3">
-                    <a class='flex items-center gap-x-1.5 text-sm font-medium text-slate-400 hover:text-blue-400 transition-colors mr-1' href='/' id='back-to-hub'>
-                        <i class="fa-solid fa-arrow-left"></i>
-                        <span class="hidden sm:inline">Hub</span>
-                    </a>
-                    <div class="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center">
-                        <i class="fa-solid fa-calculator text-white text-2xl"></i>
-                    </div>
-                    <div>
-                        <h1 class="title-font text-4xl font-semibold tracking-tighter">Financial Calcs</h1>
-                        <p class="text-slate-400 text-sm mt-0.5">Local • Private • Runs entirely on your Mac</p>
-                    </div>
-                </div>
+        <div class="flex items-center gap-x-3 mb-8">
+            <a class='flex items-center gap-x-1.5 text-sm font-medium text-slate-400 hover:text-blue-400 transition-colors mr-1' href='/' id='back-to-hub'>
+                <i class="fa-solid fa-arrow-left"></i>
+                <span class="hidden sm:inline">Hub</span>
+            </a>
+            <div class="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center">
+                <i class="fa-solid fa-calculator text-white text-2xl"></i>
             </div>
-            <div class="text-right">
-                <div class="inline-flex items-center gap-x-2 px-3 py-1.5 bg-slate-900 rounded-full border border-slate-800">
-                    <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-                    <span class="text-emerald-400 text-xs font-medium tracking-wider">100% LOCAL</span>
-                </div>
-            </div>
+            <h1 class="title-font text-4xl font-semibold tracking-tighter">Financial Calculators</h1>
         </div>
 
         <!-- Tabs -->
@@ -128,17 +306,17 @@
             <button onclick="switchTab(0)" id="tab-0"
                     class="tab-button active px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2">
                 <i class="fa-solid fa-hand-holding-dollar"></i>
-                <span>Give Me Net</span>
+                <span>Net Pay Calculator</span>
             </button>
             <button onclick="switchTab(1)" id="tab-1"
                     class="tab-button px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2 text-slate-300 hover:text-slate-200">
                 <i class="fa-solid fa-undo"></i>
-                <span>Give Me Gross</span>
+                <span>Gross-Up Calculator</span>
             </button>
             <button onclick="switchTab(2)" id="tab-2"
                     class="tab-button px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2 text-slate-300 hover:text-slate-200">
                 <i class="fa-solid fa-calendar-alt"></i>
-                <span>Paycheck → Monthly</span>
+                <span>Paycheck to Monthly Income</span>
             </button>
             <button onclick="switchTab(3)" id="tab-3"
                     class="tab-button px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2 text-slate-300 hover:text-slate-200">
@@ -148,18 +326,18 @@
             <button onclick="switchTab(4)" id="tab-4"
                     class="tab-button px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2 text-slate-300 hover:text-slate-200">
                 <i class="fa-solid fa-user-clock"></i>
-                <span>Beneficiary IRA</span>
+                <span>Beneficiary IRA RMD</span>
             </button>
         </div>
 
         <!-- Tab Contents -->
 
-        <!-- TAB 0: Give Me Net -->
+        <!-- TAB 0: Net Pay Calculator -->
         <div id="content-0" class="tab-content">
             <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8">
                 <div class="mb-6">
-                    <h2 class="text-2xl font-semibold tracking-tight">Give Me Net</h2>
-                    <p class="text-slate-400 mt-1">Calculate take-home pay after federal and state withholding.</p>
+                    <h2 class="text-2xl font-semibold tracking-tight">Net Pay Calculator</h2>
+                    <p class="text-slate-400 mt-1">Calculate net pay after federal and state withholding.</p>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -194,19 +372,19 @@
 
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                        <div class="text-xs text-slate-400">GROSS</div>
+                        <div class="metric-label">Gross</div>
                         <div id="net-result-gross" class="money text-2xl font-semibold tracking-tight mt-1">$128,500.00</div>
                     </div>
                     <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                        <div class="text-xs text-slate-400">FEDERAL TAX</div>
+                        <div class="metric-label">Federal Tax</div>
                         <div id="net-result-fed" class="money text-2xl font-semibold tracking-tight mt-1 text-rose-400">$30,840.00</div>
                     </div>
                     <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                        <div class="text-xs text-slate-400">STATE TAX</div>
+                        <div class="metric-label">State Tax</div>
                         <div id="net-result-state" class="money text-2xl font-semibold tracking-tight mt-1 text-amber-400">$7,067.50</div>
                     </div>
                     <div class="bg-slate-950 border border-emerald-900/50 rounded-2xl p-4 ring-1 ring-emerald-900/30">
-                        <div class="text-xs text-emerald-400 font-medium">NET (TAKE HOME)</div>
+                        <div class="metric-label text-emerald-400">Net Pay</div>
                         <div id="net-result-net" class="money text-2xl font-semibold tracking-tight mt-1 text-emerald-400">$90,592.50</div>
                     </div>
                 </div>
@@ -216,18 +394,18 @@
                     <button onclick="generateEmailFromNet()"
                             class="w-full md:w-auto flex items-center justify-center gap-x-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 transition-colors rounded-2xl text-sm font-semibold">
                         <i class="fa-solid fa-envelope"></i>
-                        <span>Generate Distribution Email from these numbers</span>
+                        <span>Generate Distribution Email</span>
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- TAB 1: Give Me Gross -->
+        <!-- TAB 1: Gross-Up Calculator -->
         <div id="content-1" class="tab-content hidden">
             <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8">
                 <div class="mb-6">
-                    <h2 class="text-2xl font-semibold tracking-tight">Give Me Gross</h2>
-                    <p class="text-slate-400 mt-1">Reverse calculation. Enter desired net amount to find required gross.</p>
+                    <h2 class="text-2xl font-semibold tracking-tight">Gross-Up Calculator</h2>
+                    <p class="text-slate-400 mt-1">Calculate the gross payment required to produce a specified net amount.</p>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -261,20 +439,20 @@
                 </div>
 
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 ring-1 ring-blue-900/30">
-                        <div class="text-xs text-blue-400 font-medium">REQUIRED GROSS</div>
+                    <div class="bg-slate-950 border border-emerald-900/50 rounded-2xl p-4 ring-1 ring-blue-900/30">
+                        <div class="metric-label text-blue-400">Required Gross</div>
                         <div id="gross-result-gross" class="money text-2xl font-semibold tracking-tight mt-1 text-blue-400">$127,586.21</div>
                     </div>
                     <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                        <div class="text-xs text-slate-400">FEDERAL TAX</div>
+                        <div class="metric-label">Federal Tax</div>
                         <div id="gross-result-fed" class="money text-2xl font-semibold tracking-tight mt-1 text-rose-400">$30,620.69</div>
                     </div>
                     <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                        <div class="text-xs text-slate-400">STATE TAX</div>
+                        <div class="metric-label">State Tax</div>
                         <div id="gross-result-state" class="money text-2xl font-semibold tracking-tight mt-1 text-amber-400">$7,017.24</div>
                     </div>
                     <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                        <div class="text-xs text-slate-400">NET</div>
+                        <div class="metric-label">Net Pay</div>
                         <div id="gross-result-net" class="money text-2xl font-semibold tracking-tight mt-1">$92,500.00</div>
                     </div>
                 </div>
@@ -284,21 +462,19 @@
                     <button onclick="generateEmailFromGross()"
                             class="w-full md:w-auto flex items-center justify-center gap-x-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 transition-colors rounded-2xl text-sm font-semibold">
                         <i class="fa-solid fa-envelope"></i>
-                        <span>Generate Distribution Email from these numbers</span>
+                        <span>Generate Distribution Email</span>
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- TAB 2: Paycheck → Monthly -->
+        <!-- TAB 2: Paycheck to Monthly Income -->
         <div id="content-2" class="tab-content hidden">
             <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8">
                 <div class="mb-6">
-                    <h2 class="text-2xl font-semibold tracking-tight">Paycheck → Monthly</h2>
-                    <p class="text-slate-400 mt-1">Convert bi-weekly paycheck numbers into monthly cash flow amounts.</p>
-                    <div class="mt-2 text-xs text-slate-500">
-                        Uses the standard method: <span class="font-medium text-slate-400">Bi-weekly × 26 ÷ 12 = ×2.1667</span>
-                    </div>
+                    <h2 class="text-2xl font-semibold tracking-tight">Paycheck to Monthly Income</h2>
+                    <p class="text-slate-400 mt-1">Convert bi-weekly pay into monthly income.</p>
+                    <p class="mt-2 text-xs text-slate-500">Monthly amount = bi-weekly amount × 26 ÷ 12.</p>
                 </div>
 
                 <div class="overflow-x-auto">
@@ -306,7 +482,7 @@
                         <thead>
                             <tr class="border-b border-slate-700 text-slate-400">
                                 <th class="text-left pb-3 font-medium">Item</th>
-                                <th class="text-right pb-3 font-medium w-40">Bi-Weekly</th>
+                                <th class="text-right pb-3 font-medium w-40">Bi-weekly</th>
                                 <th class="text-right pb-3 font-medium w-40">Monthly</th>
                             </tr>
                         </thead>
@@ -315,21 +491,21 @@
                         </tbody>
                         <tfoot class="border-t-2 border-slate-700 font-semibold">
                             <tr class="text-slate-400">
-                                <td class="pt-4 text-right pr-4">Gross (Monthly)</td>
+                                <td class="pt-4 text-right pr-4">Monthly gross</td>
                                 <td></td>
                                 <td class="pt-4 text-right">
                                     <span id="paycheck-gross-monthly" class="money text-base">$0.00</span>
                                 </td>
                             </tr>
                             <tr class="text-slate-400">
-                                <td class="pt-1 text-right pr-4">Total Deductions (Monthly)</td>
+                                <td class="pt-1 text-right pr-4">Monthly deductions</td>
                                 <td></td>
                                 <td class="pt-1 text-right">
                                     <span id="paycheck-deductions-monthly" class="money text-base">$0.00</span>
                                 </td>
                             </tr>
                             <tr class="bg-emerald-950/40 border-t border-slate-700">
-                                <td class="pt-3 pb-1 text-right pr-4 text-emerald-400 font-semibold">Est. Monthly Take-Home</td>
+                                <td class="pt-3 pb-1 text-right pr-4 text-emerald-400 font-semibold">Estimated monthly take-home</td>
                                 <td></td>
                                 <td class="pt-3 pb-1 text-right">
                                     <span id="paycheck-monthly-net" class="money text-xl font-bold text-emerald-400">$0.00</span>
@@ -348,28 +524,22 @@
                     <button onclick="addCustomPaycheckRow()"
                             class="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-2xl transition-colors flex items-center gap-x-2">
                         <i class="fa-solid fa-plus text-xs"></i>
-                        <span>Add Custom Line</span>
+                        <span>Add Line Item</span>
                     </button>
                 </div>
 
-                <div class="mt-4 text-[11px] text-slate-500 leading-snug">
-                    Tip: Enter your actual bi-weekly paycheck numbers from your paystub. The monthly column updates live using the 26-pay-period method.
-                </div>
+                <p class="mt-6 text-xs text-slate-500 leading-snug">
+                    Enter bi-weekly amounts from the pay stub. Monthly amounts use the 26-pay-period method.
+                </p>
             </div>
         </div>
 
         <!-- TAB 3: Retirement Limits 2026 -->
         <div id="content-3" class="tab-content hidden">
             <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8">
-                <div class="flex items-center justify-between mb-6">
-                    <div>
-                        <h2 class="text-2xl font-semibold tracking-tight">2026 Retirement Contribution Limits</h2>
-                        <p class="text-slate-400 text-sm mt-1">Official IRS limits for the 2026 tax year</p>
-                    </div>
-                    <div class="text-right text-xs text-slate-500">
-                        Source: IRS Notice<br>
-                        Updated for 2026
-                    </div>
+                <div class="mb-6">
+                    <h2 class="text-2xl font-semibold tracking-tight">2026 Retirement Contribution Limits</h2>
+                    <p class="text-slate-400 text-sm mt-1">Official IRS limits for the 2026 tax year</p>
                 </div>
 
                 <!-- 401(k) / Workplace Plans -->
@@ -399,7 +569,7 @@
                             <div class="text-xs text-amber-400 font-medium">Ages 60–63 (Super Catch-up)</div>
                             <div class="text-3xl font-semibold tracking-tight mt-1">$35,750</div>
                             <div class="text-xs text-emerald-400 mt-1">$24,500 + $11,250 catch-up</div>
-                            <div class="text-[10px] text-amber-300 mt-2">Only if your plan allows the higher limit</div>
+                            <div class="text-xs text-amber-300 mt-2">Only if your plan allows the higher limit</div>
                         </div>
                     </div>
 
@@ -451,12 +621,12 @@
                             <div>
                                 <div class="text-xs text-slate-400">Self-only</div>
                                 <div class="text-xl font-semibold">$4,400</div>
-                                <div class="text-[10px] text-emerald-300">+$1,000 if 55+</div>
+                                <div class="text-xs text-emerald-300">+$1,000 if 55+</div>
                             </div>
                             <div>
                                 <div class="text-xs text-slate-400">Family</div>
                                 <div class="text-xl font-semibold">$8,750</div>
-                                <div class="text-[10px] text-emerald-300">+$1,000 if 55+</div>
+                                <div class="text-xs text-emerald-300">+$1,000 if 55+</div>
                             </div>
                         </div>
                     </div>
@@ -469,7 +639,7 @@
                         <div>• Single / Head of Household: <span class="font-medium">$153,000 – $168,000</span> MAGI</div>
                         <div>• Married Filing Jointly: <span class="font-medium">$242,000 – $252,000</span> MAGI</div>
                     </div>
-                    <div class="text-[11px] text-slate-500 mt-1">Above these ranges, direct Roth IRA contributions are not allowed (backdoor Roth still available for most).</div>
+                    <p class="text-xs text-slate-500 mt-2">Above these ranges, direct Roth IRA contributions are not allowed (backdoor Roth still available for most).</p>
                 </div>
 
                 <!-- Important Notes -->
@@ -484,7 +654,7 @@
 
                 <!-- Quick Lookup -->
                 <div class="mt-8 pt-6 border-t border-slate-700">
-                    <h3 class="font-medium mb-3">Quick Lookup: Your 2026 Max Employee Contribution</h3>
+                    <h3 class="font-medium mb-3">2026 Maximum Employee Contribution</h3>
                     
                     <div class="flex flex-wrap gap-2 mb-3">
                         <button onclick="showRetirementMax(49)" class="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-2xl transition-colors">Under 50</button>
@@ -495,21 +665,21 @@
                     <div id="retirement-max-result" class="hidden bg-slate-950 border border-slate-700 rounded-2xl p-4 text-sm">
                         <div class="grid grid-cols-2 gap-x-8">
                             <div>
-                                <div class="text-xs text-slate-400">401(k) / 403(b) Max</div>
+                                <div class="metric-label">401(k) / 403(b) Max</div>
                                 <div id="retirement-401k-max" class="text-2xl font-semibold tracking-tight"></div>
                             </div>
                             <div>
-                                <div class="text-xs text-slate-400">IRA Max (Traditional or Roth)</div>
+                                <div class="metric-label">IRA Max (Traditional or Roth)</div>
                                 <div id="retirement-ira-max" class="text-2xl font-semibold tracking-tight"></div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="mt-6 text-[11px] text-slate-500">
+                <p class="mt-6 text-xs text-slate-500">
                     These limits are set by the IRS and are subject to annual cost-of-living adjustments. 
                     Always verify with your plan administrator or tax advisor for your specific situation.
-                </div>
+                </p>
             </div>
         </div>
 
@@ -570,7 +740,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="section-header block mb-1.5" for="bene-balance">Prior Dec 31 balance</label>
+                        <label class="section-header block mb-1.5" for="bene-balance">Prior December 31 balance</label>
                         <div class="relative">
                             <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</div>
                             <input type="number" id="bene-balance" min="0" step="0.01" inputmode="decimal"
@@ -594,24 +764,24 @@
 
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
                         <div class="bg-slate-950 border border-emerald-900/50 rounded-2xl p-4 ring-1 ring-emerald-900/30">
-                            <div class="text-xs text-emerald-400 font-medium">THIS YEAR'S RMD</div>
+                            <div class="metric-label text-emerald-400">This Year's RMD</div>
                             <div id="bene-rmd" class="money text-2xl font-semibold tracking-tight mt-1 text-emerald-400">$0.00</div>
-                            <div id="bene-rmd-caption" class="text-[11px] text-slate-500 mt-1"></div>
+                            <div id="bene-rmd-caption" class="text-xs text-slate-500 mt-1"></div>
                         </div>
                         <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                            <div class="text-xs text-slate-400">FACTOR</div>
+                            <div class="metric-label">Factor</div>
                             <div id="bene-factor" class="money text-2xl font-semibold tracking-tight mt-1">—</div>
-                            <div id="bene-factor-caption" class="text-[11px] text-slate-500 mt-1"></div>
+                            <div id="bene-factor-caption" class="text-xs text-slate-500 mt-1"></div>
                         </div>
                         <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                            <div class="text-xs text-slate-400">DEADLINE</div>
+                            <div class="metric-label">Deadline</div>
                             <div id="bene-deadline" class="text-2xl font-semibold tracking-tight mt-1">—</div>
-                            <div class="text-[11px] text-slate-500 mt-1">December 31 of the calculation year</div>
+                            <div class="text-xs text-slate-500 mt-1">December 31 of the calculation year</div>
                         </div>
                         <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
-                            <div class="text-xs text-slate-400">ACCOUNT EMPTY BY</div>
+                            <div class="metric-label">Account Empty By</div>
                             <div id="bene-empty" class="text-2xl font-semibold tracking-tight mt-1">—</div>
-                            <div id="bene-empty-caption" class="text-[11px] text-slate-500 mt-1"></div>
+                            <div id="bene-empty-caption" class="text-xs text-slate-500 mt-1"></div>
                         </div>
                     </div>
 
@@ -634,7 +804,7 @@
                                 <tbody id="bene-schedule" class="divide-y divide-slate-800"></tbody>
                             </table>
                         </div>
-                        <p class="mt-2 text-[11px] text-slate-500">The dollar RMD is shown only for the calculation year, because the balance entered is that year's prior December 31 balance.</p>
+                        <p class="mt-2 text-xs text-slate-500">The dollar RMD is shown only for the calculation year, because the balance entered is that year's prior December 31 balance.</p>
                     </div>
                 </div>
             </div>
@@ -642,9 +812,6 @@
 
         <!-- Footer -->
         <div class="mt-8 text-center space-y-3">
-            <p class="text-xs text-slate-500">
-                All calculations happen locally in your browser. Nothing is sent anywhere.
-            </p>
             <p class="text-xs text-slate-400 leading-relaxed max-w-2xl mx-auto">
                 Investment Adviser Representative of and advisory services offered through Royal Fund Management, LLC, a SEC registered investment adviser.
             </p>
@@ -718,7 +885,7 @@
             return parseFloat(el.value) || 0;
         }
 
-        // ===== TAB 0: Give Me Net =====
+        // ===== TAB 0: Net Pay Calculator =====
         function calculateNet() {
             const gross = getInputValue('net-gross');
             const fedRate = getInputValue('net-fed') / 100;
@@ -734,7 +901,7 @@
             document.getElementById('net-result-net').textContent = formatCurrency(net);
         }
 
-        // ===== TAB 1: Give Me Gross =====
+        // ===== TAB 1: Gross-Up Calculator =====
         function calculateGross() {
             const desiredNet = getInputValue('gross-net');
             const fedRate = getInputValue('gross-fed') / 100;
@@ -835,7 +1002,7 @@ Gabe`;
             });
         }
 
-        // Called from Give Me Net tab
+        // Called from Net Pay Calculator tab
         function generateEmailFromNet() {
             const gross = getInputValue('net-gross');
             const fedPercent = getInputValue('net-fed');
@@ -851,7 +1018,7 @@ Gabe`;
             showEmailModal(gross, fedPercent, statePercent, fedTax, stateTax, net);
         }
 
-        // Called from Give Me Gross tab
+        // Called from Gross-Up Calculator tab
         function generateEmailFromGross() {
             const desiredNet = getInputValue('gross-net');
             const fedPercent = getInputValue('gross-fed');
@@ -949,9 +1116,6 @@ Gabe`;
             // Make sure first tab is active
             document.getElementById('tab-0').classList.add('active');
             document.getElementById('tab-0').classList.remove('text-slate-300', 'hover:text-slate-200');
-
-            // Optional: Show a subtle welcome toast on first load (can be removed)
-            console.log('%c[Financial Calcs] Local web app initialized successfully.', 'color:#475569');
         }
 
         // Retirement Limits quick lookup
@@ -984,7 +1148,7 @@ Gabe`;
         }
 
         // ============================================
-        // PAYCHECK → MONTHLY CALCULATOR
+        // PAYCHECK TO MONTHLY INCOME
         // ============================================
         let paycheckItems = [];
 
@@ -999,7 +1163,7 @@ Gabe`;
             for (let i = 1; i <= 10; i++) {
                 items.push({
                     id: `line-${i}`,
-                    label: `Line ${i}`,
+                    label: `Deduction ${i}`,
                     biweekly: 0
                 });
             }
@@ -1071,7 +1235,7 @@ Gabe`;
         }
 
         function updatePaycheckLabel(index, value) {
-            paycheckItems[index].label = value || 'Untitled';
+            paycheckItems[index].label = value || 'Deduction';
             // No need to fully re-render, but we can if we want live label updates
         }
 
@@ -1106,7 +1270,7 @@ Gabe`;
         function addCustomPaycheckRow() {
             const newItem = {
                 id: 'custom_' + Date.now(),
-                label: 'Custom Item',
+                label: 'Additional Deduction',
                 biweekly: 0
             };
             paycheckItems.push(newItem);
@@ -1183,7 +1347,7 @@ Gabe`;
             if (derived.ok && beneficiaryStartedTouched && select) {
                 const selectedYes = select.value === 'yes';
                 if (selectedYes !== derived.suggestedStarted) {
-                    text += ' Your Yes/No selection is being used instead of that derived answer.';
+                    text += ' The manual selection is used instead of the derived status.';
                 }
             }
             hint.textContent = text;
@@ -1264,7 +1428,7 @@ Gabe`;
             }
 
             const captions = {
-                amount: `Prior Dec 31 balance ${formatCurrency(result.balance)} ÷ ${Number(result.factor).toFixed(1)}`,
+                amount: `Prior December 31 balance ${formatCurrency(result.balance)} ÷ ${Number(result.factor).toFixed(1)}`,
                 full: 'Entire prior December 31 balance is due',
                 overdue: 'Entire prior December 31 balance is still due',
                 none: 'No annual RMD this year',
