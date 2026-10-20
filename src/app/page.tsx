@@ -1,11 +1,13 @@
 import Link from "next/link";
 import "./salon/orders/supply-theme.css";
+import "./sfg-hub.css";
 import { redirect } from "next/navigation";
 import { areaMeta, AREAS } from "@/lib/areas";
 import { canAccessArea, getSession, wristCoachAllowed } from "@/lib/auth";
 import { hubApps } from "@/lib/catalog";
 import { labelsForUser } from "@/lib/clubs";
 import { SalonLogo } from "@/app/salon/orders/salon-logo";
+import { SfgLogo } from "@/components/sfg-logo";
 import { deliveriesStillOpenLabel } from "@/lib/salon-check-in";
 import { countWaitingDeliveries } from "@/lib/salon-orders";
 import { findUserById } from "@/lib/users";
@@ -124,6 +126,7 @@ export default async function HubHome() {
                   .map((app) => {
                   const href = app.href || `/apps/${app.slug}`;
                   const supplyTile = app.slug === "supply-orders";
+                  const financialTile = app.area === "financial";
                   return (
                     <a
                       key={app.slug}
@@ -133,15 +136,23 @@ export default async function HubHome() {
                       className={
                         supplyTile
                           ? "so-hub-card flex items-center justify-between gap-3 rounded-3xl border p-5 transition hover:-translate-y-0.5"
-                          : "rounded-3xl border border-slate-800 bg-slate-900 p-5 transition hover:-translate-y-0.5 hover:border-red-500"
+                          : financialTile
+                            ? "sfg-hub-card flex items-center justify-between gap-3 rounded-3xl border p-5 transition hover:-translate-y-0.5"
+                            : "rounded-3xl border border-slate-800 bg-slate-900 p-5 transition hover:-translate-y-0.5 hover:border-red-500"
                       }
                     >
-                      {supplyTile ? (
+                      {supplyTile || financialTile ? (
                         <span className="min-w-0">
                           <h2 className="text-lg font-semibold">{app.title}</h2>
                           <p className="mt-2 text-sm text-slate-400">{app.description}</p>
-                          <span className="so-hub-launch mt-4 inline-flex text-sm font-semibold">
-                            Launch
+                          <span
+                            className={
+                              supplyTile
+                                ? "so-hub-launch mt-4 inline-flex text-sm font-semibold"
+                                : "sfg-hub-launch mt-4 inline-flex text-sm font-semibold"
+                            }
+                          >
+                            {app.external ? "Open" : "Launch"}
                           </span>
                         </span>
                       ) : (
@@ -154,6 +165,7 @@ export default async function HubHome() {
                         </>
                       )}
                       {supplyTile ? <SalonLogo tone="espresso" className="so-hub-logo" /> : null}
+                      {financialTile ? <SfgLogo className="sfg-hub-logo" /> : null}
                     </a>
                   );
                 })}
