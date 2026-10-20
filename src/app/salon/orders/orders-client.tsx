@@ -22,11 +22,13 @@ import {
   itemVendor,
   leftoverLabel,
   monthLabel,
+  moveToPreviousMonthLabel,
   nextYearMonth,
   reconcileStatusChoice,
   requestedQtyFromDraft,
   rollButtonLabel,
   sharedVendorOrderNumber,
+  showMoveToPreviousMonth,
   showRollToNextMonth,
   splitBulkRowSave,
   summarizeOpenCarry,
@@ -616,6 +618,39 @@ export function SupplyOrdersClient({
     });
   }
 
+  async function moveToPrevious(id: string) {
+    if (!view) return;
+    const target = prevYearMonth(view.year, view.month);
+    const label = monthLabel(target.year, target.month);
+    if (!confirm(`Move this request to ${label}?`)) return;
+    const year = view.year;
+    const month = view.month;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await readError(
+        await fetch("/api/salon/orders/actions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "move-to-previous-month",
+            id,
+            year,
+            month,
+          }),
+        }),
+        "Could not move that request.",
+      );
+      setNotice(`Moved to ${label}.`);
+      await load(String(year), String(month));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not move that request.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function rollItem(id: string) {
     if (!view) return;
     setBusy(true);
@@ -718,6 +753,13 @@ export function SupplyOrdersClient({
     view.year === view.today.year && view.month === view.today.month;
   const suggestions = view.suggestions;
   const nextItems = view.nextItems ?? [];
+  const movePreviousLabel = showMoveToPreviousMonth(
+    { status: "pending" },
+    { year: view.year, month: view.month },
+    view.today,
+  )
+    ? moveToPreviousMonthLabel(view.year, view.month)
+    : "";
 
   return (
     <div className={`so-page min-h-dvh min-w-0 ${carryUndo ? "pt-20" : ""}`}>
@@ -1277,7 +1319,9 @@ export function SupplyOrdersClient({
             canMarkOrdered={view.canMarkOrdered}
             nextMonthLabel={monthLabel(next.year, next.month)}
             nextItems={nextItems}
+            movePreviousLabel={movePreviousLabel}
             busy={busy}
+            onMovePrevious={(id) => void moveToPrevious(id)}
             onRoll={(id) => void rollItem(id)}
             onToggle={(id) =>
               setExpandedId((current) => (current === id ? null : id))
@@ -1391,7 +1435,9 @@ export function SupplyOrdersClient({
                         canMarkOrdered={view.canMarkOrdered}
                         nextMonthLabel={monthLabel(next.year, next.month)}
                         nextItems={nextItems}
+                        movePreviousLabel={movePreviousLabel}
                         busy={busy}
+                        onMovePrevious={() => void moveToPrevious(item.id)}
                         onRoll={() => void rollItem(item.id)}
                         onEdit={() =>
                           setEditingId((current) => (current === item.id ? null : item.id))
@@ -1464,7 +1510,9 @@ function CompactItemsTable({
   canMarkOrdered,
   nextMonthLabel,
   nextItems,
+  movePreviousLabel,
   busy,
+  onMovePrevious,
   onRoll,
   onToggle,
   onEdit,
@@ -1482,7 +1530,9 @@ function CompactItemsTable({
   canMarkOrdered: boolean;
   nextMonthLabel: string;
   nextItems: SalonOrderItem[];
+  movePreviousLabel: string;
   busy: boolean;
+  onMovePrevious: (id: string) => void;
   onRoll: (id: string) => void;
   onToggle: (id: string) => void;
   onEdit: (id: string) => void;
@@ -1572,6 +1622,20 @@ function CompactItemsTable({
                       <span className="mt-1 block text-xs text-emerald-300">
                         {formatReceivedStamp(item.receivedByName, item.receivedAt)}
                       </span>
+                    ) : null}
+                    {item.status === "pending" && movePreviousLabel ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        data-testid="move-to-previous-month"
+                        className="mt-2 block rounded-xl bg-rose-700 px-3 py-2 text-xs font-semibold hover:bg-rose-600 disabled:opacity-60"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onMovePrevious(item.id);
+                        }}
+                      >
+                        {movePreviousLabel}
+                      </button>
                     ) : null}
                   </td>
                   <td className="px-2 py-2 whitespace-nowrap">
@@ -1700,7 +1764,9 @@ function ItemCard({
   canMarkOrdered,
   nextMonthLabel,
   nextItems,
+  movePreviousLabel,
   busy,
+  onMovePrevious,
   onRoll,
   onEdit,
   onPatch,
@@ -1716,7 +1782,9 @@ function ItemCard({
   canMarkOrdered: boolean;
   nextMonthLabel: string;
   nextItems: SalonOrderItem[];
+  movePreviousLabel: string;
   busy: boolean;
+  onMovePrevious: () => void;
   onRoll: () => void;
   onEdit: () => void;
   onPatch: (patch: Record<string, unknown>) => void;
@@ -1770,6 +1838,17 @@ function ItemCard({
             requestedQty={item.qty}
             movedTo={nextMonthLabel}
           />
+          {item.status === "pending" && movePreviousLabel ? (
+            <button
+              type="button"
+              disabled={busy}
+              data-testid="move-to-previous-month"
+              className="rounded-xl bg-rose-700 px-3 py-2 text-xs font-semibold hover:bg-rose-600 disabled:opacity-60"
+              onClick={onMovePrevious}
+            >
+              {movePreviousLabel}
+            </button>
+          ) : null}
           {showRollToNextMonth(item, nextItems) ? (
             <button
               type="button"

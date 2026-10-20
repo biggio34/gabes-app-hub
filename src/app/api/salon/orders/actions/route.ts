@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   bulkUpdateStatus,
   isOrderStatus,
+  moveItemToPreviousMonth,
   moveOpenItemsToNextMonth,
   moveOutOfStockToNextMonth,
   parseYearMonth,
@@ -31,6 +32,11 @@ export async function POST(request: Request) {
     if (body?.action === "roll-item") {
       if (!body.id) throw new Error("That request was not found.");
       const result = await rollOpenItem(body.id);
+      return NextResponse.json(result);
+    }
+    if (body?.action === "move-to-previous-month") {
+      if (!body.id) throw new Error("That request was not found.");
+      const result = await moveItemToPreviousMonth(body.id, parseYearMonth(body.year, body.month));
       return NextResponse.json(result);
     }
     if (body?.action === "undo-carry") {
