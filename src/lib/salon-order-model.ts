@@ -205,6 +205,39 @@ export function prevYearMonth(year: number, month: number) {
   return { year, month: month - 1 };
 }
 
+export function compareYearMonth(
+  left: { year: number; month: number },
+  right: { year: number; month: number },
+) {
+  return left.year - right.year || left.month - right.month;
+}
+
+/** True when `row` is a later calendar month than `today`. */
+export function isFutureYearMonth(
+  row: { year: number; month: number },
+  today: { year: number; month: number },
+) {
+  return compareYearMonth(row, today) > 0;
+}
+
+/**
+ * Pending rows in a month after the current calendar month (America/Chicago)
+ * can move back one month. The current month and any earlier month stay put,
+ * so the row never lands in a closed month.
+ */
+export function showMoveToPreviousMonth(
+  item: { status: OrderStatus },
+  row: { year: number; month: number },
+  today: { year: number; month: number },
+) {
+  return item.status === "pending" && isFutureYearMonth(row, today);
+}
+
+export function moveToPreviousMonthLabel(year: number, month: number) {
+  const prev = prevYearMonth(year, month);
+  return `Move to ${monthLabel(prev.year, prev.month)}`;
+}
+
 export function parseYearMonth(yearValue: unknown, monthValue: unknown) {
   const year = Number(yearValue);
   const month = Number(monthValue);

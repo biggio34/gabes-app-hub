@@ -7,8 +7,10 @@ import {
   editDetailsPatch,
   editDetailsStatus,
   leftoverAfterStatus,
+  moveToPreviousMonthLabel,
   reconcileStatusChoice,
   sharedVendorOrderNumber,
+  showMoveToPreviousMonth,
   splitBulkRowSave,
   unorderForPending,
   withUnsavedRowFields,
@@ -272,6 +274,36 @@ describe("leftoverAfterStatus", () => {
     assert.equal(leftoverAfterStatus("rolled", "in_cart"), "rolled");
     assert.equal(leftoverAfterStatus("moved", "pending"), "moved");
     assert.equal(leftoverAfterStatus("moved", "out_of_stock"), "moved");
+  });
+});
+
+describe("showMoveToPreviousMonth", () => {
+  const october = { year: 2026, month: 10 };
+
+  it("shows only for a Pending row in a month after the current one", () => {
+    assert.equal(
+      showMoveToPreviousMonth({ status: "pending" }, { year: 2026, month: 11 }, october),
+      true,
+    );
+    assert.equal(moveToPreviousMonthLabel(2026, 11), "Move to October 2026");
+    assert.equal(moveToPreviousMonthLabel(2027, 1), "Move to December 2026");
+  });
+
+  it("hides the current month, past months, and every status that is not Pending", () => {
+    assert.equal(
+      showMoveToPreviousMonth({ status: "pending" }, october, october),
+      false,
+    );
+    assert.equal(
+      showMoveToPreviousMonth({ status: "pending" }, { year: 2026, month: 9 }, october),
+      false,
+    );
+    for (const status of ["in_cart", "ordered", "partial", "received", "out_of_stock", "moved"] as const) {
+      assert.equal(
+        showMoveToPreviousMonth({ status }, { year: 2026, month: 11 }, october),
+        false,
+      );
+    }
   });
 });
 

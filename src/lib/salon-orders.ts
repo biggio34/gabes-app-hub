@@ -23,15 +23,20 @@ import { readCarryUndo, signCarryUndo, type CarryUndoLine } from "./salon-carry-
 import { patchSetsOrderedQty } from "./salon-order-permission";
 import {
   appendMoveNote,
+  compareYearMonth,
   currentYearMonth,
   deriveStatus,
   emptyReceiveRecord,
+  isFutureYearMonth,
   isLeftover,
   isOrderStatus,
   isSettableStatus,
   itemVendor,
   monthLabel,
   nextYearMonth,
+  parseYearMonth,
+  prevYearMonth,
+  showMoveToPreviousMonth,
   findExistingCarry,
   isUnorderedOutOfStock,
   leftoverAfterStatus,
@@ -797,6 +802,66 @@ export async function rollOpenItem(id: string) {
   fresh.updatedAt = new Date().toISOString();
   await persistItem(fresh);
   return { rolled: true, createdItemId: createdId, kind: "pending" as const };
+}
+
+/**
+ * Move one Pending row onto the previous month's order.
+ * The same row changes order. Nothing is copied, and no "Moved to" history is left behind.
+ * `from` is the month the user was looking at, so a second click does not walk back another month.
+ * Allowed only when that month is after `today` (America/Chicago), so the destination is never closed.
+ */
+export async function moveItemToPreviousMonth(
+  id: string,
+  from: { year: number; month: number },
+  today = currentYearMonth(),
+) {
+  const source = parseYearMonth(from.year, from.month);
+  const destination = prevYearMonth(source.year, source.month);
+  const current = await loadItem(id);
+  const order = await getOrderById(current.orderId);
+  if (!order) throw new Error("Request not found.");
+
+  if (order.year === destination.year && order.month === destination.month) {
+    return { moved: false, year: destination.year, month: destination.month, item: current };
+  }
+  if (order.year !== source.year || order.month !== source.month) {
+    throw new Error("That request is not on this month.");
+  }
+  assertCanMoveToPreviousMonth(current, source, today, destination);
+
+  const destOrder = await getOrCreateOrder(destination.year, destination.month);
+  const fresh = await loadItem(id);
+  const freshOrder = await getOrderById(fresh.orderId);
+  if (!freshOrder) throw new Error("Request not found.");
+  if (freshOrder.year === destination.year && freshOrder.month === destination.month) {
+    return { moved: false, year: destination.year, month: destination.month, item: fresh };
+  }
+  if (freshOrder.year !== source.year || freshOrder.month !== source.month) {
+    throw new Error("That request is not on this month.");
+  }
+  assertCanMoveToPreviousMonth(fresh, source, today, destination);
+
+  fresh.orderId = destOrder.id;
+  fresh.updatedAt = new Date().toISOString();
+  await persistItem(fresh);
+  return { moved: true, year: destination.year, month: destination.month, item: fresh };
+}
+
+function assertCanMoveToPreviousMonth(
+  item: SalonOrderItem,
+  source: { year: number; month: number },
+  today: { year: number; month: number },
+  destination: { year: number; month: number },
+) {
+  if (item.status !== "pending" || item.leftover === "moved" || item.leftover === "rolled") {
+    throw new Error("Only a Pending request can move to the previous month.");
+  }
+  if (!isFutureYearMonth(source, today) || !showMoveToPreviousMonth(item, source, today)) {
+    throw new Error("Only a request in a future month can move to the previous month.");
+  }
+  if (compareYearMonth(destination, today) < 0) {
+    throw new Error("A request can't move into a past month.");
+  }
 }
 
 export async function moveOpenItemsToNextMonth(
