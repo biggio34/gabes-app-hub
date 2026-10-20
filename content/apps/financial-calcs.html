@@ -78,6 +78,11 @@
         input[type="number"] {
             -moz-appearance: textfield;
         }
+
+        input[type="date"],
+        select {
+            color-scheme: dark;
+        }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-200">
@@ -119,7 +124,7 @@
         </div>
 
         <!-- Tabs -->
-        <div class="flex bg-slate-900 rounded-3xl p-1 mb-8 border border-slate-800 w-fit">
+        <div class="flex flex-wrap gap-1 bg-slate-900 rounded-3xl p-1 mb-8 border border-slate-800">
             <button onclick="switchTab(0)" id="tab-0"
                     class="tab-button active px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2">
                 <i class="fa-solid fa-hand-holding-dollar"></i>
@@ -139,6 +144,11 @@
                     class="tab-button px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2 text-slate-300 hover:text-slate-200">
                 <i class="fa-solid fa-piggy-bank"></i>
                 <span>Retirement Limits</span>
+            </button>
+            <button onclick="switchTab(4)" id="tab-4"
+                    class="tab-button px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2 text-slate-300 hover:text-slate-200">
+                <i class="fa-solid fa-user-clock"></i>
+                <span>Beneficiary IRA</span>
             </button>
         </div>
 
@@ -503,10 +513,143 @@
             </div>
         </div>
 
+        <!-- TAB 4: Beneficiary IRA RMD -->
+        <div id="content-4" class="tab-content hidden">
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-semibold tracking-tight">Beneficiary IRA RMD Calculator</h2>
+                    <p class="text-slate-400 mt-1">Inherited IRA required minimum distributions for deaths in 2020 and later. Uses the IRS Single Life Table (Treas. Reg. 1.401(a)(9)-9, 2022 and after).</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="section-header block mb-1.5" for="bene-owner-dob">Owner date of birth</label>
+                        <input type="date" id="bene-owner-dob"
+                               class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl px-4 py-3 text-lg font-medium"
+                               oninput="onBeneficiaryInput()">
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5" for="bene-owner-death">Owner date of death</label>
+                        <input type="date" id="bene-owner-death"
+                               class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl px-4 py-3 text-lg font-medium"
+                               oninput="onBeneficiaryInput()">
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5" for="bene-started">Owner had started RMDs</label>
+                        <select id="bene-started"
+                                class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl px-4 py-3 text-lg font-medium"
+                                onchange="onBeneficiaryStartedChange()">
+                            <option value="yes">Yes</option>
+                            <option value="no">No</option>
+                        </select>
+                        <p id="bene-started-hint" class="mt-2 text-xs text-slate-400 leading-relaxed">Enter the owner's date of birth and date of death to derive whether RMDs had started.</p>
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5" for="bene-type">Beneficiary type</label>
+                        <select id="bene-type"
+                                class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl px-4 py-3 text-lg font-medium"
+                                onchange="onBeneficiaryInput()">
+                            <option value="spouse">Spouse</option>
+                            <option value="child" selected>Child</option>
+                            <option value="other">Other individual</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5" for="bene-bene-dob">Beneficiary date of birth</label>
+                        <input type="date" id="bene-bene-dob"
+                               class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl px-4 py-3 text-lg font-medium"
+                               oninput="onBeneficiaryInput()">
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5" for="bene-disabled">Beneficiary disabled or chronically ill</label>
+                        <select id="bene-disabled"
+                                class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl px-4 py-3 text-lg font-medium"
+                                onchange="onBeneficiaryInput()">
+                            <option value="no" selected>No</option>
+                            <option value="yes">Yes</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5" for="bene-balance">Prior Dec 31 balance</label>
+                        <div class="relative">
+                            <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</div>
+                            <input type="number" id="bene-balance" min="0" step="0.01" inputmode="decimal"
+                                   class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl pl-8 pr-4 py-3 text-lg font-medium"
+                                   oninput="onBeneficiaryInput()">
+                        </div>
+                        <p id="bene-balance-hint" class="mt-2 text-xs text-slate-500">Account balance on December 31 of the year before the calculation year.</p>
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5" for="bene-year">Calculation year</label>
+                        <input type="number" id="bene-year" min="2020" max="2200" step="1"
+                               class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl px-4 py-3 text-lg font-medium"
+                               oninput="onBeneficiaryInput()">
+                    </div>
+                </div>
+
+                <div id="bene-errors" class="hidden mb-4 bg-amber-950/40 border border-amber-900/50 rounded-2xl p-4 text-sm text-amber-200"></div>
+
+                <div id="bene-results" class="hidden">
+                    <div id="bene-rule" class="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-sm text-slate-300 leading-relaxed"></div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                        <div class="bg-slate-950 border border-emerald-900/50 rounded-2xl p-4 ring-1 ring-emerald-900/30">
+                            <div class="text-xs text-emerald-400 font-medium">THIS YEAR'S RMD</div>
+                            <div id="bene-rmd" class="money text-2xl font-semibold tracking-tight mt-1 text-emerald-400">$0.00</div>
+                            <div id="bene-rmd-caption" class="text-[11px] text-slate-500 mt-1"></div>
+                        </div>
+                        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                            <div class="text-xs text-slate-400">FACTOR</div>
+                            <div id="bene-factor" class="money text-2xl font-semibold tracking-tight mt-1">—</div>
+                            <div id="bene-factor-caption" class="text-[11px] text-slate-500 mt-1"></div>
+                        </div>
+                        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                            <div class="text-xs text-slate-400">DEADLINE</div>
+                            <div id="bene-deadline" class="text-2xl font-semibold tracking-tight mt-1">—</div>
+                            <div class="text-[11px] text-slate-500 mt-1">December 31 of the calculation year</div>
+                        </div>
+                        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                            <div class="text-xs text-slate-400">ACCOUNT EMPTY BY</div>
+                            <div id="bene-empty" class="text-2xl font-semibold tracking-tight mt-1">—</div>
+                            <div id="bene-empty-caption" class="text-[11px] text-slate-500 mt-1"></div>
+                        </div>
+                    </div>
+
+                    <div id="bene-spouse-own" class="hidden mt-4 bg-slate-950 border border-blue-900/40 rounded-2xl p-4 text-sm text-slate-300 leading-relaxed"></div>
+
+                    <ul id="bene-notes" class="mt-4 space-y-2 text-xs text-slate-400 leading-relaxed list-disc pl-4"></ul>
+
+                    <div class="mt-6">
+                        <h3 class="font-medium mb-3">Year-by-year factor schedule</h3>
+                        <div class="overflow-x-auto max-h-96 overflow-y-auto border border-slate-800 rounded-2xl">
+                            <table class="w-full text-sm">
+                                <thead class="sticky top-0 bg-slate-900">
+                                    <tr class="border-b border-slate-700 text-slate-400">
+                                        <th class="text-left px-4 py-3 font-medium">Year</th>
+                                        <th class="text-right px-4 py-3 font-medium">Factor</th>
+                                        <th class="text-left px-4 py-3 font-medium">Basis</th>
+                                        <th class="text-right px-4 py-3 font-medium">RMD</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bene-schedule" class="divide-y divide-slate-800"></tbody>
+                            </table>
+                        </div>
+                        <p class="mt-2 text-[11px] text-slate-500">The dollar RMD is shown only for the calculation year, because the balance entered is that year's prior December 31 balance.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Footer -->
-        <div class="mt-8 text-center">
+        <div class="mt-8 text-center space-y-3">
             <p class="text-xs text-slate-500">
                 All calculations happen locally in your browser. Nothing is sent anywhere.
+            </p>
+            <p class="text-xs text-slate-400 leading-relaxed max-w-2xl mx-auto">
+                Investment Adviser Representative of and advisory services offered through Royal Fund Management, LLC, a SEC registered investment adviser.
+            </p>
+            <p class="text-xs text-slate-400 leading-relaxed max-w-2xl mx-auto">
+                This calculator provides educational estimates only and is not tax or legal advice. Consult your tax advisor before taking a distribution.
             </p>
         </div>
     </div>
@@ -545,6 +688,7 @@
         </div>
     </div>
 
+    <script src="../shared/bene-rmd.js"></script>
     <script>
         // Tailwind script
         function initializeTailwind() {
@@ -781,6 +925,12 @@ Gabe`;
                 }, 10);
             } else if (tabIndex === 3) {
                 // Retirement Limits tab - no specific focus needed
+            } else if (tabIndex === 4) {
+                calculateBeneficiaryIra();
+                setTimeout(() => {
+                    const input = document.getElementById('bene-owner-dob');
+                    if (input) input.focus();
+                }, 10);
             }
         }
 
@@ -794,6 +944,7 @@ Gabe`;
 
             // Prepare paycheck calculator data (but don't render until tab is opened)
             initPaycheckCalculator();
+            initBeneficiaryIra();
 
             // Make sure first tab is active
             document.getElementById('tab-0').classList.add('active');
@@ -977,6 +1128,211 @@ Gabe`;
             if (paycheckItems.length === 0) {
                 paycheckItems = getDefaultPaycheckItems();
             }
+        }
+
+        // ============================================
+        // BENEFICIARY IRA RMD
+        // ============================================
+        let beneficiaryStartedTouched = false;
+
+        function initBeneficiaryIra() {
+            const yearInput = document.getElementById('bene-year');
+            if (yearInput && !yearInput.value) {
+                yearInput.value = String(new Date().getFullYear());
+            }
+            updateBeneficiaryHints();
+        }
+
+        function onBeneficiaryStartedChange() {
+            beneficiaryStartedTouched = true;
+            onBeneficiaryInput();
+        }
+
+        function onBeneficiaryInput() {
+            updateBeneficiaryHints();
+            calculateBeneficiaryIra();
+        }
+
+        function beneficiaryField(id) {
+            const el = document.getElementById(id);
+            return el ? el.value : '';
+        }
+
+        function updateBeneficiaryHints() {
+            const hint = document.getElementById('bene-started-hint');
+            const balanceHint = document.getElementById('bene-balance-hint');
+            const yearValue = parseInt(beneficiaryField('bene-year'), 10);
+            if (balanceHint) {
+                if (Number.isInteger(yearValue)) {
+                    balanceHint.textContent = `Account balance on December 31, ${yearValue - 1}.`;
+                } else {
+                    balanceHint.textContent = 'Account balance on December 31 of the year before the calculation year.';
+                }
+            }
+            if (!hint || !window.BeneRmd) return;
+
+            const derived = BeneRmd.deriveOwnerRmdStatus(
+                beneficiaryField('bene-owner-dob'),
+                beneficiaryField('bene-owner-death'),
+            );
+            const select = document.getElementById('bene-started');
+            if (derived.ok && !beneficiaryStartedTouched && select) {
+                select.value = derived.suggestedStarted ? 'yes' : 'no';
+            }
+            let text = derived.hint;
+            if (derived.ok && beneficiaryStartedTouched && select) {
+                const selectedYes = select.value === 'yes';
+                if (selectedYes !== derived.suggestedStarted) {
+                    text += ' Your Yes/No selection is being used instead of that derived answer.';
+                }
+            }
+            hint.textContent = text;
+        }
+
+        function beneficiaryInputs() {
+            const year = parseInt(beneficiaryField('bene-year'), 10);
+            const balanceRaw = beneficiaryField('bene-balance');
+            return {
+                ownerDob: beneficiaryField('bene-owner-dob'),
+                ownerDeath: beneficiaryField('bene-owner-death'),
+                ownerStartedRmds: beneficiaryField('bene-started') === 'yes',
+                beneficiaryType: beneficiaryField('bene-type'),
+                beneficiaryDob: beneficiaryField('bene-bene-dob'),
+                beneficiaryDisabled: beneficiaryField('bene-disabled') === 'yes',
+                priorYearEndBalance: balanceRaw === '' ? NaN : parseFloat(balanceRaw),
+                calculationYear: year,
+            };
+        }
+
+        function beneficiaryReadyToCalculate(input) {
+            return Boolean(
+                input.ownerDob &&
+                input.ownerDeath &&
+                input.beneficiaryDob &&
+                input.beneficiaryType &&
+                Number.isFinite(input.priorYearEndBalance) &&
+                Number.isInteger(input.calculationYear),
+            );
+        }
+
+        function formatLongDate(iso) {
+            if (!iso) return '—';
+            const [year, month, day] = iso.split('-').map(Number);
+            const date = new Date(Date.UTC(year, month - 1, day));
+            return date.toLocaleDateString('en-US', {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+                timeZone: 'UTC',
+            });
+        }
+
+        function calculateBeneficiaryIra() {
+            const errorsEl = document.getElementById('bene-errors');
+            const resultsEl = document.getElementById('bene-results');
+            if (!errorsEl || !resultsEl || !window.BeneRmd) return;
+
+            const input = beneficiaryInputs();
+            if (!beneficiaryReadyToCalculate(input)) {
+                errorsEl.classList.add('hidden');
+                resultsEl.classList.add('hidden');
+                return;
+            }
+
+            const result = BeneRmd.calculateBeneficiaryRmd(input);
+            if (!result.ok) {
+                errorsEl.classList.remove('hidden');
+                errorsEl.innerHTML = result.errors.map((error) => `<div>${error}</div>`).join('');
+                resultsEl.classList.add('hidden');
+                return;
+            }
+
+            errorsEl.classList.add('hidden');
+            resultsEl.classList.remove('hidden');
+            document.getElementById('bene-rule').textContent = result.rule;
+
+            const rmdEl = document.getElementById('bene-rmd');
+            const rmdCaption = document.getElementById('bene-rmd-caption');
+            const factorEl = document.getElementById('bene-factor');
+            const factorCaption = document.getElementById('bene-factor-caption');
+            if (result.rmdKind === 'amount' || result.rmdKind === 'full' || result.rmdKind === 'overdue') {
+                rmdEl.textContent = formatCurrency(result.rmd);
+            } else if (result.rmdKind === 'year-of-death') {
+                rmdEl.textContent = 'See note';
+            } else {
+                rmdEl.textContent = formatCurrency(0);
+            }
+
+            const captions = {
+                amount: `Prior Dec 31 balance ${formatCurrency(result.balance)} ÷ ${Number(result.factor).toFixed(1)}`,
+                full: 'Entire prior December 31 balance is due',
+                overdue: 'Entire prior December 31 balance is still due',
+                none: 'No annual RMD this year',
+                delayed: 'Inherited RMDs are delayed',
+                'year-of-death': 'Stretch RMDs start the year after death',
+            };
+            rmdCaption.textContent = captions[result.rmdKind] || '';
+
+            if (result.factor == null) {
+                factorEl.textContent = '—';
+                factorCaption.textContent = result.rmdKind === 'none' ? '10-year rule' : '';
+            } else {
+                factorEl.textContent = Number(result.factor).toFixed(1);
+                const sourceLabels = {
+                    beneficiary: "Beneficiary's life expectancy",
+                    owner: "Owner's remaining life expectancy",
+                    spouse: "Spouse's age, recalculated",
+                };
+                factorCaption.textContent = sourceLabels[result.factorSource] || '';
+            }
+
+            document.getElementById('bene-deadline').textContent = result.deadline
+                ? formatLongDate(result.deadline)
+                : '—';
+
+            const emptyEl = document.getElementById('bene-empty');
+            const emptyCaption = document.getElementById('bene-empty-caption');
+            if (result.emptyByYear) {
+                emptyEl.textContent = String(result.emptyByYear);
+                emptyCaption.textContent = formatLongDate(result.emptyByDate);
+            } else {
+                emptyEl.textContent = 'No 10-year deadline';
+                emptyCaption.textContent = 'Life expectancy stretch';
+            }
+
+            const spouseEl = document.getElementById('bene-spouse-own');
+            if (result.spouseTreatAsOwn) {
+                spouseEl.classList.remove('hidden');
+                spouseEl.textContent = result.spouseTreatAsOwn.note;
+            } else {
+                spouseEl.classList.add('hidden');
+                spouseEl.textContent = '';
+            }
+
+            const notesEl = document.getElementById('bene-notes');
+            notesEl.innerHTML = result.notes.map((note) => `<li>${note}</li>`).join('');
+
+            const tbody = document.getElementById('bene-schedule');
+            tbody.innerHTML = result.schedule.map((row) => {
+                const factorText = row.factor == null ? '—' : Number(row.factor).toFixed(1);
+                let rmdText = '—';
+                if (row.isCalculationYear) {
+                    if (row.distribution === 'rmd' || row.distribution === 'full') {
+                        rmdText = formatCurrency(row.rmd);
+                    } else {
+                        rmdText = formatCurrency(0);
+                    }
+                } else if (row.distribution === 'full') {
+                    rmdText = 'Entire balance';
+                }
+                const highlight = row.isCalculationYear ? 'bg-blue-950/50' : '';
+                return `<tr class="${highlight}">
+                    <td class="px-4 py-2.5 font-medium">${row.year}</td>
+                    <td class="px-4 py-2.5 text-right money">${factorText}</td>
+                    <td class="px-4 py-2.5 text-slate-400">${row.basis}</td>
+                    <td class="px-4 py-2.5 text-right money">${rmdText}</td>
+                </tr>`;
+            }).join('');
         }
 
         // Boot the app

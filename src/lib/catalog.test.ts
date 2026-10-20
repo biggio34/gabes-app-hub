@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { hubApps } from "./catalog.ts";
+import { hubApps, rewriteAppHtml } from "./catalog.ts";
 
 describe("hub apps", () => {
   it("gives Scorekeeper to every Softball login", () => {
@@ -13,5 +13,10 @@ describe("hub apps", () => {
   it("keeps Wrist Coach behind its own grant", () => {
     const app = hubApps.find((item) => item.slug === "wrist-coach");
     assert.equal(app?.requiresFeature, "wrist-coach");
+  });
+
+  it("rewrites the beneficiary RMD script to the shared route", () => {
+    const html = rewriteAppHtml('<script src="../shared/bene-rmd.js"></script>');
+    assert.match(html, /src="\/shared\/bene-rmd\.js"/);
   });
 });
