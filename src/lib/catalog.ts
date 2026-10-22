@@ -17,7 +17,7 @@ export const hubApps: HubApp[] = [
     file: "financial-calcs.html",
     title: "Financial Calcs",
     description:
-      "Net/gross pay, tax distributions, bi-weekly to monthly, retirement contribution limits, and beneficiary IRA RMDs.",
+      "Net/gross pay, tax distributions, bi-weekly to monthly, retirement contribution limits, traditional IRA RMDs, and beneficiary IRA RMDs.",
     area: "financial",
   },
   {
@@ -153,6 +153,7 @@ export function rewriteAppHtml(html: string) {
   }
   next = next.replaceAll("../shared/elks-data.js", "/shared/elks-data.js");
   next = next.replaceAll("../shared/bene-rmd.js", "/shared/bene-rmd.js");
+  next = next.replaceAll("../shared/owner-rmd.js", "/shared/owner-rmd.js");
   next = next.replaceAll("../sample-roster-import.csv", "/shared/sample-roster-import.csv");
   next = next.replaceAll("../index.html", "/");
   return next;

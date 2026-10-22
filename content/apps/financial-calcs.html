@@ -328,6 +328,11 @@
                 <i class="fa-solid fa-user-clock"></i>
                 <span>Beneficiary IRA RMD</span>
             </button>
+            <button onclick="switchTab(5)" id="tab-5"
+                    class="tab-button px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2 text-slate-300 hover:text-slate-200">
+                <i class="fa-solid fa-calendar-check"></i>
+                <span>Traditional IRA RMD</span>
+            </button>
         </div>
 
         <!-- Tab Contents -->
@@ -688,7 +693,7 @@
             <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8">
                 <div class="mb-6">
                     <h2 class="text-2xl font-semibold tracking-tight">Beneficiary IRA RMD Calculator</h2>
-                    <p class="text-slate-400 mt-1">Inherited IRA required minimum distributions for deaths in 2020 and later. Uses the IRS Single Life Table (Treas. Reg. 1.401(a)(9)-9, 2022 and after).</p>
+                    <p class="text-slate-400 mt-1">Inherited IRA required minimum distributions. Deaths in 2020 and later follow the SECURE Act. Deaths before 2020 use the pre-2020 stretch on the IRS Single Life Table (Treas. Reg. 1.401(a)(9)-9, 2022 and after).</p>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -810,6 +815,83 @@
             </div>
         </div>
 
+        <!-- TAB 5: Traditional IRA RMD -->
+        <div id="content-5" class="tab-content hidden">
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-semibold tracking-tight">Traditional IRA RMD</h2>
+                    <p class="text-slate-400 mt-1">Account owner required minimum distributions. Age is the age attained on December 31 of the distribution year. Uses the IRS Uniform Lifetime Table (Treas. Reg. 1.401(a)(9)-9, 2022 and after).</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="section-header block mb-1.5" for="rmd-owner-dob">Owner date of birth</label>
+                        <input type="date" id="rmd-owner-dob"
+                               class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl px-4 py-3 text-lg font-medium"
+                               oninput="onOwnerRmdInput()">
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5" for="rmd-balance">Prior December 31 balance</label>
+                        <div class="relative">
+                            <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</div>
+                            <input type="number" id="rmd-balance" min="0" step="0.01" inputmode="decimal"
+                                   class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl pl-8 pr-4 py-3 text-lg font-medium"
+                                   oninput="onOwnerRmdInput()">
+                        </div>
+                        <p id="rmd-balance-hint" class="mt-2 text-xs text-slate-500">Account balance on December 31 of the year before the distribution year.</p>
+                    </div>
+                    <div>
+                        <label class="section-header block mb-1.5" for="rmd-year">Distribution year</label>
+                        <input type="number" id="rmd-year" min="1900" max="2300" step="1"
+                               class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl px-4 py-3 text-lg font-medium"
+                               oninput="onOwnerRmdInput()">
+                    </div>
+                    <div id="rmd-delay-wrap" class="hidden">
+                        <label class="section-header block mb-1.5" for="rmd-delay-first">Delay first RMD to April 1 (Y/N)</label>
+                        <select id="rmd-delay-first"
+                                class="input-field w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-2xl px-4 py-3 text-lg font-medium"
+                                onchange="onOwnerRmdInput()">
+                            <option value="no" selected>No</option>
+                            <option value="yes">Yes</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="rmd-errors" class="hidden mb-4 bg-amber-950/40 border border-amber-900/50 rounded-2xl p-4 text-sm text-amber-200"></div>
+
+                <div id="rmd-results" class="hidden">
+                    <div id="rmd-message" class="hidden bg-slate-950 border border-slate-800 rounded-2xl p-4 text-sm text-slate-300 leading-relaxed"></div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                        <div class="bg-slate-950 border border-emerald-900/50 rounded-2xl p-4 ring-1 ring-emerald-900/30">
+                            <div class="metric-label text-emerald-400">RMD</div>
+                            <div id="rmd-amount" class="money text-2xl font-semibold tracking-tight mt-1 text-emerald-400">—</div>
+                            <div id="rmd-amount-caption" class="text-xs text-slate-500 mt-1"></div>
+                        </div>
+                        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                            <div class="metric-label">Age</div>
+                            <div id="rmd-age" class="money text-2xl font-semibold tracking-tight mt-1">—</div>
+                            <div id="rmd-age-caption" class="text-xs text-slate-500 mt-1">On December 31</div>
+                        </div>
+                        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                            <div class="metric-label">Factor</div>
+                            <div id="rmd-factor" class="money text-2xl font-semibold tracking-tight mt-1">—</div>
+                            <div id="rmd-table" class="text-xs text-slate-500 mt-1"></div>
+                        </div>
+                        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                            <div class="metric-label">Due date</div>
+                            <div id="rmd-deadline" class="text-2xl font-semibold tracking-tight mt-1">—</div>
+                            <div id="rmd-deadline-caption" class="text-xs text-slate-500 mt-1"></div>
+                        </div>
+                    </div>
+
+                    <div id="rmd-warning" class="hidden mt-4 bg-amber-950/40 border border-amber-900/50 rounded-2xl p-4 text-sm text-amber-200 leading-relaxed"></div>
+
+                    <p id="rmd-note" class="mt-4 text-xs text-slate-400 leading-relaxed">Uses the IRS Uniform Lifetime Table. If the sole beneficiary is a spouse more than 10 years younger, the Joint and Last Survivor Table applies and the RMD will be lower.</p>
+                </div>
+            </div>
+        </div>
+
         <!-- Footer -->
         <div class="mt-8 text-center space-y-3">
             <p class="text-xs text-slate-400 leading-relaxed max-w-2xl mx-auto">
@@ -856,6 +938,7 @@
     </div>
 
     <script src="../shared/bene-rmd.js"></script>
+    <script src="../shared/owner-rmd.js"></script>
     <script>
         // Tailwind script
         function initializeTailwind() {
@@ -1098,6 +1181,12 @@ Gabe`;
                     const input = document.getElementById('bene-owner-dob');
                     if (input) input.focus();
                 }, 10);
+            } else if (tabIndex === 5) {
+                calculateOwnerRmd();
+                setTimeout(() => {
+                    const input = document.getElementById('rmd-owner-dob');
+                    if (input) input.focus();
+                }, 10);
             }
         }
 
@@ -1112,6 +1201,7 @@ Gabe`;
             // Prepare paycheck calculator data (but don't render until tab is opened)
             initPaycheckCalculator();
             initBeneficiaryIra();
+            initOwnerRmd();
 
             // Make sure first tab is active
             document.getElementById('tab-0').classList.add('active');
@@ -1497,6 +1587,137 @@ Gabe`;
                     <td class="px-4 py-2.5 text-right money">${rmdText}</td>
                 </tr>`;
             }).join('');
+        }
+
+        // ============================================
+        // TRADITIONAL IRA OWNER RMD
+        // ============================================
+        function initOwnerRmd() {
+            const yearInput = document.getElementById('rmd-year');
+            if (yearInput && !yearInput.value) {
+                yearInput.value = String(new Date().getFullYear());
+            }
+            updateOwnerRmdHints();
+        }
+
+        function onOwnerRmdInput() {
+            updateOwnerRmdHints();
+            calculateOwnerRmd();
+        }
+
+        function ownerRmdField(id) {
+            const el = document.getElementById(id);
+            return el ? el.value : '';
+        }
+
+        function updateOwnerRmdHints() {
+            const balanceHint = document.getElementById('rmd-balance-hint');
+            const yearValue = parseInt(ownerRmdField('rmd-year'), 10);
+            if (!balanceHint) return;
+            if (Number.isInteger(yearValue)) {
+                balanceHint.textContent = `Account balance on December 31, ${yearValue - 1}.`;
+            } else {
+                balanceHint.textContent = 'Account balance on December 31 of the year before the distribution year.';
+            }
+        }
+
+        function ownerRmdInputs() {
+            const year = parseInt(ownerRmdField('rmd-year'), 10);
+            const balanceRaw = ownerRmdField('rmd-balance');
+            return {
+                ownerDob: ownerRmdField('rmd-owner-dob'),
+                priorYearEndBalance: balanceRaw === '' ? NaN : parseFloat(balanceRaw),
+                distributionYear: year,
+                delayFirst: ownerRmdField('rmd-delay-first') === 'yes',
+            };
+        }
+
+        function ownerRmdReady(input) {
+            return Boolean(
+                input.ownerDob &&
+                Number.isFinite(input.priorYearEndBalance) &&
+                Number.isInteger(input.distributionYear),
+            );
+        }
+
+        function calculateOwnerRmd() {
+            const errorsEl = document.getElementById('rmd-errors');
+            const resultsEl = document.getElementById('rmd-results');
+            const delayWrap = document.getElementById('rmd-delay-wrap');
+            if (!errorsEl || !resultsEl || !window.OwnerRmd) return;
+
+            const input = ownerRmdInputs();
+            if (!ownerRmdReady(input)) {
+                errorsEl.classList.add('hidden');
+                resultsEl.classList.add('hidden');
+                if (delayWrap) delayWrap.classList.add('hidden');
+                return;
+            }
+
+            const result = OwnerRmd.calculateOwnerRmd(input);
+            if (delayWrap) delayWrap.classList.toggle('hidden', !result.ok || !result.delayAvailable);
+
+            if (!result.ok) {
+                errorsEl.classList.remove('hidden');
+                errorsEl.innerHTML = result.errors.map((error) => `<div>${error}</div>`).join('');
+                resultsEl.classList.add('hidden');
+                return;
+            }
+
+            errorsEl.classList.add('hidden');
+            resultsEl.classList.remove('hidden');
+
+            const messageEl = document.getElementById('rmd-message');
+            if (result.message) {
+                const april1 = result.april1Deadline ? ` The first RMD is due ${formatLongDate(result.april1Deadline)}.` : '';
+                messageEl.textContent = `${result.message}.${april1 ? april1 : ''}`;
+                messageEl.classList.remove('hidden');
+            } else {
+                messageEl.textContent = '';
+                messageEl.classList.add('hidden');
+            }
+
+            document.getElementById('rmd-age').textContent = String(result.age);
+            document.getElementById('rmd-age-caption').textContent = `On December 31, ${result.distributionYear}`;
+
+            const factorEl = document.getElementById('rmd-factor');
+            const tableEl = document.getElementById('rmd-table');
+            const amountEl = document.getElementById('rmd-amount');
+            const amountCaption = document.getElementById('rmd-amount-caption');
+            if (result.rmdRequired) {
+                factorEl.textContent = Number(result.factor).toFixed(1);
+                tableEl.textContent = result.table;
+                amountEl.textContent = formatCurrency(result.rmd);
+                amountCaption.textContent = `Prior December 31 balance ${formatCurrency(result.balance)} ÷ ${Number(result.factor).toFixed(1)}`;
+            } else {
+                factorEl.textContent = '—';
+                tableEl.textContent = 'Not required yet';
+                amountEl.textContent = 'Not required';
+                amountCaption.textContent = result.message || '';
+            }
+
+            document.getElementById('rmd-deadline').textContent = result.deadline
+                ? formatLongDate(result.deadline)
+                : '—';
+            const deadlineCaption = document.getElementById('rmd-deadline-caption');
+            if (!result.rmdRequired) {
+                deadlineCaption.textContent = 'April 1 after the first RMD year';
+            } else if (result.delayFirst) {
+                deadlineCaption.textContent = 'April 1 of the following year';
+            } else {
+                deadlineCaption.textContent = 'December 31 of the distribution year';
+            }
+
+            const warningEl = document.getElementById('rmd-warning');
+            if (result.warning) {
+                warningEl.textContent = result.warning;
+                warningEl.classList.remove('hidden');
+            } else {
+                warningEl.textContent = '';
+                warningEl.classList.add('hidden');
+            }
+
+            document.getElementById('rmd-note').textContent = result.note;
         }
 
         // Boot the app

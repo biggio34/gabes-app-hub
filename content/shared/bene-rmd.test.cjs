@@ -326,17 +326,95 @@ describe("beneficiary IRA RMDs", () => {
     assert.match(result.notes.join(" "), /follows the Yes\/No answer/);
   });
 
-  it("rejects deaths before 2020", () => {
+  it("stretches a 2014 non-spouse death on the 2022 Single Life Table", () => {
+    assert.equal(BeneRmd.singleLifeFactor(57), 29.8);
+
     const result = calc({
-      ownerDob: "1930-01-01",
-      ownerDeath: "2019-05-01",
+      ownerDob: "1960-01-01",
+      ownerDeath: "2014-08-01",
       ownerStartedRmds: true,
-      beneficiaryType: "child",
-      beneficiaryDob: "1960-01-01",
+      beneficiaryType: "other",
+      beneficiaryDob: "1958-06-01",
+      beneficiaryDisabled: true,
+      priorYearEndBalance: 20889.61,
       calculationYear: 2026,
     });
-    assert.equal(result.ok, false);
-    assert.match(result.errors.join(" "), /2020/);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.appliedRule, "pre-2020-stretch");
+    assert.equal(result.method, "Pre-2020 stretch (Single Life, non-recalculated)");
+    assert.match(result.rule, /Pre-2020 stretch \(Single Life, non-recalculated\)/);
+    assert.equal(result.edb, false);
+    assert.equal(result.emptyByYear, null);
+    assert.equal(result.factor, 18.8);
+    assert.equal(result.rmd, 1111.15);
+    assert.equal(result.rmdKind, "amount");
+    assert.equal(result.deadline, "2026-12-31");
+    const year2015 = result.schedule.find((row) => row.year === 2015);
+    assert.equal(year2015.factor, 29.8);
+    assert.equal(result.schedule.find((row) => row.year === 2026).factor, 18.8);
+
+    const asChild = calc({
+      ownerDob: "1960-01-01",
+      ownerDeath: "2014-08-01",
+      ownerStartedRmds: false,
+      beneficiaryType: "child",
+      beneficiaryDob: "1958-06-01",
+      beneficiaryDisabled: false,
+      priorYearEndBalance: 20889.61,
+      calculationYear: 2026,
+    });
+    assert.equal(asChild.appliedRule, "pre-2020-stretch");
+    assert.equal(asChild.factor, 18.8);
+    assert.equal(asChild.rmd, 1111.15);
+  });
+
+  it("recalculates a pre-2020 spouse's Single Life factor from the spouse's age each year", () => {
+    const result = calc({
+      ownerDob: "1940-01-15",
+      ownerDeath: "2014-08-01",
+      ownerStartedRmds: false,
+      beneficiaryType: "spouse",
+      beneficiaryDob: "1960-04-04",
+      beneficiaryDisabled: true,
+      priorYearEndBalance: 22000,
+      calculationYear: 2026,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.appliedRule, "pre-2020-spouse");
+    assert.equal(BeneRmd.singleLifeFactor(55), 31.6);
+    assert.equal(BeneRmd.singleLifeFactor(66), 22.0);
+    assert.equal(result.schedule.find((row) => row.year === 2015).factor, 31.6);
+    assert.equal(result.factor, 22.0);
+    assert.equal(result.factorSource, "spouse");
+    assert.equal(result.rmd, 1000);
+    assert.equal(result.emptyByYear, null);
+    assert.match(result.rule, /looked up fresh each year/i);
+    assert.doesNotMatch(result.rule, /Pre-2020 stretch \(Single Life, non-recalculated\)/);
+  });
+
+  it("does not apply the minor-child 10-year clock to a pre-2020 death", () => {
+    const result = calc({
+      ownerDob: "1970-01-01",
+      ownerDeath: "2018-06-01",
+      ownerStartedRmds: false,
+      beneficiaryType: "child",
+      beneficiaryDob: "2010-01-01",
+      beneficiaryDisabled: false,
+      priorYearEndBalance: 68900,
+      calculationYear: 2026,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.appliedRule, "pre-2020-stretch");
+    assert.equal(result.method, "Pre-2020 stretch (Single Life, non-recalculated)");
+    assert.equal(BeneRmd.singleLifeFactor(9), 75.9);
+    assert.equal(result.schedule.find((row) => row.year === 2019).factor, 75.9);
+    assert.equal(result.factor, 68.9);
+    assert.equal(result.rmd, 1000);
+    assert.equal(result.emptyByYear, null);
+    assert.equal(result.edb, false);
   });
 });
 

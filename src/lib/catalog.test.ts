@@ -19,4 +19,9 @@ describe("hub apps", () => {
     const html = rewriteAppHtml('<script src="../shared/bene-rmd.js"></script>');
     assert.match(html, /src="\/shared\/bene-rmd\.js"/);
   });
+
+  it("rewrites the owner RMD script to the shared route", () => {
+    const html = rewriteAppHtml('<script src="../shared/owner-rmd.js"></script>');
+    assert.match(html, /src="\/shared\/owner-rmd\.js"/);
+  });
 });
