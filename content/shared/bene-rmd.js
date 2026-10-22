@@ -192,11 +192,6 @@
     if (isIsoDate(input.ownerDob) && isIsoDate(input.ownerDeath) && input.ownerDeath < input.ownerDob) {
       errors.push("Date of death is before the owner's date of birth.");
     }
-    if (isIsoDate(input.ownerDeath) && yearOf(input.ownerDeath) < 2020) {
-      errors.push(
-        "This calculator covers deaths in 2020 and later (SECURE Act). It does not apply the pre-2020 stretch rules.",
-      );
-    }
     if (!TYPES[input.beneficiaryType]) {
       errors.push("Choose a beneficiary type: spouse, child, or other.");
     }
@@ -488,9 +483,91 @@
     };
   }
 
+  function calculatePre2020BeneficiaryRmd(input) {
+    const deathYear = yearOf(input.ownerDeath);
+    const balance = input.priorYearEndBalance;
+    const notes = [];
+    const deathNote = yearOfDeathNote(input, input.ownerStartedRmds);
+    if (deathNote) notes.push(deathNote);
+
+    const isSpouse = input.beneficiaryType === "spouse";
+    let appliedRule;
+    let method;
+    let schedule;
+    let rule;
+
+    if (isSpouse) {
+      appliedRule = "pre-2020-spouse";
+      method = "Pre-2020 spouse inherited (Single Life, recalculated)";
+      const firstYear = deathYear + 1;
+      schedule = scheduleSpouse(input, firstYear, Math.max(input.calculationYear, firstYear) + 5);
+      if (input.calculationYear > schedule[schedule.length - 1].year) {
+        schedule = scheduleSpouse(input, firstYear, input.calculationYear);
+      }
+      const age = ageInYear(input.beneficiaryDob, input.calculationYear);
+      const factorNow = singleLifeFactor(age);
+      rule =
+        "Pre-2020 inherited IRA kept by the surviving spouse. " +
+        "The Single Life factor is looked up fresh each year for the spouse's age that year. " +
+        `In ${input.calculationYear} the spouse is age ${age}` +
+        (factorNow == null ? ". " : ` and the factor is ${factorNow.toFixed(1)}. `) +
+        "No 10-year rule applies. Disabled, chronically ill, and minor-child distinctions do not apply.";
+    } else {
+      appliedRule = "pre-2020-stretch";
+      method = "Pre-2020 stretch (Single Life, non-recalculated)";
+      schedule = scheduleLife(input, { useLongerOf: false, emptyYear: null });
+      const anchor = lifeExpectancyAt(input, deathYear + 1, false);
+      rule =
+        `${method}. The beneficiary's age in ${deathYear + 1}, the year after death, is ${anchor.beneficiaryAge}. ` +
+        `The Single Life factor for that age on the 2022 IRS table is ${anchor.beneficiaryInitial.toFixed(1)}, reduced by 1 for each year since ${deathYear + 1}. ` +
+        "No 10-year rule applies. Disabled, chronically ill, and minor-child distinctions do not apply.";
+    }
+
+    const thisYear = pickThisYear(schedule, input);
+    if (thisYear.rmdKind === "overdue") {
+      notes.push(
+        `The life-expectancy divisor reached 1.0 or less before ${input.calculationYear}. Any balance still left is overdue. The figure shown is the entire prior December 31 balance.`,
+      );
+    }
+
+    const derived = deriveOwnerRmdStatus(input.ownerDob, input.ownerDeath);
+    return {
+      ok: true,
+      appliedRule,
+      method,
+      edb: false,
+      edbReasons: [],
+      ownerStartedRmds: input.ownerStartedRmds,
+      diedOnOrAfterRbd: Boolean(derived.ok && derived.diedOnOrAfterRbd),
+      derived,
+      useLongerOf: false,
+      deathYear,
+      yearAfterDeath: deathYear + 1,
+      calculationYear: input.calculationYear,
+      balance: roundCents(balance),
+      balanceDate: `${input.calculationYear - 1}-12-31`,
+      rule,
+      notes,
+      emptyByYear: null,
+      emptyByDate: null,
+      thisYear,
+      factor: thisYear.factor,
+      factorSource: thisYear.factorSource,
+      rmd: thisYear.rmd,
+      rmdKind: thisYear.rmdKind,
+      deadline: thisYear.deadline,
+      schedule,
+      calculationRow: schedule.find((item) => item.year === input.calculationYear) || null,
+      spouseTreatAsOwn: null,
+    };
+  }
+
   function calculateBeneficiaryRmd(input) {
     const errors = validate(input);
     if (errors.length) return { ok: false, errors };
+    if (isIsoDate(input.ownerDeath) && yearOf(input.ownerDeath) < 2020) {
+      return calculatePre2020BeneficiaryRmd(input);
+    }
 
     const derived = deriveOwnerRmdStatus(input.ownerDob, input.ownerDeath);
     const started = input.ownerStartedRmds;
