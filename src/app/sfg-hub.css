@@ -1,25 +1,25 @@
 /*
-  Hub home stays dark. Only Financial tiles pick up Strategic Financial Group.
+  Hub home stays dark. Only Financial tiles pick up the Dodgers blue.
   Same layout as .so-hub-card: light surface, brand edge, dark heading and
-  launch, lockup on the right. Resting edge is primary teal (the salon card
+  launch, lockup on the right. Resting edge is primary blue (the salon card
   uses its lighter accent the same way). Hover, headings, and the wordmark
-  use dark teal.
+  use the darker blue.
 */
 
 .sfg-hub-card {
   background: #f9fafd;
   color: #222222;
-  border: 1px solid #0bb4aa;
+  border: 1px solid #005a9c;
 }
 
 .sfg-hub-card:hover {
   background: #ffffff;
-  border-color: #076c65;
+  border-color: #003f6e;
 }
 
 .sfg-hub-card h2,
 .sfg-hub-card .sfg-hub-launch {
-  color: #076c65;
+  color: #003f6e;
 }
 
 .sfg-hub-card p {
