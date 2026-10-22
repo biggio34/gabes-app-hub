@@ -28,7 +28,7 @@
         }
         
         .tab-button.active {
-            background-color: var(--fc-teal-dark);
+            background-color: var(--fc-blue);
             color: #ffffff;
             box-shadow: none;
         }
@@ -63,7 +63,7 @@
 
         .input-field:focus {
             outline: none;
-            border-color: var(--fc-teal-dark);
+            border-color: var(--fc-blue);
             box-shadow: 0 0 0 3px var(--fc-focus);
         }
 
@@ -94,9 +94,9 @@
         }
 
         :root {
-            --fc-teal: #0BB4AA;
-            --fc-teal-dark: #076C65;
-            --fc-teal-darker: #054E49;
+            --fc-blue: #005A9C;
+            --fc-blue-dark: #003F6E;
+            --fc-blue-darker: #002C4D;
             --fc-text: #222222;
             --fc-muted: #4E5964;
             --fc-bg: #F9FAFD;
@@ -107,8 +107,9 @@
             --fc-note-bg: #F8F4EC;
             --fc-note-border: #E4D9C4;
             --fc-note-text: #6B4E16;
-            --fc-teal-wash: #E6F6F5;
-            --fc-focus: rgba(11, 180, 170, 0.28);
+            --fc-blue-wash: #E4F0F8;
+            --fc-blue-line: #A9C9E2;
+            --fc-focus: rgba(0, 90, 156, 0.28);
         }
 
         body.fc-app {
@@ -120,7 +121,7 @@
         .fc-app h1,
         .fc-app h2,
         .fc-app h3 {
-            color: var(--fc-teal-dark);
+            color: var(--fc-blue-dark);
         }
 
         .fc-app button {
@@ -145,41 +146,41 @@
 
         .fc-app .bg-slate-800 {
             background-color: #ffffff;
-            color: var(--fc-teal-dark);
+            color: var(--fc-blue-dark);
             border: 1px solid var(--fc-border);
         }
 
         .fc-app .bg-blue-600 {
-            background-color: var(--fc-teal-dark);
+            background-color: var(--fc-blue);
             color: #ffffff;
         }
 
         .fc-app .bg-blue-600:hover,
         .fc-app .hover\:bg-blue-500:hover {
-            background-color: var(--fc-teal-darker);
+            background-color: var(--fc-blue-dark);
             color: #ffffff;
         }
 
         .fc-app .bg-slate-800:hover,
         .fc-app .hover\:bg-slate-700:hover {
-            background-color: var(--fc-teal-wash);
-            color: var(--fc-teal-dark);
+            background-color: var(--fc-blue-wash);
+            color: var(--fc-blue-dark);
         }
 
         .fc-app .active\:bg-blue-700:active {
-            background-color: #043f3b;
+            background-color: var(--fc-blue-darker);
             color: #ffffff;
         }
 
         .fc-app button.bg-amber-900\/70 {
             background-color: #ffffff;
-            color: var(--fc-teal-dark);
-            border: 1px solid var(--fc-teal-dark);
+            color: var(--fc-blue-dark);
+            border: 1px solid var(--fc-blue-dark);
         }
 
         .fc-app button.hover\:bg-amber-800:hover {
-            background-color: var(--fc-teal-wash);
-            color: var(--fc-teal-dark);
+            background-color: var(--fc-blue-wash);
+            color: var(--fc-blue-dark);
         }
 
         .fc-app .border-slate-800,
@@ -190,7 +191,7 @@
 
         .fc-app .border-emerald-900\/50,
         .fc-app .border-blue-900\/40 {
-            border-color: #b7e4e0;
+            border-color: var(--fc-blue-line);
         }
 
         .fc-app .border-amber-900\/50 {
@@ -199,7 +200,7 @@
 
         .fc-app .bg-emerald-950\/40,
         .fc-app .bg-blue-950\/50 {
-            background-color: var(--fc-teal-wash);
+            background-color: var(--fc-blue-wash);
         }
 
         .fc-app .bg-amber-950\/40 {
@@ -227,7 +228,7 @@
         .fc-app .text-purple-400,
         .fc-app .metric-label.text-emerald-400,
         .fc-app .metric-label.text-blue-400 {
-            color: var(--fc-teal-dark);
+            color: var(--fc-blue-dark);
         }
 
         .fc-app .text-rose-400 {
@@ -243,12 +244,12 @@
         .fc-app .hover\:text-blue-400:hover,
         .fc-app .tab-button.hover\:text-slate-200:hover,
         .fc-app .hover\:text-white:hover {
-            color: var(--fc-teal-dark);
+            color: var(--fc-blue-dark);
         }
 
         .fc-app .tab-button.active,
         .fc-app .tab-button.active:hover {
-            background-color: var(--fc-teal-dark);
+            background-color: var(--fc-blue);
             color: #ffffff;
         }
 
@@ -260,13 +261,13 @@
         }
 
         .fc-app .tab-content > .bg-slate-900 {
-            border-top: 3px solid var(--fc-teal);
+            border-top: 3px solid var(--fc-blue);
         }
 
         .fc-app input:focus,
         .fc-app select:focus {
             outline: none;
-            border-color: var(--fc-teal-dark);
+            border-color: var(--fc-blue);
             box-shadow: 0 0 0 3px var(--fc-focus);
         }
 
