@@ -132,6 +132,16 @@ export type WristKindThemes = {
   defense: WristTheme;
 };
 
+export type WristBlockSize = {
+  rows: number;
+  cols: number;
+};
+
+export type WristKindLayouts = {
+  offense: WristBlockSize;
+  defense: WristBlockSize;
+};
+
 export type WristVersion = {
   id: string;
   name: string;
@@ -211,6 +221,8 @@ export type WristBook = {
   grids: number;
   signStart: number;
   rowStart: number;
+  /** Block size for each set. Offense is 5×5 and defense is 4×4 unless a saved book says otherwise. */
+  kindLayouts: WristKindLayouts;
   theme: WristTheme;
   sheet: WristSheet;
   cardSize: WristCardSize;
@@ -223,11 +235,15 @@ export type WristBook = {
 type WristShuffleBook = Pick<
   WristBook,
   "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
-> & { title?: string; theme?: WristTheme };
+> & { title?: string; theme?: WristTheme; kindLayouts?: WristKindLayouts };
 
 export const DEFAULT_GRIDS = 6;
 export const DEFAULT_ROWS = 5;
 export const DEFAULT_COLS = 5;
+export const DEFAULT_DEFENSE_ROWS = 4;
+export const DEFAULT_DEFENSE_COLS = 4;
+export const OFFENSE_BAND = "#c00000";
+export const DEFENSE_BAND = "#f87080";
 export const DEFAULT_SIGN_START = 1;
 export const DEFAULT_ROW_START = 1;
 export const DEFAULT_SHEET_COLS = 15;
@@ -312,6 +328,52 @@ export function defaultKindThemes(fallback?: WristTheme): WristKindThemes {
   };
 }
 
+export function defaultSetThemes(): WristKindThemes {
+  const white = "#ffffff";
+  return {
+    offense: { band: OFFENSE_BAND, ink: white, highlight: white },
+    defense: { band: DEFENSE_BAND, ink: white, highlight: white },
+  };
+}
+
+export function defaultKindLayouts(
+  rows = DEFAULT_ROWS,
+  cols = DEFAULT_COLS,
+): WristKindLayouts {
+  return {
+    offense: { rows, cols },
+    defense: { rows: DEFAULT_DEFENSE_ROWS, cols: DEFAULT_DEFENSE_COLS },
+  };
+}
+
+export function normalizeKindLayouts(
+  raw: unknown,
+  fallbackRows: number,
+  fallbackCols: number,
+): WristKindLayouts {
+  const item = asRecord(raw);
+  const rows = clampInt(fallbackRows, DEFAULT_ROWS, 3, 8);
+  const cols = clampInt(fallbackCols, DEFAULT_COLS, 3, 8);
+  if (!item) {
+    return {
+      offense: { rows, cols },
+      defense: { rows, cols },
+    };
+  }
+  const offense = asRecord(item.offense);
+  const defense = asRecord(item.defense);
+  return {
+    offense: {
+      rows: clampInt(offense?.rows, rows, 3, 8),
+      cols: clampInt(offense?.cols, cols, 3, 8),
+    },
+    defense: {
+      rows: clampInt(defense?.rows, defense ? DEFAULT_DEFENSE_ROWS : rows, 3, 8),
+      cols: clampInt(defense?.cols, defense ? DEFAULT_DEFENSE_COLS : cols, 3, 8),
+    },
+  };
+}
+
 export function normalizeKindThemes(raw: unknown, fallback?: WristTheme): WristKindThemes {
   const item = asRecord(raw);
   const defaults = defaultKindThemes(fallback);
@@ -369,14 +431,31 @@ export function normalizeLayout(raw: unknown): WristLayout {
   };
 }
 
-export function layoutOf(book: Pick<WristBook, "grids" | "rows" | "cols" | "signStart" | "rowStart">): WristLayout {
+export function layoutFor(
+  book: Pick<WristBook, "grids" | "rows" | "cols" | "signStart" | "rowStart"> & {
+    kindLayouts?: WristKindLayouts;
+    bandKind?: string;
+  },
+  kind?: WristCallKind | string,
+): WristLayout {
+  const which = playCardKind(kind || book.bandKind);
+  const block = book.kindLayouts?.[which];
   return {
-    grids: book.grids,
-    rows: book.rows,
-    cols: book.cols,
-    signStart: book.signStart,
-    rowStart: book.rowStart,
+    grids: clampInt(book.grids, DEFAULT_GRIDS, 1, 8),
+    rows: clampInt(block?.rows ?? book.rows, DEFAULT_ROWS, 3, 8),
+    cols: clampInt(block?.cols ?? book.cols, DEFAULT_COLS, 3, 8),
+    signStart: clampInt(book.signStart, DEFAULT_SIGN_START, 0, 9),
+    rowStart: clampInt(book.rowStart, DEFAULT_ROW_START, 0, 9),
   };
+}
+
+export function layoutOf(
+  book: Pick<WristBook, "grids" | "rows" | "cols" | "signStart" | "rowStart"> & {
+    kindLayouts?: WristKindLayouts;
+    bandKind?: string;
+  },
+): WristLayout {
+  return layoutFor(book, book.bandKind);
 }
 
 export function cellCount(layout: WristLayout) {
@@ -421,7 +500,7 @@ export type WristSheetGroup = {
 export function sheetGroups(book: WristBook, version: WristVersion | null): WristSheetGroup[] {
   if (!version) return [];
   const kind = playCardKind(book.bandKind);
-  const layout = layoutOf(book);
+  const layout = layoutFor(book, kind);
   const byCall = new Map<string, string[]>();
   for (const cell of versionCells(version, kind)) {
     if (!cell.callId) continue;
@@ -709,22 +788,23 @@ export function signBag(
 }
 
 export function bookLayout(
-  book: Pick<WristBook, "grids" | "rows" | "cols" | "signStart" | "rowStart">,
+  book: Pick<WristBook, "grids" | "rows" | "cols" | "signStart" | "rowStart"> & {
+    kindLayouts?: WristKindLayouts;
+    bandKind?: string;
+  },
+  kind?: WristCallKind | string,
 ): WristLayout {
-  return layoutOf({
-    grids: clampInt(book.grids, DEFAULT_GRIDS, 1, 8),
-    rows: clampInt(book.rows, DEFAULT_ROWS, 3, 8),
-    cols: clampInt(book.cols, DEFAULT_COLS, 3, 8),
-    signStart: clampInt(book.signStart, DEFAULT_SIGN_START, 0, 9),
-    rowStart: clampInt(book.rowStart, DEFAULT_ROW_START, 0, 9),
-  });
+  return layoutFor(book, kind);
 }
 
 export function buildKindCells(
-  book: Pick<WristBook, "grids" | "rows" | "cols" | "signStart" | "rowStart" | "library">,
+  book: Pick<WristBook, "grids" | "rows" | "cols" | "signStart" | "rowStart" | "library"> & {
+    kindLayouts?: WristKindLayouts;
+    bandKind?: string;
+  },
   kind: WristCallKind | string,
 ): WristCell[] {
-  const layout = bookLayout(book);
+  const layout = layoutFor(book, kind);
   const cardKind = playCardKind(kind);
   const assigned = signBag(book.library, cardKind, cellCount(layout));
   const cells: WristCell[] = [];
@@ -897,34 +977,45 @@ function parseCells(raw: unknown, layout: WristLayout): WristCell[] {
 function normalizeVersion(
   raw: unknown,
   index: number,
-  layout: WristLayout,
+  offenseLayout: WristLayout,
+  defenseLayout: WristLayout,
   library: WristCall[],
+  kindLayouts: WristKindLayouts,
   fallbackTitle?: string,
   fallbackTheme?: WristTheme,
 ): WristVersion | null {
   const item = asRecord(raw);
   if (!item) return null;
-  const legacyCells = parseCells(item.cells, layout);
-  let offenseCells = parseCells(item.offenseCells, layout);
-  let defenseCells = parseCells(item.defenseCells, layout);
+  const legacyOffense = parseCells(item.cells, offenseLayout);
+  const legacyDefense = parseCells(item.cells, defenseLayout);
+  let offenseCells = parseCells(item.offenseCells, offenseLayout);
+  let defenseCells = parseCells(item.defenseCells, defenseLayout);
   const draft = {
-    grids: layout.grids,
-    rows: layout.rows,
-    cols: layout.cols,
-    signStart: layout.signStart,
-    rowStart: layout.rowStart,
+    grids: offenseLayout.grids,
+    rows: offenseLayout.rows,
+    cols: offenseLayout.cols,
+    signStart: offenseLayout.signStart,
+    rowStart: offenseLayout.rowStart,
+    kindLayouts,
     library,
   };
 
-  if (!cellsMatchLayout(offenseCells, layout) && cellsMatchLayout(legacyCells, layout)) {
-    if (inferPlayCardKind(legacyCells, library) === "defense" && !cellsMatchLayout(defenseCells, layout)) {
-      defenseCells = cloneCells(legacyCells);
-    } else {
-      offenseCells = cloneCells(legacyCells);
-    }
+  if (!cellsMatchLayout(offenseCells, offenseLayout) && cellsMatchLayout(legacyOffense, offenseLayout)) {
+    const legacyIsDefense =
+      inferPlayCardKind(legacyOffense, library) === "defense" &&
+      !cellsMatchLayout(defenseCells, defenseLayout) &&
+      cellCount(offenseLayout) === cellCount(defenseLayout);
+    if (!legacyIsDefense) offenseCells = cloneCells(legacyOffense);
   }
-  if (!cellsMatchLayout(offenseCells, layout)) offenseCells = buildKindCells(draft, "offense");
-  if (!cellsMatchLayout(defenseCells, layout)) defenseCells = buildKindCells(draft, "defense");
+  if (
+    !cellsMatchLayout(defenseCells, defenseLayout) &&
+    cellsMatchLayout(legacyDefense, defenseLayout) &&
+    inferPlayCardKind(legacyDefense, library) === "defense"
+  ) {
+    defenseCells = cloneCells(legacyDefense);
+  }
+  if (!cellsMatchLayout(offenseCells, offenseLayout)) offenseCells = buildKindCells(draft, "offense");
+  if (!cellsMatchLayout(defenseCells, defenseLayout)) defenseCells = buildKindCells(draft, "defense");
 
   return {
     id: String(item.id || `ver-${index}`),
@@ -944,23 +1035,28 @@ function bookDraft(
   title: string,
   extra: Partial<WristBook> = {},
 ): WristBook {
-  const layout = extra.grids != null ? layoutOf(extra as WristBook) : {
-    grids: DEFAULT_GRIDS,
-    rows: DEFAULT_ROWS,
-    cols: DEFAULT_COLS,
-    signStart: DEFAULT_SIGN_START,
-    rowStart: DEFAULT_ROW_START,
-  };
+  const rows = extra.rows ?? DEFAULT_ROWS;
+  const cols = extra.cols ?? DEFAULT_COLS;
+  const grids = extra.grids ?? DEFAULT_GRIDS;
+  const signStart = extra.signStart ?? DEFAULT_SIGN_START;
+  const rowStart = extra.rowStart ?? DEFAULT_ROW_START;
+  const kindLayouts =
+    extra.kindLayouts ||
+    ({
+      offense: { rows, cols },
+      defense: { rows, cols },
+    } satisfies WristKindLayouts);
   return {
     version: 1,
     userId,
     title,
     bandKind: extra.bandKind || "offense",
-    rows: layout.rows,
-    cols: layout.cols,
-    grids: layout.grids,
-    signStart: layout.signStart,
-    rowStart: layout.rowStart,
+    rows,
+    cols,
+    grids,
+    signStart,
+    rowStart,
+    kindLayouts,
     theme: extra.theme || defaultTheme(),
     sheet: extra.sheet || defaultSheet(),
     cardSize: extra.cardSize || defaultCardSize(),
@@ -973,7 +1069,9 @@ function bookDraft(
 
 export function emptyBook(userId: string, title?: string): WristBook {
   const draft = bookDraft(userId, title?.trim() || "My signs");
-  const first = shuffleVersion(draft, "Version A");
+  draft.kindLayouts = defaultKindLayouts();
+  draft.theme = defaultSetThemes().offense;
+  const first = shuffleVersion(draft, "Version A", defaultKindTitles(draft.title), defaultSetThemes());
   draft.versions = [first];
   draft.activeVersionId = first.id;
   return draft;
@@ -983,21 +1081,34 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
   const item = asRecord(raw);
   if (!item) return emptyBook(userId, title);
   const layout = normalizeLayout(item);
+  const kindLayouts = normalizeKindLayouts(item.kindLayouts, layout.rows, layout.cols);
   const library = (Array.isArray(item.library) ? item.library : [])
     .map(normalizeCall)
     .filter((call): call is WristCall => Boolean(call));
   const book = bookDraft(userId, String(item.title || "").trim() || title?.trim() || "My signs", {
     bandKind: normalizeKind(item.bandKind || item.kind || "offense"),
     ...layout,
+    kindLayouts,
     theme: normalizeTheme(item.theme),
     sheet: normalizeSheet(item.sheet || { cols: item.sheetCols, rows: item.sheetRows }),
     cardSize: normalizeCardSize(item.cardSize),
     library: library.length ? upgradeLibrary(library) : defaultLibrary(),
     updatedAt: Number(item.updatedAt) || Date.now(),
   });
+  const offenseLayout = layoutFor(book, "offense");
+  const defenseLayout = layoutFor(book, "defense");
   book.versions = (Array.isArray(item.versions) ? item.versions : [])
     .map((version, index) =>
-      normalizeVersion(version, index, layout, book.library, book.title, book.theme),
+      normalizeVersion(
+        version,
+        index,
+        offenseLayout,
+        defenseLayout,
+        book.library,
+        book.kindLayouts,
+        book.title,
+        book.theme,
+      ),
     )
     .filter((version): version is WristVersion => Boolean(version));
   if (!book.versions.length) {

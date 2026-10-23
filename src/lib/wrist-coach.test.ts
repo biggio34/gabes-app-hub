@@ -36,8 +36,11 @@ import {
   copyCurrentVersion,
   defaultKindTitles,
   defaultKindThemes,
+  defaultKindLayouts,
+  defaultSetThemes,
   kindTheme,
   kindTitle,
+  layoutFor,
   normalizeKindThemes,
   normalizeKindTitles,
   shuffleCurrentVersion,
@@ -176,6 +179,9 @@ describe("wrist coach book", () => {
     assert.equal(book.grids, DEFAULT_GRIDS);
     assert.equal(book.rows, DEFAULT_ROWS);
     assert.equal(book.cols, DEFAULT_COLS);
+    assert.deepEqual(book.kindLayouts, defaultKindLayouts());
+    assert.equal(layoutFor(book, "defense").rows, 4);
+    assert.equal(layoutFor(book, "defense").cols, 4);
     assert.equal(book.versions.length, 1);
     const version = activeVersion(book);
     assert.ok(version);
@@ -195,7 +201,7 @@ describe("wrist coach book", () => {
 
   it("lets the coach pick wristband, text, and highlight colors", () => {
     const book = emptyBook("user-1");
-    assert.deepEqual(book.theme, defaultTheme());
+    assert.deepEqual(book.theme, defaultSetThemes().offense);
     assert.deepEqual(normalizeTheme({ band: "#9f1239", ink: "#fff", highlight: "#112233" }), {
       band: "#9f1239",
       ink: "#ffffff",
@@ -290,7 +296,9 @@ describe("wrist coach book", () => {
     assert.ok(first);
     assert.equal(playCardKind("defense"), "defense");
     assert.equal(first.offenseCells.length, first.cells.length);
-    assert.equal(first.defenseCells.length, first.cells.length);
+    assert.equal(first.offenseCells.length, cellCount(layoutFor(book, "offense")));
+    assert.equal(first.defenseCells.length, cellCount(layoutFor(book, "defense")));
+    assert.notEqual(first.defenseCells.length, first.offenseCells.length);
     const offenseIds = new Set(first.offenseCells.map((cell) => cell.callId));
     const defenseIds = new Set(first.defenseCells.map((cell) => cell.callId));
     assert.ok([...offenseIds].every((id) => book.library.find((call) => call.id === id)?.kind === "offense"));
@@ -353,6 +361,58 @@ describe("wrist coach book", () => {
     assert.equal(offenseBefore.split("|").length, first.offenseCells.length);
   });
 
+  it("keeps a block size for each set and leaves older books on one shared size", () => {
+    const book = emptyBook("user-1");
+    assert.deepEqual(layoutFor(book, "offense"), {
+      grids: DEFAULT_GRIDS,
+      rows: 5,
+      cols: 5,
+      signStart: 1,
+      rowStart: 1,
+    });
+    assert.deepEqual(layoutFor(book, "defense"), {
+      grids: DEFAULT_GRIDS,
+      rows: 4,
+      cols: 4,
+      signStart: 1,
+      rowStart: 1,
+    });
+    const legacy = normalizeBook(
+      {
+        title: "Saved card",
+        rows: 5,
+        cols: 5,
+        grids: 6,
+        library: defaultLibrary(),
+        versions: [],
+      },
+      "user-1",
+    );
+    assert.equal(layoutFor(legacy, "offense").rows, 5);
+    assert.equal(layoutFor(legacy, "defense").cols, 5);
+    assert.equal(activeVersion(legacy)?.defenseCells.length, 6 * 5 * 5);
+    const split = normalizeBook(
+      {
+        title: "Split size",
+        rows: 5,
+        cols: 5,
+        grids: 2,
+        kindLayouts: {
+          offense: { rows: 5, cols: 5 },
+          defense: { rows: 4, cols: 4 },
+        },
+        library: defaultLibrary(),
+        versions: [],
+      },
+      "user-1",
+    );
+    assert.equal(activeVersion(split)?.offenseCells.length, 2 * 5 * 5);
+    assert.equal(activeVersion(split)?.defenseCells.length, 2 * 4 * 4);
+    assert.equal(activeVersion(split)?.offenseCells.some((cell) => cell.code === "01-1"), true);
+    assert.equal(activeVersion(split)?.defenseCells.some((cell) => cell.code === "11-1"), true);
+    assert.equal(activeVersion(split)?.defenseCells.some((cell) => cell.col === 4), false);
+  });
+
   it("gives offense and defense their own names on a version", () => {
     const book = emptyBook("user-1", "PURPLE OFFENSE");
     const first = activeVersion(book);
@@ -398,7 +458,7 @@ describe("wrist coach book", () => {
     const book = emptyBook("user-1");
     const first = activeVersion(book);
     assert.ok(first);
-    assert.deepEqual(first.themes, defaultKindThemes(defaultTheme()));
+    assert.deepEqual(first.themes, defaultSetThemes());
     first.themes = {
       offense: { band: "#7e22ce", ink: "#ffffff", highlight: "#f8fafc" },
       defense: { band: "#1e3a8a", ink: "#fde68a", highlight: "#0f172a" },
