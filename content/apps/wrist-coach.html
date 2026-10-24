@@ -60,6 +60,24 @@
       position: relative;
       margin: 0 auto;
       overflow: hidden;
+      background: #fff;
+    }
+    .cut-card {
+      position: relative;
+      display: block;
+      overflow: visible;
+    }
+    .cut-marks {
+      position: absolute;
+      left: -9pt;
+      top: -9pt;
+      width: calc(100% + 18pt);
+      height: calc(100% + 18pt);
+      pointer-events: none;
+      overflow: visible;
+    }
+    .cut-marks line {
+      stroke-width: 0.9;
     }
     @media (max-width: 720px) {
       .call-edit {
@@ -142,6 +160,7 @@
       .print-page { page-break-after: always; }
       .print-page:last-child { page-break-after: auto; }
       .band-card,
+      .cut-card,
       .coach-sheet-page {
         break-inside: avoid;
         flex-shrink: 0;
@@ -149,7 +168,9 @@
         border-radius: 0;
       }
       .card-scaler { transform: none !important; width: auto !important; height: auto !important; }
-      #print-root .band-card { transform: none !important; }
+      #print-root .band-card,
+      #print-root .cut-card { transform: none !important; margin: 0 !important; }
+      .cut-marks line { stroke-width: 0.3; }
     }
   </style>
 </head>
@@ -236,6 +257,19 @@
         </label>
       </div>
       <p id="block-size-note" class="text-xs text-slate-500"></p>
+      <div class="flex flex-wrap items-center gap-2 text-sm">
+        <span class="text-slate-400">Readability</span>
+        <div id="look-btns" class="flex flex-wrap gap-1.5">
+          <button type="button" data-look="field" class="look-btn rounded-full px-3 py-1 text-xs font-semibold">Field</button>
+          <button type="button" data-look="sun" class="look-btn rounded-full px-3 py-1 text-xs font-semibold">Sun</button>
+          <button type="button" data-look="mono" class="look-btn rounded-full px-3 py-1 text-xs font-semibold">Black &amp; white</button>
+        </div>
+        <label class="ml-1 flex items-center gap-2 text-slate-300">
+          <input id="trim-guides" type="checkbox" checked class="accent-red-600">
+          Trim guides
+        </label>
+      </div>
+      <p class="text-xs text-slate-500">Field keeps the wristband colors. Sun darkens a pale band for glare. Black &amp; white holds a visible grid on a mono printer. Trim marks sit outside the sleeve. None of these change the saved signs.</p>
       <div class="grid gap-3 sm:grid-cols-3">
         <label class="grid gap-1.5 text-sm">
           Wristband
@@ -495,6 +529,8 @@
 
     let book = null;
     let wristCardSeq = 0;
+    let cardLook = "field";
+    let showTrim = true;
     let showCoachOnCard = false;
     let saveTimer = null;
     let printMode = "both";
@@ -1328,6 +1364,77 @@
       return labels;
     }
 
+    function hexToRgb(hex) {
+      const n = parseInt(String(hex || "").replace("#", ""), 16);
+      if (!Number.isFinite(n)) return [0, 0, 0];
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+
+    function channelLinear(channel) {
+      const s = channel / 255;
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    }
+
+    function relLuma(hex) {
+      const rgb = hexToRgb(hex);
+      return 0.2126 * channelLinear(rgb[0]) + 0.7152 * channelLinear(rgb[1]) + 0.0722 * channelLinear(rgb[2]);
+    }
+
+    function contrastHex(a, b) {
+      const hi = Math.max(relLuma(a), relLuma(b));
+      const lo = Math.min(relLuma(a), relLuma(b));
+      return (hi + 0.05) / (lo + 0.05);
+    }
+
+    function rgbToHex(r, g, b) {
+      function ch(value) {
+        return Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, "0");
+      }
+      return "#" + ch(r) + ch(g) + ch(b);
+    }
+
+    function bestInk(fill, fallback) {
+      const raw = String(fill || "");
+      if (!raw || raw === "transparent") return fallback || "#000000";
+      const black = contrastHex(raw, "#000000");
+      const white = contrastHex(raw, "#ffffff");
+      if (!Number.isFinite(black) || !Number.isFinite(white)) return fallback || "#000000";
+      return black >= white ? "#000000" : "#ffffff";
+    }
+
+    function deepenBand(hex) {
+      let rgb = hexToRgb(hex);
+      let r = rgb[0];
+      let g = rgb[1];
+      let b = rgb[2];
+      let guard = 0;
+      while (guard < 8 && relLuma(rgbToHex(r, g, b)) > 0.36) {
+        const nextR = r * 0.84;
+        const nextG = g * 0.84;
+        const nextB = b * 0.84;
+        if (contrastHex(rgbToHex(nextR, nextG, nextB), "#000000") < 7) break;
+        r = nextR;
+        g = nextG;
+        b = nextB;
+        guard += 1;
+      }
+      const fill = rgbToHex(r, g, b);
+      return { fill: fill, ink: bestInk(fill, "#000000") };
+    }
+
+    function versionStamp(version) {
+      const raw = String(version && version.name || "").replace(/^version\s+/i, "").trim();
+      const label = raw || "Card";
+      const ms = Number(version && version.createdAt);
+      if (!Number.isFinite(ms) || ms <= 0) return label;
+      const when = new Date(ms);
+      return label + " \u00b7 " + (when.getMonth() + 1) + "/" + when.getDate();
+    }
+
+    function emWidth(text) {
+      return textWidthAt(String(text || "").toUpperCase(), 1000) / 1000;
+    }
+
     function wristCardHtml(version, coachView, extraClass) {
       if (!version) return "";
       const layout = layoutFor(book.bandKind);
@@ -1353,34 +1460,67 @@
       const barPt = Math.min(fontPt * 0.9, barPx * 72 / 96);
       const uid = "wc" + (wristCardSeq += 1);
       const dataRows = layout.rows + 1;
-      const shapes = [];
+      const look = cardPaint(theme);
+      const dataShapes = [];
+      const bandShapes = [];
       const clips = [];
       const labels = [];
       let clipN = 0;
       function n(value) {
         return (Math.round(value * 1000) / 1000).toString();
       }
-      function addText(text, x, y, w, h, sizePt, color) {
+      function glyphMarks(value, start, baseline, sizePt, color) {
+        const cap = sizePt * 0.7;
+        let cursor = 0;
+        let marks = "";
+        for (let i = 0; i < value.length; i += 1) {
+          const adv = emWidth(value.slice(0, i + 1)) * sizePt - cursor;
+          const x0 = start + cursor;
+          const ch = value[i];
+          if (ch === "0" && adv > 0) {
+            const sw = sizePt * 0.07;
+            marks += '<line x1="' + n(x0 + adv * 0.24) + '" y1="' + n(baseline - cap * 0.18) + '" x2="' + n(x0 + adv * 0.76) + '" y2="' + n(baseline - cap * 0.82) + '" stroke="' + color + '" stroke-width="' + n(sw) + '" stroke-linecap="butt"/>';
+          } else if (ch === "I" && adv > sizePt * 0.08) {
+            const thick = sizePt * 0.055;
+            const ear = Math.min(adv * 0.08, sizePt * 0.02);
+            const top = baseline - cap;
+            marks += '<rect x="' + n(x0 + ear) + '" y="' + n(top) + '" width="' + n(Math.max(0, adv - ear * 2)) + '" height="' + n(thick) + '" fill="' + color + '"/>';
+            marks += '<rect x="' + n(x0 + ear) + '" y="' + n(baseline - thick) + '" width="' + n(Math.max(0, adv - ear * 2)) + '" height="' + n(thick) + '" fill="' + color + '"/>';
+          }
+          cursor += adv;
+        }
+        return marks;
+      }
+      function addText(text, x, y, w, h, sizePt, color, anchor, clipBox) {
         const value = String(text || "").toUpperCase();
         if (!value) return;
+        const box = clipBox || { x: x, y: y, w: w, h: h };
         const id = uid + "c" + (clipN += 1);
         clips.push(
-          '<clipPath id="' + id + '"><rect x="' + n(x) + '" y="' + n(y) + '" width="' + n(w) + '" height="' + n(h) + '"/></clipPath>'
+          '<clipPath id="' + id + '"><rect x="' + n(box.x) + '" y="' + n(box.y) + '" width="' + n(box.w) + '" height="' + n(box.h) + '"/></clipPath>'
         );
         const baseline = y + h / 2 + sizePt * 0.35;
+        const align = anchor === "end" ? "end" : "middle";
+        const widthPt = emWidth(value) * sizePt;
+        const tx = align === "end" ? x + w : x + w / 2;
+        const start = align === "end" ? tx - widthPt : tx - widthPt / 2;
         labels.push(
           '<g clip-path="url(#' + id + ')">' +
-            '<text x="' + n(x + w / 2) + '" y="' + n(baseline) + '" font-size="' + n(sizePt) + '" text-anchor="middle" fill="' + color + '">' +
+            '<text x="' + n(tx) + '" y="' + n(baseline) + '" font-size="' + n(sizePt) + '" text-anchor="' + align + '" fill="' + color + '">' +
               escapeHtml(value) +
             '</text>' +
+            glyphMarks(value, start, baseline, sizePt, color) +
           '</g>'
         );
       }
-      function addCell(x, y, fill, text, color, sizePt, title) {
-        shapes.push(
+      function addCell(x, y, fill, text, color, sizePt, title, layer) {
+        const bucket = layer === "band" ? bandShapes : dataShapes;
+        const stroke = layer === "band" ? look.bandStroke : look.dataStroke;
+        const strokeW = layer === "band" ? look.bandStrokeW : look.dataStrokeW;
+        bucket.push(
           '<g>' +
             (title ? '<title>' + title + '</title>' : '') +
-            '<rect x="' + n(x) + '" y="' + n(y) + '" width="' + n(cellW) + '" height="' + n(cellH) + '" fill="' + fill + '" stroke="#000000" stroke-width="0.25"/>' +
+            '<rect x="' + n(x) + '" y="' + n(y) + '" width="' + n(cellW) + '" height="' + n(cellH) + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + n(strokeW) + '"/>' +
           '</g>'
         );
         addText(text, x, y, cellW, cellH, sizePt, color);
@@ -1393,33 +1533,44 @@
         const acrossIndex = halfIndex === 0 ? g : g - metrics.topCount;
         const col0 = acrossIndex * (layout.cols + 1);
         const row0 = originRow(halfIndex);
-        const cornerFill = book.bandKind === "defense" ? "#ffffff" : theme.band;
-        addCell(col0 * cellW, row0 * cellH, cornerFill, "", "#000000", fontPt, "");
+        const cornerBand = book.bandKind !== "defense";
+        addCell(
+          col0 * cellW,
+          row0 * cellH,
+          cornerBand ? look.bandFill : "#ffffff",
+          "",
+          cornerBand ? look.bandInk : "#000000",
+          fontPt,
+          "",
+          cornerBand ? "band" : "data"
+        );
         for (let col = 0; col < layout.cols; col += 1) {
           addCell(
             (col0 + col + 1) * cellW,
             row0 * cellH,
-            theme.band,
+            look.bandFill,
             columnCode(g, col, layout.signStart),
-            theme.ink,
+            look.bandInk,
             fontPt,
-            ""
+            "",
+            "band"
           );
         }
         for (let row = 0; row < layout.rows; row += 1) {
           addCell(
             col0 * cellW,
             (row0 + row + 1) * cellH,
-            theme.band,
+            look.bandFill,
             rowCode(row, layout.rowStart),
-            theme.ink,
+            look.bandInk,
             fontPt,
-            ""
+            "",
+            "band"
           );
           for (let col = 0; col < layout.cols; col += 1) {
             const cell = cellAt(version, g, row, col);
             const call = cell ? callById(cell.callId) : null;
-            const paint = cellPaint(call);
+            const paint = look.data(cellPaint(call));
             const short = call ? call.short : "";
             const title = coachView && call ? escapeHtml(call.name) : (cell ? escapeHtml(cell.code) : "");
             addCell(
@@ -1429,22 +1580,125 @@
               short,
               paint.color,
               fontPt,
-              title
+              title,
+              "data"
             );
           }
         }
       }
       const barY = dataRows * cellH;
-      shapes.push(
-        '<rect x="0" y="' + n(barY) + '" width="' + n(wPt) + '" height="' + n(cellH) + '" fill="' + theme.band + '" stroke="#000000" stroke-width="0.25"/>'
+      bandShapes.push(
+        '<rect x="0" y="' + n(barY) + '" width="' + n(wPt) + '" height="' + n(cellH) + '" fill="' + look.bandFill + '" stroke="' + look.bandStroke + '" stroke-width="' + n(look.bandStrokeW) + '"/>'
       );
-      addText(bandTitle(), 0, barY, wPt, cellH, barPt, theme.ink);
-      return (
-        '<div class="band-card ' + (extraClass || "") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+      if (cardLook === "mono") {
+        bandShapes.push(
+          '<rect x="0" y="0" width="' + n(wPt) + '" height="' + n(hPt) + '" fill="none" stroke="#000000" stroke-width="0.6"/>'
+        );
+      }
+      addText(bandTitle(), 0, barY, wPt, cellH, barPt, look.bandInk);
+      const stamp = versionStamp(version).toUpperCase();
+      const stampPt = Math.min(6, Math.max(5, barPt * 0.62));
+      const titleW = emWidth(bandTitle()) * barPt;
+      const stampW = emWidth(stamp) * stampPt;
+      const titleRight = wPt / 2 + titleW / 2;
+      const stampLeft = wPt - padPt - stampW;
+      if (stamp && stampW > 0 && stampLeft >= titleRight + 3 && stampW < wPt * 0.46) {
+        addText(stamp, 0, barY, wPt - padPt, cellH, stampPt, look.bandInk, "end", {
+          x: 0,
+          y: barY,
+          w: wPt,
+          h: cellH
+        });
+      }
+      const card =
+        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="none">' +
             '<defs>' + clips.join("") + '</defs>' +
-            shapes.join("") +
+            dataShapes.join("") +
+            bandShapes.join("") +
             labels.join("") +
+          '</svg>' +
+        '</div>';
+      if (!showTrim) return card;
+      return cutWrap(card, size, n);
+    }
+
+    function cardPaint(theme) {
+      if (cardLook === "mono") {
+        return {
+          name: "mono",
+          bandFill: "#000000",
+          bandInk: "#ffffff",
+          bandStroke: "#ffffff",
+          bandStrokeW: 0.6,
+          dataStroke: "#000000",
+          dataStrokeW: 0.6,
+          data: function () {
+            return { background: "#ffffff", color: "#000000" };
+          }
+        };
+      }
+      if (cardLook === "sun") {
+        const deepened = relLuma(theme.band) > 0.45 ? deepenBand(theme.band) : null;
+        const bandFill = deepened ? deepened.fill : theme.band;
+        const bandInk = bestInk(bandFill, theme.ink);
+        return {
+          name: "sun",
+          bandFill: bandFill,
+          bandInk: bandInk,
+          bandStroke: "#000000",
+          bandStrokeW: 0.5,
+          dataStroke: "#000000",
+          dataStrokeW: 0.5,
+          data: function (paint) {
+            return {
+              background: paint.background,
+              color: bestInk(paint.background, paint.color)
+            };
+          }
+        };
+      }
+      return {
+        name: "field",
+        bandFill: theme.band,
+        bandInk: theme.ink,
+        bandStroke: "#000000",
+        bandStrokeW: 0.25,
+        dataStroke: "#000000",
+        dataStrokeW: 0.25,
+        data: function (paint) { return paint; }
+      };
+    }
+
+    function cutWrap(card, size, n) {
+      const wPt = size.widthIn * 72;
+      const hPt = size.heightIn * 72;
+      const ox = 9;
+      const oy = 9;
+      const gap = 2;
+      const len = 7;
+      function corner(x, y, hx, hy) {
+        const x0 = x + hx * gap;
+        const x1 = x + hx * (gap + len);
+        const y0 = y + hy * gap;
+        const y1 = y + hy * (gap + len);
+        return '<line x1="' + n(x0) + '" y1="' + n(y) + '" x2="' + n(x1) + '" y2="' + n(y) + '"/>' +
+          '<line x1="' + n(x) + '" y1="' + n(y0) + '" x2="' + n(x) + '" y2="' + n(y1) + '"/>';
+      }
+      const left = ox;
+      const top = oy;
+      const right = ox + wPt;
+      const bottom = oy + hPt;
+      return (
+        '<div class="cut-card" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+          card +
+          '<svg class="cut-marks" viewBox="0 0 ' + n(wPt + 18) + ' ' + n(hPt + 18) + '" preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
+            '<g fill="none" stroke="#000000" stroke-width="0.3" stroke-linecap="square">' +
+              corner(left, top, -1, -1) +
+              corner(right, top, 1, -1) +
+              corner(left, bottom, -1, 1) +
+              corner(right, bottom, 1, 1) +
+            '</g>' +
           '</svg>' +
         '</div>'
       );
@@ -1453,17 +1707,20 @@
     function scaleCardPreview() {
       const frame = document.getElementById("card-preview");
       const scaler = frame ? frame.querySelector(".card-scaler") : null;
-      const card = scaler ? scaler.querySelector(".band-card") : null;
-      if (!frame || !scaler || !card) return;
+      const wrap = scaler ? (scaler.querySelector(".cut-card") || scaler.querySelector(".band-card")) : null;
+      if (!frame || !scaler || !wrap) return;
       const size = cardSize();
       const naturalW = size.widthIn * 96;
       const naturalH = size.heightIn * 96;
+      const trim = showTrim ? 9 * 96 / 72 : 0;
       const avail = Math.max(1, frame.clientWidth);
-      const scale = Math.min(1, avail / naturalW);
-      card.style.transform = "scale(" + scale + ")";
-      card.style.transformOrigin = "top left";
-      scaler.style.width = (naturalW * scale) + "px";
-      scaler.style.height = (naturalH * scale) + "px";
+      const scale = Math.min(1, avail / (naturalW + trim * 2));
+      wrap.style.transform = "scale(" + scale + ")";
+      wrap.style.transformOrigin = "top left";
+      wrap.style.marginLeft = (trim * scale) + "px";
+      wrap.style.marginTop = (trim * scale) + "px";
+      scaler.style.width = ((naturalW + trim * 2) * scale) + "px";
+      scaler.style.height = ((naturalH + trim * 2) * scale) + "px";
     }
 
     function renderCard() {
@@ -1601,16 +1858,16 @@
         return;
       }
       const size = cardSize();
-      const gap = 0.16;
+      const gap = showTrim ? 0.28 : 0.16;
       const cards = [];
       const cardCount = tilesOnLetter(size.widthIn, size.heightIn, gap);
       for (let i = 0; i < cardCount; i += 1) cards.push(wristCardHtml(version, false, ""));
       const cardPage =
         '<section class="print-page print-cards">' +
-          '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
+          '<p style="font-size:11px;margin:0 0 ' + (showTrim ? 18 : 10) + 'px 0;color:#475569">' +
             'Player cards · ' + size.widthIn + ' × ' + size.heightIn + ' in · ' +
-            escapeHtml(bandTitle()) + ' · ' + escapeHtml(version.name) + '</p>' +
-          '<div style="display:flex;flex-wrap:wrap;gap:' + gap + 'in">' + cards.join("") + '</div>' +
+            escapeHtml(bandTitle()) + ' · ' + escapeHtml(versionStamp(version)) + '</p>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:' + gap + 'in;padding-left:' + (showTrim ? "11pt" : "0") + '">' + cards.join("") + '</div>' +
         '</section>';
       const sheet = sheetOf();
       const sheetGap = 0.16;
@@ -1621,7 +1878,7 @@
         '<section class="print-page print-key" style="color:#0f172a">' +
           '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
             'Coach sheet · ' + sheet.widthIn + ' × ' + sheet.heightIn + ' in · ' +
-            escapeHtml(bandTitle()) + ' · ' + escapeHtml(version.name) + '</p>' +
+            escapeHtml(bandTitle()) + ' · ' + escapeHtml(versionStamp(version)) + '</p>' +
           '<div style="display:flex;flex-wrap:wrap;gap:' + sheetGap + 'in">' + sheets.join("") + '</div>' +
         '</section>';
       if (printMode === "cards") root.innerHTML = cardPage;
@@ -1708,11 +1965,22 @@
       document.getElementById("sign-tally").textContent = used + " / " + total;
     }
 
+    function renderLookControls() {
+      document.querySelectorAll(".look-btn").forEach(function (btn) {
+        const on = btn.getAttribute("data-look") === cardLook;
+        btn.className = "look-btn rounded-full px-3 py-1 text-xs font-semibold " +
+          (on ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+      });
+      const box = document.getElementById("trim-guides");
+      if (box) box.checked = showTrim;
+    }
+
     function render() {
       if (!book) return;
       document.getElementById("book-title").value = bandTitle();
       document.getElementById("book-subtitle").textContent = bandTitle();
       renderKindControls();
+      renderLookControls();
       renderSizeControls();
       renderLayoutControls();
       renderSheetControls();
@@ -2063,6 +2331,19 @@
       render();
       scheduleSave();
     }
+    document.getElementById("look-btns").addEventListener("click", function (event) {
+      const btn = event.target.closest("[data-look]");
+      if (!btn) return;
+      const look = btn.getAttribute("data-look");
+      if (look !== "field" && look !== "sun" && look !== "mono") return;
+      if (look === cardLook) return;
+      cardLook = look;
+      render();
+    });
+    document.getElementById("trim-guides").addEventListener("change", function (event) {
+      showTrim = !!event.target.checked;
+      render();
+    });
     document.querySelectorAll(".size-btn").forEach(function (btn) {
       btn.addEventListener("click", function () {
         const preset = btn.getAttribute("data-size") || "wrist";
