@@ -807,6 +807,9 @@
     const CARD_MAX_H = 8.91;
     const LAMINATE_BLEED_IN = 0.125;
     const CARD_RULE_PT = 0.25;
+    const CARD_BLOCK_PT = 0.75;
+    const CARD_BLOCK_STROKE = "#000000";
+    const CARD_BAND_FRAC = 1 / 13;
     const CARD_MARK_PT = 0.6;
     const CARD_PAD_FRAC = 0.025;
     const CARD_TYPE_RATIO = 0.68;
@@ -2392,7 +2395,12 @@
       const halves = bottomCount > 0 ? 2 : 1;
       const maxAcross = Math.max(topCount, bottomCount, 1);
       const colSlots = maxAcross * (layout.cols + 1);
-      const rowSlots = halves * (layout.rows + 1) + 1;
+      const contentRows = halves * (layout.rows + 1);
+      const grids = Math.round(Number(layout.grids)) || 1;
+      const sharedBand = grids > 3 && halves > 1;
+      const footerIn = sharedBand ? size.heightIn * CARD_BAND_FRAC : size.heightIn / (contentRows + 1);
+      const cellH = sharedBand ? (size.heightIn - footerIn) / contentRows : footerIn;
+      const rowSlots = sharedBand ? contentRows : contentRows + 1;
       return {
         topCount: topCount,
         bottomCount: bottomCount,
@@ -2400,8 +2408,10 @@
         maxAcross: maxAcross,
         colSlots: colSlots,
         rowSlots: rowSlots,
+        contentRows: contentRows,
+        footerIn: footerIn,
         cellW: size.widthIn / colSlots,
-        cellH: size.heightIn / rowSlots
+        cellH: cellH
       };
     }
 
@@ -2533,8 +2543,9 @@
       const metrics = playerCardMetrics(size, layout);
       const wPt = size.widthIn * 72;
       const hPt = size.heightIn * 72;
-      const cellW = wPt / metrics.colSlots;
-      const cellH = hPt / metrics.rowSlots;
+      const cellW = metrics.cellW * 72;
+      const cellH = metrics.cellH * 72;
+      const footerH = metrics.footerIn * 72;
       const label = widestLabel(labelsOnCard(version, layout));
       const chrome = cellChrome(size, layout, emWidth(label));
       const padPt = chrome.padPt;
@@ -2681,8 +2692,18 @@
         }
         addText(text, x, y, cellW, cellH, sizePt, color, "", null, fill);
       }
-      function originRow(halfIndex) {
-        return halfIndex === 0 ? 0 : dataRows + 1;
+      function blockTop(halfIndex) {
+        return halfIndex === 0 ? 0 : dataRows * cellH + footerH;
+      }
+      const blockOutlines = [];
+      function blockOutline(x, y, bw, bh) {
+        const left = x <= 0.01 ? x + CARD_BLOCK_PT / 2 : x;
+        const right = x + bw >= wPt - 0.01 ? x + bw - CARD_BLOCK_PT / 2 : x + bw;
+        const top = y <= 0.01 ? y + CARD_BLOCK_PT / 2 : y;
+        const bottom = y + bh >= hPt - 0.01 ? y + bh - CARD_BLOCK_PT / 2 : y + bh;
+        blockOutlines.push(
+          '<path data-block-outline="1" d="M ' + n(left) + " " + n(top) + " H " + n(right) + " V " + n(bottom) + " H " + n(left) + ' Z" fill="none" stroke="' + CARD_BLOCK_STROKE + '" stroke-width="' + n(CARD_BLOCK_PT) + '" stroke-linejoin="miter" style="print-color-adjust:exact;-webkit-print-color-adjust:exact"/>'
+        );
       }
       const headerInk = cardLook === "mono" ? "#ffffff" : headerInkFor({
         band: look.bandFill,
@@ -2692,10 +2713,10 @@
         const halfIndex = g < metrics.topCount ? 0 : 1;
         const acrossIndex = halfIndex === 0 ? g : g - metrics.topCount;
         const col0 = acrossIndex * (layout.cols + 1);
-        const row0 = originRow(halfIndex);
+        const blockY = blockTop(halfIndex);
         addCell(
           col0 * cellW,
-          row0 * cellH,
+          blockY,
           look.bandFill,
           "",
           headerInk,
@@ -2706,7 +2727,7 @@
         for (let col = 0; col < layout.cols; col += 1) {
           addCell(
             (col0 + col + 1) * cellW,
-            row0 * cellH,
+            blockY,
             look.bandFill,
             columnLabel(g, col, layout),
             headerInk,
@@ -2718,7 +2739,7 @@
         for (let row = 0; row < layout.rows; row += 1) {
           addCell(
             col0 * cellW,
-            (row0 + row + 1) * cellH,
+            blockY + (row + 1) * cellH,
             look.bandFill,
             rowLabel(row, layout),
             headerInk,
@@ -2738,7 +2759,7 @@
             if (book.bandKind === "defense" && (mark === "blue" || mark === "orange")) mark = "";
             addCell(
               (col0 + col + 1) * cellW,
-              (row0 + row + 1) * cellH,
+              blockY + (row + 1) * cellH,
               fill,
               short,
               paint.color,
@@ -2749,10 +2770,11 @@
             );
           }
         }
+        blockOutline(col0 * cellW, blockY, (layout.cols + 1) * cellW, (layout.rows + 1) * cellH);
       }
       const barY = dataRows * cellH;
       bandShapes.push(
-        '<rect x="0" y="' + n(barY) + '" width="' + n(wPt) + '" height="' + n(cellH) + '" fill="' + look.bandFill + '" stroke="' + look.bandStroke + '" stroke-width="' + n(look.bandStrokeW) + '" style="print-color-adjust:exact;-webkit-print-color-adjust:exact"/>'
+        '<rect x="0" y="' + n(barY) + '" width="' + n(wPt) + '" height="' + n(footerH) + '" fill="' + look.bandFill + '" stroke="' + look.bandStroke + '" stroke-width="' + n(look.bandStrokeW) + '" style="print-color-adjust:exact;-webkit-print-color-adjust:exact"/>'
       );
       if (cardLook === "mono") {
         bandShapes.push(
@@ -2767,18 +2789,19 @@
       ["offense", "defense"].forEach(function (kind) {
         const em = emWidth(versionStamp(version, titles[kind]));
         if (em > 0 && em * footerPt > footerRoom) footerPt = footerRoom / em;
-        const bandPt = (size.heightIn * 72) / cardGridMetrics(size, layoutFor(kind)).rowSlots;
+        const bandPt = cardGridMetrics(size, layoutFor(kind)).footerIn * 72;
         if (footerPt > bandPt - 1) footerPt = Math.max(1, bandPt - 1);
       });
       const stampPt = footerPt;
       const footerTop = barY;
-      addText(stamp, 0, barY, wPt, cellH, footerPt, footerInk, "", null, look.bandFill, "footer");
+      addText(stamp, 0, barY, wPt, footerH, footerPt, footerInk, "", null, look.bandFill, "footer");
       const card =
-        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-footer-ink="' + footerInk + '" data-footer-top="' + n(footerTop) + '" data-header-ink="' + headerInk + '" data-header-fill="' + look.bandFill + '" data-corner-fill="' + chrome.cornerFill + '" data-pad-pt="' + n(chrome.padPt) + '" data-rule-pt="' + n(chrome.borderPt) + '" data-font-ratio="' + n(chrome.fontRatio) + '" data-text-ratio="' + n(chrome.textRatio) + '" data-mark-pt="' + n(markPt || 0) + '" data-align="' + chrome.align + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-footer-ink="' + footerInk + '" data-footer-top="' + n(footerTop) + '" data-header-ink="' + headerInk + '" data-header-fill="' + look.bandFill + '" data-corner-fill="' + chrome.cornerFill + '" data-pad-pt="' + n(chrome.padPt) + '" data-rule-pt="' + n(chrome.borderPt) + '" data-font-ratio="' + n(chrome.fontRatio) + '" data-text-ratio="' + n(chrome.textRatio) + '" data-mark-pt="' + n(markPt || 0) + '" data-block-pt="' + n(CARD_BLOCK_PT) + '" data-align="' + chrome.align + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="xMidYMid meet">' +
             '<defs>' + clips.join("") + '</defs>' +
             dataShapes.join("") +
             bandShapes.join("") +
+            blockOutlines.join("") +
             labels.join("") +
           '</svg>' +
         '</div>';

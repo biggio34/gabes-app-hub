@@ -16,9 +16,13 @@ import {
   cellChrome,
   CARD_PAD_FRAC,
   CARD_RULE_PT,
+  CARD_BLOCK_PT,
+  CARD_BLOCK_STROKE,
+  CARD_BAND_FRAC,
   CARD_MARK_PT,
   CARD_TYPE_RATIO,
   CARD_TEXT_RATIO,
+  blockOutlineSvg,
   DEFAULT_ROWS,
   DEFAULT_SHEET_COLS,
   DEFAULT_SHEET_ROWS,
@@ -644,6 +648,7 @@ describe("wrist coach book", () => {
     assert.equal(offense.textRatio, defense.textRatio);
     assert.ok(Math.abs(offense.textRatio - CARD_TEXT_RATIO) < 1e-9);
     assert.ok(Math.abs(defense.textRatio - CARD_TEXT_RATIO) < 1e-9);
+    assert.ok(Math.abs(offense.fontRatio - defense.fontRatio) < 1e-9);
     assert.ok(offense.fontRatio <= CARD_TYPE_RATIO + 1e-9);
     assert.ok(defense.fontRatio <= CARD_TYPE_RATIO + 1e-9);
     assert.equal(offense.align, defense.align);
@@ -656,11 +661,13 @@ describe("wrist coach book", () => {
     const offenseShared = cellChrome(size, { grids: 6, cols: 5, rows: 5 }, shared);
     const defenseShared = cellChrome(size, { grids: 6, cols: 4, rows: 4 }, shared);
     assert.ok(Math.abs(offenseShared.textRatio - defenseShared.textRatio) < 1e-9);
+    assert.ok(Math.abs(offenseShared.fontRatio - defenseShared.fontRatio) < 1e-9);
     assert.ok(Math.abs(shared * offenseShared.fontPt / offenseShared.cellWPt - shared * defenseShared.fontPt / defenseShared.cellWPt) < 1e-9);
     assert.ok(Math.abs(offense.cellWPt * 18 - size.widthIn * 72) < 1e-6);
     assert.ok(Math.abs(defense.cellWPt * 15 - size.widthIn * 72) < 1e-6);
     assert.ok(Math.abs(offense.cellHPt * 13 - size.heightIn * 72) < 1e-6);
-    assert.ok(Math.abs(defense.cellHPt * 11 - size.heightIn * 72) < 1e-6);
+    assert.ok(Math.abs(defense.cellHPt * 10 + (size.heightIn * 72) * CARD_BAND_FRAC - size.heightIn * 72) < 1e-6);
+    assert.ok(Math.abs(offense.fontRatio - defense.fontRatio) < 1e-9);
     assert.ok(offense.fontPt * 1.548 <= offense.cellWPt - offense.padPt * 2 + 1e-6);
     assert.ok(defense.fontPt * 1.237 <= defense.cellWPt - defense.padPt * 2 + 1e-6);
     const tight = cellChrome(size, { grids: 6, cols: 5, rows: 5 }, 3);
@@ -672,6 +679,8 @@ describe("wrist coach book", () => {
     assert.equal(tight.align, offense.align);
     const reference = cellChrome({ widthIn: 3.5, heightIn: 2 }, { grids: 2, cols: 5, rows: 5 }, 1.548);
     assert.equal(reference.padPt, 0.9);
+    const twoBlock = cardGridMetrics({ widthIn: 3.5, heightIn: 2 }, { grids: 2, cols: 5, rows: 5 });
+    assert.ok(Math.abs(twoBlock.cellH * 7 - 2) < 1e-9);
     const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
     assert.match(page, /function cellChrome\(size, layout, labelEm\)/);
     assert.match(page, /headerFill: "band"/);
@@ -688,7 +697,14 @@ describe("wrist coach book", () => {
     assert.match(page, /data-font-ratio="/);
     assert.match(page, /data-text-ratio="/);
     assert.match(page, /data-mark-pt="/);
+    assert.match(page, /data-block-pt="/);
     assert.match(page, /data-align="/);
+    assert.match(page, /const CARD_BLOCK_PT = 0\.75/);
+    assert.match(page, /const CARD_BLOCK_STROKE = "#000000"/);
+    assert.match(page, /const CARD_BAND_FRAC = 1 \/ 13/);
+    assert.equal(CARD_BLOCK_PT, 0.75);
+    assert.equal(CARD_BLOCK_STROKE, "#000000");
+    assert.equal(CARD_BAND_FRAC, 1 / 13);
     assert.equal(CARD_MARK_PT, 0.6);
     assert.doesNotMatch(page, /cornerBand/);
     assert.match(page, /bandStrokeW: CARD_RULE_PT/);
@@ -697,8 +713,26 @@ describe("wrist coach book", () => {
     assert.match(cardFn, /look\.bandFill,\s*"",\s*headerInk/);
     assert.match(cardFn, /const markPt = layout\.grids > 3 \? CARD_MARK_PT : 0/);
     assert.match(cardFn, /const sw = markPt \|\| sizePt \* 0\.07/);
+    assert.match(cardFn, /data-block-outline="1"/);
+    assert.match(cardFn, /n\(CARD_BLOCK_PT\)/);
+    assert.match(cardFn, /CARD_BLOCK_STROKE/);
     assert.doesNotMatch(cardFn, /"#ffffff",\s*"",/);
     assert.doesNotMatch(cardFn, /bandKind !== "defense"/);
+    function strokeWidths(svg: string): string[] {
+      return [...svg.matchAll(/stroke-width="([^"]+)"/g)].map((match) => match[1]);
+    }
+    const offenseSvg = blockOutlineSvg(size, { grids: 6, cols: 5, rows: 5 });
+    const defenseSvg = blockOutlineSvg(size, { grids: 6, cols: 4, rows: 4 });
+    const offenseStrokes = strokeWidths(offenseSvg);
+    const defenseStrokes = strokeWidths(defenseSvg);
+    assert.equal(offenseStrokes.length, 6);
+    assert.equal(defenseStrokes.length, 6);
+    assert.deepEqual(offenseStrokes, defenseStrokes);
+    assert.ok(offenseStrokes.every((width) => width === "0.75"));
+    assert.equal((offenseSvg.match(/data-block-outline="1"/g) || []).length, 6);
+    assert.equal((defenseSvg.match(/data-block-outline="1"/g) || []).length, 6);
+    assert.equal((offenseSvg.match(/stroke="#000000"/g) || []).length, 6);
+    assert.equal((defenseSvg.match(/stroke="#000000"/g) || []).length, 6);
   });
 
   it("gives offense and defense their own names on a version", () => {
@@ -870,7 +904,7 @@ describe("wrist coach book", () => {
         const metrics = cardGridMetrics(size, layout);
         assert.ok(metrics.cellW > 0 && metrics.cellH > 0);
         assert.ok(Math.abs(metrics.cellW * metrics.colSlots - size.widthIn) < 1e-9);
-        assert.ok(Math.abs(metrics.cellH * metrics.rowSlots - size.heightIn) < 1e-9);
+        assert.ok(Math.abs(metrics.cellH * metrics.contentRows + metrics.footerIn - size.heightIn) < 1e-9);
         assert.equal(metrics.topCount, blocksAcross(layout.grids));
         assert.equal(metrics.topCount + metrics.bottomCount, layout.grids);
       }
@@ -1405,7 +1439,7 @@ describe("wrist coach book", () => {
     assert.match(page, /PREVIOUS_OFFENSE_BAND = "#c00000"/);
     assert.match(page, /PREVIOUS_DEFENSE_BAND = "#f87080"/);
     assert.match(page, /footerPt = 8/);
-    assert.match(page, /addText\(stamp, 0, barY, wPt, cellH, footerPt, footerInk, "", null, look\.bandFill, "footer"\)/);
+    assert.match(page, /addText\(stamp, 0, barY, wPt, footerH, footerPt, footerInk, "", null, look\.bandFill, "footer"\)/);
     assert.doesNotMatch(page, /hPt - footerSlot/);
     assert.doesNotMatch(page, /addText\(bandTitle\(\)/);
     assert.match(page, /slice\(0, 5\)/);

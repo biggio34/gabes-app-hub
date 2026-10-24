@@ -188,8 +188,17 @@ export function normalizeCardSize(raw: unknown): WristCardSize {
 }
 
 /**
- * Equal boxes on a landscape card. Every cell is widthIn/colSlots by heightIn/rowSlots.
+ * Middle band on a card with more than three blocks, as a fraction of card height.
+ * 1/13 is one cell of a 6-block 5×5, so that card's cells stay put. A 4×4 on the
+ * same card uses this same band, and the two cells then share one aspect ratio.
+ */
+export const CARD_BAND_FRAC = 1 / 13;
+
+/**
+ * Equal boxes on a landscape card. Every cell is widthIn/colSlots by the cell height.
  * Six blocks are three across the top and three across the bottom.
+ * Two- and three-block cards keep the middle band as one cell.
+ * Larger block counts share one band height so a 4×4 and a 5×5 match.
  */
 export function cardGridMetrics(
   size: { widthIn: number; heightIn: number },
@@ -200,7 +209,12 @@ export function cardGridMetrics(
   const halves = bottomCount > 0 ? 2 : 1;
   const maxAcross = Math.max(topCount, bottomCount, 1);
   const colSlots = maxAcross * (layout.cols + 1);
-  const rowSlots = halves * (layout.rows + 1) + 1;
+  const contentRows = halves * (layout.rows + 1);
+  const grids = Math.round(Number(layout.grids)) || 1;
+  const sharedBand = grids > 3 && halves > 1;
+  const footerIn = sharedBand ? size.heightIn * CARD_BAND_FRAC : size.heightIn / (contentRows + 1);
+  const cellH = sharedBand ? (size.heightIn - footerIn) / contentRows : footerIn;
+  const rowSlots = sharedBand ? contentRows : contentRows + 1;
   return {
     topCount,
     bottomCount,
@@ -208,8 +222,10 @@ export function cardGridMetrics(
     maxAcross,
     colSlots,
     rowSlots,
+    contentRows,
+    footerIn,
     cellW: size.widthIn / colSlots,
-    cellH: size.heightIn / rowSlots,
+    cellH,
   };
 }
 
@@ -396,6 +412,62 @@ export function blocksAcross(grids: number): number {
 
 /** Field-look rule. Offense and defense use this same weight. */
 export const CARD_RULE_PT = 0.25;
+
+/** Heavier outline around each block. One weight and one color on both cards. */
+export const CARD_BLOCK_PT = 0.75;
+export const CARD_BLOCK_STROKE = "#000000";
+
+function outlineNum(value: number): string {
+  return (Math.round(value * 1000) / 1000).toString();
+}
+
+/**
+ * One heavier outline around every block. The stroke sits inside the card edge
+ * and on the shared edge between blocks, at the same weight and color on both cards.
+ */
+export function blockOutlineSvg(
+  size: { widthIn: number; heightIn: number },
+  layout: { grids: number; cols: number; rows: number },
+): string {
+  const metrics = cardGridMetrics(size, layout);
+  const cellW = metrics.cellW * 72;
+  const cellH = metrics.cellH * 72;
+  const footerH = metrics.footerIn * 72;
+  const wPt = size.widthIn * 72;
+  const hPt = size.heightIn * 72;
+  const dataRows = layout.rows + 1;
+  const sw = CARD_BLOCK_PT;
+  let svg = "";
+  for (let g = 0; g < layout.grids; g += 1) {
+    const halfIndex = g < metrics.topCount ? 0 : 1;
+    const acrossIndex = halfIndex === 0 ? g : g - metrics.topCount;
+    const x = acrossIndex * (layout.cols + 1) * cellW;
+    const y = halfIndex === 0 ? 0 : dataRows * cellH + footerH;
+    const bw = (layout.cols + 1) * cellW;
+    const bh = (layout.rows + 1) * cellH;
+    const left = x <= 0.01 ? x + sw / 2 : x;
+    const right = x + bw >= wPt - 0.01 ? x + bw - sw / 2 : x + bw;
+    const top = y <= 0.01 ? y + sw / 2 : y;
+    const bottom = y + bh >= hPt - 0.01 ? y + bh - sw / 2 : y + bh;
+    svg +=
+      '<path data-block-outline="1" d="M ' +
+      outlineNum(left) +
+      " " +
+      outlineNum(top) +
+      " H " +
+      outlineNum(right) +
+      " V " +
+      outlineNum(bottom) +
+      " H " +
+      outlineNum(left) +
+      ' Z" fill="none" stroke="' +
+      CARD_BLOCK_STROKE +
+      '" stroke-width="' +
+      outlineNum(sw) +
+      '"/>';
+  }
+  return svg;
+}
 
 /**
  * Look-alike marks on a card with more than three blocks.
