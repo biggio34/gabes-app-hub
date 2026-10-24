@@ -43,6 +43,12 @@
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    .band-card svg,
+    .band-card rect,
+    .cut-card {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
     .band-card svg {
       position: absolute;
       inset: 0;
@@ -50,6 +56,30 @@
       height: 100%;
       display: block;
       overflow: visible;
+    }
+    .add-call {
+      display: grid;
+      gap: 0.5rem;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .add-call input {
+      width: 100%;
+      min-width: 0;
+    }
+    .add-call button {
+      white-space: nowrap;
+    }
+    .swatch-line {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      overflow-x: auto;
+    }
+    .swatch-line .swatches {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 0.375rem;
+      flex: 0 0 auto;
     }
     .band-card text {
       font-family: "WristCard", "Arial Narrow", sans-serif;
@@ -189,6 +219,10 @@
       margin: 0 auto;
     }
     @media (min-width: 721px) {
+      .add-call {
+        grid-template-columns: minmax(0, 1fr) minmax(4.5rem, 7rem) auto;
+        align-items: end;
+      }
       .call-columns {
         display: grid;
         grid-template-columns: auto 5.25rem minmax(0, 1fr) auto auto;
@@ -391,7 +425,10 @@
             </div>
           </div>
           <p id="size-note" class="text-xs text-slate-400">Youth is 4.5 × 2.5. Triple windows: 5 × 3 adult, 3.5 × 2.75 youth, 2.75 × 2.15 pee wee, 4.75 × 2.25 panel. Type any other width and height. The card prints at that size.</p>
-          <button type="button" id="reset-defaults" class="min-h-11 w-fit rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-red-500">Reset to defaults</button>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" id="reset-defaults" class="min-h-11 w-fit rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-red-500">Reset to defaults</button>
+            <button type="button" id="new-book" class="min-h-11 w-fit rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-red-500">New book</button>
+          </div>
           <p id="letter-fit" class="text-xs text-slate-400"></p>
         </div>
       </div>
@@ -507,7 +544,7 @@
         <div id="library-panel-pitch" data-kind-panel="pitch" class="hidden" role="tabpanel" aria-labelledby="library-tab-pitch">
           <div class="call-columns" aria-hidden="true"><span></span><span>Code</span><span>Name</span><span>On this card</span><span></span></div>
           <div id="pitch-list" class="grid gap-2"></div>
-          <form id="add-pitch" class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto] sm:items-end">
+          <form id="add-pitch" class="add-call mt-3">
             <label class="grid gap-1 text-sm">Name
               <input id="pitch-name" placeholder="New pitch" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
             </label>
@@ -520,7 +557,7 @@
         <div id="library-panel-location" data-kind-panel="location" class="hidden" role="tabpanel" aria-labelledby="library-tab-location">
           <div class="call-columns" aria-hidden="true"><span></span><span>Code</span><span>Name</span><span>On this card</span><span></span></div>
           <div id="location-list" class="grid gap-2"></div>
-          <form id="add-location" class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto] sm:items-end">
+          <form id="add-location" class="add-call mt-3">
             <label class="grid gap-1 text-sm">Name
               <input id="location-name" placeholder="New location" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
             </label>
@@ -533,7 +570,7 @@
         <div id="library-panel-offense" data-kind-panel="offense" role="tabpanel" aria-labelledby="library-tab-offense">
           <div class="call-columns" aria-hidden="true"><span></span><span>Code</span><span>Name</span><span>On this card</span><span></span></div>
           <div id="play-list" class="grid gap-2"></div>
-          <form id="add-play" class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto] sm:items-end">
+          <form id="add-play" class="add-call mt-3">
             <label class="grid gap-1 text-sm">Name
               <input id="play-name" placeholder="New play" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
             </label>
@@ -546,7 +583,7 @@
         <div id="library-panel-defense" data-kind-panel="defense" class="hidden" role="tabpanel" aria-labelledby="library-tab-defense">
           <div class="call-columns" aria-hidden="true"><span></span><span>Code</span><span>Name</span><span>On this card</span><span></span></div>
           <div id="defense-list" class="grid gap-2"></div>
-          <form id="add-defense" class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto] sm:items-end">
+          <form id="add-defense" class="add-call mt-3">
             <label class="grid gap-1 text-sm">Name
               <input id="defense-name" placeholder="New call" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
             </label>
@@ -620,14 +657,16 @@
     </section>
   </div>
 
-  <div id="count-modal" class="hidden no-print fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-labelledby="count-modal-title">
-    <div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-5">
-      <p id="count-modal-title" class="font-semibold"></p>
-      <p id="count-modal-sub" class="mt-1 text-sm text-slate-300"></p>
-      <div id="count-modal-choices" class="mt-4 grid gap-2"></div>
-      <button type="button" id="count-modal-cancel" class="mt-4 min-h-11 w-full rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
-        Cancel
-      </button>
+  <div id="count-modal" class="hidden no-print fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-labelledby="count-modal-title">
+    <div class="mx-auto flex min-h-full w-full max-w-md items-center">
+      <div id="count-modal-panel" class="flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-3xl border border-slate-700 bg-slate-900 p-5">
+        <p id="count-modal-title" class="shrink-0 font-semibold"></p>
+        <p id="count-modal-sub" class="mt-1 shrink-0 text-sm text-slate-300"></p>
+        <div id="count-modal-choices" class="mt-4 grid min-h-0 flex-1 gap-2 overflow-y-auto"></div>
+        <button type="button" id="count-modal-cancel" class="mt-4 min-h-11 w-full shrink-0 rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
+          Cancel
+        </button>
+      </div>
     </div>
   </div>
 
@@ -761,9 +800,12 @@
     const LAMINATE_BLEED_IN = 0.125;
     const DEFAULT_THEME = { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
     const SET_THEMES = {
-      offense: { band: "#c00000", ink: "#000000", highlight: "#ffffff" },
-      defense: { band: "#f87080", ink: "#000000", highlight: "#ffffff" }
+      offense: { band: "#ff0000", ink: "#ffffff", highlight: "#ffffff" },
+      defense: { band: "#f7bad1", ink: "#000000", highlight: "#ffffff" }
     };
+    const PREVIOUS_OFFENSE_BAND = "#c00000";
+    const PREVIOUS_DEFENSE_BAND = "#f87080";
+    const LEGACY_PURPLE_BAND = "#7e22ce";
 
     let book = null;
     let wristCardSeq = 0;
@@ -892,7 +934,7 @@
     }
 
     function defaultCardSize() {
-      return { preset: "wrist", widthIn: 3.25, heightIn: 2 };
+      return { preset: "softball", widthIn: 3.5, heightIn: 2.25 };
     }
 
     function roundInches(value, fallback, min, max) {
@@ -1272,6 +1314,7 @@
           callId: call.id,
           name: call.name,
           short: call.short,
+          decoy: call.decoy === true,
           codes: byCall[call.id].slice().sort(function (a, b) {
             return String(a).localeCompare(String(b), undefined, { numeric: true });
           })
@@ -1398,7 +1441,7 @@
         grids: 6, // new cards stay at 6 blocks; do not drop this to 2 to enlarge the type
         signStart: 1,
         rowStart: 1,
-        theme: { band: SET_THEMES.offense.band, ink: "#000000", highlight: "#ffffff" },
+        theme: { band: SET_THEMES.offense.band, ink: SET_THEMES.offense.ink, highlight: "#ffffff" },
         sheet: defaultSheet(),
         cardSize: defaultCardSize(),
         numbering: "standard",
@@ -1413,12 +1456,240 @@
       };
       const first = shuffleVersion(next, "Version A");
       first.themes = {
-        offense: { band: SET_THEMES.offense.band, ink: "#000000", highlight: "#ffffff" },
-        defense: { band: SET_THEMES.defense.band, ink: "#000000", highlight: "#ffffff" }
+        offense: { band: SET_THEMES.offense.band, ink: SET_THEMES.offense.ink, highlight: "#ffffff" },
+        defense: { band: SET_THEMES.defense.band, ink: SET_THEMES.defense.ink, highlight: "#ffffff" }
       };
       next.versions = [first];
       next.activeVersionId = first.id;
       return next;
+    }
+
+    function starterName(short) {
+      const names = {
+        X: "X",
+        P: "P",
+        B1: "Bunt to 1st",
+        FBS: "Fake bunt + steal",
+        SAS: "Safety squeeze",
+        "H+R": "Hit and run",
+        SS3B: "Steal second and third"
+      };
+      return names[String(short || "").toUpperCase()] || "";
+    }
+
+    function stripStarterTee(call) {
+      if (!call || call.kind !== "offense") return;
+      const match = String(call.name || "").trim().match(/^t\s+(.+)$/i);
+      if (!match) return;
+      const rest = match[1].trim();
+      const short = String(call.short || "").toUpperCase();
+      const canonical = starterName(short);
+      const starterNames = ["x", "p", "bunt to 1st", "fake bunt + steal", "safety squeeze", "hit and run", "steal second and third"];
+      if (rest.toUpperCase() !== short && !canonical && starterNames.indexOf(rest.toLowerCase()) < 0) return;
+      if (canonical && (rest.toUpperCase() === short || rest.toLowerCase() === canonical.toLowerCase())) call.name = canonical;
+      else call.name = rest;
+    }
+
+    function dedupeLibraryCalls() {
+      const alias = {};
+      const kept = [];
+      const index = {};
+      const starterIds = {
+        "play-x": 1,
+        "play-p": 1,
+        "play-b1": 1,
+        "play-fbs": 1,
+        "play-ssq": 1,
+        "play-hr": 1,
+        "play-ss3b": 1
+      };
+      book.library.forEach(function (call) {
+        const key = call.kind + ":" + String(call.short || "").toUpperCase();
+        if (index[key] == null) {
+          index[key] = kept.length;
+          kept.push(call);
+          return;
+        }
+        const current = kept[index[key]];
+        let winner = current;
+        let loser = call;
+        const nextCount = call.count || 0;
+        const currentCount = current.count || 0;
+        if (nextCount > currentCount || (nextCount === currentCount && starterIds[call.id] && !starterIds[current.id])) {
+          winner = call;
+          loser = current;
+        }
+        if (String(winner.short || "").toUpperCase() === "H+R") {
+          const hit = [current, call].filter(function (item) {
+            return String(item.name || "").trim().toLowerCase() === "hit and run";
+          })[0];
+          if (hit) winner = Object.assign({}, winner, { name: hit.name });
+        }
+        kept[index[key]] = winner;
+        alias[loser.id] = winner.id;
+      });
+      Object.keys(alias).forEach(function (id) {
+        let next = alias[id];
+        const seen = {};
+        seen[id] = true;
+        while (alias[next] && !seen[alias[next]]) {
+          seen[next] = true;
+          next = alias[next];
+        }
+        alias[id] = next;
+      });
+      book.library = kept;
+      if (!book.versions) return;
+      book.versions.forEach(function (version) {
+        ["cells", "offenseCells", "defenseCells"].forEach(function (key) {
+          if (!version[key]) return;
+          version[key] = version[key].map(function (cell) {
+            if (cell && alias[cell.callId]) return Object.assign({}, cell, { callId: alias[cell.callId] });
+            return cell;
+          });
+        });
+      });
+    }
+
+    function sameHex(value, hex) {
+      return String(value || "").trim().toLowerCase() === hex;
+    }
+
+    function factoryBlack(value) {
+      if (value == null || String(value).trim() === "") return true;
+      const ink = String(value).trim().toLowerCase();
+      return ink === "#000000" || ink === "#000";
+    }
+
+    function factoryWhite(value) {
+      if (value == null || String(value).trim() === "") return true;
+      const ink = String(value).trim().toLowerCase();
+      return ink === "#ffffff" || ink === "#fff";
+    }
+
+    function paintIs(paint, band) {
+      return paint && sameHex(paint.band, band) && factoryBlack(paint.ink) && factoryWhite(paint.highlight);
+    }
+
+    function blockSize(key, fallbackRows, fallbackCols) {
+      const layouts = book.kindLayouts || {};
+      const side = layouts[key] || {};
+      return {
+        rows: Number(side.rows || fallbackRows),
+        cols: Number(side.cols || fallbackCols)
+      };
+    }
+
+    function migrateFactoryCard() {
+      const theme = book.theme || {};
+      const versions = book.versions || [];
+      const rows = Number(book.rows) || 5;
+      const cols = Number(book.cols) || 5;
+      const offense = blockSize("offense", rows, cols);
+      const defense = blockSize("defense", rows, cols);
+      const size = book.cardSize || {};
+      const purple = sameHex(theme.band, LEGACY_PURPLE_BAND) &&
+        (size.preset === "large" || (Number(size.widthIn) === 5 && Number(size.heightIn) === 3)) &&
+        offense.rows === 5 && offense.cols === 5 && defense.rows === 5 && defense.cols === 5 &&
+        versions.every(function (version) {
+          const themes = version && version.themes;
+          if (!themes) return true;
+          return (!themes.offense || sameHex(themes.offense.band, LEGACY_PURPLE_BAND)) &&
+            (!themes.defense || sameHex(themes.defense.band, LEGACY_PURPLE_BAND));
+        });
+      let previous = false;
+      if (!purple && paintIs(theme, PREVIOUS_OFFENSE_BAND)) {
+        previous = versions.some(function (version) {
+          return version && version.themes && version.themes.defense;
+        }) && versions.every(function (version) {
+          const themes = version && version.themes;
+          if (!themes) return true;
+          if (themes.offense && !paintIs(themes.offense, PREVIOUS_OFFENSE_BAND)) return false;
+          if (!themes.defense || !paintIs(themes.defense, PREVIOUS_DEFENSE_BAND)) return false;
+          return true;
+        });
+      }
+      if (!purple && !previous) return;
+      const themes = {
+        offense: { band: SET_THEMES.offense.band, ink: SET_THEMES.offense.ink, highlight: "#ffffff" },
+        defense: { band: SET_THEMES.defense.band, ink: SET_THEMES.defense.ink, highlight: "#ffffff" }
+      };
+      book.theme = { band: themes.offense.band, ink: themes.offense.ink, highlight: "#ffffff" };
+      if (purple) {
+        book.rows = 5;
+        book.cols = 5;
+        book.kindLayouts = { offense: { rows: 5, cols: 5 }, defense: { rows: 4, cols: 4 } };
+        book.cardSize = defaultCardSize();
+      } else if (size.preset === "wrist" || (Number(size.widthIn) === 3.25 && Number(size.heightIn) === 2)) {
+        book.cardSize = defaultCardSize();
+      }
+      versions.forEach(function (version) {
+        version.themes = {
+          offense: { band: themes.offense.band, ink: themes.offense.ink, highlight: "#ffffff" },
+          defense: { band: themes.defense.band, ink: themes.defense.ink, highlight: "#ffffff" }
+        };
+      });
+    }
+
+    function evenSpreadCounts(calls, total) {
+      const counts = {};
+      const list = (calls || []).filter(function (call) { return call && call.id; });
+      list.forEach(function (call) { counts[call.id] = 0; });
+      if (total <= 0 || !list.length) return counts;
+      const base = Math.floor(total / list.length);
+      let extra = total % list.length;
+      const ordered = list.filter(function (call) { return !call.decoy; })
+        .concat(list.filter(function (call) { return !!call.decoy; }));
+      ordered.forEach(function (call) {
+        const bonus = extra > 0 ? 1 : 0;
+        if (extra > 0) extra -= 1;
+        counts[call.id] = base + bonus;
+      });
+      return counts;
+    }
+
+    function paginateCoachSheet(blocks, sheet) {
+      const cols = Math.max(1, Math.round(Number(sheet.cols)) || 1);
+      const minRows = Math.max(1, Math.round(Number(sheet.rows) || 1));
+      const innerH = Math.max(0.4, Number(sheet.heightIn) - 0.24);
+      const minHeader = 0.2;
+      const minCode = 0.16;
+      const pieces = (blocks || []).map(function (block) {
+        return {
+          block: block,
+          codeRows: Math.max(minRows, Math.ceil(block.codes.length / cols) || 1)
+        };
+      });
+      function heightOf(items) {
+        let height = minHeader;
+        items.forEach(function (item) { height += minHeader + item.codeRows * minCode; });
+        return height;
+      }
+      if (!pieces.length || heightOf(pieces) <= innerH + 1e-6) return [blocks.slice()];
+      const pages = [];
+      let current = [];
+      let currentPieces = [];
+      pieces.forEach(function (piece) {
+        const alone = minHeader + minHeader + piece.codeRows * minCode;
+        if (current.length && heightOf(currentPieces.concat([piece])) > innerH + 1e-6) {
+          pages.push(current);
+          current = [];
+          currentPieces = [];
+        }
+        if (!current.length && alone > innerH + 1e-6) {
+          const roomRows = Math.max(1, Math.floor((innerH - minHeader - minHeader) / minCode));
+          const perPage = roomRows * cols;
+          const codes = piece.block.codes.length ? piece.block.codes : [""];
+          for (let start = 0; start < codes.length; start += perPage) {
+            pages.push([Object.assign({}, piece.block, { codes: codes.slice(start, start + perPage) })]);
+          }
+          return;
+        }
+        current.push(piece.block);
+        currentPieces.push(piece);
+      });
+      if (current.length) pages.push(current);
+      return pages;
     }
 
     function ensureBookShape() {
@@ -1428,6 +1699,7 @@
         if (item.weight == null) item.weight = 0;
         if (item.kind === "offense" && String(item.short || "").toUpperCase() === "H&R") item.short = "H+R";
         if (item.kind === "offense" && String(item.short || "").toUpperCase() === "X") item.decoy = true;
+        stripStarterTee(item);
       });
       [
         ["play-x", "X", "X", 0, true],
@@ -1448,6 +1720,8 @@
         call.count = 0;
         book.library.push(call);
       });
+      dedupeLibraryCalls();
+      migrateFactoryCard();
       if (book.numbering !== "ordered" && book.numbering !== "oneHand") book.numbering = "standard";
       if (!book.cardSize) book.cardSize = defaultCardSize();
       if (!book.theme) book.theme = defaultTheme();
@@ -1707,17 +1981,15 @@
               '</div>' +
               '<button type="button" data-call-del="' + escapeHtml(item.id) + '" class="call-remove" aria-label="Remove ' + escapeHtml(item.name) + '">×</button>' +
             '</div>' +
-            '<div class="flex flex-wrap items-center gap-2">' +
+            '<div class="grid gap-2">' +
               (item.decoy ? '<span class="text-xs font-semibold text-slate-300">Decoy</span>' : "") +
               (kind === "offense" || kind === "defense"
-                ? '<label class="flex items-center gap-2 text-xs text-slate-400">Weight' +
+                ? '<label class="flex w-fit items-center gap-2 text-xs text-slate-400">Weight' +
                     '<input data-call-weight="' + escapeHtml(item.id) + '" value="' + (item.weight > 0 ? escapeHtml(String(item.weight)) : "") + '" inputmode="numeric" aria-label="Weight for ' + escapeHtml(item.name) + '" placeholder="—" class="min-h-10 w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-center text-sm outline-none focus:border-red-500">' +
                   '</label>'
                 : "") +
-              '<span class="text-xs text-slate-400">Cell</span>' +
-              '<div class="flex flex-wrap gap-1.5">' + swatchRow(item.id, "fill", fill) + '</div>' +
-              '<span class="text-xs text-slate-400">Text</span>' +
-              '<div class="flex flex-wrap gap-1.5">' + swatchRow(item.id, "ink", ink) + '</div>' +
+              '<div class="swatch-line"><span class="shrink-0 text-xs text-slate-400">Cell</span><div class="swatches">' + swatchRow(item.id, "fill", fill) + '</div></div>' +
+              '<div class="swatch-line"><span class="shrink-0 text-xs text-slate-400">Text</span><div class="swatches">' + swatchRow(item.id, "ink", ink) + '</div></div>' +
             '</div>' +
           '</div>'
         );
@@ -1947,12 +2219,6 @@
         Math.max(4, cellH * 96 / 72)
       );
       const fontPt = fontPx * 72 / 96;
-      const barPx = fitFontPx(
-        bandTitle(),
-        Math.max(4, (wPt - padPt * 2) * 96 / 72),
-        Math.max(4, fontPx * 0.9)
-      );
-      const barPt = Math.min(fontPt * 0.9, barPx * 72 / 96);
       const uid = "wc" + (wristCardSeq += 1);
       const dataRows = layout.rows + 1;
       const look = cardPaint(theme);
@@ -2073,7 +2339,7 @@
         bucket.push(
           '<g>' +
             (title ? '<title>' + title + '</title>' : '') +
-            '<rect x="' + n(x - overlap) + '" y="' + n(y - overlap) + '" width="' + n(cellW + strokeW) + '" height="' + n(cellH + strokeW) + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + n(strokeW) + '"/>' +
+            '<rect x="' + n(x - overlap) + '" y="' + n(y - overlap) + '" width="' + n(cellW + strokeW) + '" height="' + n(cellH + strokeW) + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + n(strokeW) + '" style="print-color-adjust:exact;-webkit-print-color-adjust:exact"/>' +
           '</g>'
         );
         if (mark) {
@@ -2102,13 +2368,14 @@
           "",
           cornerBand ? "band" : "data"
         );
+        const headerInk = "#ffffff";
         for (let col = 0; col < layout.cols; col += 1) {
           addCell(
             (col0 + col + 1) * cellW,
             row0 * cellH,
             look.bandFill,
             columnLabel(g, col, layout),
-            look.bandInk,
+            headerInk,
             fontPt,
             "",
             "band"
@@ -2120,7 +2387,7 @@
             (row0 + row + 1) * cellH,
             look.bandFill,
             rowLabel(row, layout),
-            look.bandInk,
+            headerInk,
             fontPt,
             "",
             "band"
@@ -2132,7 +2399,9 @@
             const short = call ? call.short : "";
             const title = coachView && call ? escapeHtml(call.name) : (cell ? escapeHtml(cell.code) : "");
             const fill = row % 2 === 1 ? shadeFill(paint.background) : paint.background;
-            const mark = normalizeColor(call && call.fill);
+            let mark = normalizeColor(call && call.fill);
+            if (mark === "clear" || mark === "white") mark = "";
+            if (book.bandKind === "defense" && (mark === "blue" || mark === "orange")) mark = "";
             addCell(
               (col0 + col + 1) * cellW,
               (row0 + row + 1) * cellH,
@@ -2142,44 +2411,28 @@
               fontPt,
               title,
               "data",
-              mark === "clear" || mark === "white" ? "" : mark
+              mark
             );
           }
         }
       }
       const barY = dataRows * cellH;
       bandShapes.push(
-        '<rect x="0" y="' + n(barY) + '" width="' + n(wPt) + '" height="' + n(cellH) + '" fill="' + look.bandFill + '" stroke="' + look.bandStroke + '" stroke-width="' + n(look.bandStrokeW) + '"/>'
+        '<rect x="0" y="' + n(barY) + '" width="' + n(wPt) + '" height="' + n(cellH) + '" fill="' + look.bandFill + '" stroke="' + look.bandStroke + '" stroke-width="' + n(look.bandStrokeW) + '" style="print-color-adjust:exact;-webkit-print-color-adjust:exact"/>'
       );
       if (cardLook === "mono") {
         bandShapes.push(
           '<rect x="0" y="0" width="' + n(wPt) + '" height="' + n(hPt) + '" fill="none" stroke="#000000" stroke-width="0.6"/>'
         );
       }
-      addText(bandTitle(), 0, barY, wPt, cellH, barPt, look.bandInk, "", null, look.bandFill);
       const stamp = versionStamp(version, bandTitle());
-      const titleRight = wPt / 2 + emWidth(bandTitle()) * barPt / 2;
-      const room = wPt - padPt - titleRight - 3;
-      let stampText = stamp;
-      let stampPt = Math.min(cellH * 0.78, Math.max(8, barPt * 0.8));
-      let stampW = emWidth(stampText) * stampPt;
-      if (stampW > room && emWidth(stampText) > 0) {
-        const date = versionDate(version);
-        stampText = versionToken(version) + (date ? " \u00b7 " + date : "");
-        stampW = emWidth(stampText) * stampPt;
-        if (stampW > room && emWidth(stampText) > 0) {
-          stampPt = Math.max(6, room / emWidth(stampText));
-          stampW = emWidth(stampText) * stampPt;
-        }
-      }
-      if (stampText && stampW > 0 && stampW <= room + 0.5) {
-        addText(stampText, 0, barY, wPt - padPt, cellH, stampPt, look.bandInk, "end", {
-          x: 0,
-          y: barY,
-          w: wPt,
-          h: cellH
-        }, look.bandFill);
-      }
+      const footerInk = hexLuma(look.bandFill) < 150 ? "#ffffff" : "#000000";
+      const footerRoom = Math.max(1, wPt - padPt * 2);
+      const footerEm = emWidth(stamp);
+      let footerPt = 8;
+      if (footerEm > 0 && footerEm * footerPt > footerRoom) footerPt = footerRoom / footerEm;
+      const stampPt = footerPt;
+      addText(stamp, 0, barY, wPt, cellH, footerPt, footerInk, "", null, look.bandFill);
       const card =
         '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="xMidYMid meet">' +
@@ -2369,7 +2622,9 @@
       mount.innerHTML = visible.map(function (group) {
         return (
           '<div class="name-row"><b>' + escapeHtml(group.short) + '</b><span>' +
-            escapeHtml(group.name) + '</span><span class="codes">' +
+            escapeHtml(group.name) + '</span>' +
+            (group.decoy ? '<span class="name-decoy text-xs font-semibold text-amber-200">Decoy</span>' : '') +
+            '<span class="codes">' +
             escapeHtml(group.codes.join("  ")) + '</span></div>'
         );
       }).join("");
@@ -2429,14 +2684,14 @@
       }).join("");
     }
 
-    function coachSheetHtml(version) {
+    function coachSheetHtml(version, groups) {
       if (!version) return "";
       const sheet = sheetOf();
       const theme = themeOf();
-      const groups = sheetGroups(version);
+      const rows = groups || sheetGroups(version);
       const banner = escapeHtml(bandTitle() + " - CALLS ARE TOP + LEFT");
       let bodyRows = 0;
-      const blocks = groups.map(function (group) {
+      const blocks = rows.map(function (group) {
         const needed = Math.max(sheet.rows, Math.ceil(group.codes.length / sheet.cols) || 1);
         bodyRows += 1 + needed;
         return { group: group, needed: needed };
@@ -2448,14 +2703,14 @@
       const innerW = Math.max(1, sheet.widthIn - 0.24);
       const codeH = codeCount > 0
         ? innerH / (headerCount * headerScale + codeCount)
-        : innerH / headerCount;
+        : innerH / Math.max(1, headerCount);
       const headerH = codeCount > 0 ? codeH * headerScale : codeH;
       const headerPx = headerH * 96;
       const codePx = codeH * 96;
       const colPx = (innerW / Math.max(1, sheet.cols)) * 96;
-      const codeSize = Math.max(10, Math.min(codePx * 0.88, colPx * 0.6));
-      const playSize = Math.max(11, Math.min(48, headerPx * 0.88));
-      const bannerSize = Math.max(11, Math.min(headerPx * 0.82, innerW * 96 * 0.028));
+      const codeSize = Math.max(1, Math.min(codePx * 0.78, colPx * 0.55, Math.max(1, codePx - 1)));
+      const playSize = Math.max(1, Math.min(headerPx * 0.78, 28, Math.max(1, headerPx - 1)));
+      const bannerSize = Math.max(1, Math.min(headerPx * 0.72, innerW * 96 * 0.04, Math.max(1, headerPx - 1)));
       const headerStyle = "height:" + headerH + "in";
       const codeStyle = "height:" + codeH + "in";
       const body = blocks.map(function (block) {
@@ -2486,6 +2741,14 @@
       );
     }
 
+    function coachSheetPages(version) {
+      const sheet = sheetOf();
+      const groups = sheetGroups(version);
+      return paginateCoachSheet(groups, sheet).map(function (slice) {
+        return coachSheetHtml(version, slice);
+      });
+    }
+
     function renderCoachKey() {
       const version = activeVersion();
       const mount = document.getElementById("coach-key");
@@ -2493,7 +2756,7 @@
         mount.innerHTML = "";
         return;
       }
-      mount.innerHTML = coachSheetHtml(version);
+      mount.innerHTML = coachSheetPages(version).join("");
     }
 
     const LETTER_W = 8.5;
@@ -2574,20 +2837,28 @@
       const sheetGap = 0.16;
       const sheetReserve = CALIBRATE_IN + CALIBRATE_GAP;
       const sheetFit = letterFit(sheet.widthIn, sheet.heightIn, sheetGap, sheetReserve, 0);
-      const sheets = [];
-      for (let i = 0; i < sheetFit.count; i += 1) sheets.push(coachSheetHtml(version));
-      const keyCopy =
-        "Print at 100% / Actual size. Do not choose Fit to page or Scale to fit. " +
-        "This square is 1 inch — measure it before you cut. " +
-        sheetFit.count + " coach sheet" + (sheetFit.count === 1 ? "" : "s") + " fit on this Letter page (" +
-        sheetFit.cols + " across × " + sheetFit.rows + " down). " +
-        "Turn on Background graphics so the colors print. " +
-        escapeHtml(versionStamp(version)) + ".";
-      const keyPage =
-        '<section class="print-page print-key" style="color:#0f172a">' +
-          calibrationHtml(keyCopy) +
-          '<div style="display:flex;flex-wrap:wrap;gap:' + sheetGap + 'in">' + sheets.join("") + '</div>' +
-        '</section>';
+      const sheetPages = coachSheetPages(version);
+      const keyPages = [];
+      for (let i = 0; i < sheetPages.length; i += sheetFit.count) {
+        const chunk = sheetPages.slice(i, i + sheetFit.count);
+        const pageNo = Math.floor(i / sheetFit.count) + 1;
+        const pageCount = Math.max(1, Math.ceil(sheetPages.length / sheetFit.count));
+        const keyCopy =
+          "Print at 100% / Actual size. Do not choose Fit to page or Scale to fit. " +
+          "This square is 1 inch — measure it before you cut. " +
+          "Coach sheet " + pageNo + " of " + pageCount + " (" +
+          sheetPages.length + " page" + (sheetPages.length === 1 ? "" : "s") + " so every call prints, " +
+          sheetFit.cols + " across × " + sheetFit.rows + " down). " +
+          "Turn on Background graphics so the colors print. " +
+          escapeHtml(versionStamp(version)) + ".";
+        keyPages.push(
+          '<section class="print-page print-key" style="color:#0f172a">' +
+            calibrationHtml(keyCopy) +
+            '<div style="display:flex;flex-wrap:wrap;gap:' + sheetGap + 'in">' + chunk.join("") + '</div>' +
+          '</section>'
+        );
+      }
+      const keyPage = keyPages.join("");
       if (printMode === "cards") root.innerHTML = cardPage;
       else if (printMode === "key") root.innerHTML = keyPage;
       else root.innerHTML = cardPage + keyPage;
@@ -2803,10 +3074,18 @@
       return best;
     }
 
+    function shortInUse(kind, short, exceptId) {
+      const code = String(short || "").trim().toUpperCase();
+      if (!code) return false;
+      return book.library.some(function (item) {
+        return item.kind === kind && item.id !== exceptId && String(item.short || "").toUpperCase() === code;
+      });
+    }
+
     function addCall(kind, name, short) {
       const cleanName = String(name || "").trim();
       const cleanShort = String(short || "").trim().slice(0, 5).toUpperCase();
-      if (!cleanName) return;
+      if (!cleanName) return false;
       const call = {
         id: kind + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         kind: kind,
@@ -2817,6 +3096,10 @@
         count: 1,
         weight: 0
       };
+      if (shortInUse(kind, call.short)) {
+        window.alert("That code is already used. Each code has to be unique.");
+        return false;
+      }
       if (kind === "offense" && call.short === "X") call.decoy = true;
       book.library.push(call);
       if (kind === "offense" || kind === "defense") {
@@ -2836,6 +3119,7 @@
       }
       render();
       scheduleSave();
+      return true;
     }
 
     function printNow(mode, versionId) {
@@ -2996,25 +3280,25 @@
     document.getElementById("sheet-h").addEventListener("change", applyCustomSheetSize);
     document.getElementById("add-pitch").addEventListener("submit", function (event) {
       event.preventDefault();
-      addCall("pitch", document.getElementById("pitch-name").value, document.getElementById("pitch-short").value);
+      if (!addCall("pitch", document.getElementById("pitch-name").value, document.getElementById("pitch-short").value)) return;
       document.getElementById("pitch-name").value = "";
       document.getElementById("pitch-short").value = "";
     });
     document.getElementById("add-play").addEventListener("submit", function (event) {
       event.preventDefault();
-      addCall("offense", document.getElementById("play-name").value, document.getElementById("play-short").value);
+      if (!addCall("offense", document.getElementById("play-name").value, document.getElementById("play-short").value)) return;
       document.getElementById("play-name").value = "";
       document.getElementById("play-short").value = "";
     });
     document.getElementById("add-location").addEventListener("submit", function (event) {
       event.preventDefault();
-      addCall("location", document.getElementById("location-name").value, document.getElementById("location-short").value);
+      if (!addCall("location", document.getElementById("location-name").value, document.getElementById("location-short").value)) return;
       document.getElementById("location-name").value = "";
       document.getElementById("location-short").value = "";
     });
     document.getElementById("add-defense").addEventListener("submit", function (event) {
       event.preventDefault();
-      addCall("defense", document.getElementById("defense-name").value, document.getElementById("defense-short").value);
+      if (!addCall("defense", document.getElementById("defense-name").value, document.getElementById("defense-short").value)) return;
       document.getElementById("defense-name").value = "";
       document.getElementById("defense-short").value = "";
     });
@@ -3027,6 +3311,11 @@
     document.getElementById("play-list").addEventListener("click", onLibraryClick);
     document.getElementById("defense-list").addEventListener("click", onLibraryClick);
     document.getElementById("count-modal-cancel").addEventListener("click", function () {
+      closeCountModal();
+      render();
+    });
+    document.getElementById("count-modal").addEventListener("click", function (event) {
+      if (event.target.closest("#count-modal-panel")) return;
       closeCountModal();
       render();
     });
@@ -3109,7 +3398,13 @@
         return;
       }
       if (event.target.getAttribute("data-call-short")) {
-        call.short = event.target.value.trim().slice(0, 5).toUpperCase() || call.short;
+        const nextShort = event.target.value.trim().slice(0, 5).toUpperCase() || call.short;
+        if (shortInUse(call.kind, nextShort, call.id)) {
+          window.alert("That code is already used. Each code has to be unique.");
+          event.target.value = call.short;
+          return;
+        }
+        call.short = nextShort;
         if (call.kind === "offense" && call.short === "X") call.decoy = true;
         render();
         scheduleSave();
@@ -3258,22 +3553,43 @@
     });
     document.getElementById("reset-defaults").addEventListener("click", function () {
       if (!book) return;
-      const ok = window.confirm("Reset colors, block sizes, and card size to the defaults? Calls and version names stay. Both cards are filled again.");
+      const ok = window.confirm("Reset colors and block sizes to the defaults? The card size stays. Calls and version names stay. Both cards are filled again.");
       if (!ok) return;
       book.rows = 5;
       book.cols = 5;
       book.kindLayouts = { offense: { rows: 5, cols: 5 }, defense: { rows: 4, cols: 4 } };
-      book.cardSize = defaultCardSize();
-      book.theme = { band: SET_THEMES.offense.band, ink: "#000000", highlight: "#ffffff" };
-      book.versions.forEach(function (version) {
-        version.themes = {
-          offense: { band: SET_THEMES.offense.band, ink: "#000000", highlight: "#ffffff" },
-          defense: { band: SET_THEMES.defense.band, ink: "#000000", highlight: "#ffffff" }
-        };
-        version.offenseCells = buildKindCells(book, "offense");
-        version.defenseCells = buildKindCells(book, "defense");
-        version.cells = version.offenseCells;
+      book.theme = { band: SET_THEMES.offense.band, ink: SET_THEMES.offense.ink, highlight: "#ffffff" };
+      ["offense", "defense"].forEach(function (kind) {
+        const counts = evenSpreadCounts(
+          book.library.filter(function (call) { return call.kind === kind; }),
+          cellCount(layoutFor(kind))
+        );
+        book.library.forEach(function (call) {
+          if (call.kind === kind) call.count = counts[call.id] || 0;
+        });
       });
+      book.fillPrefer = "count";
+      try {
+        book.versions.forEach(function (version) {
+          version.themes = {
+            offense: { band: SET_THEMES.offense.band, ink: SET_THEMES.offense.ink, highlight: "#ffffff" },
+            defense: { band: SET_THEMES.defense.band, ink: SET_THEMES.defense.ink, highlight: "#ffffff" }
+          };
+          version.offenseCells = buildKindCells(book, "offense");
+          version.defenseCells = buildKindCells(book, "defense");
+          version.cells = version.offenseCells;
+        });
+      } finally {
+        delete book.fillPrefer;
+      }
+      render();
+      scheduleSave();
+    });
+    document.getElementById("new-book").addEventListener("click", function () {
+      if (!book) return;
+      const ok = window.confirm("Start a new book titled My signs? This replaces the book on this screen, including its calls and versions.");
+      if (!ok) return;
+      book = emptyBook();
       render();
       scheduleSave();
     });

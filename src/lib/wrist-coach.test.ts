@@ -58,8 +58,18 @@ import {
   defaultSetThemes,
   OFFENSE_BAND,
   DEFENSE_BAND,
+  PREVIOUS_OFFENSE_BAND,
+  PREVIOUS_DEFENSE_BAND,
   isUntouchedLegacyCard,
+  isUntouchedPreviousColors,
+  isPreviousDefaultSize,
   upgradeLibrary,
+  migrateCalls,
+  duplicateShorts,
+  shortInUse,
+  evenSpreadCounts,
+  spreadLibrary,
+  paginateCoachSheet,
   kindTheme,
   kindTitle,
   layoutFor,
@@ -688,9 +698,9 @@ describe("wrist coach book", () => {
     });
   });
 
-  it("defaults the player card to the 3.25 × 2 wrist size", () => {
+  it("defaults the player card to the 3.5 × 2.25 softball size", () => {
     const book = emptyBook("user-1");
-    assert.deepEqual(book.cardSize, { preset: "wrist", widthIn: 3.25, heightIn: 2 });
+    assert.deepEqual(book.cardSize, { preset: "softball", widthIn: 3.5, heightIn: 2.25 });
     assert.deepEqual(normalizeCardSize({ preset: "softball" }), {
       preset: "softball",
       widthIn: 3.5,
@@ -1129,17 +1139,20 @@ describe("wrist coach book", () => {
     const fresh = emptyBook("coach-1");
     assert.equal(fresh.title, "My signs");
     assert.equal(fresh.theme.band, OFFENSE_BAND);
-    assert.equal(OFFENSE_BAND, "#c00000");
-    assert.equal(DEFENSE_BAND, "#f87080");
-    assert.equal(activeVersion(fresh)?.themes.offense.band, "#c00000");
-    assert.equal(activeVersion(fresh)?.themes.defense.band, "#f87080");
+    assert.equal(fresh.theme.ink, "#ffffff");
+    assert.equal(OFFENSE_BAND, "#ff0000");
+    assert.equal(DEFENSE_BAND, "#f7bad1");
+    assert.equal(activeVersion(fresh)?.themes.offense.band, "#ff0000");
+    assert.equal(activeVersion(fresh)?.themes.offense.ink, "#ffffff");
+    assert.equal(activeVersion(fresh)?.themes.defense.band, "#f7bad1");
+    assert.equal(activeVersion(fresh)?.themes.defense.ink, "#000000");
     assert.equal(layoutFor(fresh, "offense").rows, 5);
     assert.equal(layoutFor(fresh, "offense").cols, 5);
     assert.equal(layoutFor(fresh, "defense").rows, 4);
     assert.equal(layoutFor(fresh, "defense").cols, 4);
-    assert.equal(fresh.cardSize.preset, "wrist");
-    assert.equal(fresh.cardSize.widthIn, 3.25);
-    assert.equal(fresh.cardSize.heightIn, 2);
+    assert.equal(fresh.cardSize.preset, "softball");
+    assert.equal(fresh.cardSize.widthIn, 3.5);
+    assert.equal(fresh.cardSize.heightIn, 2.25);
     const offense = defaultLibrary().filter((call) => call.kind === "offense");
     for (const code of ["X", "P", "B1", "FBS", "SAS", "H+R", "SS3B"]) {
       assert.ok(offense.some((call) => call.short === code), code);
@@ -1227,9 +1240,11 @@ describe("wrist coach book", () => {
     }), false);
     const migrated = normalizeBook(purple, "softballbot", "softballbot's signs");
     assert.equal(migrated.title, "SOFTBALLBOT'S SIGNS");
-    assert.equal(migrated.theme.band, "#c00000");
-    assert.equal(migrated.cardSize.preset, "wrist");
-    assert.equal(migrated.cardSize.widthIn, 3.25);
+    assert.equal(migrated.theme.band, "#ff0000");
+    assert.equal(migrated.theme.ink, "#ffffff");
+    assert.equal(migrated.cardSize.preset, "softball");
+    assert.equal(migrated.cardSize.widthIn, 3.5);
+    assert.equal(migrated.cardSize.heightIn, 2.25);
     assert.equal(migrated.kindLayouts.defense.rows, 4);
     assert.equal(migrated.kindLayouts.defense.cols, 4);
     assert.equal(migrated.kindLayouts.offense.rows, 5);
@@ -1237,7 +1252,8 @@ describe("wrist coach book", () => {
     assert.equal(migrated.activeVersionId, "ver-c");
     const keptVersion = migrated.versions[0];
     assert.equal(keptVersion.titles.offense, "SOFTBALLBOT'S SIGNS");
-    assert.equal(keptVersion.themes.defense.band, "#f87080");
+    assert.equal(keptVersion.themes.defense.band, "#f7bad1");
+    assert.equal(keptVersion.themes.defense.ink, "#000000");
     assert.equal(keptVersion.offenseCells.length, 150);
     assert.ok(keptVersion.offenseCells.every((cell) => cell.callId === "play-x"));
     assert.equal(keptVersion.defenseCells.length, 96);
@@ -1292,9 +1308,12 @@ describe("wrist coach book", () => {
     assert.doesNotMatch(page, /userName/);
     assert.doesNotMatch(page, /Saved on the server/);
     assert.match(page, /setStatus\("Saved", true\)/);
-    assert.match(page, /#c00000/);
-    assert.match(page, /#f87080/);
-    assert.match(page, /Math\.max\(8, barPt \* 0\.8\)/);
+    assert.match(page, /#ff0000/);
+    assert.match(page, /#f7bad1/);
+    assert.match(page, /PREVIOUS_OFFENSE_BAND = "#c00000"/);
+    assert.match(page, /PREVIOUS_DEFENSE_BAND = "#f87080"/);
+    assert.match(page, /footerPt = 8/);
+    assert.doesNotMatch(page, /addText\(bandTitle\(\)/);
     assert.match(page, /slice\(0, 5\)/);
     assert.match(page, /count: 1/);
     assert.match(page, /if \(pendingCount\) return/);
@@ -1307,6 +1326,220 @@ describe("wrist coach book", () => {
     assert.doesNotMatch(route, /session\.name/);
     assert.doesNotMatch(route, /stored\?\.name/);
     assert.doesNotMatch(route, /password|token|email/i);
+  });
+
+  it("migrates untouched last-round colors, keeps custom colors, and leaves a custom size", () => {
+    function fill(rows: number, cols: number, callId: string) {
+      const cells = [];
+      for (let grid = 0; grid < 6; grid += 1) {
+        for (let row = 0; row < rows; row += 1) {
+          for (let col = 0; col < cols; col += 1) {
+            cells.push({ grid, row, col, code: `${grid}${row}${col}`, callId });
+          }
+        }
+      }
+      return cells;
+    }
+    const previous = {
+      title: "SOFTBALLBOT'S SIGNS",
+      theme: { band: "#C00000", ink: "#000000", highlight: "#ffffff" },
+      cardSize: { preset: "wrist", widthIn: 3.25, heightIn: 2 },
+      rows: 5,
+      cols: 5,
+      grids: 6,
+      kindLayouts: { offense: { rows: 5, cols: 5 }, defense: { rows: 4, cols: 4 } },
+      library: defaultLibrary(),
+      versions: [{
+        id: "ver-a",
+        name: "Version A",
+        createdAt: 1,
+        themes: {
+          offense: { band: PREVIOUS_OFFENSE_BAND, ink: "#000000", highlight: "#ffffff" },
+          defense: { band: PREVIOUS_DEFENSE_BAND, ink: "#000000", highlight: "#ffffff" },
+        },
+        offenseCells: fill(5, 5, "play-x"),
+        defenseCells: fill(4, 4, "def-hld"),
+      }],
+    };
+    assert.equal(isUntouchedPreviousColors(previous), true);
+    assert.equal(isPreviousDefaultSize(previous), true);
+    assert.equal(isUntouchedLegacyCard(previous), false);
+    const moved = normalizeBook(previous, "softballbot");
+    assert.equal(moved.title, "SOFTBALLBOT'S SIGNS");
+    assert.equal(moved.theme.band, "#ff0000");
+    assert.equal(moved.theme.ink, "#ffffff");
+    assert.equal(activeVersion(moved)?.themes.defense.band, "#f7bad1");
+    assert.equal(activeVersion(moved)?.themes.defense.ink, "#000000");
+    assert.equal(moved.cardSize.preset, "softball");
+    assert.equal(moved.cardSize.widthIn, 3.5);
+    assert.equal(moved.cardSize.heightIn, 2.25);
+    assert.equal(moved.kindLayouts.defense.rows, 4);
+    assert.ok(activeVersion(moved)?.offenseCells.every((cell) => cell.callId === "play-x"));
+
+    const sized = normalizeBook({
+      ...previous,
+      cardSize: { preset: "youth", widthIn: 4.5, heightIn: 2.5 },
+    }, "softballbot");
+    assert.equal(sized.theme.band, "#ff0000");
+    assert.equal(sized.cardSize.preset, "youth");
+    assert.equal(sized.cardSize.widthIn, 4.5);
+
+    const inked = normalizeBook({
+      ...previous,
+      theme: { band: "#c00000", ink: "#ffffff", highlight: "#ffffff" },
+    }, "softballbot");
+    assert.equal(isUntouchedPreviousColors(inked), false);
+    assert.equal(inked.theme.band, "#c00000");
+    assert.equal(inked.cardSize.preset, "wrist");
+
+    const custom = normalizeBook({
+      ...previous,
+      theme: { band: "#112233", ink: "#000000", highlight: "#ffffff" },
+      versions: [{
+        ...previous.versions[0],
+        themes: {
+          offense: { band: "#112233", ink: "#000000", highlight: "#ffffff" },
+          defense: { band: "#f87080", ink: "#000000", highlight: "#ffffff" },
+        },
+      }],
+    }, "softballbot");
+    assert.equal(custom.theme.band, "#112233");
+    assert.equal(custom.cardSize.preset, "wrist");
+  });
+
+  it("drops the T prefix, dedupes H+R, and keeps every code unique", () => {
+    const cells = [];
+    for (let grid = 0; grid < 6; grid += 1) {
+      for (let row = 0; row < 5; row += 1) {
+        for (let col = 0; col < 5; col += 1) {
+          cells.push({ grid, row, col, code: "011", callId: "t-hr" });
+        }
+      }
+    }
+    const raw = {
+      title: "Codes",
+      rows: 5,
+      cols: 5,
+      grids: 6,
+      kindLayouts: { offense: { rows: 5, cols: 5 }, defense: { rows: 4, cols: 4 } },
+      library: [
+        { id: "t-x", kind: "offense", name: "T X", short: "X", fill: "clear", ink: "clear", count: 5, weight: 0 },
+        { id: "play-x", kind: "offense", name: "X", short: "X", fill: "clear", ink: "clear", count: 1, weight: 0 },
+        { id: "t-hr", kind: "offense", name: "T Hit and run", short: "H+R", fill: "clear", ink: "clear", count: 1, weight: 0 },
+        { id: "play-hr", kind: "offense", name: "Hit and run", short: "H+R", fill: "clear", ink: "clear", count: 4, weight: 0 },
+        { id: "t-ss", kind: "offense", name: "T SS3B", short: "SS3B", fill: "clear", ink: "clear", count: 2, weight: 0 },
+        { id: "custom", kind: "offense", name: "T Takeoff", short: "TOF", fill: "clear", ink: "clear", count: 1, weight: 0 },
+      ],
+      versions: [{ id: "ver-a", name: "Version A", createdAt: 1, offenseCells: cells, cells }],
+    };
+    const migrated = normalizeBook(raw, "coach-1");
+    const offense = migrated.library.filter((call) => call.kind === "offense");
+    assert.equal(offense.filter((call) => call.short === "X").length, 1);
+    assert.equal(offense.find((call) => call.short === "X")?.name, "X");
+    assert.equal(offense.find((call) => call.short === "X")?.count, 5);
+    assert.equal(offense.filter((call) => call.short === "H+R").length, 1);
+    assert.equal(offense.find((call) => call.short === "H+R")?.id, "play-hr");
+    assert.equal(offense.find((call) => call.short === "H+R")?.name, "Hit and run");
+    assert.equal(offense.find((call) => call.short === "H+R")?.count, 4);
+    assert.equal(offense.find((call) => call.short === "SS3B")?.name, "Steal second and third");
+    assert.equal(offense.find((call) => call.id === "custom")?.name, "T Takeoff");
+    assert.deepEqual(duplicateShorts(offense), []);
+    assert.equal(shortInUse(offense, "offense", "H+R"), true);
+    assert.equal(shortInUse(offense, "offense", "ZZZ"), false);
+    assert.equal(activeVersion(migrated)?.offenseCells[0].callId, "play-hr");
+    const direct = migrateCalls([
+      { id: "a", kind: "offense", name: "T X", short: "X", fill: "clear", ink: "clear", count: 0, weight: 0 },
+      { id: "b", kind: "offense", name: "Hit and run", short: "H+R", fill: "clear", ink: "clear", count: 2, weight: 0 },
+      { id: "c", kind: "offense", name: "T Hit and run", short: "H+R", fill: "clear", ink: "clear", count: 9, weight: 0 },
+    ]);
+    assert.equal(direct.library.filter((call) => call.short === "H+R").length, 1);
+    assert.equal(direct.library.find((call) => call.short === "H+R")?.count, 9);
+    assert.equal(direct.library.find((call) => call.short === "H+R")?.name, "Hit and run");
+    assert.equal(direct.alias.b, direct.library.find((call) => call.short === "H+R")?.id);
+    assert.equal(duplicateShorts(upgradeLibrary(defaultLibrary())).length, 0);
+  });
+
+  it("spreads reset boxes evenly and includes decoys without taking the extras first", () => {
+    const calls = [
+      { id: "ha", decoy: false },
+      { id: "bnt", decoy: false },
+      { id: "slp", decoy: false },
+      { id: "stl", decoy: false },
+      { id: "x", decoy: true },
+    ];
+    const counts = evenSpreadCounts(calls, 8);
+    assert.deepEqual(counts, { ha: 2, bnt: 2, slp: 2, stl: 1, x: 1 });
+    const values = Object.values(counts);
+    assert.ok(Math.max(...values) - Math.min(...values) <= 1);
+    const book = emptyBook("coach-1");
+    const offense = book.library.filter((call) => call.kind === "offense");
+    const total = cellCount(layoutFor(book, "offense"));
+    const spread = evenSpreadCounts(offense, total);
+    const nums = offense.map((call) => spread[call.id] || 0);
+    assert.equal(nums.reduce((sum, count) => sum + count, 0), total);
+    assert.ok(Math.max(...nums) - Math.min(...nums) <= 1);
+    const decoyCount = spread[offense.find((call) => call.decoy)?.id || ""] || 0;
+    assert.ok(decoyCount > 0);
+    assert.ok(offense.filter((call) => !call.decoy).every((call) => (spread[call.id] || 0) >= decoyCount));
+    const next = spreadLibrary(book.library, "offense", total);
+    assert.equal(next.find((call) => call.short === "HA")?.count, spread["play-ha"]);
+    assert.equal(next.filter((call) => call.kind === "defense").every((call) => call.count === book.library.find((item) => item.id === call.id)?.count), true);
+  });
+
+  it("prints every starter and the full offense list on the coach sheet", () => {
+    const starters = ["X", "P", "B1", "FBS", "SAS", "H+R", "SS3B"];
+    const starterBlocks = starters.map((short) => {
+      const call = defaultLibrary().find((item) => item.kind === "offense" && item.short === short);
+      assert.ok(call);
+      return { name: call.name, short: call.short, codes: ["011", "012"] };
+    });
+    const starterPages = paginateCoachSheet(starterBlocks, { cols: 15, rows: 1, heightIn: 5.5 });
+    assert.deepEqual(starterPages.flat().map((block) => block.short), starters);
+    const offenseBlocks = defaultLibrary()
+      .filter((call) => call.kind === "offense")
+      .map((call) => ({ name: call.name, short: call.short, codes: ["011"] }));
+    const pages = paginateCoachSheet(offenseBlocks, { cols: 15, rows: 1, heightIn: 5.5 });
+    assert.ok(pages.length > 1);
+    assert.deepEqual(pages.flat().map((block) => block.short), offenseBlocks.map((block) => block.short));
+    const flat = pages.flat().map((block) => block.short);
+    assert.ok(flat.indexOf("FBS") < flat.length - 1);
+    assert.ok(flat.includes("SS3B"));
+    assert.ok(flat.includes("HA"));
+    const tiny = paginateCoachSheet(starterBlocks, { cols: 15, rows: 1, heightIn: 2 });
+    assert.ok(tiny.length > 1);
+    assert.deepEqual(tiny.flat().map((block) => block.short), starters);
+  });
+
+  it("marks decoys on the names sheet and keeps the round 16 page controls", () => {
+    const book = emptyBook("coach-1");
+    const version = activeVersion(book);
+    assert.ok(version);
+    version.offenseCells[0].callId = "play-x";
+    version.cells[0].callId = "play-x";
+    const group = sheetGroups(book, version).find((item) => item.short === "X");
+    assert.equal(group?.decoy, true);
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /id="new-book"/);
+    assert.match(page, /Start a new book titled My signs/);
+    assert.match(page, /max-h-\[calc\(100dvh-2rem\)\]/);
+    assert.match(page, /id="count-modal-panel"/);
+    assert.match(page, /closest\("#count-modal-panel"\)/);
+    assert.match(page, /headerInk = "#ffffff"/);
+    assert.match(page, /class="add-call/);
+    assert.match(page, /class="swatch-line"/);
+    assert.match(page, /name-decoy/);
+    assert.match(page, /function paginateCoachSheet/);
+    assert.match(page, /function shortInUse/);
+    assert.match(page, /print-color-adjust:exact/);
+    assert.match(page, /-webkit-print-color-adjust:exact/);
+    assert.match(page, /mark === "blue" \|\| mark === "orange"/);
+    assert.doesNotMatch(page, /Math\.max\(10,/);
+    const resetStart = page.indexOf('getElementById("reset-defaults")');
+    const resetEnd = page.indexOf('getElementById("new-book")');
+    const reset = page.slice(resetStart, resetEnd);
+    assert.match(reset, /evenSpreadCounts/);
+    assert.doesNotMatch(reset, /cardSize/);
+    assert.match(page, /The card size stays/);
   });
 
   it("normalize repairs a missing book and keeps the user id", () => {

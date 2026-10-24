@@ -145,7 +145,7 @@ export type WristCardSize = {
 };
 
 export function defaultCardSize(): WristCardSize {
-  return { preset: "wrist", ...CARD_SIZE_PRESETS.wrist };
+  return { preset: "softball", ...CARD_SIZE_PRESETS.softball };
 }
 
 /** Largest card that still prints at 100% on Letter, with the calibration row and crop marks. */
@@ -406,10 +406,13 @@ export const DEFAULT_ROWS = 5;
 export const DEFAULT_COLS = 5;
 export const DEFAULT_DEFENSE_ROWS = 4;
 export const DEFAULT_DEFENSE_COLS = 4;
-export const OFFENSE_BAND = "#c00000";
-export const DEFENSE_BAND = "#f87080";
+export const OFFENSE_BAND = "#ff0000";
+export const DEFENSE_BAND = "#f7bad1";
 /** Old factory wristband. Only an untouched book still on this purple migrates. */
 export const LEGACY_PURPLE_BAND = "#7e22ce";
+/** Last round's factory colors. Only an untouched book still on this pair migrates. */
+export const PREVIOUS_OFFENSE_BAND = "#c00000";
+export const PREVIOUS_DEFENSE_BAND = "#f87080";
 export const DEFAULT_SIGN_START = 1;
 export const DEFAULT_ROW_START = 1;
 export const DEFAULT_SHEET_COLS = 15;
@@ -496,10 +499,9 @@ export function defaultKindThemes(fallback?: WristTheme): WristKindThemes {
 
 export function defaultSetThemes(): WristKindThemes {
   const white = "#ffffff";
-  const ink = "#000000";
   return {
-    offense: { band: OFFENSE_BAND, ink, highlight: white },
-    defense: { band: DEFENSE_BAND, ink, highlight: white },
+    offense: { band: OFFENSE_BAND, ink: white, highlight: white },
+    defense: { band: DEFENSE_BAND, ink: "#000000", highlight: white },
   };
 }
 
@@ -799,6 +801,7 @@ export type WristSheetGroup = {
   name: string;
   short: string;
   codes: string[];
+  decoy?: boolean;
 };
 
 export function sheetGroups(book: WristBook, version: WristVersion | null): WristSheetGroup[] {
@@ -830,8 +833,65 @@ export function sheetGroups(book: WristBook, version: WristVersion | null): Wris
       callId: call.id,
       name: call.name,
       short: call.short,
+      decoy: call.decoy === true,
       codes: (byCall.get(call.id) || []).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
     }));
+}
+
+export type CoachSheetBlock = {
+  name: string;
+  short: string;
+  codes: string[];
+};
+
+/**
+ * Split a coach sheet so every call prints. One page when the calls fit at a
+ * 0.20in header and 0.16in code row. Otherwise complete plays move to the next
+ * page, and a single huge play splits only when it cannot fit alone.
+ */
+export function paginateCoachSheet(
+  blocks: CoachSheetBlock[],
+  sheet: { cols: number; rows?: number; heightIn: number },
+): CoachSheetBlock[][] {
+  const cols = Math.max(1, Math.round(Number(sheet.cols)) || 1);
+  const minRows = Math.max(1, Math.round(Number(sheet.rows) || 1));
+  const innerH = Math.max(0.4, Number(sheet.heightIn) - 0.24);
+  const minHeader = 0.2;
+  const minCode = 0.16;
+  const pieces = blocks.map((block) => ({
+    block,
+    codeRows: Math.max(minRows, Math.ceil(block.codes.length / cols) || 1),
+  }));
+  const heightOf = (items: typeof pieces) => {
+    let height = minHeader;
+    for (const item of items) height += minHeader + item.codeRows * minCode;
+    return height;
+  };
+  if (!pieces.length || heightOf(pieces) <= innerH + 1e-6) return [blocks.slice()];
+  const pages: CoachSheetBlock[][] = [];
+  let current: CoachSheetBlock[] = [];
+  let currentPieces: typeof pieces = [];
+  for (const piece of pieces) {
+    const alone = minHeader + minHeader + piece.codeRows * minCode;
+    if (current.length && heightOf(currentPieces.concat([piece])) > innerH + 1e-6) {
+      pages.push(current);
+      current = [];
+      currentPieces = [];
+    }
+    if (!current.length && alone > innerH + 1e-6) {
+      const roomRows = Math.max(1, Math.floor((innerH - minHeader - minHeader) / minCode));
+      const perPage = roomRows * cols;
+      const codes = piece.block.codes.length ? piece.block.codes : [""];
+      for (let start = 0; start < codes.length; start += perPage) {
+        pages.push([{ ...piece.block, codes: codes.slice(start, start + perPage) }]);
+      }
+      continue;
+    }
+    current.push(piece.block);
+    currentPieces.push(piece);
+  }
+  if (current.length) pages.push(current);
+  return pages;
 }
 
 export function cardCounts(
@@ -1061,8 +1121,109 @@ function withOffenseAliases(call: WristCall): WristCall {
   return call;
 }
 
-export function upgradeLibrary(list: WristCall[]) {
-  const next = reclassifyLocations(list).map(withOffenseAliases);
+const STARTER_NAME_BY_SHORT: Record<string, string> = Object.fromEntries(
+  STARTER_OFFENSE.map((row) => [row[2].toUpperCase(), row[1]]),
+);
+
+function stripStarterTee(call: WristCall): WristCall {
+  if (call.kind !== "offense") return call;
+  const match = call.name.trim().match(/^t\s+(.+)$/i);
+  if (!match) return call;
+  const rest = match[1].trim();
+  const short = call.short.toUpperCase();
+  const canonical = STARTER_NAME_BY_SHORT[short];
+  const restIsStarterName = Object.values(STARTER_NAME_BY_SHORT).some(
+    (value) => value.toLowerCase() === rest.toLowerCase(),
+  );
+  if (rest.toUpperCase() !== short && !canonical && !restIsStarterName) return call;
+  if (canonical && (rest.toUpperCase() === short || rest.toLowerCase() === canonical.toLowerCase())) {
+    return { ...call, name: canonical };
+  }
+  return { ...call, name: rest };
+}
+
+function canonicalRank(call: WristCall) {
+  if (STARTER_OFFENSE.some((row) => row[0] === call.id)) return 0;
+  if (/^play-[a-z0-9+]+$/i.test(call.id)) return 1;
+  return 2;
+}
+
+function preferCall(a: WristCall, b: WristCall): WristCall {
+  const countA = a.count || 0;
+  const countB = b.count || 0;
+  let winner = a;
+  let loser = b;
+  if (countB > countA || (countB === countA && canonicalRank(b) < canonicalRank(a))) {
+    winner = b;
+    loser = a;
+  }
+  let name = winner.name;
+  if (winner.short.toUpperCase() === "H+R") {
+    const hit = [a, b].find((call) => call.name.trim().toLowerCase() === "hit and run");
+    if (hit) name = hit.name;
+  } else if (/^t\s+/i.test(name) && !/^t\s+/i.test(loser.name)) {
+    name = loser.name;
+  }
+  return name === winner.name ? winner : { ...winner, name };
+}
+
+export function duplicateShorts(list: WristCall[]) {
+  const seen = new Map<string, number>();
+  const dups: string[] = [];
+  for (const call of list) {
+    const key = `${call.kind}:${call.short.toUpperCase()}`;
+    const count = (seen.get(key) || 0) + 1;
+    seen.set(key, count);
+    if (count === 2) dups.push(key);
+  }
+  return dups;
+}
+
+export function shortInUse(
+  library: WristCall[],
+  kind: string,
+  short: string,
+  exceptId?: string,
+) {
+  const code = short.trim().toUpperCase();
+  if (!code) return false;
+  return library.some(
+    (call) => call.kind === kind && call.id !== exceptId && call.short.toUpperCase() === code,
+  );
+}
+
+export function dedupeLibrary(list: WristCall[]): { library: WristCall[]; alias: Record<string, string> } {
+  const alias: Record<string, string> = {};
+  const library: WristCall[] = [];
+  const indexByKey = new Map<string, number>();
+  for (const call of list) {
+    const key = `${call.kind}:${call.short.toUpperCase()}`;
+    const existingAt = indexByKey.get(key);
+    if (existingAt == null) {
+      indexByKey.set(key, library.length);
+      library.push(call);
+      continue;
+    }
+    const current = library[existingAt];
+    const survivor = preferCall(current, call);
+    const dropped = survivor.id === current.id ? call : current;
+    library[existingAt] = survivor;
+    alias[dropped.id] = survivor.id;
+  }
+  for (const id of Object.keys(alias)) {
+    let next = alias[id];
+    const seen = new Set<string>([id]);
+    while (alias[next] && !seen.has(alias[next])) {
+      seen.add(next);
+      next = alias[next];
+    }
+    alias[id] = next;
+  }
+  return { library, alias };
+}
+
+export function migrateCalls(list: WristCall[]) {
+  const next = reclassifyLocations(list).map(withOffenseAliases).map(stripStarterTee);
   if (isLegacyTwoGroupLibrary(list)) {
     const extras = [
       ...rowsToCalls("location", DEFAULT_LOCATIONS),
@@ -1076,7 +1237,11 @@ export function upgradeLibrary(list: WristCall[]) {
   for (const call of rowsToCalls("offense", STARTER_OFFENSE)) {
     if (!libraryHas(next, call)) next.push({ ...call, count: 0 });
   }
-  return next;
+  return dedupeLibrary(next);
+}
+
+export function upgradeLibrary(list: WristCall[]) {
+  return migrateCalls(list).library;
 }
 
 export function nextVersionName(existing: WristVersion[]) {
@@ -1146,6 +1311,39 @@ export function signBag(
     while (bag.length < total) bag.push(pad[bag.length % pad.length]);
   }
   return shuffleInPlace(bag.slice(0, total));
+}
+
+/** Even box counts. Remainder goes to real plays before decoys, and counts differ by at most 1. */
+export function evenSpreadCounts(
+  calls: Array<Pick<WristCall, "id" | "decoy">>,
+  total: number,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  const list = calls.filter((call) => call.id);
+  for (const call of list) counts[call.id] = 0;
+  if (total <= 0 || !list.length) return counts;
+  const base = Math.floor(total / list.length);
+  let extra = total % list.length;
+  const ordered = [
+    ...list.filter((call) => !call.decoy),
+    ...list.filter((call) => call.decoy),
+  ];
+  for (const call of ordered) {
+    const bonus = extra > 0 ? 1 : 0;
+    if (extra > 0) extra -= 1;
+    counts[call.id] = base + bonus;
+  }
+  return counts;
+}
+
+export function spreadLibrary(library: WristCall[], kind: WristCallKind, total: number) {
+  const counts = evenSpreadCounts(
+    library.filter((call) => call.kind === kind),
+    total,
+  );
+  return library.map((call) =>
+    call.kind === kind ? { ...call, count: counts[call.id] ?? 0 } : call,
+  );
 }
 
 export function bookLayout(
@@ -1482,6 +1680,84 @@ function sameHex(value: unknown, hex: string) {
   return String(value || "").trim().toLowerCase() === hex;
 }
 
+function hexText(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function isFactoryBlackInk(value: unknown) {
+  const ink = hexText(value);
+  return ink === "#000000" || ink === "#000";
+}
+
+function isFactoryWhite(value: unknown) {
+  const ink = hexText(value);
+  return ink === "" || ink === "#ffffff" || ink === "#fff";
+}
+
+function paintUntouched(
+  raw: unknown,
+  band: string,
+  ink: "black" | "any",
+) {
+  const paint = asRecord(raw);
+  if (!paint) return false;
+  if (paint.band == null || !sameHex(paint.band, band)) return false;
+  if (ink === "black" && paint.ink != null && !isFactoryBlackInk(paint.ink)) return false;
+  if (paint.highlight != null && !isFactoryWhite(paint.highlight)) return false;
+  return true;
+}
+
+/** Last round's red/pink factory pair, still on black ink. Custom colors return false. */
+export function isUntouchedPreviousColors(raw: unknown) {
+  const item = asRecord(raw);
+  if (!item) return false;
+  if (!paintUntouched(item.theme, PREVIOUS_OFFENSE_BAND, "black")) return false;
+  const versions = Array.isArray(item.versions) ? item.versions : [];
+  let sawDefense = false;
+  for (const version of versions) {
+    const record = asRecord(version);
+    const themes = record ? asRecord(record.themes) : null;
+    if (!themes) continue;
+    const offense = asRecord(themes.offense);
+    const defense = asRecord(themes.defense);
+    if (offense && !paintUntouched(offense, PREVIOUS_OFFENSE_BAND, "black")) return false;
+    if (!defense) return false;
+    if (!paintUntouched(defense, PREVIOUS_DEFENSE_BAND, "black")) return false;
+    sawDefense = true;
+  }
+  return sawDefense;
+}
+
+export function isPreviousDefaultSize(raw: unknown) {
+  const item = asRecord(raw);
+  const size = item ? asRecord(item.cardSize) : null;
+  if (!size) return false;
+  if (size.preset === "wrist") return true;
+  return Number(size.widthIn) === 3.25 && Number(size.heightIn) === 2;
+}
+
+function remapVersionCells(raw: unknown, alias: Record<string, string>) {
+  if (!raw || !Object.keys(alias).length) return raw;
+  const item = asRecord(raw);
+  if (!item) return raw;
+  const mapList = (cells: unknown) => {
+    if (!Array.isArray(cells)) return cells;
+    return cells.map((cell) => {
+      const record = asRecord(cell);
+      if (!record) return cell;
+      const callId = String(record.callId || "");
+      const next = alias[callId];
+      return next ? { ...record, callId: next } : cell;
+    });
+  };
+  return {
+    ...item,
+    cells: mapList(item.cells),
+    offenseCells: mapList(item.offenseCells),
+    defenseCells: mapList(item.defenseCells),
+  };
+}
+
 /** Purple 5×5 blocks on a 5×3 card, with no coach color or size change. */
 export function isUntouchedLegacyCard(raw: unknown) {
   const item = asRecord(raw);
@@ -1523,6 +1799,9 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
   const item = asRecord(raw);
   if (!item) return emptyBook(userId, title);
   const legacy = isUntouchedLegacyCard(item);
+  const previousColors = !legacy && isUntouchedPreviousColors(item);
+  const migrateColors = legacy || previousColors;
+  const migrateSize = legacy || (previousColors && isPreviousDefaultSize(item));
   const layout = normalizeLayout(item);
   const kindLayouts = legacy
     ? defaultKindLayouts()
@@ -1530,15 +1809,18 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
   const library = (Array.isArray(item.library) ? item.library : [])
     .map(normalizeCall)
     .filter((call): call is WristCall => Boolean(call));
+  const migrated = library.length
+    ? migrateCalls(library)
+    : { library: defaultLibrary(), alias: {} as Record<string, string> };
   const book = bookDraft(userId, String(item.title || "").trim() || title?.trim() || "My signs", {
     bandKind: normalizeKind(item.bandKind || item.kind || "offense"),
     ...layout,
     kindLayouts,
-    theme: legacy ? defaultSetThemes().offense : normalizeTheme(item.theme),
+    theme: migrateColors ? defaultSetThemes().offense : normalizeTheme(item.theme),
     sheet: normalizeSheet(item.sheet || { cols: item.sheetCols, rows: item.sheetRows }),
-    cardSize: legacy ? defaultCardSize() : normalizeCardSize(item.cardSize),
+    cardSize: migrateSize ? defaultCardSize() : normalizeCardSize(item.cardSize),
     numbering: normalizeNumbering(item.numbering),
-    library: library.length ? upgradeLibrary(library) : defaultLibrary(),
+    library: migrated.library,
     updatedAt: Number(item.updatedAt) || Date.now(),
   });
   const offenseLayout = layoutFor(book, "offense");
@@ -1546,7 +1828,9 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
   book.versions = (Array.isArray(item.versions) ? item.versions : [])
     .map((version, index) =>
       normalizeVersion(
-        legacy && asRecord(version) ? { ...asRecord(version), themes: defaultSetThemes() } : version,
+        migrateColors && asRecord(version)
+          ? { ...asRecord(remapVersionCells(version, migrated.alias)), themes: defaultSetThemes() }
+          : remapVersionCells(version, migrated.alias),
         index,
         offenseLayout,
         defenseLayout,
