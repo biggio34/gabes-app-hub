@@ -381,21 +381,97 @@ export function blocksAcross(grids: number): number {
   return Math.ceil(count / 2);
 }
 
+/** Field-look rule. Offense and defense use this same weight. */
+export const CARD_RULE_PT = 0.25;
+
+/**
+ * Side inset on a card with more than three blocks, as a fraction of cell width.
+ * A 4×4 and a 5×5 then share one padding ratio.
+ */
+export const CARD_PAD_FRAC = 0.025;
+
+/**
+ * Type size as a fraction of cell height when a card has more than three blocks.
+ * A code that would overflow the cell shrinks; the ratio otherwise stays put.
+ */
+export const CARD_TYPE_RATIO = 0.68;
+
 /**
  * Side inset for card type, in points.
  * Two- and three-block cards keep the 0.9pt gap from the reference samples.
- * A 6-block cell is about 13pt wide, so that fixed gap is eased toward 0.35pt
- * and the one shared type size can grow. Cells at least 20pt wide keep 0.9pt.
+ * Larger block counts use the same fraction of the cell, so 4×4 and 5×5 match.
  */
 export function sidePadPt(cellW: number, grids: number): number {
   if (!Number.isFinite(cellW) || cellW <= 0) return 0.9;
   if (!Number.isFinite(grids) || grids <= 3) return 0.9;
-  const wide = 20;
-  const tight = 14;
-  if (cellW >= wide) return 0.9;
-  if (cellW <= tight) return 0.35;
-  const t = (cellW - tight) / (wide - tight);
-  return Math.round((0.35 + (0.9 - 0.35) * t) * 1000) / 1000;
+  return Math.round(cellW * CARD_PAD_FRAC * 1000) / 1000;
+}
+
+export type CellChrome = {
+  padPt: number;
+  /** padPt divided by cell width. */
+  padFrac: number;
+  borderPt: number;
+  cellWPt: number;
+  cellHPt: number;
+  fontPt: number;
+  /** fontPt divided by cell height. */
+  fontRatio: number;
+  align: "middle";
+  /** Column, row, and corner cells paint with the card band. */
+  headerFill: "band";
+};
+
+/**
+ * Shared box chrome for every block count. Header cells are the same size as
+ * data cells. Padding, rule weight, alignment, and the type-to-cell ratio
+ * follow one rule, so a 4×4 and a 5×5 are the same design at different counts.
+ */
+export function cellChrome(
+  size: { widthIn: number; heightIn: number },
+  layout: { grids: number; cols: number; rows: number },
+  labelEm: number,
+): CellChrome {
+  const metrics = cardGridMetrics(size, layout);
+  const cellWPt = metrics.cellW * 72;
+  const cellHPt = metrics.cellH * 72;
+  const padPt = sidePadPt(cellWPt, layout.grids);
+  const innerW = Math.max(1, cellWPt - padPt * 2);
+  const em = Number.isFinite(labelEm) && labelEm > 0 ? labelEm : 1;
+  const grids = layout.grids;
+  let fontPt: number;
+  let fontRatio: number;
+  if (!Number.isFinite(grids) || grids <= 3) {
+    fontPt = Math.min(cellHPt, innerW / em);
+    fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
+  } else {
+    fontRatio = CARD_TYPE_RATIO;
+    fontPt = cellHPt * fontRatio;
+    if (fontPt * em > innerW) {
+      fontPt = innerW / em;
+      fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
+    }
+    if (fontPt > cellHPt) {
+      fontPt = cellHPt;
+      fontRatio = cellHPt > 0 ? 1 : 0;
+    }
+  }
+  const minPt = (4 * 72) / 96;
+  if (fontPt < minPt) {
+    fontPt = minPt;
+    fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
+  }
+  return {
+    padPt,
+    padFrac: cellWPt > 0 ? padPt / cellWPt : 0,
+    borderPt: CARD_RULE_PT,
+    cellWPt,
+    cellHPt,
+    fontPt,
+    fontRatio,
+    align: "middle",
+    headerFill: "band",
+  };
 }
 
 /** White knockout behind dark type. Reference sizes (about 16pt and up) stay at 0.4pt. */

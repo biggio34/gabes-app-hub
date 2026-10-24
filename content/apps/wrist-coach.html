@@ -806,6 +806,9 @@
     const CARD_MAX_W = 7.42;
     const CARD_MAX_H = 8.91;
     const LAMINATE_BLEED_IN = 0.125;
+    const CARD_RULE_PT = 0.25;
+    const CARD_PAD_FRAC = 0.025;
+    const CARD_TYPE_RATIO = 0.68;
     const DEFAULT_THEME = { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
     const SET_THEMES = {
       offense: { band: "#ff0000", ink: "#ffffff", highlight: "#ffffff", headerInk: "#ffffff" },
@@ -2220,16 +2223,54 @@
       return Math.max(4, Math.floor(size * 100) / 100);
     }
 
-    // Keep in sync with sidePadPt / knockoutPt in src/lib/wrist-coach.ts.
+    // Keep in sync with sidePadPt / cellChrome / knockoutPt in src/lib/wrist-coach.ts.
     function sidePadPt(cellW, grids) {
       if (!isFinite(cellW) || cellW <= 0) return 0.9;
       if (!isFinite(grids) || grids <= 3) return 0.9;
-      const wide = 20;
-      const tight = 14;
-      if (cellW >= wide) return 0.9;
-      if (cellW <= tight) return 0.35;
-      const t = (cellW - tight) / (wide - tight);
-      return Math.round((0.35 + (0.9 - 0.35) * t) * 1000) / 1000;
+      return Math.round(cellW * CARD_PAD_FRAC * 1000) / 1000;
+    }
+
+    function cellChrome(size, layout, labelEm) {
+      const metrics = cardGridMetrics(size, layout);
+      const cellWPt = metrics.cellW * 72;
+      const cellHPt = metrics.cellH * 72;
+      const padPt = sidePadPt(cellWPt, layout.grids);
+      const innerW = Math.max(1, cellWPt - padPt * 2);
+      const em = isFinite(labelEm) && labelEm > 0 ? labelEm : 1;
+      const grids = layout.grids;
+      let fontPt;
+      let fontRatio;
+      if (!isFinite(grids) || grids <= 3) {
+        fontPt = Math.min(cellHPt, innerW / em);
+        fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
+      } else {
+        fontRatio = CARD_TYPE_RATIO;
+        fontPt = cellHPt * fontRatio;
+        if (fontPt * em > innerW) {
+          fontPt = innerW / em;
+          fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
+        }
+        if (fontPt > cellHPt) {
+          fontPt = cellHPt;
+          fontRatio = cellHPt > 0 ? 1 : 0;
+        }
+      }
+      const minPt = 4 * 72 / 96;
+      if (fontPt < minPt) {
+        fontPt = minPt;
+        fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
+      }
+      return {
+        padPt: padPt,
+        padFrac: cellWPt > 0 ? padPt / cellWPt : 0,
+        borderPt: CARD_RULE_PT,
+        cellWPt: cellWPt,
+        cellHPt: cellHPt,
+        fontPt: fontPt,
+        fontRatio: fontRatio,
+        align: "middle",
+        headerFill: "band"
+      };
     }
 
     function knockoutPt(sizePt) {
@@ -2395,13 +2436,16 @@
       const hPt = size.heightIn * 72;
       const cellW = wPt / metrics.colSlots;
       const cellH = hPt / metrics.rowSlots;
-      const padPt = sidePadPt(cellW, layout.grids);
+      const label = widestLabel(labelsOnCard(version, layout));
+      const chrome = cellChrome(size, layout, emWidth(label));
+      const padPt = chrome.padPt;
       const fontPx = fitFontPx(
-        widestLabel(labelsOnCard(version, layout)),
+        label,
         Math.max(4, (cellW - padPt * 2) * 96 / 72),
         Math.max(4, cellH * 96 / 72)
       );
-      const fontPt = fontPx * 72 / 96;
+      const fittedPt = fontPx * 72 / 96;
+      const fontPt = layout.grids > 3 ? chrome.fontPt : fittedPt;
       const uid = "wc" + (wristCardSeq += 1);
       const dataRows = layout.rows + 1;
       const look = cardPaint(theme);
@@ -2549,16 +2593,15 @@
         const acrossIndex = halfIndex === 0 ? g : g - metrics.topCount;
         const col0 = acrossIndex * (layout.cols + 1);
         const row0 = originRow(halfIndex);
-        const cornerBand = book.bandKind !== "defense";
         addCell(
           col0 * cellW,
           row0 * cellH,
-          cornerBand ? look.bandFill : "#ffffff",
+          look.bandFill,
           "",
-          cornerBand ? look.bandInk : "#000000",
+          headerInk,
           fontPt,
           "",
-          cornerBand ? "band" : "data"
+          "band"
         );
         for (let col = 0; col < layout.cols; col += 1) {
           addCell(
@@ -2631,7 +2674,7 @@
       const footerTop = barY;
       addText(stamp, 0, barY, wPt, cellH, footerPt, footerInk, "", null, look.bandFill, "footer");
       const card =
-        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-footer-ink="' + footerInk + '" data-footer-top="' + n(footerTop) + '" data-header-ink="' + headerInk + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-footer-ink="' + footerInk + '" data-footer-top="' + n(footerTop) + '" data-header-ink="' + headerInk + '" data-header-fill="' + look.bandFill + '" data-pad-pt="' + n(chrome.padPt) + '" data-rule-pt="' + n(chrome.borderPt) + '" data-font-ratio="' + n(chrome.fontRatio) + '" data-align="' + chrome.align + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="xMidYMid meet">' +
             '<defs>' + clips.join("") + '</defs>' +
             dataShapes.join("") +
@@ -2683,10 +2726,10 @@
         name: "field",
         bandFill: theme.band,
         bandInk: theme.ink,
-        bandStroke: "#000000",
-        bandStrokeW: 0.25,
-        dataStroke: "#000000",
-        dataStrokeW: 0.25,
+          bandStroke: "#000000",
+          bandStrokeW: CARD_RULE_PT,
+          dataStroke: "#000000",
+          dataStrokeW: CARD_RULE_PT,
         data: function (paint) { return paint; }
       };
     }

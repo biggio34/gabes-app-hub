@@ -13,6 +13,10 @@ import {
   blocksAcross,
   knockoutPt,
   sidePadPt,
+  cellChrome,
+  CARD_PAD_FRAC,
+  CARD_RULE_PT,
+  CARD_TYPE_RATIO,
   DEFAULT_ROWS,
   DEFAULT_SHEET_COLS,
   DEFAULT_SHEET_ROWS,
@@ -599,9 +603,10 @@ describe("wrist coach book", () => {
     assert.equal(blocksAcross(1), 1);
     assert.equal(blocksAcross(8), 4);
     assert.ok(emptyBook("user-1", "Offense").cardSize.widthIn > emptyBook("user-1", "Offense").cardSize.heightIn);
-    assert.equal(sidePadPt(13, 6), 0.35);
-    assert.equal(sidePadPt(20, 6), 0.9);
-    assert.equal(sidePadPt(15.6, 6), 0.497);
+    assert.equal(sidePadPt(13, 6), 0.325);
+    assert.equal(sidePadPt(20, 6), 0.5);
+    assert.equal(sidePadPt(15.6, 6), 0.39);
+    assert.equal(sidePadPt(14, 6) / 14, sidePadPt(16.8, 6) / 16.8);
     assert.ok(sidePadPt(13, 6) < sidePadPt(21, 2));
     assert.equal(knockoutPt(15.9), 0.4);
     assert.equal(knockoutPt(21.825), 0.4);
@@ -615,9 +620,58 @@ describe("wrist coach book", () => {
     assert.match(page, /grids: 6/);
     assert.match(page, /function sidePadPt\(cellW, grids\)/);
     assert.match(page, /if \(!isFinite\(grids\) \|\| grids <= 3\) return 0\.9/);
-    assert.match(page, /sidePadPt\(cellW, layout\.grids\)/);
+    assert.match(page, /sidePadPt\(cellWPt, layout\.grids\)/);
     assert.match(page, /knockoutPt\(fontPt\)/);
     assert.doesNotMatch(page, /const padPt = 0\.9/);
+  });
+
+  it("uses the same cell chrome on a 5×5 offense card and a 4×4 defense card", () => {
+    const size = { widthIn: 3.5, heightIn: 2.25 };
+    const offense = cellChrome(size, { grids: 6, cols: 5, rows: 5 }, 1.548);
+    const defense = cellChrome(size, { grids: 6, cols: 4, rows: 4 }, 1.237);
+    assert.ok(Math.abs(offense.padFrac - defense.padFrac) < 1e-9);
+    assert.ok(Math.abs(offense.padFrac - CARD_PAD_FRAC) < 1e-9);
+    assert.equal(offense.padPt, 0.35);
+    assert.equal(defense.padPt, 0.42);
+    assert.equal(offense.borderPt, defense.borderPt);
+    assert.equal(offense.borderPt, CARD_RULE_PT);
+    assert.equal(offense.fontRatio, defense.fontRatio);
+    assert.equal(offense.fontRatio, CARD_TYPE_RATIO);
+    assert.equal(offense.align, defense.align);
+    assert.equal(offense.align, "middle");
+    assert.equal(offense.headerFill, "band");
+    assert.equal(defense.headerFill, "band");
+    assert.ok(Math.abs(offense.cellWPt * 18 - size.widthIn * 72) < 1e-6);
+    assert.ok(Math.abs(defense.cellWPt * 15 - size.widthIn * 72) < 1e-6);
+    assert.ok(Math.abs(offense.cellHPt * 13 - size.heightIn * 72) < 1e-6);
+    assert.ok(Math.abs(defense.cellHPt * 11 - size.heightIn * 72) < 1e-6);
+    assert.ok(offense.fontPt * 1.548 <= offense.cellWPt - offense.padPt * 2 + 1e-6);
+    assert.ok(defense.fontPt * 1.237 <= defense.cellWPt - defense.padPt * 2 + 1e-6);
+    const tight = cellChrome(size, { grids: 6, cols: 5, rows: 5 }, 3);
+    assert.ok(tight.fontRatio < CARD_TYPE_RATIO);
+    assert.ok(tight.fontPt * 3 <= tight.cellWPt - tight.padPt * 2 + 1e-6);
+    assert.equal(tight.borderPt, offense.borderPt);
+    assert.ok(Math.abs(tight.padFrac - offense.padFrac) < 1e-9);
+    assert.equal(tight.align, offense.align);
+    const reference = cellChrome({ widthIn: 3.5, heightIn: 2 }, { grids: 2, cols: 5, rows: 5 }, 1.548);
+    assert.equal(reference.padPt, 0.9);
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /function cellChrome\(size, layout, labelEm\)/);
+    assert.match(page, /headerFill: "band"/);
+    assert.match(page, /const CARD_RULE_PT = 0\.25/);
+    assert.match(page, /const CARD_TYPE_RATIO = 0\.68/);
+    assert.match(page, /data-header-fill="/);
+    assert.match(page, /data-pad-pt="/);
+    assert.match(page, /data-rule-pt="/);
+    assert.match(page, /data-font-ratio="/);
+    assert.match(page, /data-align="/);
+    assert.doesNotMatch(page, /cornerBand/);
+    assert.match(page, /bandStrokeW: CARD_RULE_PT/);
+    assert.match(page, /dataStrokeW: CARD_RULE_PT/);
+    const cardFn = page.slice(page.indexOf("function wristCardHtml"), page.indexOf("function cardPaint"));
+    assert.match(cardFn, /look\.bandFill,\s*"",\s*headerInk/);
+    assert.doesNotMatch(cardFn, /"#ffffff",\s*"",/);
+    assert.doesNotMatch(cardFn, /bandKind !== "defense"/);
   });
 
   it("gives offense and defense their own names on a version", () => {
@@ -797,7 +851,8 @@ describe("wrist coach book", () => {
     assert.match(page, /function cardGridMetrics\(size, layout\)/);
     assert.match(page, /const metrics = cardGridMetrics\(size, layout\)/);
     assert.match(page, /data-type-pt="/);
-    assert.match(page, /const fontPt = fontPx \* 72 \/ 96/);
+    assert.match(page, /const fittedPt = fontPx \* 72 \/ 96/);
+    assert.match(page, /const fontPt = layout\.grids > 3 \? chrome\.fontPt : fittedPt/);
     assert.match(page, /const CARD_MAX_W = 7\.42/);
     assert.match(page, /const CARD_MAX_H = 8\.91/);
     assert.match(page, /id="card-w"/);
@@ -933,7 +988,8 @@ describe("wrist coach book", () => {
     assert.match(page, /const cardGap = laminateOn \? 0\.03 : 0\.28/);
     assert.match(page, /const cardSide = laminateOn \? MARK_PAD : MARK_PAD \+ MARK_OUT/);
     const cardFn = page.slice(page.indexOf("function wristCardHtml"), page.indexOf("function cardPaint"));
-    assert.match(cardFn, /const fontPt = fontPx \* 72 \/ 96/);
+    assert.match(cardFn, /const fittedPt = fontPx \* 72 \/ 96/);
+    assert.match(cardFn, /const fontPt = layout\.grids > 3 \? chrome\.fontPt : fittedPt/);
     assert.doesNotMatch(cardFn.slice(0, cardFn.indexOf("const fontPt")), /laminateOn/);
     assert.doesNotMatch(cardFn, /fontPt = [^;]*laminate/);
   });
