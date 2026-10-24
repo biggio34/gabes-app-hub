@@ -844,27 +844,79 @@ export type CoachSheetBlock = {
   codes: string[];
 };
 
+export type CoachSheetFrame = {
+  cols: number;
+  minRows: number;
+  innerH: number;
+  capacity: number;
+  headerIn: number;
+  codeIn: number;
+  codeSize: number;
+  playSize: number;
+  bannerSize: number;
+};
+
 /**
- * Split a coach sheet so every call prints. One page when the calls fit at a
- * 0.20in header and 0.16in code row. Otherwise complete plays move to the next
- * page, and a single huge play splits only when it cannot fit alone.
+ * Row size for a full coach sheet. Partial pages use these same heights so a
+ * leftover call does not stretch into a giant header.
+ */
+export function coachSheetFrame(sheet: {
+  cols: number;
+  rows?: number;
+  widthIn?: number;
+  heightIn: number;
+}): CoachSheetFrame {
+  const cols = Math.max(1, Math.round(Number(sheet.cols)) || 1);
+  const minRows = Math.max(1, Math.round(Number(sheet.rows) || 1));
+  const heightIn = Number(sheet.heightIn) || 5.5;
+  const widthIn = Number(sheet.widthIn) || 3.5;
+  const innerH = Math.max(0.4, heightIn - 0.24);
+  const innerW = Math.max(1, widthIn - 0.24);
+  const headerScale = 0.72;
+  let capacity = 1;
+  for (let groups = 1; groups <= 60; groups += 1) {
+    const headerCount = 1 + groups;
+    const codeCount = groups * minRows;
+    const codeH = innerH / (headerCount * headerScale + codeCount);
+    const headerH = codeH * headerScale;
+    if (headerH < 0.145 || codeH < 0.16) break;
+    capacity = groups;
+  }
+  const headerCount = 1 + capacity;
+  const codeCount = capacity * minRows;
+  const codeIn = innerH / (headerCount * headerScale + codeCount);
+  const headerIn = codeIn * headerScale;
+  const headerPx = headerIn * 96;
+  const codePx = codeIn * 96;
+  const colPx = (innerW / cols) * 96;
+  const codeSize = Math.max(1, Math.min(codePx * 0.78, colPx * 0.55, Math.max(1, codePx - 1)));
+  const playSize = Math.max(1, Math.min(headerPx * 0.78, 28, Math.max(1, headerPx - 1)));
+  const bannerSize = Math.max(1, Math.min(headerPx * 0.72, innerW * 96 * 0.04, Math.max(1, headerPx - 1)));
+  return { cols, minRows, innerH, capacity, headerIn, codeIn, codeSize, playSize, bannerSize };
+}
+
+/**
+ * Split a coach sheet so every call prints. Rows stay the full-page size.
+ * A call that does not fit starts the next page. One huge play splits only
+ * when it cannot fit on a page alone.
  */
 export function paginateCoachSheet(
   blocks: CoachSheetBlock[],
-  sheet: { cols: number; rows?: number; heightIn: number },
+  sheet: { cols: number; rows?: number; widthIn?: number; heightIn: number },
 ): CoachSheetBlock[][] {
-  const cols = Math.max(1, Math.round(Number(sheet.cols)) || 1);
-  const minRows = Math.max(1, Math.round(Number(sheet.rows) || 1));
-  const innerH = Math.max(0.4, Number(sheet.heightIn) - 0.24);
-  const minHeader = 0.2;
-  const minCode = 0.16;
+  const frame = coachSheetFrame(sheet);
+  const cols = frame.cols;
+  const minRows = frame.minRows;
+  const innerH = frame.innerH;
+  const headerIn = frame.headerIn;
+  const codeIn = frame.codeIn;
   const pieces = blocks.map((block) => ({
     block,
     codeRows: Math.max(minRows, Math.ceil(block.codes.length / cols) || 1),
   }));
   const heightOf = (items: typeof pieces) => {
-    let height = minHeader;
-    for (const item of items) height += minHeader + item.codeRows * minCode;
+    let height = headerIn;
+    for (const item of items) height += headerIn + item.codeRows * codeIn;
     return height;
   };
   if (!pieces.length || heightOf(pieces) <= innerH + 1e-6) return [blocks.slice()];
@@ -872,14 +924,14 @@ export function paginateCoachSheet(
   let current: CoachSheetBlock[] = [];
   let currentPieces: typeof pieces = [];
   for (const piece of pieces) {
-    const alone = minHeader + minHeader + piece.codeRows * minCode;
+    const alone = headerIn + headerIn + piece.codeRows * codeIn;
     if (current.length && heightOf(currentPieces.concat([piece])) > innerH + 1e-6) {
       pages.push(current);
       current = [];
       currentPieces = [];
     }
     if (!current.length && alone > innerH + 1e-6) {
-      const roomRows = Math.max(1, Math.floor((innerH - minHeader - minHeader) / minCode));
+      const roomRows = Math.max(1, Math.floor((innerH - headerIn - headerIn) / codeIn));
       const perPage = roomRows * cols;
       const codes = piece.block.codes.length ? piece.block.codes : [""];
       for (let start = 0; start < codes.length; start += perPage) {
@@ -1344,6 +1396,41 @@ export function spreadLibrary(library: WristCall[], kind: WristCallKind, total: 
   return library.map((call) =>
     call.kind === kind ? { ...call, count: counts[call.id] ?? 0 } : call,
   );
+}
+
+/**
+ * Counts for Reset. Offense keeps the factory counts a new book deals.
+ * Defense keeps every factory call, spread evenly, which is how a new book
+ * fills a defense card. A custom call stays only when it is already on the card.
+ * Catalog calls a new book leaves off (count 0) stay off.
+ */
+export function libraryForReset(
+  library: WristCall[],
+  kind: WristCallKind,
+  onCardIds: string[],
+  total: number,
+): WristCall[] {
+  const factory = defaultLibrary().filter((call) => call.kind === kind);
+  const factoryById = new Map(factory.map((call) => [call.id, call]));
+  const onCard = new Set(onCardIds.filter(Boolean));
+  if (kind === "defense") {
+    const keep = library.filter((call) => {
+      if (call.kind !== kind || !call.id) return false;
+      if (factoryById.has(call.id)) return true;
+      return onCard.has(call.id);
+    });
+    const spread = evenSpreadCounts(keep, total);
+    return library.map((call) =>
+      call.kind === kind ? { ...call, count: spread[call.id] || 0 } : call,
+    );
+  }
+  return library.map((call) => {
+    if (call.kind !== kind) return call;
+    const known = factoryById.get(call.id);
+    if (known) return { ...call, count: known.count };
+    if (onCard.has(call.id)) return { ...call, count: Math.max(1, call.count || 0) };
+    return { ...call, count: 0 };
+  });
 }
 
 export function bookLayout(

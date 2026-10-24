@@ -69,7 +69,10 @@ import {
   shortInUse,
   evenSpreadCounts,
   spreadLibrary,
+  libraryForReset,
   paginateCoachSheet,
+  coachSheetFrame,
+  buildKindCells,
   kindTheme,
   kindTitle,
   layoutFor,
@@ -1313,6 +1316,8 @@ describe("wrist coach book", () => {
     assert.match(page, /PREVIOUS_OFFENSE_BAND = "#c00000"/);
     assert.match(page, /PREVIOUS_DEFENSE_BAND = "#f87080"/);
     assert.match(page, /footerPt = 8/);
+    assert.match(page, /addText\(stamp, 0, barY, wPt, cellH, footerPt, footerInk, "", null, look\.bandFill, "footer"\)/);
+    assert.doesNotMatch(page, /hPt - footerSlot/);
     assert.doesNotMatch(page, /addText\(bandTitle\(\)/);
     assert.match(page, /slice\(0, 5\)/);
     assert.match(page, /count: 1/);
@@ -1486,6 +1491,53 @@ describe("wrist coach book", () => {
     assert.equal(next.filter((call) => call.kind === "defense").every((call) => call.count === book.library.find((item) => item.id === call.id)?.count), true);
   });
 
+  it("reset deals the same plays as a new book", () => {
+    const tally = (cells: Array<{ callId: string }>) => {
+      const counts: Record<string, number> = {};
+      for (const cell of cells) {
+        if (!cell.callId) continue;
+        counts[cell.callId] = (counts[cell.callId] || 0) + 1;
+      }
+      return counts;
+    };
+    const fresh = emptyBook("coach-1");
+    const freshVersion = activeVersion(fresh);
+    assert.ok(freshVersion);
+    const book = emptyBook("coach-1");
+    const version = activeVersion(book);
+    assert.ok(version);
+    const offenseTotal = cellCount(layoutFor(book, "offense"));
+    const defenseTotal = cellCount(layoutFor(book, "defense"));
+    book.library = spreadLibrary(book.library, "offense", offenseTotal);
+    version.offenseCells = buildKindCells(book, "offense");
+    version.cells = version.offenseCells;
+    const polluted = new Set(version.offenseCells.map((cell) => cell.callId).filter(Boolean));
+    assert.ok(polluted.size >= 28);
+    book.library = libraryForReset(
+      book.library,
+      "offense",
+      version.offenseCells.map((cell) => cell.callId),
+      offenseTotal,
+    );
+    book.library = libraryForReset(
+      book.library,
+      "defense",
+      version.defenseCells.map((cell) => cell.callId),
+      defenseTotal,
+    );
+    version.offenseCells = buildKindCells(book, "offense");
+    version.defenseCells = buildKindCells(book, "defense");
+    assert.deepEqual(tally(version.offenseCells), tally(freshVersion.offenseCells));
+    assert.deepEqual(tally(version.defenseCells), tally(freshVersion.defenseCells));
+    for (const short of ["HA", "SWG", "SQZ", "DBL", "SLH", "BFH"]) {
+      const call = book.library.find((item) => item.kind === "offense" && item.short === short);
+      assert.ok(call);
+      assert.equal(call.count, 0);
+      assert.equal(version.offenseCells.some((cell) => cell.callId === call.id), false);
+    }
+    assert.equal(new Set(version.offenseCells.map((cell) => cell.callId)).size < 28, true);
+  });
+
   it("prints every starter and the full offense list on the coach sheet", () => {
     const starters = ["X", "P", "B1", "FBS", "SAS", "H+R", "SS3B"];
     const starterBlocks = starters.map((short) => {
@@ -1510,6 +1562,43 @@ describe("wrist coach book", () => {
     assert.deepEqual(tiny.flat().map((block) => block.short), starters);
   });
 
+  it("gives defense coach sheets a second page in the same row style", () => {
+    const sheet = { cols: 15, rows: 1, widthIn: 3.5, heightIn: 5.5 };
+    const frame = coachSheetFrame(sheet);
+    assert.equal(frame.capacity, 14);
+    assert.ok(frame.headerIn < 0.2);
+    assert.ok(frame.headerIn > 0.12);
+    assert.ok(frame.codeIn > frame.headerIn);
+    const defense = defaultLibrary().filter((call) => call.kind === "defense");
+    const blocksFor = (count: number) => Array.from({ length: count }, (_, index) => {
+      const call = defense[index] || { name: `Extra ${index + 1}`, short: `E${index + 1}` };
+      return { name: call.name, short: call.short, codes: ["11", "12", "13"] };
+    });
+    const expectedPages = (count: number) => Math.ceil(count / frame.capacity);
+    for (const count of [15, 20, 30]) {
+      const pages = paginateCoachSheet(blocksFor(count), sheet);
+      assert.equal(pages.length, expectedPages(count), `${count} calls`);
+      assert.equal(pages[0].length, frame.capacity);
+      const last = count % frame.capacity || frame.capacity;
+      assert.equal(pages[pages.length - 1].length, last);
+      assert.deepEqual(pages.flat().map((block) => block.short), blocksFor(count).map((block) => block.short));
+      const offensePages = paginateCoachSheet(
+        blocksFor(count).map((block, index) => ({ ...block, short: `O${index + 1}` })),
+        sheet,
+      );
+      assert.equal(offensePages.length, pages.length);
+    }
+    const fifteen = paginateCoachSheet(blocksFor(15), sheet);
+    assert.equal(fifteen.length, 2);
+    assert.equal(fifteen[1].length, 1);
+    assert.equal(fifteen[1][0].short, "NS");
+    assert.equal(fifteen[1][0].name, "No steal");
+    const partial = coachSheetFrame(sheet);
+    assert.equal(partial.headerIn, frame.headerIn);
+    assert.equal(partial.bannerSize, frame.bannerSize);
+    assert.equal(partial.codeSize, frame.codeSize);
+  });
+
   it("marks decoys on the names sheet and keeps the round 16 page controls", () => {
     const book = emptyBook("coach-1");
     const version = activeVersion(book);
@@ -1529,6 +1618,14 @@ describe("wrist coach book", () => {
     assert.match(page, /class="swatch-line"/);
     assert.match(page, /name-decoy/);
     assert.match(page, /function paginateCoachSheet/);
+    assert.match(page, /function coachSheetFrame/);
+    assert.match(page, /function libraryForReset/);
+    assert.match(page, /const sheetFit = \{ cols: 1, rows: 1, count: 1 \}/);
+    assert.match(page, /data-header-in/);
+    assert.match(page, /data-footer-top/);
+    assert.match(page, /#111111/);
+    assert.match(page, /text-shadow: none/);
+    assert.match(page, /text-shadow:none/);
     assert.match(page, /function shortInUse/);
     assert.match(page, /print-color-adjust:exact/);
     assert.match(page, /-webkit-print-color-adjust:exact/);
@@ -1537,7 +1634,8 @@ describe("wrist coach book", () => {
     const resetStart = page.indexOf('getElementById("reset-defaults")');
     const resetEnd = page.indexOf('getElementById("new-book")');
     const reset = page.slice(resetStart, resetEnd);
-    assert.match(reset, /evenSpreadCounts/);
+    assert.match(reset, /libraryForReset/);
+    assert.doesNotMatch(reset, /evenSpreadCounts/);
     assert.doesNotMatch(reset, /cardSize/);
     assert.match(page, /The card size stays/);
   });

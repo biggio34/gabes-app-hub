@@ -86,6 +86,7 @@
       font-weight: 700;
       letter-spacing: 0;
       font-variant-numeric: tabular-nums;
+      text-shadow: none;
     }
     .card-scaler {
       position: relative;
@@ -257,7 +258,7 @@
     }
     .coach-sheet {
       width: 100%;
-      height: 100%;
+      height: auto;
       border-collapse: collapse;
       background: #fff;
       color: #111;
@@ -1631,6 +1632,33 @@
       });
     }
 
+    function libraryForReset(library, kind, onCardIds, total) {
+      const factory = defaultLibrary().filter(function (call) { return call.kind === kind; });
+      const factoryById = {};
+      factory.forEach(function (call) { factoryById[call.id] = call; });
+      const onCard = {};
+      (onCardIds || []).forEach(function (id) { if (id) onCard[id] = true; });
+      if (kind === "defense") {
+        const keep = library.filter(function (call) {
+          if (!call || call.kind !== kind || !call.id) return false;
+          if (factoryById[call.id]) return true;
+          return !!onCard[call.id];
+        });
+        const spread = evenSpreadCounts(keep, total);
+        return library.map(function (call) {
+          if (call.kind !== kind) return call;
+          return Object.assign({}, call, { count: spread[call.id] || 0 });
+        });
+      }
+      return library.map(function (call) {
+        if (call.kind !== kind) return call;
+        const known = factoryById[call.id];
+        if (known) return Object.assign({}, call, { count: known.count });
+        if (onCard[call.id]) return Object.assign({}, call, { count: Math.max(1, call.count || 0) });
+        return Object.assign({}, call, { count: 0 });
+      });
+    }
+
     function evenSpreadCounts(calls, total) {
       const counts = {};
       const list = (calls || []).filter(function (call) { return call && call.id; });
@@ -1648,12 +1676,53 @@
       return counts;
     }
 
-    function paginateCoachSheet(blocks, sheet) {
+    function coachSheetFrame(sheet) {
       const cols = Math.max(1, Math.round(Number(sheet.cols)) || 1);
       const minRows = Math.max(1, Math.round(Number(sheet.rows) || 1));
-      const innerH = Math.max(0.4, Number(sheet.heightIn) - 0.24);
-      const minHeader = 0.2;
-      const minCode = 0.16;
+      const heightIn = Number(sheet.heightIn) || 5.5;
+      const widthIn = Number(sheet.widthIn) || 3.5;
+      const innerH = Math.max(0.4, heightIn - 0.24);
+      const innerW = Math.max(1, widthIn - 0.24);
+      const headerScale = 0.72;
+      let capacity = 1;
+      for (let groups = 1; groups <= 60; groups += 1) {
+        const headerCount = 1 + groups;
+        const codeCount = groups * minRows;
+        const codeH = innerH / (headerCount * headerScale + codeCount);
+        const headerH = codeH * headerScale;
+        if (headerH < 0.145 || codeH < 0.16) break;
+        capacity = groups;
+      }
+      const packedHeaders = 1 + capacity;
+      const packedCodes = capacity * minRows;
+      const codeIn = innerH / (packedHeaders * headerScale + packedCodes);
+      const headerIn = codeIn * headerScale;
+      const headerPx = headerIn * 96;
+      const codePx = codeIn * 96;
+      const colPx = (innerW / cols) * 96;
+      const codeSize = Math.max(1, Math.min(codePx * 0.78, colPx * 0.55, Math.max(1, codePx - 1)));
+      const playSize = Math.max(1, Math.min(headerPx * 0.78, 28, Math.max(1, headerPx - 1)));
+      const bannerSize = Math.max(1, Math.min(headerPx * 0.72, innerW * 96 * 0.04, Math.max(1, headerPx - 1)));
+      return {
+        cols: cols,
+        minRows: minRows,
+        innerH: innerH,
+        capacity: capacity,
+        headerIn: headerIn,
+        codeIn: codeIn,
+        codeSize: codeSize,
+        playSize: playSize,
+        bannerSize: bannerSize
+      };
+    }
+
+    function paginateCoachSheet(blocks, sheet) {
+      const frame = coachSheetFrame(sheet || {});
+      const cols = frame.cols;
+      const minRows = frame.minRows;
+      const innerH = frame.innerH;
+      const headerIn = frame.headerIn;
+      const codeIn = frame.codeIn;
       const pieces = (blocks || []).map(function (block) {
         return {
           block: block,
@@ -1661,23 +1730,23 @@
         };
       });
       function heightOf(items) {
-        let height = minHeader;
-        items.forEach(function (item) { height += minHeader + item.codeRows * minCode; });
+        let height = headerIn;
+        items.forEach(function (item) { height += headerIn + item.codeRows * codeIn; });
         return height;
       }
-      if (!pieces.length || heightOf(pieces) <= innerH + 1e-6) return [blocks.slice()];
+      if (!pieces.length || heightOf(pieces) <= innerH + 1e-6) return [(blocks || []).slice()];
       const pages = [];
       let current = [];
       let currentPieces = [];
       pieces.forEach(function (piece) {
-        const alone = minHeader + minHeader + piece.codeRows * minCode;
+        const alone = headerIn + headerIn + piece.codeRows * codeIn;
         if (current.length && heightOf(currentPieces.concat([piece])) > innerH + 1e-6) {
           pages.push(current);
           current = [];
           currentPieces = [];
         }
         if (!current.length && alone > innerH + 1e-6) {
-          const roomRows = Math.max(1, Math.floor((innerH - minHeader - minHeader) / minCode));
+          const roomRows = Math.max(1, Math.floor((innerH - headerIn - headerIn) / codeIn));
           const perPage = roomRows * cols;
           const codes = piece.block.codes.length ? piece.block.codes : [""];
           for (let start = 0; start < codes.length; start += perPage) {
@@ -2271,7 +2340,7 @@
         }
         return marks;
       }
-      function addText(text, x, y, w, h, sizePt, color, anchor, clipBox, fill) {
+      function addText(text, x, y, w, h, sizePt, color, anchor, clipBox, fill, role) {
         const value = String(text || "").toUpperCase();
         if (!value) return;
         const box = clipBox || { x: x, y: y, w: w, h: h };
@@ -2284,13 +2353,18 @@
         const widthPt = emWidth(value) * sizePt;
         const tx = align === "end" ? x + w : x + w / 2;
         const start = align === "end" ? tx - widthPt : tx - widthPt / 2;
-        const halo = fill && hexLuma(fill) < 150 && hexLuma(color) < 100;
+        const isFooter = role === "footer";
+        const halo = !isFooter && fill && hexLuma(fill) < 150 && hexLuma(color) < 100;
         const haloAttr = halo
           ? ' stroke="#ffffff" stroke-width="' + n(knockoutPt(fontPt)) + '" paint-order="stroke fill" stroke-linejoin="round"'
           : "";
+        const fontAttr = isFooter
+          ? ' font-family="WristCard, Arial Narrow, sans-serif" font-weight="700" letter-spacing="0"'
+          : "";
+        const strokeAttr = halo ? "" : ' stroke="none"';
         labels.push(
           '<g clip-path="url(#' + id + ')"' + haloAttr + '>' +
-            '<text x="' + n(tx) + '" y="' + n(baseline) + '" font-size="' + n(sizePt) + '" text-anchor="' + align + '" fill="' + color + '">' +
+            '<text x="' + n(tx) + '" y="' + n(baseline) + '" font-size="' + n(sizePt) + '" text-anchor="' + align + '" fill="' + color + '"' + fontAttr + strokeAttr + '>' +
               escapeHtml(value) +
             '</text>' +
             glyphMarks(value, start, baseline, sizePt, color) +
@@ -2426,15 +2500,21 @@
         );
       }
       const stamp = versionStamp(version, bandTitle());
-      const footerInk = hexLuma(look.bandFill) < 150 ? "#ffffff" : "#000000";
-      const footerRoom = Math.max(1, wPt - padPt * 2);
-      const footerEm = emWidth(stamp);
+      const footerInk = hexLuma(look.bandFill) < 150 ? "#ffffff" : "#111111";
+      const footerRoom = Math.max(1, wPt - 1.8);
       let footerPt = 8;
-      if (footerEm > 0 && footerEm * footerPt > footerRoom) footerPt = footerRoom / footerEm;
+      const titles = kindTitlesOf(version);
+      ["offense", "defense"].forEach(function (kind) {
+        const em = emWidth(versionStamp(version, titles[kind]));
+        if (em > 0 && em * footerPt > footerRoom) footerPt = footerRoom / em;
+        const bandPt = (size.heightIn * 72) / cardGridMetrics(size, layoutFor(kind)).rowSlots;
+        if (footerPt > bandPt - 1) footerPt = Math.max(1, bandPt - 1);
+      });
       const stampPt = footerPt;
-      addText(stamp, 0, barY, wPt, cellH, footerPt, footerInk, "", null, look.bandFill);
+      const footerTop = barY;
+      addText(stamp, 0, barY, wPt, cellH, footerPt, footerInk, "", null, look.bandFill, "footer");
       const card =
-        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-footer-ink="' + footerInk + '" data-footer-top="' + n(footerTop) + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="xMidYMid meet">' +
             '<defs>' + clips.join("") + '</defs>' +
             dataShapes.join("") +
@@ -2690,29 +2770,16 @@
       const theme = themeOf();
       const rows = groups || sheetGroups(version);
       const banner = escapeHtml(bandTitle() + " - CALLS ARE TOP + LEFT");
-      let bodyRows = 0;
+      const frame = coachSheetFrame(sheet);
       const blocks = rows.map(function (group) {
-        const needed = Math.max(sheet.rows, Math.ceil(group.codes.length / sheet.cols) || 1);
-        bodyRows += 1 + needed;
+        const needed = Math.max(frame.minRows, Math.ceil(group.codes.length / frame.cols) || 1);
         return { group: group, needed: needed };
       });
-      const headerCount = 1 + blocks.length;
-      const codeCount = Math.max(0, bodyRows - blocks.length);
-      const headerScale = 0.72;
-      const innerH = Math.max(1, sheet.heightIn - 0.24);
-      const innerW = Math.max(1, sheet.widthIn - 0.24);
-      const codeH = codeCount > 0
-        ? innerH / (headerCount * headerScale + codeCount)
-        : innerH / Math.max(1, headerCount);
-      const headerH = codeCount > 0 ? codeH * headerScale : codeH;
-      const headerPx = headerH * 96;
-      const codePx = codeH * 96;
-      const colPx = (innerW / Math.max(1, sheet.cols)) * 96;
-      const codeSize = Math.max(1, Math.min(codePx * 0.78, colPx * 0.55, Math.max(1, codePx - 1)));
-      const playSize = Math.max(1, Math.min(headerPx * 0.78, 28, Math.max(1, headerPx - 1)));
-      const bannerSize = Math.max(1, Math.min(headerPx * 0.72, innerW * 96 * 0.04, Math.max(1, headerPx - 1)));
-      const headerStyle = "height:" + headerH + "in";
-      const codeStyle = "height:" + codeH + "in";
+      const codeSize = frame.codeSize;
+      const playSize = frame.playSize;
+      const bannerSize = frame.bannerSize;
+      const headerStyle = "height:" + frame.headerIn + "in";
+      const codeStyle = "height:" + frame.codeIn + "in";
       const body = blocks.map(function (block) {
         const playRow =
           '<tr style="' + headerStyle + '"><th class="sheet-play" colspan="' + sheet.cols + '" style="font-size:' + playSize + 'px">' +
@@ -2730,9 +2797,9 @@
         return playRow + codeRows.join("");
       }).join("");
       return (
-        '<div class="coach-sheet-page shadow-xl" style="width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;padding:0.12in">' +
+        '<div class="coach-sheet-page shadow-xl" data-header-in="' + frame.headerIn + '" data-code-in="' + frame.codeIn + '" data-banner-px="' + bannerSize + '" style="width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;padding:0.12in">' +
           '<table class="coach-sheet">' +
-            '<thead><tr style="' + headerStyle + '"><th class="sheet-banner" colspan="' + sheet.cols + '" style="background:' + theme.band + ';color:' + theme.ink + ';font-size:' + bannerSize + 'px;' + (hexLuma(theme.band) < 150 && hexLuma(theme.ink) < 100 ? "text-shadow:-0.4pt 0 #fff,0.4pt 0 #fff,0 -0.4pt #fff,0 0.4pt #fff;" : "") + '">' +
+            '<thead><tr class="sheet-banner-row" style="' + headerStyle + '"><th class="sheet-banner" colspan="' + sheet.cols + '" style="background:' + theme.band + ';color:' + (hexLuma(theme.band) < 150 ? "#ffffff" : "#111111") + ';font-size:' + bannerSize + 'px;text-shadow:none">' +
               banner +
             '</th></tr></thead>' +
             '<tbody>' + body + '</tbody>' +
@@ -2833,10 +2900,8 @@
           calibrationHtml(escapeHtml(cardCopy)) +
           '<div style="display:flex;flex-wrap:wrap;gap:' + cardGap + 'in;padding-left:11pt">' + cards.join("") + '</div>' +
         '</section>';
-      const sheet = sheetOf();
       const sheetGap = 0.16;
-      const sheetReserve = CALIBRATE_IN + CALIBRATE_GAP;
-      const sheetFit = letterFit(sheet.widthIn, sheet.heightIn, sheetGap, sheetReserve, 0);
+      const sheetFit = { cols: 1, rows: 1, count: 1 };
       const sheetPages = coachSheetPages(version);
       const keyPages = [];
       for (let i = 0; i < sheetPages.length; i += sheetFit.count) {
@@ -3559,14 +3624,13 @@
       book.cols = 5;
       book.kindLayouts = { offense: { rows: 5, cols: 5 }, defense: { rows: 4, cols: 4 } };
       book.theme = { band: SET_THEMES.offense.band, ink: SET_THEMES.offense.ink, highlight: "#ffffff" };
+      const source = activeVersion();
       ["offense", "defense"].forEach(function (kind) {
-        const counts = evenSpreadCounts(
-          book.library.filter(function (call) { return call.kind === kind; }),
-          cellCount(layoutFor(kind))
-        );
-        book.library.forEach(function (call) {
-          if (call.kind === kind) call.count = counts[call.id] || 0;
+        const onCard = [];
+        versionCells(source, kind).forEach(function (cell) {
+          if (cell && cell.callId) onCard.push(cell.callId);
         });
+        book.library = libraryForReset(book.library, kind, onCard, cellCount(layoutFor(kind)));
       });
       book.fillPrefer = "count";
       try {
