@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   areaAndFeatureLinks,
@@ -26,6 +27,10 @@ import {
   moveLibraryCall,
   normalizeBook,
   normalizeCardSize,
+  CARD_SIZE_PRESETS,
+  LETTER_SHEET,
+  letterSheetFit,
+  letterBlockFits,
   normalizeSheet,
   normalizeTheme,
   nextVersionName,
@@ -523,6 +528,44 @@ describe("wrist coach book", () => {
       widthIn: 8.5,
       heightIn: 1,
     });
+  });
+
+  it("fits a full Letter sheet of cards beside a 1 inch calibration square", () => {
+    const cardGap = 0.28;
+    const cardReserve = LETTER_SHEET.calibrateIn + LETTER_SHEET.calibrateGapIn + LETTER_SHEET.markOutIn;
+    const cardSide = LETTER_SHEET.markPadIn + LETTER_SHEET.markOutIn;
+    const expected: Record<string, { cols: number; rows: number; count: number }> = {
+      band: { cols: 1, rows: 4, count: 4 },
+      play: { cols: 2, rows: 4, count: 8 },
+      wrist: { cols: 2, rows: 4, count: 8 },
+      softball: { cols: 2, rows: 3, count: 6 },
+      large: { cols: 1, rows: 2, count: 2 },
+    };
+    for (const [name, size] of Object.entries(CARD_SIZE_PRESETS)) {
+      const fit = letterSheetFit(size.widthIn, size.heightIn, cardGap, {
+        reserveIn: cardReserve,
+        sidePadIn: cardSide,
+      });
+      assert.deepEqual(fit, expected[name], name);
+      assert.equal(
+        letterBlockFits(size.widthIn, size.heightIn, fit.cols, fit.rows, cardGap, {
+          reserveIn: cardReserve,
+          sidePadIn: cardSide,
+        }),
+        true,
+        name,
+      );
+    }
+    const sheet = letterSheetFit(3.5, 5.5, 0.16, {
+      reserveIn: LETTER_SHEET.calibrateIn + LETTER_SHEET.calibrateGapIn,
+    });
+    assert.deepEqual(sheet, { cols: 2, rows: 1, count: 2 });
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /Print at 100% \/ Actual size/);
+    assert.match(page, /Do not choose Fit to page/);
+    assert.match(page, /class="print-inch"/);
+    assert.match(page, /const LETTER_MARGIN = 0\.4/);
+    assert.match(page, /const CALIBRATE_IN = 1/);
   });
 
   it("keeps cell and text colors on each call", () => {

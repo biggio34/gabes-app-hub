@@ -58,6 +58,56 @@ export const CARD_SIZE_PRESETS = {
   large: { widthIn: 5, heightIn: 3 },
 } as const;
 
+/**
+ * Letter print sheet. The same numbers are copied in content/apps/wrist-coach.html
+ * so a card's CSS inches stay a physical inch when the dialog is at 100%.
+ */
+export const LETTER_SHEET = {
+  widthIn: 8.5,
+  heightIn: 11,
+  marginIn: 0.4,
+  calibrateIn: 1,
+  calibrateGapIn: 0.16,
+  /** Crop marks stick out 9pt past the card. */
+  markOutIn: 9 / 72,
+  /** Left padding so the left crop marks stay on the page. */
+  markPadIn: 11 / 72,
+} as const;
+
+export function letterSheetFit(
+  widthIn: number,
+  heightIn: number,
+  gapIn: number,
+  options?: { reserveIn?: number; sidePadIn?: number },
+) {
+  const contentW = LETTER_SHEET.widthIn - LETTER_SHEET.marginIn * 2;
+  const contentH = LETTER_SHEET.heightIn - LETTER_SHEET.marginIn * 2;
+  const reserve = options?.reserveIn ?? LETTER_SHEET.calibrateIn + LETTER_SHEET.calibrateGapIn;
+  const side = options?.sidePadIn ?? 0;
+  const usableW = contentW - side;
+  const usableH = contentH - reserve;
+  const cols = Math.max(1, Math.floor((usableW + gapIn) / (widthIn + gapIn)));
+  const rows = Math.max(1, Math.floor((usableH + gapIn) / (heightIn + gapIn)));
+  return { cols, rows, count: cols * rows };
+}
+
+export function letterBlockFits(
+  widthIn: number,
+  heightIn: number,
+  cols: number,
+  rows: number,
+  gapIn: number,
+  options?: { reserveIn?: number; sidePadIn?: number },
+) {
+  const contentW = LETTER_SHEET.widthIn - LETTER_SHEET.marginIn * 2;
+  const contentH = LETTER_SHEET.heightIn - LETTER_SHEET.marginIn * 2;
+  const reserve = options?.reserveIn ?? LETTER_SHEET.calibrateIn + LETTER_SHEET.calibrateGapIn;
+  const side = options?.sidePadIn ?? 0;
+  const blockW = cols * widthIn + Math.max(0, cols - 1) * gapIn + side;
+  const blockH = reserve + rows * heightIn + Math.max(0, rows - 1) * gapIn;
+  return blockW <= contentW + 1e-6 && blockH <= contentH + 1e-6;
+}
+
 export type CardSizePreset = "band" | "play" | "softball" | "wrist" | "large" | "custom";
 
 export type WristCardSize = {
