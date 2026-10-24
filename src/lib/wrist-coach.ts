@@ -39,9 +39,9 @@ export function callColors(call?: Pick<WristCall, "fill" | "ink"> | null) {
   const fill = normalizeColor(call?.fill);
   const ink = normalizeColor(call?.ink);
   const background = fill === "clear" ? "#ffffff" : WRIST_COLOR_HEX[fill];
-  let color = "#0f172a";
+  let color = "#000000";
   if (ink === "clear") {
-    color = fill === "clear" || fill === "white" ? "#0f172a" : "#ffffff";
+    color = fill === "clear" || fill === "white" ? "#000000" : "#ffffff";
   } else if (ink === "white") {
     color = "#ffffff";
   } else {
@@ -51,12 +51,14 @@ export function callColors(call?: Pick<WristCall, "fill" | "ink"> | null) {
 }
 
 export const CARD_SIZE_PRESETS = {
+  band: { widthIn: 4, heightIn: 2 },
+  play: { widthIn: 3.5, heightIn: 2 },
   softball: { widthIn: 3.5, heightIn: 2.25 },
   wrist: { widthIn: 3.25, heightIn: 2 },
   large: { widthIn: 5, heightIn: 3 },
 } as const;
 
-export type CardSizePreset = "softball" | "wrist" | "large" | "custom";
+export type CardSizePreset = "band" | "play" | "softball" | "wrist" | "large" | "custom";
 
 export type WristCardSize = {
   preset: CardSizePreset;
@@ -77,7 +79,7 @@ function clampInches(value: unknown, fallback: number, min: number, max: number)
 export function normalizeCardSize(raw: unknown): WristCardSize {
   const item = asRecord(raw);
   const preset = item?.preset;
-  if (preset === "softball" || preset === "wrist" || preset === "large") {
+  if (preset === "band" || preset === "play" || preset === "softball" || preset === "wrist" || preset === "large") {
     return { preset, ...CARD_SIZE_PRESETS[preset] };
   }
   if (preset === "custom" || item?.widthIn != null || item?.heightIn != null) {
@@ -242,8 +244,8 @@ export const DEFAULT_ROWS = 5;
 export const DEFAULT_COLS = 5;
 export const DEFAULT_DEFENSE_ROWS = 4;
 export const DEFAULT_DEFENSE_COLS = 4;
-export const OFFENSE_BAND = "#c00000";
-export const DEFENSE_BAND = "#f87080";
+export const OFFENSE_BAND = "#ff0000";
+export const DEFENSE_BAND = "#f7bad1";
 export const DEFAULT_SIGN_START = 1;
 export const DEFAULT_ROW_START = 1;
 export const DEFAULT_SHEET_COLS = 15;
@@ -330,9 +332,10 @@ export function defaultKindThemes(fallback?: WristTheme): WristKindThemes {
 
 export function defaultSetThemes(): WristKindThemes {
   const white = "#ffffff";
+  const ink = "#000000";
   return {
-    offense: { band: OFFENSE_BAND, ink: white, highlight: white },
-    defense: { band: DEFENSE_BAND, ink: white, highlight: white },
+    offense: { band: OFFENSE_BAND, ink, highlight: white },
+    defense: { band: DEFENSE_BAND, ink, highlight: white },
   };
 }
 

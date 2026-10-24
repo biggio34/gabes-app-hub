@@ -29,82 +29,37 @@
     .color-pick::-webkit-color-swatch-wrapper { padding: 2px; }
     .color-pick::-webkit-color-swatch { border: none; border-radius: 6px; }
     .band-card {
-      background: #000;
-      color: #111;
+      position: relative;
+      background: #fff;
+      color: #000;
       box-sizing: border-box;
-      display: grid;
-      gap: 1px;
-      padding: 1px;
-      overflow: hidden;
+      display: block;
+      padding: 0;
+      overflow: visible;
       font-family: "WristCard", "Arial Narrow", sans-serif;
       font-weight: 700;
       font-variant-numeric: tabular-nums;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    .band-card svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      overflow: visible;
+    }
+    .band-card text {
+      font-family: "WristCard", "Arial Narrow", sans-serif;
+      font-weight: 700;
+      letter-spacing: 0;
+      font-variant-numeric: tabular-nums;
+    }
     .card-scaler {
       position: relative;
       margin: 0 auto;
       overflow: hidden;
-    }
-    .bs-block {
-      min-width: 0;
-      min-height: 0;
-      width: 100%;
-      height: 100%;
-      display: grid;
-      gap: 1px;
-      background: #000;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    .bs-head, .bs-rownum, .bs-cell, .bs-corner, .bs-spine {
-      min-width: 0;
-      min-height: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      white-space: nowrap;
-      box-sizing: border-box;
-      line-height: 1;
-      padding: var(--bs-pad, 1px);
-      font-family: inherit;
-      font-weight: 700;
-      font-style: normal;
-      font-variant-numeric: tabular-nums;
-      letter-spacing: 0;
-      text-transform: uppercase;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    .bs-head, .bs-rownum, .bs-cell, .bs-corner {
-      font-size: var(--bs-size, 12px);
-      background: #fff;
-      color: #111;
-    }
-    .bs-head, .bs-rownum, .bs-corner, .bs-spine {
-      background: var(--bs-band, #c00000);
-      color: var(--bs-ink, #fff);
-    }
-    .bs-fit, .bs-spine-text {
-      display: block;
-      max-width: 100%;
-      line-height: 1;
-      font: inherit;
-      font-size: 1em;
-      font-weight: 700;
-      letter-spacing: 0;
-      white-space: nowrap;
-      text-transform: uppercase;
-      font-variant-numeric: tabular-nums;
-    }
-    .bs-fit { transform: translateY(0.06em); }
-    .bs-spine {
-      font-size: var(--bs-spine-size, 14px);
-      letter-spacing: 0;
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
     }
     @media (max-width: 720px) {
       .call-edit {
@@ -243,6 +198,8 @@
         <div class="grid gap-1.5 text-sm sm:col-span-2">
           Size
           <div class="flex flex-wrap items-center gap-2">
+            <button type="button" data-size="band" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">4 × 2 in</button>
+            <button type="button" data-size="play" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">3.5 × 2 in</button>
             <button type="button" data-size="wrist" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">3.25 × 2 in</button>
             <button type="button" data-size="softball" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">3.5 × 2.25 in</button>
             <button type="button" data-size="large" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">5 × 3 in</button>
@@ -524,17 +481,20 @@
       orange: "#ea580c"
     };
     const SIZE_PRESETS = {
+      band: { widthIn: 4, heightIn: 2 },
+      play: { widthIn: 3.5, heightIn: 2 },
       wrist: { widthIn: 3.25, heightIn: 2 },
       softball: { widthIn: 3.5, heightIn: 2.25 },
       large: { widthIn: 5, heightIn: 3 }
     };
     const DEFAULT_THEME = { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
     const SET_THEMES = {
-      offense: { band: "#c00000", ink: "#ffffff", highlight: "#ffffff" },
-      defense: { band: "#f87080", ink: "#ffffff", highlight: "#ffffff" }
+      offense: { band: "#ff0000", ink: "#000000", highlight: "#ffffff" },
+      defense: { band: "#f7bad1", ink: "#000000", highlight: "#ffffff" }
     };
 
     let book = null;
+    let wristCardSeq = 0;
     let showCoachOnCard = false;
     let saveTimer = null;
     let printMode = "both";
@@ -626,8 +586,8 @@
       const fill = normalizeColor(call && call.fill);
       const ink = normalizeColor(call && call.ink);
       const background = fill === "clear" ? "#ffffff" : COLOR_HEX[fill];
-      let color = "#0f172a";
-      if (ink === "clear") color = (fill === "clear" || fill === "white") ? "#0f172a" : "#ffffff";
+      let color = "#000000";
+      if (ink === "clear") color = (fill === "clear" || fill === "white") ? "#000000" : "#ffffff";
       else if (ink === "white") color = "#ffffff";
       else color = COLOR_HEX[ink];
       return { background: background, color: color };
@@ -648,7 +608,7 @@
       if (fill === "clear") {
         return {
           background: theme.highlight,
-          color: hexLuma(theme.highlight) > 140 ? "#0f172a" : "#ffffff"
+          color: hexLuma(theme.highlight) > 140 ? "#000000" : "#ffffff"
         };
       }
       return callColors(call);
@@ -660,7 +620,7 @@
 
     function cardSize() {
       const size = book && book.cardSize ? book.cardSize : defaultCardSize();
-      if (size.preset === "wrist" || size.preset === "softball" || size.preset === "large") {
+      if (size.preset === "band" || size.preset === "play" || size.preset === "wrist" || size.preset === "softball" || size.preset === "large") {
         return { preset: size.preset, widthIn: SIZE_PRESETS[size.preset].widthIn, heightIn: SIZE_PRESETS[size.preset].heightIn };
       }
       const widthIn = Math.min(8.5, Math.max(1, Number(size.widthIn) || 3.25));
@@ -1028,7 +988,7 @@
         grids: 6,
         signStart: 1,
         rowStart: 1,
-        theme: { band: SET_THEMES.offense.band, ink: "#ffffff", highlight: "#ffffff" },
+        theme: { band: SET_THEMES.offense.band, ink: "#000000", highlight: "#ffffff" },
         sheet: defaultSheet(),
         cardSize: defaultCardSize(),
         kindLayouts: {
@@ -1042,8 +1002,8 @@
       };
       const first = shuffleVersion(next, "Version A");
       first.themes = {
-        offense: { band: SET_THEMES.offense.band, ink: "#ffffff", highlight: "#ffffff" },
-        defense: { band: SET_THEMES.defense.band, ink: "#ffffff", highlight: "#ffffff" }
+        offense: { band: SET_THEMES.offense.band, ink: "#000000", highlight: "#ffffff" },
+        defense: { band: SET_THEMES.defense.band, ink: "#000000", highlight: "#ffffff" }
       };
       next.versions = [first];
       next.activeVersionId = first.id;
@@ -1336,24 +1296,21 @@
       const bottomCount = Math.max(0, layout.grids - topCount);
       const halves = bottomCount > 0 ? 2 : 1;
       const maxAcross = Math.max(topCount, bottomCount, 1);
-      const spine = maxAcross > 1;
-      const line = 1 / 96;
-      const colSlots = maxAcross + (spine ? 1 : 0);
-      const innerW = size.widthIn - line * 2 - line * Math.max(0, colSlots - 1);
-      const blockW = innerW / (maxAcross + (spine ? 1 / (layout.cols + 1) : 0));
-      const cellW = (blockW - line * layout.cols) / (layout.cols + 1);
-      const innerH = size.heightIn - line * 2 - line * Math.max(0, halves - 1);
-      const blockH = innerH / halves;
-      const cellH = (blockH - line * layout.rows) / (layout.rows + 1);
-      const padIn = Math.max(line * 0.4, Math.min(cellW, cellH) * 0.08);
+      const colSlots = maxAcross * (layout.cols + 1);
+      const rowSlots = halves * (layout.rows + 1) + 1;
+      const cellW = size.widthIn / colSlots;
+      const cellH = size.heightIn / rowSlots;
+      // 0.9pt side inset, the gap around SS3B on the reference card.
+      const padIn = 0.9 / 72;
       return {
         topCount: topCount,
+        bottomCount: bottomCount,
         halves: halves,
         maxAcross: maxAcross,
-        spine: spine,
+        colSlots: colSlots,
+        rowSlots: rowSlots,
         cellW: cellW,
         cellH: cellH,
-        spineW: spine ? cellW : 0,
         padIn: padIn
       };
     }
@@ -1377,66 +1334,118 @@
       const size = cardSize();
       const theme = themeOf();
       const metrics = playerCardMetrics(size, layout);
-      const groups = [ [], [] ];
-      for (let g = 0; g < layout.grids; g += 1) groups[g < metrics.topCount ? 0 : 1].push(g);
-      const split = Math.floor(metrics.maxAcross / 2);
-      const columns = [];
-      for (let i = 0; i < metrics.maxAcross; i += 1) {
-        if (metrics.spine && i === split) columns.push(metrics.spineW + "in");
-        columns.push("minmax(0,1fr)");
+      const wPt = size.widthIn * 72;
+      const hPt = size.heightIn * 72;
+      const cellW = wPt / metrics.colSlots;
+      const cellH = hPt / metrics.rowSlots;
+      const padPt = 0.9;
+      const fontPx = fitFontPx(
+        widestLabel(labelsOnCard(version, layout)),
+        Math.max(4, (cellW - padPt * 2) * 96 / 72),
+        Math.max(4, cellH * 96 / 72)
+      );
+      const fontPt = fontPx * 72 / 96;
+      const barPx = fitFontPx(
+        bandTitle(),
+        Math.max(4, (wPt - padPt * 2) * 96 / 72),
+        Math.max(4, fontPx * 0.9)
+      );
+      const barPt = Math.min(fontPt * 0.9, barPx * 72 / 96);
+      const uid = "wc" + (wristCardSeq += 1);
+      const dataRows = layout.rows + 1;
+      const shapes = [];
+      const clips = [];
+      const labels = [];
+      let clipN = 0;
+      function n(value) {
+        return (Math.round(value * 1000) / 1000).toString();
       }
-      const innerWpx = Math.max(4, (metrics.cellW - metrics.padIn * 2) * 96);
-      const innerHpx = Math.max(4, (metrics.cellH - metrics.padIn * 2) * 96);
-      const fontPx = fitFontPx(widestLabel(labelsOnCard(version, layout)), innerWpx, innerHpx);
-      const spineLong = Math.max(4, (size.heightIn - metrics.padIn * 2) * 96);
-      const spineShort = Math.max(4, (metrics.spineW - metrics.padIn * 2) * 96);
-      const spinePx = metrics.spine ? fitFontPx(bandTitle(), spineLong, spineShort) : fontPx;
-      function blockColumn(index) {
-        if (!metrics.spine) return index + 1;
-        return index < split ? index + 1 : index + 2;
+      function addText(text, x, y, w, h, sizePt, color) {
+        const value = String(text || "").toUpperCase();
+        if (!value) return;
+        const id = uid + "c" + (clipN += 1);
+        clips.push(
+          '<clipPath id="' + id + '"><rect x="' + n(x) + '" y="' + n(y) + '" width="' + n(w) + '" height="' + n(h) + '"/></clipPath>'
+        );
+        const baseline = y + h / 2 + sizePt * 0.35;
+        labels.push(
+          '<g clip-path="url(#' + id + ')">' +
+            '<text x="' + n(x + w / 2) + '" y="' + n(baseline) + '" font-size="' + n(sizePt) + '" text-anchor="middle" fill="' + color + '">' +
+              escapeHtml(value) +
+            '</text>' +
+          '</g>'
+        );
       }
-      function blockHtml(grid, rowIndex, index) {
-        const cells = ['<div class="bs-corner"></div>'];
+      function addCell(x, y, fill, text, color, sizePt, title) {
+        shapes.push(
+          '<g>' +
+            (title ? '<title>' + title + '</title>' : '') +
+            '<rect x="' + n(x) + '" y="' + n(y) + '" width="' + n(cellW) + '" height="' + n(cellH) + '" fill="' + fill + '" stroke="#000000" stroke-width="0.25"/>' +
+          '</g>'
+        );
+        addText(text, x, y, cellW, cellH, sizePt, color);
+      }
+      function originRow(halfIndex) {
+        return halfIndex === 0 ? 0 : dataRows + 1;
+      }
+      for (let g = 0; g < layout.grids; g += 1) {
+        const halfIndex = g < metrics.topCount ? 0 : 1;
+        const acrossIndex = halfIndex === 0 ? g : g - metrics.topCount;
+        const col0 = acrossIndex * (layout.cols + 1);
+        const row0 = originRow(halfIndex);
+        const cornerFill = book.bandKind === "defense" ? "#ffffff" : theme.band;
+        addCell(col0 * cellW, row0 * cellH, cornerFill, "", "#000000", fontPt, "");
         for (let col = 0; col < layout.cols; col += 1) {
-          cells.push(
-            '<div class="bs-head"><span class="bs-fit">' + escapeHtml(columnCode(grid, col, layout.signStart)) + '</span></div>'
+          addCell(
+            (col0 + col + 1) * cellW,
+            row0 * cellH,
+            theme.band,
+            columnCode(g, col, layout.signStart),
+            theme.ink,
+            fontPt,
+            ""
           );
         }
         for (let row = 0; row < layout.rows; row += 1) {
-          cells.push(
-            '<div class="bs-rownum"><span class="bs-fit">' + escapeHtml(rowCode(row, layout.rowStart)) + '</span></div>'
+          addCell(
+            col0 * cellW,
+            (row0 + row + 1) * cellH,
+            theme.band,
+            rowCode(row, layout.rowStart),
+            theme.ink,
+            fontPt,
+            ""
           );
           for (let col = 0; col < layout.cols; col += 1) {
-            const cell = cellAt(version, grid, row, col);
+            const cell = cellAt(version, g, row, col);
             const call = cell ? callById(cell.callId) : null;
             const paint = cellPaint(call);
             const short = call ? call.short : "";
             const title = coachView && call ? escapeHtml(call.name) : (cell ? escapeHtml(cell.code) : "");
-            cells.push(
-              '<div class="bs-cell" title="' + title + '" style="background:' + paint.background + ';color:' + paint.color + '">' +
-                '<span class="bs-fit">' + escapeHtml(short) + '</span>' +
-              '</div>'
+            addCell(
+              (col0 + col + 1) * cellW,
+              (row0 + row + 1) * cellH,
+              paint.background,
+              short,
+              paint.color,
+              fontPt,
+              title
             );
           }
         }
-        return (
-          '<div class="bs-block" style="grid-column:' + blockColumn(index) + ';grid-row:' + (rowIndex + 1) + ';grid-template-columns:repeat(' + (layout.cols + 1) + ',minmax(0,1fr));grid-template-rows:repeat(' + (layout.rows + 1) + ',minmax(0,1fr))">' +
-            cells.join("") +
-          '</div>'
-        );
       }
-      const blocks = [];
-      groups.forEach(function (grids, rowIndex) {
-        grids.forEach(function (grid, index) {
-          blocks.push(blockHtml(grid, rowIndex, index));
-        });
-      });
-      const spine = metrics.spine
-        ? '<div class="bs-spine" style="grid-column:' + (split + 1) + ';grid-row:1 / span ' + metrics.halves + '"><span class="bs-spine-text">' + escapeHtml(bandTitle()) + '</span></div>'
-        : "";
+      const barY = dataRows * cellH;
+      shapes.push(
+        '<rect x="0" y="' + n(barY) + '" width="' + n(wPt) + '" height="' + n(cellH) + '" fill="' + theme.band + '" stroke="#000000" stroke-width="0.25"/>'
+      );
+      addText(bandTitle(), 0, barY, wPt, cellH, barPt, theme.ink);
       return (
-        '<div class="band-card ' + (extraClass || "") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in;--bs-band:' + theme.band + ';--bs-ink:' + theme.ink + ';--bs-size:' + fontPx + 'px;--bs-pad:' + metrics.padIn + 'in;--bs-spine-size:' + spinePx + 'px;grid-template-columns:' + columns.join(" ") + ';grid-template-rows:repeat(' + metrics.halves + ',minmax(0,1fr))">' +
-          blocks.join("") + spine +
+        '<div class="band-card ' + (extraClass || "") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+          '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="none">' +
+            '<defs>' + clips.join("") + '</defs>' +
+            shapes.join("") +
+            labels.join("") +
+          '</svg>' +
         '</div>'
       );
     }
@@ -1668,7 +1677,7 @@
       const note = document.getElementById("block-size-note");
       if (note) {
         const name = book.bandKind === "defense" ? "Defense" : "Offense";
-        note.textContent = name + " blocks are " + layout.cols + " × " + layout.rows + ". Offense and defense each keep their own block size. The center bar uses this set’s color and name.";
+        note.textContent = name + " blocks are " + layout.cols + " × " + layout.rows + ". Offense and defense each keep their own block size. The center band uses this set’s color and name.";
       }
     }
 
