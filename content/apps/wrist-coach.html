@@ -335,15 +335,24 @@
             <button type="button" data-size="play" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">3.5 × 2 in</button>
             <button type="button" data-size="wrist" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">3.25 × 2 in</button>
             <button type="button" data-size="softball" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">3.5 × 2.25 in</button>
-            <button type="button" data-size="large" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">5 × 3 in</button>
+            <button type="button" data-size="large" class="size-btn rounded-full px-3 py-1 text-xs font-semibold" title="Also the adult triple window">5 × 3 in</button>
+            <button type="button" data-size="youth" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">Youth 4.5 × 2.5</button>
+            <button type="button" data-size="tripleYouth" class="size-btn rounded-full px-3 py-1 text-xs font-semibold" title="Youth triple window">Triple 3.5 × 2.75</button>
+            <button type="button" data-size="triplePeewee" class="size-btn rounded-full px-3 py-1 text-xs font-semibold" title="Pee wee triple window">Pee wee 2.75 × 2.15</button>
+            <button type="button" data-size="triplePanel" class="size-btn rounded-full px-3 py-1 text-xs font-semibold" title="Youth triple panel">Triple 4.75 × 2.25</button>
             <button type="button" data-size="custom" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">Custom</button>
-            <div id="custom-size" class="hidden items-center gap-2 text-sm">
-              <input id="card-w" inputmode="decimal" aria-label="Width in inches" class="min-h-10 w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+            <div id="custom-size" class="flex items-center gap-2 text-sm">
+              <label class="flex items-center gap-1.5">Width
+                <input id="card-w" inputmode="decimal" step="0.01" min="1" max="7.42" aria-label="Width in inches" class="min-h-10 w-20 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              </label>
               <span>×</span>
-              <input id="card-h" inputmode="decimal" aria-label="Height in inches" class="min-h-10 w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              <label class="flex items-center gap-1.5">Height
+                <input id="card-h" inputmode="decimal" step="0.01" min="1" max="8.91" aria-label="Height in inches" class="min-h-10 w-20 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              </label>
               <span class="text-slate-500">in</span>
             </div>
           </div>
+          <p id="size-note" class="text-xs text-slate-400">Youth is 4.5 × 2.5. Triple windows: 5 × 3 adult, 3.5 × 2.75 youth, 2.75 × 2.15 pee wee, 4.75 × 2.25 panel. Type any other width and height. The card prints at that size.</p>
           <p id="letter-fit" class="text-xs text-slate-400"></p>
         </div>
       </div>
@@ -686,8 +695,15 @@
       play: { widthIn: 3.5, heightIn: 2 },
       wrist: { widthIn: 3.25, heightIn: 2 },
       softball: { widthIn: 3.5, heightIn: 2.25 },
-      large: { widthIn: 5, heightIn: 3 }
+      large: { widthIn: 5, heightIn: 3 },
+      youth: { widthIn: 4.5, heightIn: 2.5 },
+      tripleYouth: { widthIn: 3.5, heightIn: 2.75 },
+      triplePeewee: { widthIn: 2.75, heightIn: 2.15 },
+      triplePanel: { widthIn: 4.75, heightIn: 2.25 }
     };
+    const CARD_MIN_IN = 1;
+    const CARD_MAX_W = 7.42;
+    const CARD_MAX_H = 8.91;
     const DEFAULT_THEME = { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
     const SET_THEMES = {
       offense: { band: "#ff0000", ink: "#000000", highlight: "#ffffff" },
@@ -823,14 +839,22 @@
       return { preset: "wrist", widthIn: 3.25, heightIn: 2 };
     }
 
+    function roundInches(value, fallback, min, max) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(max, Math.max(min, Math.round(n * 100) / 100));
+    }
+
     function cardSize() {
       const size = book && book.cardSize ? book.cardSize : defaultCardSize();
-      if (size.preset === "band" || size.preset === "play" || size.preset === "wrist" || size.preset === "softball" || size.preset === "large") {
+      if (SIZE_PRESETS[size.preset]) {
         return { preset: size.preset, widthIn: SIZE_PRESETS[size.preset].widthIn, heightIn: SIZE_PRESETS[size.preset].heightIn };
       }
-      const widthIn = Math.min(8.5, Math.max(1, Number(size.widthIn) || 3.25));
-      const heightIn = Math.min(11, Math.max(1, Number(size.heightIn) || 2));
-      return { preset: "custom", widthIn: widthIn, heightIn: heightIn };
+      return {
+        preset: "custom",
+        widthIn: roundInches(size.widthIn, 3.25, CARD_MIN_IN, CARD_MAX_W),
+        heightIn: roundInches(size.heightIn, 2, CARD_MIN_IN, CARD_MAX_H)
+      };
     }
 
     function defaultLibrary() {
@@ -1659,17 +1683,14 @@
       return Math.ceil(count / 2);
     }
 
-    function playerCardMetrics(size, layout) {
+    // Keep in sync with cardGridMetrics in src/lib/wrist-coach.ts.
+    function cardGridMetrics(size, layout) {
       const topCount = blocksAcross(layout.grids);
       const bottomCount = Math.max(0, layout.grids - topCount);
       const halves = bottomCount > 0 ? 2 : 1;
       const maxAcross = Math.max(topCount, bottomCount, 1);
       const colSlots = maxAcross * (layout.cols + 1);
       const rowSlots = halves * (layout.rows + 1) + 1;
-      const cellW = size.widthIn / colSlots;
-      const cellH = size.heightIn / rowSlots;
-      // 0.9pt on a 2-block reference card. Narrower 6-block cells use a smaller gap.
-      const padIn = sidePadPt(cellW * 72, layout.grids) / 72;
       return {
         topCount: topCount,
         bottomCount: bottomCount,
@@ -1677,8 +1698,24 @@
         maxAcross: maxAcross,
         colSlots: colSlots,
         rowSlots: rowSlots,
-        cellW: cellW,
-        cellH: cellH,
+        cellW: size.widthIn / colSlots,
+        cellH: size.heightIn / rowSlots
+      };
+    }
+
+    function playerCardMetrics(size, layout) {
+      const metrics = cardGridMetrics(size, layout);
+      // 0.9pt on a 2-block reference card. Narrower 6-block cells use a smaller gap.
+      const padIn = sidePadPt(metrics.cellW * 72, layout.grids) / 72;
+      return {
+        topCount: metrics.topCount,
+        bottomCount: metrics.bottomCount,
+        halves: metrics.halves,
+        maxAcross: metrics.maxAcross,
+        colSlots: metrics.colSlots,
+        rowSlots: metrics.rowSlots,
+        cellW: metrics.cellW,
+        cellH: metrics.cellH,
         padIn: padIn
       };
     }
@@ -2035,7 +2072,7 @@
         }, look.bandFill);
       }
       const card =
-        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-shade="' + (shadeRows ? "1" : "0") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="xMidYMid meet">' +
             '<defs>' + clips.join("") + '</defs>' +
             dataShapes.join("") +
@@ -2417,8 +2454,8 @@
         btn.setAttribute("aria-pressed", on ? "true" : "false");
       });
       const custom = document.getElementById("custom-size");
-      custom.classList.toggle("hidden", size.preset !== "custom");
-      custom.classList.toggle("flex", size.preset === "custom");
+      custom.classList.remove("hidden");
+      custom.classList.add("flex");
       document.getElementById("card-w").value = String(size.widthIn);
       document.getElementById("card-h").value = String(size.heightIn);
     }
@@ -2979,12 +3016,10 @@
       });
     });
     function applyCustomSize() {
-      const w = Number(document.getElementById("card-w").value);
-      const h = Number(document.getElementById("card-h").value);
       book.cardSize = {
         preset: "custom",
-        widthIn: Number.isFinite(w) && w > 0 ? Math.min(8.5, Math.max(1, w)) : 3.25,
-        heightIn: Number.isFinite(h) && h > 0 ? Math.min(11, Math.max(1, h)) : 2
+        widthIn: roundInches(document.getElementById("card-w").value, 3.25, CARD_MIN_IN, CARD_MAX_W),
+        heightIn: roundInches(document.getElementById("card-h").value, 2, CARD_MIN_IN, CARD_MAX_H)
       };
       render();
       scheduleSave();

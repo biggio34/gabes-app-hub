@@ -30,6 +30,8 @@ import {
   moveLibraryCall,
   normalizeBook,
   normalizeCardSize,
+  maxCardInches,
+  cardGridMetrics,
   CARD_SIZE_PRESETS,
   LETTER_SHEET,
   letterSheetFit,
@@ -637,16 +639,101 @@ describe("wrist coach book", () => {
       widthIn: 5,
       heightIn: 3,
     });
+    assert.deepEqual(normalizeCardSize({ preset: "youth" }), {
+      preset: "youth",
+      widthIn: 4.5,
+      heightIn: 2.5,
+    });
+    assert.deepEqual(normalizeCardSize({ preset: "tripleYouth" }), {
+      preset: "tripleYouth",
+      widthIn: 3.5,
+      heightIn: 2.75,
+    });
+    assert.deepEqual(normalizeCardSize({ preset: "triplePeewee" }), {
+      preset: "triplePeewee",
+      widthIn: 2.75,
+      heightIn: 2.15,
+    });
+    assert.deepEqual(normalizeCardSize({ preset: "triplePanel" }), {
+      preset: "triplePanel",
+      widthIn: 4.75,
+      heightIn: 2.25,
+    });
     assert.deepEqual(normalizeCardSize({ preset: "custom", widthIn: 4.25, heightIn: 2.5 }), {
       preset: "custom",
       widthIn: 4.25,
       heightIn: 2.5,
     });
+    assert.deepEqual(maxCardInches(), { widthIn: 7.42, heightIn: 8.91 });
     assert.deepEqual(normalizeCardSize({ preset: "custom", widthIn: 99, heightIn: 0 }), {
       preset: "custom",
-      widthIn: 8.5,
+      widthIn: 7.42,
       heightIn: 1,
     });
+  });
+
+  it("keeps equal boxes and one type size at every preset and odd custom size", () => {
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    const oddSizes = [
+      { widthIn: 3.33, heightIn: 2.17 },
+      { widthIn: 6.2, heightIn: 2.05 },
+      { widthIn: 2.13, heightIn: 1.63 },
+      { widthIn: 4.125, heightIn: 2.333 },
+      { widthIn: 7.42, heightIn: 4.1 },
+    ];
+    assert.deepEqual(normalizeCardSize({ preset: "custom", widthIn: 4.125, heightIn: 2.333 }), {
+      preset: "custom",
+      widthIn: 4.13,
+      heightIn: 2.33,
+    });
+    assert.deepEqual(normalizeCardSize({ widthIn: 6.2, heightIn: 2.05 }), {
+      preset: "custom",
+      widthIn: 6.2,
+      heightIn: 2.05,
+    });
+    assert.deepEqual(normalizeCardSize({ preset: "custom", widthIn: 0.2, heightIn: 20 }), {
+      preset: "custom",
+      widthIn: 1,
+      heightIn: 8.91,
+    });
+    const layouts = [
+      { grids: 6, cols: 5, rows: 5 },
+      { grids: 2, cols: 4, rows: 4 },
+      { grids: 1, cols: 3, rows: 8 },
+      { grids: 7, cols: 6, rows: 3 },
+    ];
+    const sizes = [...Object.values(CARD_SIZE_PRESETS), ...oddSizes.map((size) => normalizeCardSize({ preset: "custom", ...size }))];
+    for (const size of sizes) {
+      for (const layout of layouts) {
+        const metrics = cardGridMetrics(size, layout);
+        assert.ok(metrics.cellW > 0 && metrics.cellH > 0);
+        assert.ok(Math.abs(metrics.cellW * metrics.colSlots - size.widthIn) < 1e-9);
+        assert.ok(Math.abs(metrics.cellH * metrics.rowSlots - size.heightIn) < 1e-9);
+        assert.equal(metrics.topCount, blocksAcross(layout.grids));
+        assert.equal(metrics.topCount + metrics.bottomCount, layout.grids);
+      }
+    }
+    assert.match(page, /function cardGridMetrics\(size, layout\)/);
+    assert.match(page, /const metrics = cardGridMetrics\(size, layout\)/);
+    assert.match(page, /data-type-pt="/);
+    assert.match(page, /const fontPt = fontPx \* 72 \/ 96/);
+    assert.match(page, /const CARD_MAX_W = 7\.42/);
+    assert.match(page, /const CARD_MAX_H = 8\.91/);
+    assert.match(page, /id="card-w"/);
+    assert.match(page, /id="card-h"/);
+    assert.match(page, /data-size="youth"/);
+    assert.match(page, /data-size="tripleYouth"/);
+    assert.match(page, /data-size="triplePeewee"/);
+    assert.match(page, /data-size="triplePanel"/);
+    assert.match(page, /widthIn: 4\.5/);
+    assert.match(page, /heightIn: 2\.5/);
+    assert.match(page, /heightIn: 2\.75/);
+    assert.match(page, /widthIn: 2\.75/);
+    assert.match(page, /heightIn: 2\.15/);
+    assert.match(page, /widthIn: 4\.75/);
+    for (const name of Object.keys(CARD_SIZE_PRESETS)) {
+      assert.match(page, new RegExp(`data-size="${name}"`));
+    }
   });
 
   it("fits a full Letter sheet of cards beside a 1 inch calibration square", () => {
@@ -659,6 +746,10 @@ describe("wrist coach book", () => {
       wrist: { cols: 2, rows: 4, count: 8 },
       softball: { cols: 2, rows: 3, count: 6 },
       large: { cols: 1, rows: 2, count: 2 },
+      youth: { cols: 1, rows: 3, count: 3 },
+      tripleYouth: { cols: 2, rows: 3, count: 6 },
+      triplePeewee: { cols: 2, rows: 3, count: 6 },
+      triplePanel: { cols: 1, rows: 3, count: 3 },
     };
     for (const [name, size] of Object.entries(CARD_SIZE_PRESETS)) {
       const fit = letterSheetFit(size.widthIn, size.heightIn, cardGap, {

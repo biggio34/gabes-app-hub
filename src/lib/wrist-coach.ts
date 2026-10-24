@@ -55,7 +55,16 @@ export const CARD_SIZE_PRESETS = {
   play: { widthIn: 3.5, heightIn: 2 },
   softball: { widthIn: 3.5, heightIn: 2.25 },
   wrist: { widthIn: 3.25, heightIn: 2 },
+  /** 5 × 3 also fits an adult triple-window panel. */
   large: { widthIn: 5, heightIn: 3 },
+  /** Small sleeve Gabe asked for. Wider than the 4.5 × 2.25 playmaker insert. */
+  youth: { widthIn: 4.5, heightIn: 2.5 },
+  /** Champro youth triple window. */
+  tripleYouth: { widthIn: 3.5, heightIn: 2.75 },
+  /** Champro pee wee triple window. */
+  triplePeewee: { widthIn: 2.75, heightIn: 2.15 },
+  /** FieldSage youth triple panel. */
+  triplePanel: { widthIn: 4.75, heightIn: 2.25 },
 } as const;
 
 /**
@@ -108,7 +117,8 @@ export function letterBlockFits(
   return blockW <= contentW + 1e-6 && blockH <= contentH + 1e-6;
 }
 
-export type CardSizePreset = "band" | "play" | "softball" | "wrist" | "large" | "custom";
+export type NamedCardSizePreset = keyof typeof CARD_SIZE_PRESETS;
+export type CardSizePreset = NamedCardSizePreset | "custom";
 
 export type WristCardSize = {
   preset: CardSizePreset;
@@ -120,6 +130,22 @@ export function defaultCardSize(): WristCardSize {
   return { preset: "wrist", ...CARD_SIZE_PRESETS.wrist };
 }
 
+/** Largest card that still prints at 100% on Letter, with the calibration row and crop marks. */
+export function maxCardInches(): { widthIn: number; heightIn: number } {
+  const contentW = LETTER_SHEET.widthIn - LETTER_SHEET.marginIn * 2;
+  const contentH = LETTER_SHEET.heightIn - LETTER_SHEET.marginIn * 2;
+  const side = LETTER_SHEET.markPadIn + LETTER_SHEET.markOutIn;
+  const reserve = LETTER_SHEET.calibrateIn + LETTER_SHEET.calibrateGapIn + LETTER_SHEET.markOutIn;
+  return {
+    widthIn: Math.floor((contentW - side) * 100) / 100,
+    heightIn: Math.floor((contentH - reserve) * 100) / 100,
+  };
+}
+
+function isNamedCardPreset(value: unknown): value is NamedCardSizePreset {
+  return typeof value === "string" && value in CARD_SIZE_PRESETS;
+}
+
 function clampInches(value: unknown, fallback: number, min: number, max: number) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -129,17 +155,44 @@ function clampInches(value: unknown, fallback: number, min: number, max: number)
 export function normalizeCardSize(raw: unknown): WristCardSize {
   const item = asRecord(raw);
   const preset = item?.preset;
-  if (preset === "band" || preset === "play" || preset === "softball" || preset === "wrist" || preset === "large") {
+  if (isNamedCardPreset(preset)) {
     return { preset, ...CARD_SIZE_PRESETS[preset] };
   }
+  const limits = maxCardInches();
   if (preset === "custom" || item?.widthIn != null || item?.heightIn != null) {
     return {
       preset: "custom",
-      widthIn: clampInches(item?.widthIn, CARD_SIZE_PRESETS.softball.widthIn, 1, 8.5),
-      heightIn: clampInches(item?.heightIn, CARD_SIZE_PRESETS.softball.heightIn, 1, 11),
+      widthIn: clampInches(item?.widthIn, CARD_SIZE_PRESETS.softball.widthIn, 1, limits.widthIn),
+      heightIn: clampInches(item?.heightIn, CARD_SIZE_PRESETS.softball.heightIn, 1, limits.heightIn),
     };
   }
   return defaultCardSize();
+}
+
+/**
+ * Equal boxes on a landscape card. Every cell is widthIn/colSlots by heightIn/rowSlots.
+ * Six blocks are three across the top and three across the bottom.
+ */
+export function cardGridMetrics(
+  size: { widthIn: number; heightIn: number },
+  layout: { grids: number; cols: number; rows: number },
+) {
+  const topCount = blocksAcross(layout.grids);
+  const bottomCount = Math.max(0, layout.grids - topCount);
+  const halves = bottomCount > 0 ? 2 : 1;
+  const maxAcross = Math.max(topCount, bottomCount, 1);
+  const colSlots = maxAcross * (layout.cols + 1);
+  const rowSlots = halves * (layout.rows + 1) + 1;
+  return {
+    topCount,
+    bottomCount,
+    halves,
+    maxAcross,
+    colSlots,
+    rowSlots,
+    cellW: size.widthIn / colSlots,
+    cellH: size.heightIn / rowSlots,
+  };
 }
 
 export type WristCall = {
