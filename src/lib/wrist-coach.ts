@@ -150,6 +150,8 @@ export type WristCall = {
   fill: WristColor;
   ink: WristColor;
   count: number;
+  /** 0 keeps the box count. 1 is rare and fills one or two cells. A higher weight fills more. */
+  weight?: number;
 };
 
 export type WristCell = {
@@ -278,6 +280,8 @@ export type WristBook = {
   theme: WristTheme;
   sheet: WristSheet;
   cardSize: WristCardSize;
+  /** How column and row numbers are printed. Standard keeps the block numbers. */
+  numbering: WristNumbering;
   library: WristCall[];
   versions: WristVersion[];
   activeVersionId: string;
@@ -287,7 +291,7 @@ export type WristBook = {
 type WristShuffleBook = Pick<
   WristBook,
   "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
-> & { title?: string; theme?: WristTheme; kindLayouts?: WristKindLayouts };
+> & { title?: string; theme?: WristTheme; kindLayouts?: WristKindLayouts; numbering?: WristNumbering };
 
 export const DEFAULT_GRIDS = 6;
 export const DEFAULT_ROWS = 5;
@@ -543,6 +547,143 @@ export function sheetCode(
   return `${columnCode(grid, col, signStart)}${rowCode(row, rowStart)}`;
 }
 
+export type WristNumbering = "standard" | "ordered" | "oneHand";
+
+export function normalizeNumbering(value: unknown): WristNumbering {
+  if (value === "ordered" || value === "oneHand") return value;
+  return "standard";
+}
+
+/** Bijective base 5, written with the digits 1–5. 1 is "1", 6 is "11", 30 is "55". */
+export function oneHandDigits(value: number) {
+  let n = Math.max(1, Math.round(value));
+  const digits: string[] = [];
+  while (n > 0) {
+    const rem = (n - 1) % 5;
+    digits.push(String(rem + 1));
+    n = Math.floor((n - 1) / 5);
+  }
+  return digits.reverse().join("");
+}
+
+export function columnLabel(
+  grid: number,
+  col: number,
+  cols: number,
+  numbering: WristNumbering = "standard",
+  signStart = DEFAULT_SIGN_START,
+) {
+  const across = grid * Math.max(1, cols) + col + 1;
+  if (numbering === "ordered") return String(across);
+  if (numbering === "oneHand") return oneHandDigits(across);
+  return columnCode(grid, col, signStart);
+}
+
+export function rowLabel(
+  row: number,
+  numbering: WristNumbering = "standard",
+  rowStart = DEFAULT_ROW_START,
+) {
+  if (numbering === "ordered") return String(row + 1);
+  if (numbering === "oneHand") return oneHandDigits(row + 1);
+  return rowCode(row, rowStart);
+}
+
+export function signalCallCode(
+  grid: number,
+  row: number,
+  col: number,
+  cols: number,
+  numbering: WristNumbering = "standard",
+  signStart = DEFAULT_SIGN_START,
+  rowStart = DEFAULT_ROW_START,
+) {
+  if (numbering === "standard") return callCode(grid, row, col, signStart, rowStart);
+  return `${columnLabel(grid, col, cols, numbering, signStart)}-${rowLabel(row, numbering, rowStart)}`;
+}
+
+export function signalSheetCode(
+  grid: number,
+  row: number,
+  col: number,
+  cols: number,
+  numbering: WristNumbering = "standard",
+  signStart = DEFAULT_SIGN_START,
+  rowStart = DEFAULT_ROW_START,
+) {
+  if (numbering === "standard") return sheetCode(grid, row, col, signStart, rowStart);
+  return `${columnLabel(grid, col, cols, numbering, signStart)}-${rowLabel(row, numbering, rowStart)}`;
+}
+
+function largestRemainder(weights: number[], total: number) {
+  const counts = weights.map(() => 0);
+  if (total <= 0 || !weights.length) return counts;
+  const sum = weights.reduce((totalWeight, weight) => totalWeight + weight, 0) || weights.length;
+  const exact = weights.map((weight) => (total * weight) / sum);
+  for (let i = 0; i < weights.length; i += 1) counts[i] = Math.floor(exact[i]);
+  let left = total - counts.reduce((sumCounts, count) => sumCounts + count, 0);
+  const order = exact
+    .map((value, index) => ({ index, frac: value - Math.floor(value), weight: weights[index] }))
+    .sort((a, b) => b.frac - a.frac || b.weight - a.weight || a.index - b.index);
+  for (const item of order) {
+    if (left <= 0) break;
+    counts[item.index] += 1;
+    left -= 1;
+  }
+  return counts;
+}
+
+export function allocateCallCounts(
+  calls: Array<{ id: string; weight: number; rare?: boolean }>,
+  total: number,
+) {
+  const counts: Record<string, number> = {};
+  for (const call of calls) counts[call.id] = 0;
+  if (total <= 0 || !calls.length) return counts;
+  const rare = calls.filter((call) => call.rare);
+  const common = calls.filter((call) => !call.rare);
+  const weightOf = new Map(calls.map((call) => [call.id, Math.max(1, Math.round(call.weight) || 1)]));
+  const give = (group: Array<{ id: string }>, amount: number) => {
+    if (!group.length || amount <= 0) return;
+    const share = largestRemainder(group.map((call) => weightOf.get(call.id) || 1), amount);
+    group.forEach((call, index) => {
+      counts[call.id] += share[index];
+    });
+  };
+  if (!rare.length) {
+    give(calls, total);
+    return counts;
+  }
+  if (!common.length) {
+    let left = Math.min(total, rare.length * 2);
+    for (const call of rare) {
+      if (left <= 0) break;
+      counts[call.id] = 1;
+      left -= 1;
+    }
+    for (const call of rare) {
+      if (left <= 0) break;
+      counts[call.id] += 1;
+      left -= 1;
+    }
+    return counts;
+  }
+  if (total < calls.length) {
+    give(common, total);
+    return counts;
+  }
+  for (const call of calls) counts[call.id] = 1;
+  give(common, total - calls.length);
+  for (const call of rare) {
+    const donor = common.reduce((best, item) => (counts[item.id] > counts[best.id] ? item : best));
+    if (counts[donor.id] >= 4 && counts[call.id] < 2) {
+      counts[donor.id] -= 1;
+      counts[call.id] += 1;
+    }
+  }
+  return counts;
+}
+
 export type WristSheetGroup = {
   callId: string;
   name: string;
@@ -560,7 +701,17 @@ export function sheetGroups(book: WristBook, version: WristVersion | null): Wris
     const call = callById(book, cell.callId);
     if (!call || call.kind !== kind) continue;
     const list = byCall.get(call.id) || [];
-    list.push(sheetCode(cell.grid, cell.row, cell.col, layout.signStart, layout.rowStart));
+    list.push(
+      signalSheetCode(
+        cell.grid,
+        cell.row,
+        cell.col,
+        layout.cols,
+        book.numbering,
+        layout.signStart,
+        layout.rowStart,
+      ),
+    );
     byCall.set(call.id, list);
   }
   return book.library
@@ -812,12 +963,31 @@ export function signBag(
   library: WristCall[],
   kind: WristCallKind,
   total: number,
+  prefer?: "weight" | "count",
 ) {
   if (total <= 0) return [];
   const signs = library.filter((item) => item.kind === kind && item.id);
   if (!signs.length) return Array.from({ length: total }, () => "");
-  const specified = signs.some((item) => (item.count || 0) > 0);
+  const useWeight = prefer !== "count" && signs.some((item) => (item.weight || 0) > 0);
   const bag: string[] = [];
+  if (useWeight) {
+    const active = signs.filter((item) => (item.weight || 0) > 0 || (item.count || 0) > 0);
+    const counts = allocateCallCounts(
+      active.map((item) => ({
+        id: item.id,
+        weight: (item.weight || 0) > 0 ? item.weight || 1 : item.count,
+        rare: item.weight === 1,
+      })),
+      total,
+    );
+    for (const sign of active) {
+      const n = counts[sign.id] || 0;
+      for (let i = 0; i < n; i += 1) bag.push(sign.id);
+    }
+    while (bag.length < total) bag.push("");
+    return shuffleInPlace(bag);
+  }
+  const specified = signs.some((item) => (item.count || 0) > 0);
   if (specified) {
     for (const sign of signs) {
       const n = Math.max(0, Math.round(Number(sign.count) || 0));
@@ -854,6 +1024,7 @@ export function buildKindCells(
   book: Pick<WristBook, "grids" | "rows" | "cols" | "signStart" | "rowStart" | "library"> & {
     kindLayouts?: WristKindLayouts;
     bandKind?: string;
+    numbering?: WristNumbering;
   },
   kind: WristCallKind | string,
 ): WristCell[] {
@@ -869,7 +1040,15 @@ export function buildKindCells(
           grid,
           row,
           col,
-          code: callCode(grid, row, col, layout.signStart, layout.rowStart),
+          code: signalCallCode(
+            grid,
+            row,
+            col,
+            layout.cols,
+            book.numbering || "standard",
+            layout.signStart,
+            layout.rowStart,
+          ),
           callId: assigned[i] || "",
         });
         i += 1;
@@ -999,10 +1178,11 @@ function normalizeCall(raw: unknown, index: number): WristCall | null {
     fill: normalizeColor(item.fill),
     ink: normalizeColor(item.ink),
     count: clampInt(item.count, 0, 0, 300),
+    weight: clampInt(item.weight, 0, 0, 30),
   };
 }
 
-function normalizeCell(raw: unknown, layout: WristLayout): WristCell | null {
+function normalizeCell(raw: unknown, layout: WristLayout, numbering: WristNumbering = "standard"): WristCell | null {
   const item = asRecord(raw);
   if (!item) return null;
   const row = Number(item.row);
@@ -1016,14 +1196,14 @@ function normalizeCell(raw: unknown, layout: WristLayout): WristCell | null {
     grid,
     row,
     col,
-    code: callCode(grid, row, col, layout.signStart, layout.rowStart),
+    code: signalCallCode(grid, row, col, layout.cols, numbering, layout.signStart, layout.rowStart),
     callId: String(item.callId || ""),
   };
 }
 
-function parseCells(raw: unknown, layout: WristLayout): WristCell[] {
+function parseCells(raw: unknown, layout: WristLayout, numbering: WristNumbering): WristCell[] {
   return (Array.isArray(raw) ? raw : [])
-    .map((cell) => normalizeCell(cell, layout))
+    .map((cell) => normalizeCell(cell, layout, numbering))
     .filter((cell): cell is WristCell => Boolean(cell));
 }
 
@@ -1036,13 +1216,14 @@ function normalizeVersion(
   kindLayouts: WristKindLayouts,
   fallbackTitle?: string,
   fallbackTheme?: WristTheme,
+  numbering: WristNumbering = "standard",
 ): WristVersion | null {
   const item = asRecord(raw);
   if (!item) return null;
-  const legacyOffense = parseCells(item.cells, offenseLayout);
-  const legacyDefense = parseCells(item.cells, defenseLayout);
-  let offenseCells = parseCells(item.offenseCells, offenseLayout);
-  let defenseCells = parseCells(item.defenseCells, defenseLayout);
+  const legacyOffense = parseCells(item.cells, offenseLayout, numbering);
+  const legacyDefense = parseCells(item.cells, defenseLayout, numbering);
+  let offenseCells = parseCells(item.offenseCells, offenseLayout, numbering);
+  let defenseCells = parseCells(item.defenseCells, defenseLayout, numbering);
   const draft = {
     grids: offenseLayout.grids,
     rows: offenseLayout.rows,
@@ -1051,6 +1232,7 @@ function normalizeVersion(
     rowStart: offenseLayout.rowStart,
     kindLayouts,
     library,
+    numbering,
   };
 
   if (!cellsMatchLayout(offenseCells, offenseLayout) && cellsMatchLayout(legacyOffense, offenseLayout)) {
@@ -1113,6 +1295,7 @@ function bookDraft(
     theme: extra.theme || defaultTheme(),
     sheet: extra.sheet || defaultSheet(),
     cardSize: extra.cardSize || defaultCardSize(),
+    numbering: extra.numbering || "standard",
     library: extra.library || defaultLibrary(),
     versions: extra.versions || [],
     activeVersionId: extra.activeVersionId || "",
@@ -1145,6 +1328,7 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
     theme: normalizeTheme(item.theme),
     sheet: normalizeSheet(item.sheet || { cols: item.sheetCols, rows: item.sheetRows }),
     cardSize: normalizeCardSize(item.cardSize),
+    numbering: normalizeNumbering(item.numbering),
     library: library.length ? upgradeLibrary(library) : defaultLibrary(),
     updatedAt: Number(item.updatedAt) || Date.now(),
   });
@@ -1161,6 +1345,7 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
         book.kindLayouts,
         book.title,
         book.theme,
+        book.numbering,
       ),
     )
     .filter((version): version is WristVersion => Boolean(version));

@@ -38,6 +38,12 @@ import {
   sheetCode,
   sheetGroups,
   signBag,
+  allocateCallCounts,
+  oneHandDigits,
+  columnLabel,
+  rowLabel,
+  signalCallCode,
+  normalizeNumbering,
   copyCurrentVersion,
   defaultKindTitles,
   defaultKindThemes,
@@ -236,6 +242,82 @@ describe("wrist coach book", () => {
     const bag = signBag(library, "offense", 5);
     assert.equal(bag.filter((id) => id === "play-br").length, 3);
     assert.equal(bag.filter((id) => id === "play-x").length, 2);
+  });
+
+  it("deals rare weights into one or two cells and gives the rest to heavier calls", () => {
+    const counts = allocateCallCounts(
+      [
+        { id: "rare", weight: 1, rare: true },
+        { id: "often", weight: 15 },
+      ],
+      20,
+    );
+    assert.equal(counts.rare + counts.often, 20);
+    assert.ok(counts.rare === 1 || counts.rare === 2);
+    assert.ok(counts.often > counts.rare);
+    const capped = allocateCallCounts(
+      [
+        { id: "only", weight: 1, rare: true },
+        { id: "also", weight: 1, rare: true },
+      ],
+      10,
+    );
+    assert.equal(capped.only, 2);
+    assert.equal(capped.also, 2);
+    const library = [
+      { id: "play-rare", kind: "offense" as const, name: "Take", short: "T", fill: "clear" as const, ink: "clear" as const, count: 15, weight: 1 },
+      { id: "play-hit", kind: "offense" as const, name: "Hit", short: "H", fill: "clear" as const, ink: "clear" as const, count: 15, weight: 0 },
+      { id: "play-bunt", kind: "offense" as const, name: "Bunt", short: "B", fill: "clear" as const, ink: "clear" as const, count: 7, weight: 0 },
+    ];
+    const bag = signBag(library, "offense", 30);
+    const rare = bag.filter((id) => id === "play-rare").length;
+    const hit = bag.filter((id) => id === "play-hit").length;
+    const bunt = bag.filter((id) => id === "play-bunt").length;
+    assert.equal(bag.length, 30);
+    assert.ok(rare === 1 || rare === 2);
+    assert.ok(hit > rare);
+    assert.ok(bunt > 0);
+    assert.equal(hit + bunt + rare, 30);
+    const exact = signBag(library, "offense", 5, "count");
+    assert.equal(exact.filter((id) => id === "play-rare").length + exact.filter((id) => id === "play-hit").length + exact.filter((id) => id === "play-bunt").length, 5);
+  });
+
+  it("prints numbers in order and can limit every digit to 1-5", () => {
+    assert.equal(oneHandDigits(1), "1");
+    assert.equal(oneHandDigits(5), "5");
+    assert.equal(oneHandDigits(6), "11");
+    assert.equal(oneHandDigits(30), "55");
+    assert.equal(columnLabel(0, 0, 5, "ordered", 3), "1");
+    assert.equal(columnLabel(1, 0, 5, "ordered", 1), "6");
+    assert.equal(columnLabel(1, 0, 5, "oneHand", 1), "11");
+    assert.equal(columnLabel(0, 0, 5, "standard", 1), "01");
+    assert.equal(rowLabel(0, "ordered", 4), "1");
+    assert.equal(rowLabel(4, "oneHand", 1), "5");
+    assert.equal(rowLabel(5, "oneHand", 1), "11");
+    assert.equal(signalCallCode(1, 0, 0, 5, "ordered", 1, 1), "6-1");
+    assert.equal(signalCallCode(5, 4, 4, 5, "oneHand", 1, 1), "55-5");
+    for (let n = 1; n <= 150; n += 1) {
+      assert.match(oneHandDigits(n), /^[1-5]+$/);
+    }
+    const saved = normalizeBook(
+      {
+        title: "One hand",
+        numbering: "oneHand",
+        library: [
+          { id: "play-x", kind: "offense", name: "X", short: "X", count: 1, weight: 4 },
+        ],
+        versions: [],
+      },
+      "user-9",
+    );
+    assert.equal(saved.numbering, "oneHand");
+    assert.equal(saved.library.find((item) => item.id === "play-x")?.weight, 4);
+    assert.equal(normalizeNumbering("nope"), "standard");
+    const book = emptyBook("user-1");
+    assert.equal(book.numbering, "standard");
+    const ordered = normalizeBook({ ...book, numbering: "ordered", versions: book.versions }, "user-1");
+    const code = activeVersion(ordered)?.cells[0]?.code;
+    assert.equal(code, "1-1");
   });
 
   it("shuffle creates another mapping with a new version name", () => {
@@ -595,6 +677,10 @@ describe("wrist coach book", () => {
     assert.match(page, /\.count-step \{\s*width: 40px;/);
     assert.match(page, />Codes</);
     assert.match(page, />Names</);
+    assert.match(page, /data-numbering="ordered"/);
+    assert.match(page, /data-numbering="oneHand"/);
+    assert.match(page, /data-call-weight/);
+    assert.match(page, /One hand uses only the digits 1/);
     assert.doesNotMatch(page, /Copy and Create New Version/);
     assert.doesNotMatch(page, />Sign start</);
     assert.doesNotMatch(page, />Highlight</);

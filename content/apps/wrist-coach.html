@@ -89,6 +89,7 @@
     .size-btn,
     .look-btn,
     .sheet-size-btn,
+    .number-btn,
     .library-tab,
     #view-player,
     #view-coach,
@@ -367,6 +368,15 @@
         </label>
       </div>
       <p id="block-size-note" class="text-sm text-slate-400"></p>
+      <div class="grid gap-1.5 text-sm">
+        Number style
+        <div id="number-btns" class="flex flex-wrap gap-1.5" role="group" aria-label="Number style">
+          <button type="button" data-numbering="standard" class="number-btn rounded-full px-3 py-1 text-xs font-semibold">Block numbers</button>
+          <button type="button" data-numbering="ordered" class="number-btn rounded-full px-3 py-1 text-xs font-semibold">In order</button>
+          <button type="button" data-numbering="oneHand" class="number-btn rounded-full px-3 py-1 text-xs font-semibold">One hand (1–5)</button>
+        </div>
+        <p class="text-sm text-slate-400">Block numbers stay on each block and follow the first column and first row. In order prints 1, 2, 3 straight across the card. One hand uses only the digits 1–5, so a coach can signal on one hand.</p>
+      </div>
       <div class="flex flex-wrap items-center gap-2 text-sm">
         <span class="text-slate-400">Readability</span>
         <div id="look-btns" class="flex flex-wrap gap-1.5" role="group" aria-label="Readability">
@@ -429,7 +439,7 @@
       <div class="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 id="signs-heading" class="font-semibold">Offense calls</h2>
-          <p class="text-sm text-slate-400">Offense and defense fill the card. Pitches and locations stay in the library.</p>
+          <p class="text-sm text-slate-400">Offense and defense fill the card. Pitches and locations stay in the library. Weight 1 fills one or two boxes, and a higher weight fills more. Leave weight blank to keep that call’s box count. Shuffle deals from the weights.</p>
         </div>
         <p id="sign-tally" class="text-sm text-slate-300"></p>
       </div>
@@ -937,6 +947,113 @@
       return columnCode(grid, col, layout.signStart) + "-" + rowCode(row, layout.rowStart);
     }
 
+    function numberingOf() {
+      return book && (book.numbering === "ordered" || book.numbering === "oneHand") ? book.numbering : "standard";
+    }
+
+    function oneHandDigits(value) {
+      let n = Math.max(1, Math.round(value));
+      const digits = [];
+      while (n > 0) {
+        digits.push(String(((n - 1) % 5) + 1));
+        n = Math.floor((n - 1) / 5);
+      }
+      return digits.reverse().join("");
+    }
+
+    function columnLabel(grid, col, layout) {
+      const mode = numberingOf();
+      const across = grid * layout.cols + col + 1;
+      if (mode === "ordered") return String(across);
+      if (mode === "oneHand") return oneHandDigits(across);
+      return columnCode(grid, col, layout.signStart);
+    }
+
+    function rowLabel(row, layout) {
+      const mode = numberingOf();
+      if (mode === "ordered") return String(row + 1);
+      if (mode === "oneHand") return oneHandDigits(row + 1);
+      return rowCode(row, layout.rowStart);
+    }
+
+    function signalCallCode(grid, row, col, layout) {
+      if (numberingOf() === "standard") return callCode(grid, row, col, layout);
+      return columnLabel(grid, col, layout) + "-" + rowLabel(row, layout);
+    }
+
+    function signalSheetCode(grid, row, col, layout) {
+      if (numberingOf() === "standard") return sheetCode(grid, row, col, layout);
+      return columnLabel(grid, col, layout) + "-" + rowLabel(row, layout);
+    }
+
+    function largestRemainder(weights, total) {
+      const counts = weights.map(function () { return 0; });
+      if (total <= 0 || !weights.length) return counts;
+      const sum = weights.reduce(function (totalWeight, weight) { return totalWeight + weight; }, 0) || weights.length;
+      const exact = weights.map(function (weight) { return (total * weight) / sum; });
+      for (let i = 0; i < weights.length; i += 1) counts[i] = Math.floor(exact[i]);
+      let left = total - counts.reduce(function (sumCounts, count) { return sumCounts + count; }, 0);
+      const order = exact.map(function (value, index) {
+        return { index: index, frac: value - Math.floor(value), weight: weights[index] };
+      }).sort(function (a, b) {
+        return b.frac - a.frac || b.weight - a.weight || a.index - b.index;
+      });
+      order.forEach(function (item) {
+        if (left <= 0) return;
+        counts[item.index] += 1;
+        left -= 1;
+      });
+      return counts;
+    }
+
+    function allocateCallCounts(calls, total) {
+      const counts = {};
+      calls.forEach(function (call) { counts[call.id] = 0; });
+      if (total <= 0 || !calls.length) return counts;
+      const rare = calls.filter(function (call) { return call.rare; });
+      const common = calls.filter(function (call) { return !call.rare; });
+      function weightOf(call) { return Math.max(1, Math.round(call.weight) || 1); }
+      function give(group, amount) {
+        if (!group.length || amount <= 0) return;
+        const share = largestRemainder(group.map(weightOf), amount);
+        group.forEach(function (call, index) { counts[call.id] += share[index]; });
+      }
+      if (!rare.length) {
+        give(calls, total);
+        return counts;
+      }
+      if (!common.length) {
+        let left = Math.min(total, rare.length * 2);
+        rare.forEach(function (call) {
+          if (left <= 0) return;
+          counts[call.id] = 1;
+          left -= 1;
+        });
+        rare.forEach(function (call) {
+          if (left <= 0) return;
+          counts[call.id] += 1;
+          left -= 1;
+        });
+        return counts;
+      }
+      if (total < calls.length) {
+        give(common, total);
+        return counts;
+      }
+      calls.forEach(function (call) { counts[call.id] = 1; });
+      give(common, total - calls.length);
+      rare.forEach(function (call) {
+        const donor = common.reduce(function (best, item) {
+          return counts[item.id] > counts[best.id] ? item : best;
+        });
+        if (counts[donor.id] >= 4 && counts[call.id] < 2) {
+          counts[donor.id] -= 1;
+          counts[call.id] += 1;
+        }
+      });
+      return counts;
+    }
+
     const SHEET_SIZE_PRESETS = {
       card: { widthIn: 3.5, heightIn: 5.5 },
       letter: { widthIn: 8.5, heightIn: 11 },
@@ -1064,7 +1181,7 @@
         const call = callById(cell.callId);
         if (!call || call.kind !== kind) return;
         if (!byCall[call.id]) byCall[call.id] = [];
-        byCall[call.id].push(sheetCode(cell.grid || 0, cell.row, cell.col, layout));
+        byCall[call.id].push(signalSheetCode(cell.grid || 0, cell.row, cell.col, layout));
       });
       return book.library.filter(function (call) {
         return call.kind === kind && byCall[call.id];
@@ -1098,10 +1215,28 @@
       return list;
     }
 
-    function signBag(library, kind, total) {
+    function signBag(library, kind, total, prefer) {
       if (total <= 0) return [];
       const signs = (library || []).filter(function (item) { return item.kind === kind && item.id; });
       if (!signs.length) return Array.from({ length: total }, function () { return ""; });
+      const useWeight = prefer !== "count" && signs.some(function (item) { return (item.weight || 0) > 0; });
+      if (useWeight) {
+        const active = signs.filter(function (item) { return (item.weight || 0) > 0 || (item.count || 0) > 0; });
+        const counts = allocateCallCounts(active.map(function (item) {
+          return {
+            id: item.id,
+            weight: (item.weight || 0) > 0 ? item.weight : item.count,
+            rare: item.weight === 1
+          };
+        }), total);
+        const bag = [];
+        active.forEach(function (sign) {
+          const n = counts[sign.id] || 0;
+          for (let i = 0; i < n; i += 1) bag.push(sign.id);
+        });
+        while (bag.length < total) bag.push("");
+        return shuffleInPlace(bag);
+      }
       const specified = signs.some(function (item) { return (item.count || 0) > 0; });
       const bag = [];
       if (specified) {
@@ -1128,7 +1263,7 @@
 
     function buildKindCells(current, kind) {
       const layout = layoutForBook(current, kind);
-      const assigned = signBag(current.library, playCardKind(kind), cellCount(layout));
+      const assigned = signBag(current.library, playCardKind(kind), cellCount(layout), current && current.fillPrefer);
       const cells = [];
       let i = 0;
       for (let grid = 0; grid < layout.grids; grid += 1) {
@@ -1138,7 +1273,7 @@
               grid: grid,
               row: row,
               col: col,
-              code: callCode(grid, row, col, layout),
+              code: signalCallCode(grid, row, col, layout),
               callId: assigned[i] || ""
             });
             i += 1;
@@ -1184,6 +1319,7 @@
         theme: { band: SET_THEMES.offense.band, ink: "#000000", highlight: "#ffffff" },
         sheet: defaultSheet(),
         cardSize: defaultCardSize(),
+        numbering: "standard",
         kindLayouts: {
           offense: { rows: 5, cols: 5 },
           defense: { rows: 4, cols: 4 }
@@ -1207,7 +1343,9 @@
       if (!book.library || !book.library.length) book.library = defaultLibrary();
       book.library.forEach(function (item) {
         if (item.count == null) item.count = 0;
+        if (item.weight == null) item.weight = 0;
       });
+      if (book.numbering !== "ordered" && book.numbering !== "oneHand") book.numbering = "standard";
       if (!book.cardSize) book.cardSize = defaultCardSize();
       if (!book.theme) book.theme = defaultTheme();
       book.theme = normalizeTheme(book.theme);
@@ -1259,17 +1397,22 @@
       }
     }
 
-    function refillCard(kind) {
-      const current = activeVersion();
-      if (current && current.locked) return false;
-      if (!current) {
-        const next = shuffleVersion(book, "Version A");
-        book.versions = [next];
-        book.activeVersionId = next.id;
+    function refillCard(kind, prefer) {
+      book.fillPrefer = prefer || "";
+      try {
+        const current = activeVersion();
+        if (current && current.locked) return false;
+        if (!current) {
+          const next = shuffleVersion(book, "Version A");
+          book.versions = [next];
+          book.activeVersionId = next.id;
+          return true;
+        }
+        setVersionCells(current, kind || book.bandKind, buildKindCells(book, kind || book.bandKind));
         return true;
+      } finally {
+        delete book.fillPrefer;
       }
-      setVersionCells(current, kind || book.bandKind, buildKindCells(book, kind || book.bandKind));
-      return true;
     }
 
     function refillBothCards() {
@@ -1433,6 +1576,11 @@
               '<button type="button" data-call-del="' + escapeHtml(item.id) + '" class="call-remove" aria-label="Remove ' + escapeHtml(item.name) + '">×</button>' +
             '</div>' +
             '<div class="flex flex-wrap items-center gap-2">' +
+              (kind === "offense" || kind === "defense"
+                ? '<label class="flex items-center gap-2 text-xs text-slate-400">Weight' +
+                    '<input data-call-weight="' + escapeHtml(item.id) + '" value="' + (item.weight > 0 ? escapeHtml(String(item.weight)) : "") + '" inputmode="numeric" aria-label="Weight for ' + escapeHtml(item.name) + '" placeholder="—" class="min-h-10 w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-center text-sm outline-none focus:border-red-500">' +
+                  '</label>'
+                : "") +
               '<span class="text-xs text-slate-400">Cell</span>' +
               '<div class="flex flex-wrap gap-1.5">' + swatchRow(item.id, "fill", fill) + '</div>' +
               '<span class="text-xs text-slate-400">Text</span>' +
@@ -1511,8 +1659,8 @@
     function labelsOnCard(version, layout) {
       const labels = [];
       for (let grid = 0; grid < layout.grids; grid += 1) {
-        for (let col = 0; col < layout.cols; col += 1) labels.push(columnCode(grid, col, layout.signStart));
-        for (let row = 0; row < layout.rows; row += 1) labels.push(rowCode(row, layout.rowStart));
+        for (let col = 0; col < layout.cols; col += 1) labels.push(columnLabel(grid, col, layout));
+        for (let row = 0; row < layout.rows; row += 1) labels.push(rowLabel(row, layout));
       }
       versionCells(version, book.bandKind).forEach(function (cell) {
         const call = callById(cell.callId);
@@ -1785,7 +1933,7 @@
             (col0 + col + 1) * cellW,
             row0 * cellH,
             look.bandFill,
-            columnCode(g, col, layout.signStart),
+            columnLabel(g, col, layout),
             look.bandInk,
             fontPt,
             "",
@@ -1797,7 +1945,7 @@
             col0 * cellW,
             (row0 + row + 1) * cellH,
             look.bandFill,
-            rowCode(row, layout.rowStart),
+            rowLabel(row, layout),
             look.bandInk,
             fontPt,
             "",
@@ -2340,6 +2488,31 @@
       tally.textContent = used + " of " + cellCount(layout) + " boxes on this card";
     }
 
+    function stampSignalCodes() {
+      if (!book) return;
+      book.versions.forEach(function (version) {
+        ["offense", "defense"].forEach(function (kind) {
+          const layout = layoutFor(kind);
+          const cells = versionCells(version, kind).map(function (cell) {
+            const next = Object.assign({}, cell);
+            next.code = signalCallCode(cell.grid || 0, cell.row, cell.col, layout);
+            return next;
+          });
+          setVersionCells(version, kind, cells);
+        });
+      });
+    }
+
+    function renderNumberControls() {
+      const mode = numberingOf();
+      document.querySelectorAll(".number-btn").forEach(function (btn) {
+        const on = btn.getAttribute("data-numbering") === mode;
+        btn.className = "number-btn rounded-full px-3 py-1 text-xs font-semibold " +
+          (on ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+
     function renderLookControls() {
       document.querySelectorAll(".look-btn").forEach(function (btn) {
         const on = btn.getAttribute("data-look") === cardLook;
@@ -2358,6 +2531,7 @@
       document.getElementById("book-title").value = bandTitle();
       document.getElementById("book-subtitle").textContent = bandTitle();
       renderKindControls();
+      renderNumberControls();
       renderLookControls();
       renderSizeControls();
       renderLayoutControls();
@@ -2385,7 +2559,8 @@
         short: cleanShort || cleanName.slice(0, 3).toUpperCase(),
         fill: "clear",
         ink: "clear",
-        count: 0
+        count: 0,
+        weight: 0
       });
       render();
       scheduleSave();
@@ -2597,7 +2772,7 @@
         return;
       }
       closeCountModal();
-      refillCard(source.kind);
+      refillCard(source.kind, "count");
       render();
       scheduleSave();
     });
@@ -2648,7 +2823,8 @@
     function onCallEdit(event) {
       const id = event.target.getAttribute("data-call-name") ||
         event.target.getAttribute("data-call-short") ||
-        event.target.getAttribute("data-call-count");
+        event.target.getAttribute("data-call-count") ||
+        event.target.getAttribute("data-call-weight");
       if (!id) return;
       const call = callById(id);
       if (!call) return;
@@ -2666,6 +2842,14 @@
       }
       if (event.target.getAttribute("data-call-count")) {
         openCountTrade(id, event.target.value);
+        return;
+      }
+      if (event.target.getAttribute("data-call-weight")) {
+        const raw = String(event.target.value || "").trim();
+        call.weight = raw === "" ? 0 : clampInt(raw, 0, 0, 30);
+        refillCard(call.kind, "weight");
+        render();
+        scheduleSave();
       }
     }
     function onLibraryClick(event) {
@@ -2722,6 +2906,17 @@
       render();
       scheduleSave();
     }
+    document.getElementById("number-btns").addEventListener("click", function (event) {
+      const btn = event.target.closest("[data-numbering]");
+      if (!btn) return;
+      const mode = btn.getAttribute("data-numbering");
+      if (mode !== "standard" && mode !== "ordered" && mode !== "oneHand") return;
+      if (mode === numberingOf()) return;
+      book.numbering = mode;
+      stampSignalCodes();
+      render();
+      scheduleSave();
+    });
     document.getElementById("look-btns").addEventListener("click", function (event) {
       const btn = event.target.closest("[data-look]");
       if (!btn) return;
