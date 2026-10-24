@@ -10,6 +10,7 @@ import {
 import {
   DEFAULT_COLS,
   DEFAULT_GRIDS,
+  blocksAcross,
   knockoutPt,
   sidePadPt,
   DEFAULT_ROWS,
@@ -510,6 +511,11 @@ describe("wrist coach book", () => {
     assert.equal(sidePadPt(19.5, 2), 0.9);
     assert.equal(sidePadPt(28.8, 2), 0.9);
     assert.equal(sidePadPt(13, 3), 0.9);
+    assert.equal(blocksAcross(6), 3);
+    assert.equal(blocksAcross(2), 2);
+    assert.equal(blocksAcross(1), 1);
+    assert.equal(blocksAcross(8), 4);
+    assert.ok(emptyBook("user-1", "Offense").cardSize.widthIn > emptyBook("user-1", "Offense").cardSize.heightIn);
     assert.equal(sidePadPt(13, 6), 0.35);
     assert.equal(sidePadPt(20, 6), 0.9);
     assert.equal(sidePadPt(15.6, 6), 0.497);
@@ -519,6 +525,10 @@ describe("wrist coach book", () => {
     assert.ok(knockoutPt(9.158) < 0.4);
     assert.ok(knockoutPt(9.158) >= 0.22);
     const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /function blocksAcross\(grids\)/);
+    assert.match(page, /blocksAcross\(layout\.grids\)/);
+    assert.match(page, /n\(hPt\) \+ '" preserveAspectRatio="xMidYMid meet"/);
+    assert.doesNotMatch(page, /preserveAspectRatio="none"/);
     assert.match(page, /grids: 6/);
     assert.match(page, /function sidePadPt\(cellW, grids\)/);
     assert.match(page, /if \(!isFinite\(grids\) \|\| grids <= 3\) return 0\.9/);

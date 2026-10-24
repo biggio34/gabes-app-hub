@@ -297,6 +297,16 @@ type WristShuffleBook = Pick<
 export const DEFAULT_GRIDS = 6;
 
 /**
+ * Blocks across a landscape card. The red 5×5 reference is 3.5in wide by 2in tall:
+ * six blocks sit three across the top and three across the bottom, not in one vertical column.
+ */
+export function blocksAcross(grids: number): number {
+  const count = Math.max(1, Math.round(Number(grids)) || 1);
+  if (count <= 3) return count;
+  return Math.ceil(count / 2);
+}
+
+/**
  * Side inset for card type, in points.
  * Two- and three-block cards keep the 0.9pt gap from the reference samples.
  * A 6-block cell is about 13pt wide, so that fixed gap is eased toward 0.35pt

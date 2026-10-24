@@ -34,6 +34,7 @@
       color: #000;
       box-sizing: border-box;
       display: block;
+      flex-shrink: 0;
       padding: 0;
       overflow: visible;
       font-family: "WristCard", "Arial Narrow", sans-serif;
@@ -65,6 +66,7 @@
     .cut-card {
       position: relative;
       display: block;
+      flex-shrink: 0;
       overflow: visible;
     }
     .cut-marks {
@@ -1649,8 +1651,16 @@
       return Math.round(Math.max(0.22, sizePt * (0.4 / 15.9)) * 1000) / 1000;
     }
 
+    // Keep in sync with blocksAcross in src/lib/wrist-coach.ts.
+    // Landscape: blocks run across the card. Six blocks are 3 over 3, like the red 5x5 reference.
+    function blocksAcross(grids) {
+      const count = Math.max(1, Math.round(Number(grids)) || 1);
+      if (count <= 3) return count;
+      return Math.ceil(count / 2);
+    }
+
     function playerCardMetrics(size, layout) {
-      const topCount = layout.grids <= 3 ? layout.grids : Math.ceil(layout.grids / 2);
+      const topCount = blocksAcross(layout.grids);
       const bottomCount = Math.max(0, layout.grids - topCount);
       const halves = bottomCount > 0 ? 2 : 1;
       const maxAcross = Math.max(topCount, bottomCount, 1);
@@ -2026,7 +2036,7 @@
       }
       const card =
         '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-shade="' + (shadeRows ? "1" : "0") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
-          '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="none">' +
+          '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="xMidYMid meet">' +
             '<defs>' + clips.join("") + '</defs>' +
             dataShapes.join("") +
             bandShapes.join("") +
