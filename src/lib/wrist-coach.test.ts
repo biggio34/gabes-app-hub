@@ -34,6 +34,8 @@ import {
   cardGridMetrics,
   CARD_SIZE_PRESETS,
   LETTER_SHEET,
+  LAMINATE_BLEED_IN,
+  laminateCutInches,
   letterSheetFit,
   letterBlockFits,
   normalizeSheet,
@@ -778,6 +780,83 @@ describe("wrist coach book", () => {
     assert.match(page, /const CALIBRATE_IN = 1/);
   });
 
+  it("keeps the printed card exact and moves the cut line out when laminate is on", () => {
+    assert.equal(LAMINATE_BLEED_IN, 0.125);
+    const samples = [
+      { widthIn: 3.25, heightIn: 2 },
+      { widthIn: 4.5, heightIn: 2.5 },
+      { widthIn: 3.5, heightIn: 2.25 },
+      { widthIn: 5, heightIn: 3 },
+      { widthIn: 3.63, heightIn: 2.12 },
+      { widthIn: 2.75, heightIn: 2.15 },
+      { widthIn: 4.75, heightIn: 2.25 },
+    ];
+    for (const size of samples) {
+      const off = laminateCutInches(size.widthIn, size.heightIn, false);
+      assert.deepEqual(off, {
+        bleedIn: 0,
+        contentWidthIn: size.widthIn,
+        contentHeightIn: size.heightIn,
+        cutWidthIn: size.widthIn,
+        cutHeightIn: size.heightIn,
+      });
+      const on = laminateCutInches(size.widthIn, size.heightIn, true);
+      assert.equal(on.bleedIn, 0.125);
+      assert.equal(on.contentWidthIn, size.widthIn);
+      assert.equal(on.contentHeightIn, size.heightIn);
+      assert.equal(on.cutWidthIn, Math.round((size.widthIn + 0.25) * 1000) / 1000);
+      assert.equal(on.cutHeightIn, Math.round((size.heightIn + 0.25) * 1000) / 1000);
+      assert.equal(on.cutWidthIn - on.contentWidthIn, 0.25);
+      assert.equal(on.cutHeightIn - on.contentHeightIn, 0.25);
+    }
+    const cardGap = 0.28;
+    const cardReserve = LETTER_SHEET.calibrateIn + LETTER_SHEET.calibrateGapIn + LETTER_SHEET.markOutIn;
+    const cardSide = LETTER_SHEET.markPadIn + LETTER_SHEET.markOutIn;
+    const fitOpts = { reserveIn: cardReserve, sidePadIn: cardSide };
+    const onFit: Record<string, { cols: number; rows: number; count: number }> = {
+      wrist: { cols: 2, rows: 3, count: 6 },
+      youth: { cols: 1, rows: 3, count: 3 },
+      softball: { cols: 1, rows: 3, count: 3 },
+      large: { cols: 1, rows: 2, count: 2 },
+      play: { cols: 1, rows: 3, count: 3 },
+      triplePeewee: { cols: 2, rows: 3, count: 6 },
+    };
+    for (const [name, expectFit] of Object.entries(onFit)) {
+      const size = CARD_SIZE_PRESETS[name as keyof typeof CARD_SIZE_PRESETS];
+      const cut = laminateCutInches(size.widthIn, size.heightIn, true);
+      const fit = letterSheetFit(cut.cutWidthIn, cut.cutHeightIn, cardGap, fitOpts);
+      assert.deepEqual(fit, expectFit, name);
+      assert.equal(letterBlockFits(cut.cutWidthIn, cut.cutHeightIn, fit.cols, fit.rows, cardGap, fitOpts), true, name);
+    }
+    const custom = laminateCutInches(3.63, 2.12, true);
+    assert.deepEqual(custom, {
+      bleedIn: 0.125,
+      contentWidthIn: 3.63,
+      contentHeightIn: 2.12,
+      cutWidthIn: 3.88,
+      cutHeightIn: 2.37,
+    });
+    assert.deepEqual(letterSheetFit(custom.cutWidthIn, custom.cutHeightIn, cardGap, fitOpts), {
+      cols: 1,
+      rows: 3,
+      count: 3,
+    });
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /id="laminate"/);
+    assert.match(page, /const LAMINATE_BLEED_IN = 0\.125/);
+    assert.match(page, /let laminateOn = false/);
+    assert.match(page, /class="laminate-inset"/);
+    assert.match(page, /data-laminate="/);
+    assert.match(page, /data-content-w="/);
+    assert.match(page, /data-cut-w="/);
+    assert.match(page, /A clear 1\/8 in border sits on every side/);
+    assert.match(page, /getElementById\("laminate"\)\.addEventListener\("change", function \(event\) \{\s*laminateOn = !!event\.target\.checked;\s*render\(\);\s*\}\);/);
+    const cardFn = page.slice(page.indexOf("function wristCardHtml"), page.indexOf("function cardPaint"));
+    assert.match(cardFn, /const fontPt = fontPx \* 72 \/ 96/);
+    assert.doesNotMatch(cardFn.slice(0, cardFn.indexOf("const fontPt")), /laminateOn/);
+    assert.doesNotMatch(cardFn, /fontPt = [^;]*laminate/);
+  });
+
   it("keeps the Wrist Coach editor usable on a phone", () => {
     const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
     assert.match(page, /Card setup/);
@@ -792,6 +871,7 @@ describe("wrist coach book", () => {
     assert.match(page, /let libraryKind = "offense"/);
     assert.match(page, /id="name-key"/);
     assert.match(page, /id="letter-preview"/);
+    assert.match(page, /id="laminate"/);
     assert.match(page, /id="delete-modal"/);
     assert.match(page, /role="dialog"/);
     assert.match(page, /aria-modal="true"/);

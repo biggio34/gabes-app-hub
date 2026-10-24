@@ -83,6 +83,24 @@ export const LETTER_SHEET = {
   markPadIn: 11 / 72,
 } as const;
 
+/** Clear border on each side when Laminate is on. The cut line sits outside the print. */
+export const LAMINATE_BLEED_IN = 0.125;
+
+/**
+ * Laminate keeps the printed card at width × height and moves the cut line
+ * one bleed outside it on every side. Off leaves the cut line on the card edge.
+ */
+export function laminateCutInches(widthIn: number, heightIn: number, on: boolean) {
+  const bleed = on ? LAMINATE_BLEED_IN : 0;
+  return {
+    bleedIn: bleed,
+    contentWidthIn: widthIn,
+    contentHeightIn: heightIn,
+    cutWidthIn: Math.round((widthIn + bleed * 2) * 1000) / 1000,
+    cutHeightIn: Math.round((heightIn + bleed * 2) * 1000) / 1000,
+  };
+}
+
 export function letterSheetFit(
   widthIn: number,
   heightIn: number,

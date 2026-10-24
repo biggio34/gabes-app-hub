@@ -400,11 +400,15 @@
           Trim guides
         </label>
         <label class="flex items-center gap-2 text-slate-300">
+          <input id="laminate" type="checkbox" class="accent-red-600">
+          Laminate
+        </label>
+        <label class="flex items-center gap-2 text-slate-300">
           <input id="shade-rows" type="checkbox" class="accent-red-600">
           Shade rows
         </label>
       </div>
-      <p class="text-sm text-slate-400">Field keeps the wristband colors. Shade rows is off until you turn it on. Sun, black &amp; white, trim, and row shading change this print only. They do not change the saved signs.</p>
+      <p class="text-sm text-slate-400">Field keeps the wristband colors. Shade rows and laminate are off until you turn them on. Laminate adds a 1/8 in clear border and puts the cut line outside the print, so the printed card stays the window size after you laminate. Sun, black &amp; white, trim, laminate, and row shading change this print only. They do not change the saved signs.</p>
       <div class="grid gap-3 sm:grid-cols-3">
         <label class="grid gap-1.5 text-sm">
           Band color
@@ -704,6 +708,7 @@
     const CARD_MIN_IN = 1;
     const CARD_MAX_W = 7.42;
     const CARD_MAX_H = 8.91;
+    const LAMINATE_BLEED_IN = 0.125;
     const DEFAULT_THEME = { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
     const SET_THEMES = {
       offense: { band: "#ff0000", ink: "#000000", highlight: "#ffffff" },
@@ -714,6 +719,7 @@
     let wristCardSeq = 0;
     let cardLook = "field";
     let showTrim = true;
+    let laminateOn = false;
     let shadeRows = false;
     let showCoachOnCard = false;
     let libraryKind = "offense";
@@ -2081,7 +2087,7 @@
           '</svg>' +
         '</div>';
       const trim = trimOverride == null ? showTrim : !!trimOverride;
-      if (!trim) return card;
+      if (!trim && !laminateOn) return card;
       return cutWrap(card, size, n);
     }
 
@@ -2133,8 +2139,11 @@
     }
 
     function cutWrap(card, size, n) {
-      const wPt = size.widthIn * 72;
-      const hPt = size.heightIn * 72;
+      const bleed = laminateOn ? LAMINATE_BLEED_IN : 0;
+      const cutW = Math.round((size.widthIn + bleed * 2) * 1000) / 1000;
+      const cutH = Math.round((size.heightIn + bleed * 2) * 1000) / 1000;
+      const wPt = cutW * 72;
+      const hPt = cutH * 72;
       const ox = 9;
       const oy = 9;
       const gap = 2;
@@ -2151,9 +2160,12 @@
       const top = oy;
       const right = ox + wPt;
       const bottom = oy + hPt;
+      const inner = bleed
+        ? '<div class="laminate-inset" style="position:absolute;left:' + bleed + 'in;top:' + bleed + 'in;width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' + card + '</div>'
+        : card;
       return (
-        '<div class="cut-card" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
-          card +
+        '<div class="cut-card" data-laminate="' + (bleed ? "1" : "0") + '" data-bleed="' + bleed + '" data-content-w="' + size.widthIn + '" data-content-h="' + size.heightIn + '" data-cut-w="' + cutW + '" data-cut-h="' + cutH + '" style="width:' + cutW + 'in;height:' + cutH + 'in">' +
+          inner +
           '<svg class="cut-marks" viewBox="0 0 ' + n(wPt + 18) + ' ' + n(hPt + 18) + '" preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
             '<g fill="none" stroke="#000000" stroke-width="0.3" stroke-linecap="square">' +
               corner(left, top, -1, -1) +
@@ -2172,9 +2184,10 @@
       const wrap = scaler ? (scaler.querySelector(".cut-card") || scaler.querySelector(".band-card")) : null;
       if (!frame || !scaler || !wrap) return;
       const size = cardSize();
-      const naturalW = size.widthIn * 96;
-      const naturalH = size.heightIn * 96;
-      const trim = showTrim ? 9 * 96 / 72 : 0;
+      const bleed = laminateOn ? LAMINATE_BLEED_IN : 0;
+      const naturalW = (size.widthIn + bleed * 2) * 96;
+      const naturalH = (size.heightIn + bleed * 2) * 96;
+      const trim = showTrim || laminateOn ? 9 * 96 / 72 : 0;
       const avail = Math.max(1, frame.clientWidth);
       const scale = Math.min(1, avail / (naturalW + trim * 2));
       wrap.style.transform = "scale(" + scale + ")";
@@ -2380,14 +2393,18 @@
       const cardGap = 0.28;
       const cardReserve = CALIBRATE_IN + CALIBRATE_GAP + MARK_OUT;
       const cardSide = MARK_PAD + MARK_OUT;
-      const cardFit = letterFit(size.widthIn, size.heightIn, cardGap, cardReserve, cardSide);
+      const bleed = laminateOn ? LAMINATE_BLEED_IN * 2 : 0;
+      const cardFit = letterFit(size.widthIn + bleed, size.heightIn + bleed, cardGap, cardReserve, cardSide);
       const cards = [];
       for (let i = 0; i < cardFit.count; i += 1) cards.push(wristCardHtml(version, false, "", true));
+      const cutSentence = laminateOn
+        ? "The printed card stays the window size. A clear 1/8 in border sits on every side. Cut on the outer corner marks. "
+        : "Cut on the corner marks. ";
       const cardCopy =
         "Print at 100% / Actual size. Do not choose Fit to page or Scale to fit. " +
         "This square is 1 inch — measure it before you cut. " +
         cardFit.count + " card" + (cardFit.count === 1 ? "" : "s") + " fit on this Letter sheet (" +
-        cardFit.cols + " across × " + cardFit.rows + " down). Cut on the corner marks. " +
+        cardFit.cols + " across × " + cardFit.rows + " down). " + cutSentence +
         "Turn on Background graphics so the colors print. Colored boxes keep a mark so a black-and-white printer still shows them.";
       const cardPage =
         '<section class="print-page print-cards">' +
@@ -2417,9 +2434,13 @@
       else root.innerHTML = cardPage + keyPage;
       if (fitNote) {
         const noun = cardFit.count === 1 ? "card fits" : "cards fit";
+        const laminateNote = laminateOn
+          ? " Laminate is on: the clear border is 1/8 in and the cut is the outer marks."
+          : "";
         const fitText =
           cardFit.count + " " + noun + " on one Letter sheet (" + cardFit.cols + " across × " + cardFit.rows +
-          " down), with cut marks. Print at 100% / Actual size — the sheet has a 1 inch square to measure.";
+          " down), with cut marks. Print at 100% / Actual size — the sheet has a 1 inch square to measure." +
+          laminateNote;
         fitNote.textContent = fitText;
         const previewNote = document.getElementById("letter-preview-note");
         if (previewNote) previewNote.textContent = fitText;
@@ -2586,6 +2607,8 @@
       });
       const box = document.getElementById("trim-guides");
       if (box) box.checked = showTrim;
+      const laminate = document.getElementById("laminate");
+      if (laminate) laminate.checked = laminateOn;
       const shade = document.getElementById("shade-rows");
       if (shade) shade.checked = shadeRows;
     }
@@ -2992,6 +3015,10 @@
     });
     document.getElementById("trim-guides").addEventListener("change", function (event) {
       showTrim = !!event.target.checked;
+      render();
+    });
+    document.getElementById("laminate").addEventListener("change", function (event) {
+      laminateOn = !!event.target.checked;
       render();
     });
     document.getElementById("shade-rows").addEventListener("change", function (event) {
