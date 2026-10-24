@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { createContext, runInContext } from "node:vm";
 import {
   areaAndFeatureLinks,
   mergeUserFeatures,
@@ -735,6 +736,74 @@ describe("wrist coach book", () => {
     assert.equal((defenseSvg.match(/stroke="#000000"/g) || []).length, 6);
   });
 
+  it("renders factory and custom cards with finite SVG attributes", () => {
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    const metricsFn = page.slice(page.indexOf("function playerCardMetrics"), page.indexOf("function labelsOnCard"));
+    assert.match(metricsFn, /footerIn: metrics\.footerIn/);
+    assert.match(metricsFn, /contentRows: metrics\.contentRows/);
+    const nameTools = page.slice(page.indexOf('id="name-tools"'), page.indexOf('id="name-key"'));
+    assert.match(nameTools, /id="name-search"/);
+    assert.match(nameTools, /placeholder="Code or name"/);
+    assert.match(nameTools, /id="name-box"/);
+    assert.match(nameTools, /aria-label="Look up a box number"/);
+    assert.match(page, /id="view-coach"/);
+    assert.match(page, /tools\.classList\.remove\("hidden"\)/);
+
+    const rendered = renderWristCards(page);
+    const cards = [
+      { name: "offense", html: rendered.offense, widthIn: 3.5, heightIn: 2.25, fill: "#ff0000" },
+      { name: "defense", html: rendered.defense, widthIn: 3.5, heightIn: 2.25, fill: "#f7bad1" },
+      { name: "custom", html: rendered.custom, widthIn: 4.25, heightIn: 2.5, fill: "#ff0000" },
+    ];
+    for (const card of cards) {
+      const bad = nonFiniteSvgAttributes(card.html);
+      assert.deepEqual(bad, [], card.name + " " + bad.slice(0, 4).join(" | "));
+      assert.equal(card.html.includes("NaN"), false, card.name);
+      assert.equal(card.html.includes("undefined"), false, card.name);
+      assert.equal(card.html.includes("Infinity"), false, card.name);
+      const box = cardViewBox(card.html);
+      assert.equal(box.w, Math.round(card.widthIn * 72 * 1000) / 1000);
+      assert.equal(box.h, Math.round(card.heightIn * 72 * 1000) / 1000);
+      const outlines = [...card.html.matchAll(/<path data-block-outline="1"[^>]*>/g)].map((match) => match[0]);
+      assert.equal(outlines.length, 6, card.name);
+      const tops = outlines.map((path) => {
+        assert.match(path, /stroke="#000000"/);
+        assert.match(path, /stroke-width="0\.75"/);
+        const y = path.match(/d="M [-\d.]+ ([-\d.]+)/);
+        assert.ok(y, path);
+        const value = Number(y[1]);
+        assert.equal(Number.isFinite(value), true, card.name);
+        return value;
+      });
+      tops.sort((a, b) => a - b);
+      assert.ok(tops[2] < 1, card.name + " top row");
+      assert.ok(tops[3] > box.h * 0.4, card.name + " second row");
+      assert.ok(tops[5] < box.h, card.name);
+      assert.match(card.html, /stroke-width="0\.25"/);
+      assert.match(card.html, new RegExp('data-header-fill="' + card.fill + '"'));
+      assert.match(card.html, /data-corner-fill="band"/);
+      assert.match(card.html, /data-block-pt="0\.75"/);
+      assert.match(card.html, /data-rule-pt="0\.25"/);
+      if (card.name !== "custom") {
+        assert.match(card.html, /data-text-ratio="0\.59"/);
+        const ratio = card.html.match(/data-font-ratio="([^"]+)"/);
+        assert.ok(ratio, card.name);
+        assert.ok(Math.abs(Number(ratio[1]) - 0.663) < 0.001, card.name + " " + ratio[1]);
+      }
+      const stamp = card.html.match(/<text x="[^"]+" y="([^"]+)"[^>]*>MY SIGNS \u00b7 VA \u00b7 [^<]*<\/text>/);
+      assert.ok(stamp, card.name + " stamp");
+      const stampY = Number(stamp[1]);
+      assert.equal(Number.isFinite(stampY), true, card.name);
+      assert.ok(stampY > box.h * 0.4 && stampY < box.h, card.name + " stamp y " + stampY);
+      const footer = card.html.match(/<rect x="0" y="([^"]+)" width="[^"]+" height="([^"]+)" fill="/);
+      assert.ok(footer, card.name);
+      assert.equal(Number.isFinite(Number(footer[1])), true);
+      assert.ok(Number(footer[2]) > 0, card.name + " footer height");
+    }
+    assert.equal((rendered.offense.match(/data-block-outline="1"/g) || []).length, 6);
+    assert.equal((rendered.defense.match(/data-block-outline="1"/g) || []).length, 6);
+  });
+
   it("gives offense and defense their own names on a version", () => {
     const book = emptyBook("user-1", "PURPLE OFFENSE");
     const first = activeVersion(book);
@@ -1429,6 +1498,8 @@ describe("wrist coach book", () => {
     assert.match(page, /id="reset-defaults"/);
     assert.match(page, /id="name-search"/);
     assert.match(page, /id="name-box"/);
+    assert.match(page, /id="name-tools"/);
+    assert.match(page, /id="view-coach"/);
     assert.match(page, /title: "My signs"/);
     assert.doesNotMatch(page, /function hubName/);
     assert.doesNotMatch(page, /userName/);
@@ -2032,3 +2103,113 @@ describe("wrist coach book", () => {
     assert.deepEqual(book.theme, { ...defaultTheme(), headerInk: "#ffffff" });
   });
 });
+
+function stubCardElement() {
+  return {
+    classList: {
+      add() {},
+      remove() {},
+      toggle() {},
+      contains() { return false; },
+    },
+    style: {},
+    dataset: {},
+    hidden: false,
+    textContent: "",
+    innerHTML: "",
+    value: "",
+    checked: false,
+    className: "",
+    addEventListener() {},
+    removeEventListener() {},
+    setAttribute() {},
+    getAttribute() { return null; },
+    querySelector() { return stubCardElement(); },
+    querySelectorAll() { return []; },
+    focus() {},
+    closest() { return null; },
+    appendChild() {},
+  };
+}
+
+function renderWristCards(page: string) {
+  const start = page.indexOf("<script>");
+  const end = page.lastIndexOf("</script>");
+  const boot = page.lastIndexOf("armCardFont();");
+  assert.ok(start > 0 && end > start && boot > start);
+  const source = page.slice(start + "<script>".length, boot) + `
+    book = emptyBook();
+    const version = book.versions[0];
+    function paintCard(kind, size) {
+      book.bandKind = kind;
+      book.cardSize = size || { preset: "softball", widthIn: 3.5, heightIn: 2.25 };
+      return wristCardHtml(version, false, "");
+    }
+    globalThis.__rendered = {
+      offense: paintCard("offense"),
+      defense: paintCard("defense"),
+      custom: paintCard("offense", { preset: "custom", widthIn: 4.25, heightIn: 2.5 })
+    };
+  `;
+  const hub = { userId: "test-user" };
+  const sandbox: {
+    __rendered?: { offense: string; defense: string; custom: string };
+    HUB_SOFTBALL: { userId: string };
+    console: typeof console;
+    setTimeout: typeof setTimeout;
+    clearTimeout: typeof clearTimeout;
+    document: object;
+    window: object;
+  } = {
+    HUB_SOFTBALL: hub,
+    console,
+    setTimeout,
+    clearTimeout,
+    document: {
+      getElementById() { return stubCardElement(); },
+      querySelector() { return stubCardElement(); },
+      querySelectorAll() { return []; },
+      addEventListener() {},
+      createElement(tag: string) {
+        if (tag !== "canvas") return stubCardElement();
+        const ctx = {
+          font: "",
+          measureText(text: string) {
+            const px = Number(String(ctx.font).match(/([\d.]+)px/)?.[1] || 16);
+            // SS3B is 1.548em in WristCard. A flat 0.387em per cap keeps that code inside the 0.59 cell width.
+            return { width: String(text || "").length * px * 0.387 };
+          },
+        };
+        return { getContext() { return ctx; } };
+      },
+    },
+    window: {
+      addEventListener() {},
+      HUB_SOFTBALL: hub,
+      confirm() { return false; },
+      alert() {},
+    },
+  };
+  runInContext(source, createContext(sandbox), { filename: "wrist-coach.html" });
+  assert.ok(sandbox.__rendered);
+  return sandbox.__rendered;
+}
+
+function nonFiniteSvgAttributes(markup: string): string[] {
+  const bad: string[] = [];
+  const svgs = markup.match(/<svg\b[\s\S]*?<\/svg>/g) || [];
+  for (const svg of svgs) {
+    const re = /([\w:-]+)\s*=\s*"([^"]*)"/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(svg))) {
+      if (/NaN|undefined|Infinity/.test(match[2])) bad.push(match[1] + '="' + match[2] + '"');
+    }
+  }
+  return bad;
+}
+
+function cardViewBox(markup: string) {
+  const match = markup.match(/<svg viewBox="0 0 ([0-9.]+) ([0-9.]+)"/);
+  assert.ok(match, markup.slice(0, 240));
+  return { w: Number(match[1]), h: Number(match[2]) };
+}

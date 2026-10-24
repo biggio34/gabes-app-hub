@@ -2426,6 +2426,9 @@
         maxAcross: metrics.maxAcross,
         colSlots: metrics.colSlots,
         rowSlots: metrics.rowSlots,
+        contentRows: metrics.contentRows,
+        // The second block row and the footer stamp sit under this band. Dropping it makes their y NaN.
+        footerIn: metrics.footerIn,
         cellW: metrics.cellW,
         cellH: metrics.cellH,
         padIn: padIn
