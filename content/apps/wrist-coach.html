@@ -268,8 +268,12 @@
           <input id="trim-guides" type="checkbox" checked class="accent-red-600">
           Trim guides
         </label>
+        <label class="flex items-center gap-2 text-slate-300">
+          <input id="shade-rows" type="checkbox" class="accent-red-600">
+          Shade rows
+        </label>
       </div>
-      <p class="text-xs text-slate-500">Field keeps the wristband colors. Sun darkens a pale band for glare. Black &amp; white holds a visible grid on a mono printer. Trim marks sit outside the sleeve. None of these change the saved signs.</p>
+      <p class="text-xs text-slate-500">Field keeps the wristband colors. Shade rows is off until you turn it on. Sun, black &amp; white, trim, and row shading change this print only. They do not change the saved signs.</p>
       <div class="grid gap-3 sm:grid-cols-3">
         <label class="grid gap-1.5 text-sm">
           Wristband
@@ -531,6 +535,7 @@
     let wristCardSeq = 0;
     let cardLook = "field";
     let showTrim = true;
+    let shadeRows = false;
     let showCoachOnCard = false;
     let saveTimer = null;
     let printMode = "both";
@@ -1422,13 +1427,32 @@
       return { fill: fill, ink: bestInk(fill, "#000000") };
     }
 
-    function versionStamp(version) {
+    function versionToken(version) {
       const raw = String(version && version.name || "").replace(/^version\s+/i, "").trim();
-      const label = raw || "Card";
+      return "v" + (raw || "1");
+    }
+
+    function versionDate(version) {
       const ms = Number(version && version.createdAt);
-      if (!Number.isFinite(ms) || ms <= 0) return label;
+      if (!Number.isFinite(ms) || ms <= 0) return "";
       const when = new Date(ms);
-      return label + " \u00b7 " + (when.getMonth() + 1) + "/" + when.getDate();
+      return (when.getMonth() + 1) + "/" + when.getDate();
+    }
+
+    function versionStamp(version, setName) {
+      const set = String(setName != null ? setName : bandTitle()).trim() || "Card";
+      const parts = [set, versionToken(version)];
+      const date = versionDate(version);
+      if (date) parts.push(date);
+      return parts.join(" \u00b7 ");
+    }
+
+    function shadeFill(fill) {
+      if (!shadeRows) return fill;
+      const raw = String(fill || "");
+      if (!raw || raw === "transparent" || relLuma(raw) < 0.88) return fill;
+      const tint = "#e6e8ed";
+      return contrastHex(tint, "#000000") >= 7 ? tint : fill;
     }
 
     function emWidth(text) {
@@ -1486,6 +1510,23 @@
             const top = baseline - cap;
             marks += '<rect x="' + n(x0 + ear) + '" y="' + n(top) + '" width="' + n(Math.max(0, adv - ear * 2)) + '" height="' + n(thick) + '" fill="' + color + '"/>';
             marks += '<rect x="' + n(x0 + ear) + '" y="' + n(baseline - thick) + '" width="' + n(Math.max(0, adv - ear * 2)) + '" height="' + n(thick) + '" fill="' + color + '"/>';
+          } else if (ch === "B" && adv > 0) {
+            const thick = sizePt * 0.06;
+            const top = baseline - cap;
+            marks += '<rect x="' + n(x0 + adv * 0.02) + '" y="' + n(top) + '" width="' + n(adv * 0.32) + '" height="' + n(thick) + '" fill="' + color + '"/>';
+            marks += '<rect x="' + n(x0 + adv * 0.02) + '" y="' + n(baseline - thick) + '" width="' + n(adv * 0.32) + '" height="' + n(thick) + '" fill="' + color + '"/>';
+          } else if (ch === "8" && adv > 0) {
+            const thick = sizePt * 0.055;
+            const mid = baseline - cap * 0.52 - thick / 2;
+            marks += '<rect x="' + n(x0 + adv * 0.3) + '" y="' + n(mid) + '" width="' + n(adv * 0.4) + '" height="' + n(thick) + '" fill="' + color + '"/>';
+          } else if (ch === "5" && adv > 0) {
+            const thick = sizePt * 0.16;
+            marks += '<rect x="' + n(x0 + adv * 0.02) + '" y="' + n(baseline - cap) + '" width="' + n(adv * 0.96) + '" height="' + n(thick) + '" fill="' + color + '"/>';
+          } else if (ch === "S" && adv > 0) {
+            const thick = sizePt * 0.05;
+            const yS = baseline - cap * 0.5 - thick / 2;
+            marks += '<rect x="' + n(x0 + adv * 0.08) + '" y="' + n(yS) + '" width="' + n(adv * 0.22) + '" height="' + n(thick) + '" fill="' + color + '"/>';
+            marks += '<rect x="' + n(x0 + adv * 0.7) + '" y="' + n(yS) + '" width="' + n(adv * 0.22) + '" height="' + n(thick) + '" fill="' + color + '"/>';
           }
           cursor += adv;
         }
@@ -1573,10 +1614,11 @@
             const paint = look.data(cellPaint(call));
             const short = call ? call.short : "";
             const title = coachView && call ? escapeHtml(call.name) : (cell ? escapeHtml(cell.code) : "");
+            const fill = row % 2 === 1 ? shadeFill(paint.background) : paint.background;
             addCell(
               (col0 + col + 1) * cellW,
               (row0 + row + 1) * cellH,
-              paint.background,
+              fill,
               short,
               paint.color,
               fontPt,
@@ -1596,14 +1638,24 @@
         );
       }
       addText(bandTitle(), 0, barY, wPt, cellH, barPt, look.bandInk);
-      const stamp = versionStamp(version).toUpperCase();
-      const stampPt = Math.min(6, Math.max(5, barPt * 0.62));
-      const titleW = emWidth(bandTitle()) * barPt;
-      const stampW = emWidth(stamp) * stampPt;
-      const titleRight = wPt / 2 + titleW / 2;
-      const stampLeft = wPt - padPt - stampW;
-      if (stamp && stampW > 0 && stampLeft >= titleRight + 3 && stampW < wPt * 0.46) {
-        addText(stamp, 0, barY, wPt - padPt, cellH, stampPt, look.bandInk, "end", {
+      const stamp = versionStamp(version, bandTitle());
+      const titleRight = wPt / 2 + emWidth(bandTitle()) * barPt / 2;
+      const room = wPt - padPt - titleRight - 3;
+      let stampText = stamp;
+      let stampPt = Math.min(6, Math.max(4.6, barPt * 0.5));
+      let stampW = emWidth(stampText) * stampPt;
+      if (stampW > room && emWidth(stampText) > 0) {
+        const fitted = room / emWidth(stampText);
+        if (fitted >= 4.2) stampPt = fitted;
+        else {
+          const date = versionDate(version);
+          stampText = versionToken(version) + (date ? " \u00b7 " + date : "");
+          stampPt = Math.min(6, Math.max(5, barPt * 0.62));
+        }
+        stampW = emWidth(stampText) * stampPt;
+      }
+      if (stampText && stampW > 0 && stampW <= room) {
+        addText(stampText, 0, barY, wPt - padPt, cellH, stampPt, look.bandInk, "end", {
           x: 0,
           y: barY,
           w: wPt,
@@ -1611,7 +1663,7 @@
         });
       }
       const card =
-        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-shade="' + (shadeRows ? "1" : "0") + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="none">' +
             '<defs>' + clips.join("") + '</defs>' +
             dataShapes.join("") +
@@ -1866,7 +1918,7 @@
         '<section class="print-page print-cards">' +
           '<p style="font-size:11px;margin:0 0 ' + (showTrim ? 18 : 10) + 'px 0;color:#475569">' +
             'Player cards · ' + size.widthIn + ' × ' + size.heightIn + ' in · ' +
-            escapeHtml(bandTitle()) + ' · ' + escapeHtml(versionStamp(version)) + '</p>' +
+            escapeHtml(versionStamp(version)) + '</p>' +
           '<div style="display:flex;flex-wrap:wrap;gap:' + gap + 'in;padding-left:' + (showTrim ? "11pt" : "0") + '">' + cards.join("") + '</div>' +
         '</section>';
       const sheet = sheetOf();
@@ -1878,7 +1930,7 @@
         '<section class="print-page print-key" style="color:#0f172a">' +
           '<p style="font-size:11px;margin:0 0 10px 0;color:#475569">' +
             'Coach sheet · ' + sheet.widthIn + ' × ' + sheet.heightIn + ' in · ' +
-            escapeHtml(bandTitle()) + ' · ' + escapeHtml(versionStamp(version)) + '</p>' +
+            escapeHtml(versionStamp(version)) + '</p>' +
           '<div style="display:flex;flex-wrap:wrap;gap:' + sheetGap + 'in">' + sheets.join("") + '</div>' +
         '</section>';
       if (printMode === "cards") root.innerHTML = cardPage;
@@ -1973,6 +2025,8 @@
       });
       const box = document.getElementById("trim-guides");
       if (box) box.checked = showTrim;
+      const shade = document.getElementById("shade-rows");
+      if (shade) shade.checked = shadeRows;
     }
 
     function render() {
@@ -2342,6 +2396,10 @@
     });
     document.getElementById("trim-guides").addEventListener("change", function (event) {
       showTrim = !!event.target.checked;
+      render();
+    });
+    document.getElementById("shade-rows").addEventListener("change", function (event) {
+      shadeRows = !!event.target.checked;
       render();
     });
     document.querySelectorAll(".size-btn").forEach(function (btn) {
