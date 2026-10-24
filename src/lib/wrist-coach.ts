@@ -293,7 +293,32 @@ type WristShuffleBook = Pick<
   "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
 > & { title?: string; theme?: WristTheme; kindLayouts?: WristKindLayouts; numbering?: WristNumbering };
 
+/** New cards use 6 blocks. A saved 2-block card stays 2 so it can match the reference samples. */
 export const DEFAULT_GRIDS = 6;
+
+/**
+ * Side inset for card type, in points.
+ * Two- and three-block cards keep the 0.9pt gap from the reference samples.
+ * A 6-block cell is about 13pt wide, so that fixed gap is eased toward 0.35pt
+ * and the one shared type size can grow. Cells at least 20pt wide keep 0.9pt.
+ */
+export function sidePadPt(cellW: number, grids: number): number {
+  if (!Number.isFinite(cellW) || cellW <= 0) return 0.9;
+  if (!Number.isFinite(grids) || grids <= 3) return 0.9;
+  const wide = 20;
+  const tight = 14;
+  if (cellW >= wide) return 0.9;
+  if (cellW <= tight) return 0.35;
+  const t = (cellW - tight) / (wide - tight);
+  return Math.round((0.35 + (0.9 - 0.35) * t) * 1000) / 1000;
+}
+
+/** White knockout behind dark type. Reference sizes (about 16pt and up) stay at 0.4pt. */
+export function knockoutPt(sizePt: number): number {
+  if (!Number.isFinite(sizePt) || sizePt >= 15.5) return 0.4;
+  return Math.round(Math.max(0.22, sizePt * (0.4 / 15.9)) * 1000) / 1000;
+}
+
 export const DEFAULT_ROWS = 5;
 export const DEFAULT_COLS = 5;
 export const DEFAULT_DEFENSE_ROWS = 4;

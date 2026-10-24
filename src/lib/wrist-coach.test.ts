@@ -10,6 +10,8 @@ import {
 import {
   DEFAULT_COLS,
   DEFAULT_GRIDS,
+  knockoutPt,
+  sidePadPt,
   DEFAULT_ROWS,
   DEFAULT_SHEET_COLS,
   DEFAULT_SHEET_ROWS,
@@ -187,6 +189,7 @@ describe("wrist coach book", () => {
     assert.equal(book.userId, "user-1");
     assert.equal(book.title, "Gabe's signs");
     assert.equal(book.bandKind, "offense");
+    assert.equal(DEFAULT_GRIDS, 6);
     assert.equal(book.grids, DEFAULT_GRIDS);
     assert.equal(book.rows, DEFAULT_ROWS);
     assert.equal(book.cols, DEFAULT_COLS);
@@ -498,6 +501,30 @@ describe("wrist coach book", () => {
     assert.equal(activeVersion(split)?.offenseCells.some((cell) => cell.code === "01-1"), true);
     assert.equal(activeVersion(split)?.defenseCells.some((cell) => cell.code === "11-1"), true);
     assert.equal(activeVersion(split)?.defenseCells.some((cell) => cell.col === 4), false);
+  });
+
+  it("keeps six blocks on a new card and the reference gap on a two-block card", () => {
+    assert.equal(DEFAULT_GRIDS, 6);
+    assert.equal(emptyBook("user-1", "New card").grids, 6);
+    assert.equal(sidePadPt(21, 2), 0.9);
+    assert.equal(sidePadPt(19.5, 2), 0.9);
+    assert.equal(sidePadPt(28.8, 2), 0.9);
+    assert.equal(sidePadPt(13, 3), 0.9);
+    assert.equal(sidePadPt(13, 6), 0.35);
+    assert.equal(sidePadPt(20, 6), 0.9);
+    assert.equal(sidePadPt(15.6, 6), 0.497);
+    assert.ok(sidePadPt(13, 6) < sidePadPt(21, 2));
+    assert.equal(knockoutPt(15.9), 0.4);
+    assert.equal(knockoutPt(21.825), 0.4);
+    assert.ok(knockoutPt(9.158) < 0.4);
+    assert.ok(knockoutPt(9.158) >= 0.22);
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /grids: 6/);
+    assert.match(page, /function sidePadPt\(cellW, grids\)/);
+    assert.match(page, /if \(!isFinite\(grids\) \|\| grids <= 3\) return 0\.9/);
+    assert.match(page, /sidePadPt\(cellW, layout\.grids\)/);
+    assert.match(page, /knockoutPt\(fontPt\)/);
+    assert.doesNotMatch(page, /const padPt = 0\.9/);
   });
 
   it("gives offense and defense their own names on a version", () => {

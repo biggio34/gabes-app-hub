@@ -1313,7 +1313,7 @@
         bandKind: "offense",
         rows: 5,
         cols: 5,
-        grids: 6,
+        grids: 6, // new cards stay at 6 blocks; do not drop this to 2 to enlarge the type
         signStart: 1,
         rowStart: 1,
         theme: { band: SET_THEMES.offense.band, ink: "#000000", highlight: "#ffffff" },
@@ -1632,6 +1632,23 @@
       return Math.max(4, Math.floor(size * 100) / 100);
     }
 
+    // Keep in sync with sidePadPt / knockoutPt in src/lib/wrist-coach.ts.
+    function sidePadPt(cellW, grids) {
+      if (!isFinite(cellW) || cellW <= 0) return 0.9;
+      if (!isFinite(grids) || grids <= 3) return 0.9;
+      const wide = 20;
+      const tight = 14;
+      if (cellW >= wide) return 0.9;
+      if (cellW <= tight) return 0.35;
+      const t = (cellW - tight) / (wide - tight);
+      return Math.round((0.35 + (0.9 - 0.35) * t) * 1000) / 1000;
+    }
+
+    function knockoutPt(sizePt) {
+      if (!isFinite(sizePt) || sizePt >= 15.5) return 0.4;
+      return Math.round(Math.max(0.22, sizePt * (0.4 / 15.9)) * 1000) / 1000;
+    }
+
     function playerCardMetrics(size, layout) {
       const topCount = layout.grids <= 3 ? layout.grids : Math.ceil(layout.grids / 2);
       const bottomCount = Math.max(0, layout.grids - topCount);
@@ -1641,8 +1658,8 @@
       const rowSlots = halves * (layout.rows + 1) + 1;
       const cellW = size.widthIn / colSlots;
       const cellH = size.heightIn / rowSlots;
-      // 0.9pt side inset, the gap around SS3B on the reference card.
-      const padIn = 0.9 / 72;
+      // 0.9pt on a 2-block reference card. Narrower 6-block cells use a smaller gap.
+      const padIn = sidePadPt(cellW * 72, layout.grids) / 72;
       return {
         topCount: topCount,
         bottomCount: bottomCount,
@@ -1769,7 +1786,7 @@
       const hPt = size.heightIn * 72;
       const cellW = wPt / metrics.colSlots;
       const cellH = hPt / metrics.rowSlots;
-      const padPt = 0.9;
+      const padPt = sidePadPt(cellW, layout.grids);
       const fontPx = fitFontPx(
         widestLabel(labelsOnCard(version, layout)),
         Math.max(4, (cellW - padPt * 2) * 96 / 72),
@@ -1847,7 +1864,7 @@
         const start = align === "end" ? tx - widthPt : tx - widthPt / 2;
         const halo = fill && hexLuma(fill) < 150 && hexLuma(color) < 100;
         const haloAttr = halo
-          ? ' stroke="#ffffff" stroke-width="0.4" paint-order="stroke fill" stroke-linejoin="round"'
+          ? ' stroke="#ffffff" stroke-width="' + n(knockoutPt(fontPt)) + '" paint-order="stroke fill" stroke-linejoin="round"'
           : "";
         labels.push(
           '<g clip-path="url(#' + id + ')"' + haloAttr + '>' +
