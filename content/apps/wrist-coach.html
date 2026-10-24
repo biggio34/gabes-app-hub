@@ -128,7 +128,8 @@
       font-weight: 600;
     }
     #name-key { display: grid; gap: 0.35rem; }
-    #name-key[hidden] { display: none; }
+    #name-key[hidden],
+    #name-tools.hidden { display: none; }
     .name-row {
       display: flex;
       flex-wrap: wrap;
@@ -140,21 +141,57 @@
     }
     .name-row b { letter-spacing: 0.04em; }
     .name-row .codes { color: #cbd5e1; font-variant-numeric: tabular-nums; }
-    #letter-preview {
-      overflow: hidden;
-      border-radius: 1rem;
-      background: #cbd5e1;
-    }
+    #name-tools { display: grid; }
     .letter-page {
       width: 8.5in;
       box-sizing: border-box;
       padding: 0.4in;
       background: #fff;
     }
+    .version-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 16.5rem;
+      gap: 0.75rem;
+      align-items: start;
+    }
+    .version-titles,
+    .version-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 0.5rem;
+      align-content: start;
+    }
+    .version-actions .ver-action {
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    #save-status:not(.hidden) {
+      position: fixed;
+      right: 1rem;
+      bottom: 1rem;
+      z-index: 70;
+      margin: 0;
+      border-radius: 999px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 0.55rem 0.9rem;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+    #letter-preview {
+      overflow: hidden;
+      border-radius: 1rem;
+      background: #fff;
+      width: min(100%, 8.5in);
+      margin: 0 auto;
+    }
     @media (min-width: 721px) {
       .call-columns {
         display: grid;
-        grid-template-columns: auto 3.5rem minmax(0, 1fr) auto auto;
+        grid-template-columns: auto 5.25rem minmax(0, 1fr) auto auto;
         gap: 0.5rem;
         align-items: end;
         color: #94a3b8;
@@ -163,8 +200,9 @@
       }
     }
     @media (max-width: 720px) {
+      .version-row { grid-template-columns: minmax(0, 1fr); }
       .call-edit {
-        grid-template-columns: auto 4.25rem minmax(0, 1fr) !important;
+        grid-template-columns: auto 5.25rem minmax(0, 1fr) !important;
       }
       .call-edit > :nth-child(4),
       .call-edit > :nth-child(5) {
@@ -311,15 +349,15 @@
         </button>
       </div>
     </header>
-    <p id="save-status" class="hidden text-xs text-slate-500"></p>
+    <p id="save-status" class="no-print hidden text-xs"></p>
     <p id="load-error" class="hidden text-sm text-red-400"></p>
 
     <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
       <h2 class="font-semibold">Card setup</h2>
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label class="grid gap-1.5 text-sm">
+      <div class="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label class="grid min-w-0 gap-1.5 text-sm">
           Name on the card
-          <input id="book-title" maxlength="60" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          <input id="book-title" maxlength="60" class="w-full min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
         <div class="grid gap-1.5 text-sm">
           Card you are editing
@@ -353,29 +391,30 @@
             </div>
           </div>
           <p id="size-note" class="text-xs text-slate-400">Youth is 4.5 × 2.5. Triple windows: 5 × 3 adult, 3.5 × 2.75 youth, 2.75 × 2.15 pee wee, 4.75 × 2.25 panel. Type any other width and height. The card prints at that size.</p>
+          <button type="button" id="reset-defaults" class="min-h-11 w-fit rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-red-500">Reset to defaults</button>
           <p id="letter-fit" class="text-xs text-slate-400"></p>
         </div>
       </div>
-      <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <label class="grid gap-1.5 text-sm">
+      <div class="grid min-w-0 items-start gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <label class="grid min-w-0 gap-1.5 text-sm">
           First column
-          <input id="sign-start" inputmode="numeric" aria-describedby="block-size-note" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          <input id="sign-start" inputmode="numeric" aria-describedby="block-size-note" class="w-full min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
-        <label class="grid gap-1.5 text-sm">
+        <label class="grid min-w-0 gap-1.5 text-sm">
           First row
-          <input id="row-start" inputmode="numeric" aria-describedby="block-size-note" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          <input id="row-start" inputmode="numeric" aria-describedby="block-size-note" class="w-full min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
-        <label class="grid gap-1.5 text-sm">
+        <label class="grid min-w-0 gap-1.5 text-sm">
           Blocks
-          <input id="grid-count" inputmode="numeric" aria-describedby="block-size-note" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          <input id="grid-count" inputmode="numeric" aria-describedby="block-size-note" class="w-full min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
-        <label class="grid gap-1.5 text-sm">
+        <label class="grid min-w-0 gap-1.5 text-sm">
           Block columns
-          <input id="grid-cols" inputmode="numeric" aria-label="Block columns" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          <input id="grid-cols" inputmode="numeric" aria-label="Block columns" class="w-full min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
-        <label class="grid gap-1.5 text-sm">
+        <label class="grid min-w-0 gap-1.5 text-sm">
           Block rows
-          <input id="grid-rows" inputmode="numeric" aria-label="Block rows" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          <input id="grid-rows" inputmode="numeric" aria-label="Block rows" class="w-full min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
       </div>
       <p id="block-size-note" class="text-sm text-slate-400"></p>
@@ -473,7 +512,7 @@
               <input id="pitch-name" placeholder="New pitch" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
             </label>
             <label class="grid gap-1 text-sm">Code
-              <input id="pitch-short" maxlength="4" placeholder="FB" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+              <input id="pitch-short" maxlength="5" placeholder="FB" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
             </label>
             <button class="min-h-11 rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">Add pitch</button>
           </form>
@@ -486,7 +525,7 @@
               <input id="location-name" placeholder="New location" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
             </label>
             <label class="grid gap-1 text-sm">Code
-              <input id="location-short" maxlength="4" placeholder="IN" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+              <input id="location-short" maxlength="5" placeholder="IN" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
             </label>
             <button class="min-h-11 rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">Add location</button>
           </form>
@@ -499,7 +538,7 @@
               <input id="play-name" placeholder="New play" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
             </label>
             <label class="grid gap-1 text-sm">Code
-              <input id="play-short" maxlength="4" placeholder="HA" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+              <input id="play-short" maxlength="5" placeholder="HA" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
             </label>
             <button class="min-h-11 rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">Add play</button>
           </form>
@@ -512,7 +551,7 @@
               <input id="defense-name" placeholder="New call" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
             </label>
             <label class="grid gap-1 text-sm">Code
-              <input id="defense-short" maxlength="4" placeholder="HLD" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+              <input id="defense-short" maxlength="5" placeholder="HLD" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
             </label>
             <button class="min-h-11 rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">Add call</button>
           </form>
@@ -530,6 +569,15 @@
       </div>
       <p class="text-sm text-slate-400">Codes is the card a player reads. Names lists each call and the box numbers that mean it.</p>
       <div id="card-preview" class="flex justify-center overflow-x-auto"></div>
+      <div id="name-tools" class="hidden gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-end">
+        <label class="grid min-w-0 gap-1 text-sm">Search
+          <input id="name-search" placeholder="Code or name" autocomplete="off" class="w-full min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+        <label class="grid min-w-0 gap-1 text-sm">Box number
+          <input id="name-box" inputmode="text" placeholder="11" autocomplete="off" aria-label="Look up a box number" class="w-full min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+        </label>
+      </div>
+      <p id="name-box-hit" class="hidden text-sm text-slate-200"></p>
       <div id="name-key" hidden></div>
     </section>
 
@@ -648,10 +696,12 @@
       ["play-fbt", "Fake bunt + take", "FBT", 10],
       ["play-hr", "Hit and run", "H+R", 10],
       ["play-ssq", "Safety squeeze", "SAS", 7],
+      ["play-ss3b", "Steal second and third", "SS3B", 6],
       ["play-stl", "Steal", "S", 15],
       ["play-sus", "Suicide squeeze", "SUS", 7],
       ["play-tke", "Take", "T", 7],
-      ["play-x", "X", "X", 15],
+      ["play-x", "X", "X", 15, true],
+      ["play-p", "P", "P", 8],
       ["play-ha", "Hit away", "HA"],
       ["play-bnt", "Bunt", "BNT"],
       ["play-slp", "Slap", "SLP"],
@@ -711,8 +761,8 @@
     const LAMINATE_BLEED_IN = 0.125;
     const DEFAULT_THEME = { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
     const SET_THEMES = {
-      offense: { band: "#ff0000", ink: "#000000", highlight: "#ffffff" },
-      defense: { band: "#f7bad1", ink: "#000000", highlight: "#ffffff" }
+      offense: { band: "#c00000", ink: "#000000", highlight: "#ffffff" },
+      defense: { band: "#f87080", ink: "#000000", highlight: "#ffffff" }
     };
 
     let book = null;
@@ -725,12 +775,10 @@
     let libraryKind = "offense";
     let saveTimer = null;
     let printMode = "both";
+    let printVersionId = null;
     let pendingCount = null;
-
-    function hubName() {
-      const hub = window.HUB_SOFTBALL || {};
-      return hub.userName || "Coach";
-    }
+    let countModalReadyAt = 0;
+    let saveToastTimer = null;
 
     function clampInt(value, fallback, min, max) {
       const n = Number(value);
@@ -793,7 +841,7 @@
 
     function rowsToCalls(kind, rows) {
       return rows.map(function (row) {
-        return {
+        const call = {
           id: row[0],
           kind: kind,
           name: row[1],
@@ -802,6 +850,8 @@
           ink: "clear",
           count: clampInt(row[3], 0, 0, 300)
         };
+        if (row[4] === true) call.decoy = true;
+        return call;
       });
     }
 
@@ -1341,7 +1391,7 @@
       const next = {
         version: 1,
         userId: (window.HUB_SOFTBALL && HUB_SOFTBALL.userId) || "",
-        title: hubName() + "'s signs",
+        title: "My signs",
         bandKind: "offense",
         rows: 5,
         cols: 5,
@@ -1376,6 +1426,27 @@
       book.library.forEach(function (item) {
         if (item.count == null) item.count = 0;
         if (item.weight == null) item.weight = 0;
+        if (item.kind === "offense" && String(item.short || "").toUpperCase() === "H&R") item.short = "H+R";
+        if (item.kind === "offense" && String(item.short || "").toUpperCase() === "X") item.decoy = true;
+      });
+      [
+        ["play-x", "X", "X", 0, true],
+        ["play-p", "P", "P", 0],
+        ["play-b1", "Bunt to 1st", "B1", 0],
+        ["play-fbs", "Fake bunt + steal", "FBS", 0],
+        ["play-ssq", "Safety squeeze", "SAS", 0],
+        ["play-hr", "Hit and run", "H+R", 0],
+        ["play-ss3b", "Steal second and third", "SS3B", 0]
+      ].forEach(function (row) {
+        const exists = book.library.some(function (item) {
+          return item.id === row[0] ||
+            String(item.short || "").toUpperCase() === String(row[2]).toUpperCase() ||
+            String(item.name || "").trim().toLowerCase() === String(row[1]).trim().toLowerCase();
+        });
+        if (exists) return;
+        const call = rowsToCalls("offense", [row])[0];
+        call.count = 0;
+        book.library.push(call);
       });
       if (book.numbering !== "ordered" && book.numbering !== "oneHand") book.numbering = "standard";
       if (!book.cardSize) book.cardSize = defaultCardSize();
@@ -1515,10 +1586,19 @@
         .replace(/"/g, "&quot;");
     }
 
-    function setStatus(message) {
+    function setStatus(message, transient) {
       const el = document.getElementById("save-status");
       el.textContent = message;
       el.classList.toggle("hidden", !message);
+      clearTimeout(saveToastTimer);
+      if (transient && message) {
+        saveToastTimer = setTimeout(function () {
+          if (el.textContent === message) {
+            el.textContent = "";
+            el.classList.add("hidden");
+          }
+        }, 1600);
+      }
     }
 
     function setError(message) {
@@ -1559,7 +1639,7 @@
           return;
         }
         setError("");
-        setStatus("Saved on the server.");
+        setStatus("Saved", true);
       } catch (err) {
         setError("Could not save Wrist Coach.");
         setStatus("");
@@ -1613,12 +1693,12 @@
         const count = onCard[item.id] || 0;
         return (
           '<div class="grid gap-1.5">' +
-            '<div class="call-edit grid grid-cols-[auto_3.5rem_minmax(0,1fr)_auto_auto] gap-2 items-center">' +
+            '<div class="call-edit grid grid-cols-[auto_5.25rem_minmax(0,1fr)_auto_auto] gap-2 items-center">' +
               '<div class="grid gap-1">' +
                 '<button type="button" data-call-move="' + escapeHtml(item.id) + '" data-dir="-1" class="count-step" aria-label="Move ' + escapeHtml(item.name) + ' up"' + (index === 0 ? " disabled" : "") + '>↑</button>' +
                 '<button type="button" data-call-move="' + escapeHtml(item.id) + '" data-dir="1" class="count-step" aria-label="Move ' + escapeHtml(item.name) + ' down"' + (index === items.length - 1 ? " disabled" : "") + '>↓</button>' +
               '</div>' +
-              '<input data-call-short="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.short) + '" maxlength="4" aria-label="Code for ' + escapeHtml(item.name) + '" class="min-h-10 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs uppercase outline-none focus:border-red-500">' +
+              '<input data-call-short="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.short) + '" maxlength="5" aria-label="Code for ' + escapeHtml(item.name) + '" class="min-h-10 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs uppercase outline-none focus:border-red-500">' +
               '<input data-call-name="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.name) + '" aria-label="Name for ' + escapeHtml(item.short) + '" class="min-h-10 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm outline-none focus:border-red-500">' +
               '<div class="flex items-center gap-1">' +
                 '<button type="button" data-call-less="' + escapeHtml(item.id) + '" class="count-step" aria-label="Fewer boxes for ' + escapeHtml(item.name) + '">−</button>' +
@@ -1628,6 +1708,7 @@
               '<button type="button" data-call-del="' + escapeHtml(item.id) + '" class="call-remove" aria-label="Remove ' + escapeHtml(item.name) + '">×</button>' +
             '</div>' +
             '<div class="flex flex-wrap items-center gap-2">' +
+              (item.decoy ? '<span class="text-xs font-semibold text-slate-300">Decoy</span>' : "") +
               (kind === "offense" || kind === "defense"
                 ? '<label class="flex items-center gap-2 text-xs text-slate-400">Weight' +
                     '<input data-call-weight="' + escapeHtml(item.id) + '" value="' + (item.weight > 0 ? escapeHtml(String(item.weight)) : "") + '" inputmode="numeric" aria-label="Weight for ' + escapeHtml(item.name) + '" placeholder="—" class="min-h-10 w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-center text-sm outline-none focus:border-red-500">' +
@@ -1910,8 +1991,10 @@
             const mid = baseline - cap * 0.52 - thick / 2;
             marks += '<rect x="' + n(x0 + adv * 0.3) + '" y="' + n(mid) + '" width="' + n(adv * 0.4) + '" height="' + n(thick) + '" fill="' + color + '"/>';
           } else if (ch === "5" && adv > 0) {
-            const thick = sizePt * 0.16;
-            marks += '<rect x="' + n(x0 + adv * 0.02) + '" y="' + n(baseline - cap) + '" width="' + n(adv * 0.96) + '" height="' + n(thick) + '" fill="' + color + '"/>';
+            const thick = sizePt * 0.08;
+            const inset = adv * 0.12;
+            const y5 = baseline - cap + sizePt * 0.02;
+            marks += '<rect x="' + n(x0 + inset) + '" y="' + n(y5) + '" width="' + n(Math.max(0, adv - inset * 2)) + '" height="' + n(thick) + '" fill="' + color + '"/>';
           } else if (ch === "S" && adv > 0) {
             const thick = sizePt * 0.05;
             const yS = baseline - cap * 0.5 - thick / 2;
@@ -1986,10 +2069,11 @@
         const bucket = layer === "band" ? bandShapes : dataShapes;
         const stroke = layer === "band" ? look.bandStroke : look.dataStroke;
         const strokeW = layer === "band" ? look.bandStrokeW : look.dataStrokeW;
+        const overlap = strokeW / 2;
         bucket.push(
           '<g>' +
             (title ? '<title>' + title + '</title>' : '') +
-            '<rect x="' + n(x) + '" y="' + n(y) + '" width="' + n(cellW) + '" height="' + n(cellH) + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + n(strokeW) + '"/>' +
+            '<rect x="' + n(x - overlap) + '" y="' + n(y - overlap) + '" width="' + n(cellW + strokeW) + '" height="' + n(cellH + strokeW) + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + n(strokeW) + '"/>' +
           '</g>'
         );
         if (mark) {
@@ -2077,19 +2161,18 @@
       const titleRight = wPt / 2 + emWidth(bandTitle()) * barPt / 2;
       const room = wPt - padPt - titleRight - 3;
       let stampText = stamp;
-      let stampPt = Math.min(6, Math.max(4.6, barPt * 0.5));
+      let stampPt = Math.min(cellH * 0.78, Math.max(8, barPt * 0.8));
       let stampW = emWidth(stampText) * stampPt;
       if (stampW > room && emWidth(stampText) > 0) {
-        const fitted = room / emWidth(stampText);
-        if (fitted >= 4.2) stampPt = fitted;
-        else {
-          const date = versionDate(version);
-          stampText = versionToken(version) + (date ? " \u00b7 " + date : "");
-          stampPt = Math.min(6, Math.max(5, barPt * 0.62));
-        }
+        const date = versionDate(version);
+        stampText = versionToken(version) + (date ? " \u00b7 " + date : "");
         stampW = emWidth(stampText) * stampPt;
+        if (stampW > room && emWidth(stampText) > 0) {
+          stampPt = Math.max(6, room / emWidth(stampText));
+          stampW = emWidth(stampText) * stampPt;
+        }
       }
-      if (stampText && stampW > 0 && stampW <= room) {
+      if (stampText && stampW > 0 && stampW <= room + 0.5) {
         addText(stampText, 0, barY, wPt - padPt, cellH, stampPt, look.bandInk, "end", {
           x: 0,
           y: barY,
@@ -2098,7 +2181,7 @@
         }, look.bandFill);
       }
       const card =
-        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="xMidYMid meet">' +
             '<defs>' + clips.join("") + '</defs>' +
             dataShapes.join("") +
@@ -2218,25 +2301,72 @@
       scaler.style.height = ((naturalH + trim * 2) * scale) + "px";
     }
 
+    function boxCodeMatches(code, needle) {
+      const value = String(code || "").toLowerCase();
+      const query = String(needle || "").trim().toLowerCase();
+      if (!query) return false;
+      if (value === query) return true;
+      const stripped = value.replace(/^0+/, "");
+      const queryStripped = query.replace(/^0+/, "");
+      return !!stripped && stripped === queryStripped;
+    }
+
     function renderNameKey() {
       const mount = document.getElementById("name-key");
+      const tools = document.getElementById("name-tools");
+      const hit = document.getElementById("name-box-hit");
       const player = document.getElementById("view-player");
       const coach = document.getElementById("view-coach");
       if (player) player.setAttribute("aria-pressed", showCoachOnCard ? "false" : "true");
       if (coach) coach.setAttribute("aria-pressed", showCoachOnCard ? "true" : "false");
-      if (!mount) return;
       if (!showCoachOnCard) {
-        mount.hidden = true;
-        mount.innerHTML = "";
+        if (mount) {
+          mount.hidden = true;
+          mount.innerHTML = "";
+        }
+        if (tools) tools.classList.add("hidden");
+        if (hit) {
+          hit.classList.add("hidden");
+          hit.textContent = "";
+        }
         return;
       }
+      if (tools) tools.classList.remove("hidden");
+      const query = String((document.getElementById("name-search") || {}).value || "").trim().toLowerCase();
+      const box = String((document.getElementById("name-box") || {}).value || "").trim();
       const groups = sheetGroups(activeVersion());
+      if (hit) {
+        if (!box) {
+          hit.classList.add("hidden");
+          hit.textContent = "";
+        } else {
+          let found = null;
+          groups.forEach(function (group) {
+            if (found) return;
+            if (group.codes.some(function (code) { return boxCodeMatches(code, box); })) found = group;
+          });
+          hit.classList.remove("hidden");
+          hit.textContent = found
+            ? box.toUpperCase() + " is " + found.name + " (" + found.short + ")"
+            : "No box " + box.toUpperCase();
+        }
+      }
+      if (!mount) return;
       mount.hidden = false;
+      const visible = groups.filter(function (group) {
+        if (!query) return true;
+        const blob = (group.short + " " + group.name + " " + group.codes.join(" ")).toLowerCase();
+        return blob.indexOf(query) >= 0;
+      });
       if (!groups.length) {
         mount.innerHTML = '<p class="text-sm text-slate-400">No calls on this card yet.</p>';
         return;
       }
-      mount.innerHTML = groups.map(function (group) {
+      if (!visible.length) {
+        mount.innerHTML = '<p class="text-sm text-slate-400">No names match that search.</p>';
+        return;
+      }
+      mount.innerHTML = visible.map(function (group) {
         return (
           '<div class="name-row"><b>' + escapeHtml(group.short) + '</b><span>' +
             escapeHtml(group.name) + '</span><span class="codes">' +
@@ -2269,20 +2399,20 @@
         const when = new Date(version.createdAt).toLocaleString();
         const titles = kindTitlesOf(version);
         return (
-          '<li class="flex flex-wrap items-start justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3"' + (active ? ' aria-current="true"' : "") + '>' +
-            '<div class="min-w-0 grow">' +
+          '<li class="version-row rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3"' + (active ? ' aria-current="true"' : "") + '>' +
+            '<div class="min-w-0">' +
               '<input data-ver-name="' + escapeHtml(version.id) + '" value="' + escapeHtml(version.name) + '" aria-label="Version name" class="min-h-10 w-full bg-transparent text-sm font-semibold outline-none focus:text-red-300">' +
-              '<div class="mt-2 grid gap-2 sm:grid-cols-2">' +
-                '<label class="grid gap-1 text-xs font-semibold text-slate-400">Offense title' +
-                  '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="offense" maxlength="60" aria-label="Offense title" value="' + escapeHtml(titles.offense) + '" class="min-h-10 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
+              '<div class="version-titles mt-2">' +
+                '<label class="grid min-w-0 gap-1 text-xs font-semibold text-slate-400">Offense title' +
+                  '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="offense" maxlength="60" aria-label="Offense title" value="' + escapeHtml(titles.offense) + '" class="min-h-10 w-full min-w-0 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
                 '</label>' +
-                '<label class="grid gap-1 text-xs font-semibold text-slate-400">Defense title' +
-                  '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="defense" maxlength="60" aria-label="Defense title" value="' + escapeHtml(titles.defense) + '" class="min-h-10 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
+                '<label class="grid min-w-0 gap-1 text-xs font-semibold text-slate-400">Defense title' +
+                  '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="defense" maxlength="60" aria-label="Defense title" value="' + escapeHtml(titles.defense) + '" class="min-h-10 w-full min-w-0 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
                 '</label>' +
               '</div>' +
               '<p class="mt-2 text-xs text-slate-500">' + escapeHtml(when) + (active ? " · Active" : "") + (version.locked ? " · Locked (both cards)" : "") + '</p>' +
             '</div>' +
-            '<div class="flex flex-wrap items-center gap-2 pt-1">' +
+            '<div class="version-actions">' +
               '<button type="button" data-ver-print="' + escapeHtml(version.id) + '" class="ver-action text-slate-200 hover:text-red-300">Reprint</button>' +
               (active
                 ? '<span class="ver-action text-red-300">Using</span>'
@@ -2292,7 +2422,7 @@
               '</button>' +
               (book.versions.length > 1
                 ? '<button type="button" data-ver-del="' + escapeHtml(version.id) + '" class="ver-action text-slate-300 hover:text-red-300">Delete</button>'
-                : "") +
+                : '<span class="ver-action text-transparent" aria-hidden="true">Delete</span>') +
             '</div>' +
           '</li>'
         );
@@ -2401,8 +2531,16 @@
       );
     }
 
+    function versionForPrint() {
+      if (printVersionId && book) {
+        const picked = book.versions.find(function (item) { return item.id === printVersionId; });
+        if (picked) return picked;
+      }
+      return activeVersion();
+    }
+
     function renderPrint() {
-      const version = activeVersion();
+      const version = versionForPrint();
       const root = document.getElementById("print-root");
       const fitNote = document.getElementById("letter-fit");
       if (!version) {
@@ -2411,9 +2549,9 @@
         return;
       }
       const size = cardSize();
-      const cardGap = 0.28;
+      const cardGap = laminateOn ? 0.03 : 0.28;
       const cardReserve = CALIBRATE_IN + CALIBRATE_GAP + MARK_OUT;
-      const cardSide = MARK_PAD + MARK_OUT;
+      const cardSide = laminateOn ? MARK_PAD : MARK_PAD + MARK_OUT;
       const bleed = laminateOn ? LAMINATE_BLEED_IN * 2 : 0;
       const cardFit = letterFit(size.widthIn + bleed, size.heightIn + bleed, cardGap, cardReserve, cardSide);
       const cards = [];
@@ -2656,28 +2794,57 @@
       renderPrint();
     }
 
+    function fullestOther(kind, exceptId) {
+      let best = null;
+      book.library.forEach(function (item) {
+        if (item.kind !== kind || item.id === exceptId) return;
+        if (!best || item.count > best.count) best = item;
+      });
+      return best;
+    }
+
     function addCall(kind, name, short) {
       const cleanName = String(name || "").trim();
-      const cleanShort = String(short || "").trim().slice(0, 4).toUpperCase();
+      const cleanShort = String(short || "").trim().slice(0, 5).toUpperCase();
       if (!cleanName) return;
-      book.library.push({
+      const call = {
         id: kind + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         kind: kind,
         name: cleanName,
         short: cleanShort || cleanName.slice(0, 3).toUpperCase(),
         fill: "clear",
         ink: "clear",
-        count: 0,
+        count: 1,
         weight: 0
-      });
+      };
+      if (kind === "offense" && call.short === "X") call.decoy = true;
+      book.library.push(call);
+      if (kind === "offense" || kind === "defense") {
+        materializeKindCounts(kind, cardCounts(activeVersion()));
+        call.count = 1;
+        const slots = cellCount(layoutFor(kind));
+        let sum = 0;
+        book.library.forEach(function (item) {
+          if (item.kind === kind) sum += item.count || 0;
+        });
+        if (sum > slots) {
+          const donor = fullestOther(kind, call.id);
+          if (donor && donor.count > 0) donor.count -= 1;
+          else call.count = 0;
+        }
+        refillCard(kind, "count");
+      }
       render();
       scheduleSave();
     }
 
-    function printNow(mode) {
+    function printNow(mode, versionId) {
       printMode = mode;
+      printVersionId = versionId || null;
       renderPrint();
       window.print();
+      printVersionId = null;
+      renderPrint();
     }
 
     function applyThemeField(field, value) {
@@ -2865,7 +3032,7 @@
     });
     document.getElementById("count-modal-choices").addEventListener("click", function (event) {
       const btn = event.target.closest("[data-count-other]");
-      if (!btn || !pendingCount) return;
+      if (!btn || !pendingCount || Date.now() < countModalReadyAt) return;
       const otherId = btn.getAttribute("data-count-other");
       const source = callById(pendingCount.id);
       if (!source) {
@@ -2890,26 +3057,22 @@
     }
 
     function openCountTrade(id, nextCount) {
+      if (pendingCount) return;
       const call = callById(id);
       if (!call) return;
       const kind = call.kind;
       materializeKindCounts(kind, cardCounts(activeVersion()));
       const current = call.count;
       const next = clampInt(nextCount, current, 0, 300);
-      if (next === current) {
-        render();
-        return;
-      }
+      if (next === current) return;
       const delta = next - current;
       const others = book.library.filter(function (item) {
         if (item.id === id || item.kind !== kind) return false;
         return delta > 0 ? item.count >= delta : true;
       });
-      if (!others.length) {
-        render();
-        return;
-      }
+      if (!others.length) return;
       pendingCount = { id: id, next: next, current: current };
+      countModalReadyAt = Date.now() + 280;
       document.getElementById("count-modal-title").textContent =
         call.name + " · " + current + " → " + next;
       document.getElementById("count-modal-sub").textContent = delta > 0
@@ -2924,8 +3087,11 @@
         );
       }).join("");
       document.getElementById("count-modal").classList.remove("hidden");
-      const firstChoice = document.querySelector("#count-modal-choices button");
-      (firstChoice || document.getElementById("count-modal-cancel")).focus();
+      setTimeout(function () {
+        if (!pendingCount) return;
+        const firstChoice = document.querySelector("#count-modal-choices button");
+        (firstChoice || document.getElementById("count-modal-cancel")).focus();
+      }, 0);
     }
 
     function onCallEdit(event) {
@@ -2943,7 +3109,8 @@
         return;
       }
       if (event.target.getAttribute("data-call-short")) {
-        call.short = event.target.value.trim().slice(0, 4).toUpperCase() || call.short;
+        call.short = event.target.value.trim().slice(0, 5).toUpperCase() || call.short;
+        if (call.kind === "offense" && call.short === "X") call.decoy = true;
         render();
         scheduleSave();
         return;
@@ -2973,12 +3140,14 @@
       }
       const moreId = target.getAttribute("data-call-more");
       if (moreId) {
+        if (pendingCount) return;
         const onCard = cardCounts(activeVersion());
         openCountTrade(moreId, (onCard[moreId] || 0) + 1);
         return;
       }
       const lessId = target.getAttribute("data-call-less");
       if (lessId) {
+        if (pendingCount) return;
         const onCard = cardCounts(activeVersion());
         const current = onCard[lessId] || 0;
         if (current <= 0) return;
@@ -3082,6 +3251,32 @@
       showCoachOnCard = true;
       renderCard();
     });
+    ["name-search", "name-box"].forEach(function (id) {
+      document.getElementById(id).addEventListener("input", function () {
+        renderNameKey();
+      });
+    });
+    document.getElementById("reset-defaults").addEventListener("click", function () {
+      if (!book) return;
+      const ok = window.confirm("Reset colors, block sizes, and card size to the defaults? Calls and version names stay. Both cards are filled again.");
+      if (!ok) return;
+      book.rows = 5;
+      book.cols = 5;
+      book.kindLayouts = { offense: { rows: 5, cols: 5 }, defense: { rows: 4, cols: 4 } };
+      book.cardSize = defaultCardSize();
+      book.theme = { band: SET_THEMES.offense.band, ink: "#000000", highlight: "#ffffff" };
+      book.versions.forEach(function (version) {
+        version.themes = {
+          offense: { band: SET_THEMES.offense.band, ink: "#000000", highlight: "#ffffff" },
+          defense: { band: SET_THEMES.defense.band, ink: "#000000", highlight: "#ffffff" }
+        };
+        version.offenseCells = buildKindCells(book, "offense");
+        version.defenseCells = buildKindCells(book, "defense");
+        version.cells = version.offenseCells;
+      });
+      render();
+      scheduleSave();
+    });
     document.getElementById("shuffle-current").addEventListener("click", function () {
       if (!shuffleCurrent()) return;
       render();
@@ -3153,10 +3348,7 @@
       const lockId = event.target.getAttribute("data-ver-lock");
       const delId = event.target.getAttribute("data-ver-del");
       if (printId) {
-        book.activeVersionId = printId;
-        render();
-        scheduleSave();
-        printNow("cards");
+        printNow("cards", printId);
         return;
       }
       if (useId) {

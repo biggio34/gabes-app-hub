@@ -223,6 +223,8 @@ export type WristCall = {
   count: number;
   /** 0 keeps the box count. 1 is rare and fills one or two cells. A higher weight fills more. */
   weight?: number;
+  /** A decoy prints at the same cap height as a real code. */
+  decoy?: boolean;
 };
 
 export type WristCell = {
@@ -404,8 +406,10 @@ export const DEFAULT_ROWS = 5;
 export const DEFAULT_COLS = 5;
 export const DEFAULT_DEFENSE_ROWS = 4;
 export const DEFAULT_DEFENSE_COLS = 4;
-export const OFFENSE_BAND = "#ff0000";
-export const DEFENSE_BAND = "#f7bad1";
+export const OFFENSE_BAND = "#c00000";
+export const DEFENSE_BAND = "#f87080";
+/** Old factory wristband. Only an untouched book still on this purple migrates. */
+export const LEGACY_PURPLE_BAND = "#7e22ce";
 export const DEFAULT_SIGN_START = 1;
 export const DEFAULT_ROW_START = 1;
 export const DEFAULT_SHEET_COLS = 15;
@@ -915,7 +919,7 @@ const DEFAULT_LOCATIONS: Array<[string, string, string]> = [
   ["loc-mid", "Middle", "MID"],
 ];
 
-const DEFAULT_OFFENSE: Array<[string, string, string, number?]> = [
+const DEFAULT_OFFENSE: Array<[string, string, string, number?, boolean?]> = [
   ["play-br", "Bunt + run", "B+R", 15],
   ["play-b1", "Bunt to 1st", "B1", 15],
   ["play-b3", "Bunt to 3rd", "B3", 15],
@@ -925,10 +929,12 @@ const DEFAULT_OFFENSE: Array<[string, string, string, number?]> = [
   ["play-fbt", "Fake bunt + take", "FBT", 10],
   ["play-hr", "Hit and run", "H+R", 10],
   ["play-ssq", "Safety squeeze", "SAS", 7],
+  ["play-ss3b", "Steal second and third", "SS3B", 6],
   ["play-stl", "Steal", "S", 15],
   ["play-sus", "Suicide squeeze", "SUS", 7],
   ["play-tke", "Take", "T", 7],
-  ["play-x", "X", "X", 15],
+  ["play-x", "X", "X", 15, true],
+  ["play-p", "P", "P", 8],
   ["play-ha", "Hit away", "HA"],
   ["play-bnt", "Bunt", "BNT"],
   ["play-slp", "Slap", "SLP"],
@@ -980,17 +986,21 @@ export function newCallId(kind: WristCallKind, name: string) {
 
 function rowsToCalls(
   kind: WristCallKind,
-  rows: Array<[string, string, string] | [string, string, string, number?]>,
+  rows: Array<[string, string, string] | [string, string, string, number?] | [string, string, string, number?, boolean?]>,
 ): WristCall[] {
-  return rows.map((row) => ({
-    id: row[0],
-    kind,
-    name: row[1],
-    short: row[2],
-    fill: "clear",
-    ink: "clear",
-    count: clampInt(row[3], 0, 0, 300),
-  }));
+  return rows.map((row) => {
+    const call: WristCall = {
+      id: row[0],
+      kind,
+      name: row[1],
+      short: row[2],
+      fill: "clear",
+      ink: "clear",
+      count: clampInt(row[3], 0, 0, 300),
+    };
+    if (row[4] === true) call.decoy = true;
+    return call;
+  });
 }
 
 export function defaultLibrary(): WristCall[] {
@@ -1033,16 +1043,38 @@ export function isLegacyTwoGroupLibrary(list: WristCall[]) {
   return !kinds.has("defense") && !kinds.has("location");
 }
 
+const STARTER_OFFENSE: Array<[string, string, string, number?, boolean?]> = [
+  ["play-x", "X", "X", 15, true],
+  ["play-p", "P", "P", 8],
+  ["play-b1", "Bunt to 1st", "B1", 15],
+  ["play-fbs", "Fake bunt + steal", "FBS", 10],
+  ["play-ssq", "Safety squeeze", "SAS", 7],
+  ["play-hr", "Hit and run", "H+R", 10],
+  ["play-ss3b", "Steal second and third", "SS3B", 6],
+];
+
+function withOffenseAliases(call: WristCall): WristCall {
+  if (call.kind !== "offense") return call;
+  const short = call.short.toUpperCase();
+  if (short === "H&R") return { ...call, short: "H+R" };
+  if (short === "X") return { ...call, decoy: true };
+  return call;
+}
+
 export function upgradeLibrary(list: WristCall[]) {
-  const next = reclassifyLocations(list);
-  if (!isLegacyTwoGroupLibrary(list)) return next;
-  const extras = [
-    ...rowsToCalls("location", DEFAULT_LOCATIONS),
-    ...rowsToCalls("offense", DEFAULT_OFFENSE),
-    ...rowsToCalls("defense", DEFAULT_DEFENSE),
-  ];
-  for (const call of extras) {
-    if (!libraryHas(next, call)) next.push(call);
+  const next = reclassifyLocations(list).map(withOffenseAliases);
+  if (isLegacyTwoGroupLibrary(list)) {
+    const extras = [
+      ...rowsToCalls("location", DEFAULT_LOCATIONS),
+      ...rowsToCalls("offense", DEFAULT_OFFENSE),
+      ...rowsToCalls("defense", DEFAULT_DEFENSE),
+    ];
+    for (const call of extras) {
+      if (!libraryHas(next, call)) next.push(call);
+    }
+  }
+  for (const call of rowsToCalls("offense", STARTER_OFFENSE)) {
+    if (!libraryHas(next, call)) next.push({ ...call, count: 0 });
   }
   return next;
 }
@@ -1298,17 +1330,20 @@ function normalizeCall(raw: unknown, index: number): WristCall | null {
   if (!item) return null;
   const kind = normalizeKind(item.kind);
   const name = String(item.name || "").trim();
-  const short = String(item.short || "").trim().slice(0, 4).toUpperCase();
+  const short = String(item.short || "").trim().slice(0, 5).toUpperCase();
   if (!name && !short) return null;
+  const cleaned = short === "H&R" ? "H+R" : short || (name || "XX").slice(0, 3).toUpperCase();
+  const decoy = item.decoy === true || (kind === "offense" && cleaned === "X");
   return {
     id: String(item.id || `call-${kind}-${index}`),
     kind,
-    name: name || short || kindLabel(kind),
-    short: short || (name || "XX").slice(0, 3).toUpperCase(),
+    name: name || cleaned || kindLabel(kind),
+    short: cleaned,
     fill: normalizeColor(item.fill),
     ink: normalizeColor(item.ink),
     count: clampInt(item.count, 0, 0, 300),
     weight: clampInt(item.weight, 0, 0, 30),
+    ...(decoy ? { decoy: true } : {}),
   };
 }
 
@@ -1443,11 +1478,55 @@ export function emptyBook(userId: string, title?: string): WristBook {
   return draft;
 }
 
+function sameHex(value: unknown, hex: string) {
+  return String(value || "").trim().toLowerCase() === hex;
+}
+
+/** Purple 5×5 blocks on a 5×3 card, with no coach color or size change. */
+export function isUntouchedLegacyCard(raw: unknown) {
+  const item = asRecord(raw);
+  if (!item) return false;
+  const theme = asRecord(item.theme);
+  if (!theme || !sameHex(theme.band, LEGACY_PURPLE_BAND)) return false;
+  const size = asRecord(item.cardSize);
+  if (!size) return false;
+  const width = Number(size.widthIn);
+  const height = Number(size.heightIn);
+  if (size.preset !== "large" && !(width === 5 && height === 3)) return false;
+  const layouts = asRecord(item.kindLayouts);
+  const rows = Number(item.rows) || 5;
+  const cols = Number(item.cols) || 5;
+  const block = (key: string) => {
+    const side = layouts ? asRecord(layouts[key]) : null;
+    return {
+      rows: side ? Number(side.rows) : rows,
+      cols: side ? Number(side.cols) : cols,
+    };
+  };
+  const offense = block("offense");
+  const defense = block("defense");
+  if (offense.rows !== 5 || offense.cols !== 5 || defense.rows !== 5 || defense.cols !== 5) return false;
+  const versions = Array.isArray(item.versions) ? item.versions : [];
+  for (const version of versions) {
+    const record = asRecord(version);
+    const themes = record ? asRecord(record.themes) : null;
+    if (!themes) continue;
+    for (const key of ["offense", "defense"]) {
+      const paint = asRecord(themes[key]);
+      if (paint && paint.band != null && !sameHex(paint.band, LEGACY_PURPLE_BAND)) return false;
+    }
+  }
+  return true;
+}
+
 export function normalizeBook(raw: unknown, userId: string, title?: string): WristBook {
   const item = asRecord(raw);
   if (!item) return emptyBook(userId, title);
+  const legacy = isUntouchedLegacyCard(item);
   const layout = normalizeLayout(item);
-  const kindLayouts = normalizeKindLayouts(item.kindLayouts, layout.rows, layout.cols);
+  const kindLayouts = legacy
+    ? defaultKindLayouts()
+    : normalizeKindLayouts(item.kindLayouts, layout.rows, layout.cols);
   const library = (Array.isArray(item.library) ? item.library : [])
     .map(normalizeCall)
     .filter((call): call is WristCall => Boolean(call));
@@ -1455,9 +1534,9 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
     bandKind: normalizeKind(item.bandKind || item.kind || "offense"),
     ...layout,
     kindLayouts,
-    theme: normalizeTheme(item.theme),
+    theme: legacy ? defaultSetThemes().offense : normalizeTheme(item.theme),
     sheet: normalizeSheet(item.sheet || { cols: item.sheetCols, rows: item.sheetRows }),
-    cardSize: normalizeCardSize(item.cardSize),
+    cardSize: legacy ? defaultCardSize() : normalizeCardSize(item.cardSize),
     numbering: normalizeNumbering(item.numbering),
     library: library.length ? upgradeLibrary(library) : defaultLibrary(),
     updatedAt: Number(item.updatedAt) || Date.now(),
@@ -1467,7 +1546,7 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
   book.versions = (Array.isArray(item.versions) ? item.versions : [])
     .map((version, index) =>
       normalizeVersion(
-        version,
+        legacy && asRecord(version) ? { ...asRecord(version), themes: defaultSetThemes() } : version,
         index,
         offenseLayout,
         defenseLayout,
