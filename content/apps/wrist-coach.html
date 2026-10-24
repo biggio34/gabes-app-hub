@@ -486,7 +486,7 @@
         </label>
       </div>
       <p class="text-sm text-slate-400">Field keeps the wristband colors. Shade rows and laminate are off until you turn them on. Laminate adds a 1/8 in clear border and puts the cut line outside the print, so the printed card stays the window size after you laminate. Sun, black &amp; white, trim, laminate, and row shading change this print only. They do not change the saved signs.</p>
-      <div class="grid gap-3 sm:grid-cols-3">
+      <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <label class="grid gap-1.5 text-sm">
           Band color
           <span class="flex items-center gap-2">
@@ -499,6 +499,13 @@
           <span class="flex items-center gap-2">
             <input type="color" id="theme-ink" class="color-pick" aria-label="Band text color">
             <input id="theme-ink-hex" maxlength="7" aria-label="Band text hex" class="w-28 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-red-500">
+          </span>
+        </label>
+        <label class="grid gap-1.5 text-sm">
+          Header numbers
+          <span class="flex items-center gap-2">
+            <input type="color" id="theme-header" class="color-pick" aria-label="Header number color">
+            <input id="theme-header-hex" maxlength="7" aria-label="Header number color hex" class="w-28 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-red-500">
           </span>
         </label>
         <label class="grid gap-1.5 text-sm">
@@ -801,8 +808,8 @@
     const LAMINATE_BLEED_IN = 0.125;
     const DEFAULT_THEME = { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
     const SET_THEMES = {
-      offense: { band: "#ff0000", ink: "#ffffff", highlight: "#ffffff" },
-      defense: { band: "#f7bad1", ink: "#000000", highlight: "#ffffff" }
+      offense: { band: "#ff0000", ink: "#ffffff", highlight: "#ffffff", headerInk: "#ffffff" },
+      defense: { band: "#f7bad1", ink: "#000000", highlight: "#ffffff", headerInk: "#111111" }
     };
     const PREVIOUS_OFFENSE_BAND = "#c00000";
     const PREVIOUS_DEFENSE_BAND = "#f87080";
@@ -846,18 +853,75 @@
     function normalizeTheme(raw) {
       const fallback = defaultTheme();
       const theme = raw || {};
-      return {
+      const next = {
         band: normalizeHex(theme.band || theme.wristband, fallback.band),
         ink: normalizeHex(theme.ink || theme.text, fallback.ink),
         highlight: normalizeHex(theme.highlight || theme.cell, fallback.highlight)
       };
+      if (theme.headerInk != null && String(theme.headerInk).trim()) {
+        next.headerInk = normalizeHex(theme.headerInk, headerInkFor({ band: next.band }));
+      }
+      return next;
+    }
+
+    function headerInkFor(theme) {
+      const band = theme && theme.band ? theme.band : "#000000";
+      if (theme && theme.headerInk) return normalizeHex(theme.headerInk, "#111111");
+      return hexLuma(band) < 150 ? "#ffffff" : "#111111";
+    }
+
+    function factoryThemes() {
+      return {
+        offense: {
+          band: SET_THEMES.offense.band,
+          ink: SET_THEMES.offense.ink,
+          highlight: SET_THEMES.offense.highlight,
+          headerInk: SET_THEMES.offense.headerInk
+        },
+        defense: {
+          band: SET_THEMES.defense.band,
+          ink: SET_THEMES.defense.ink,
+          highlight: SET_THEMES.defense.highlight,
+          headerInk: SET_THEMES.defense.headerInk
+        }
+      };
+    }
+
+    function sameHeaderBand(theme, band) {
+      return theme && String(theme.band || "").trim().toLowerCase() === band;
+    }
+
+    function readableHeaderTheme(theme) {
+      const paint = normalizeTheme(theme);
+      if (paint.headerInk) return paint;
+      const ink = String(paint.ink || "").toLowerCase();
+      const highlight = String(paint.highlight || "").toLowerCase();
+      const whiteInk = ink === "#ffffff" || ink === "#fff";
+      const blackInk = ink === "#000000" || ink === "#000";
+      const whiteHighlight = highlight === "#ffffff" || highlight === "#fff";
+      if (!whiteHighlight) return paint;
+      const untouched =
+        (sameHeaderBand(paint, SET_THEMES.offense.band) && whiteInk) ||
+        (sameHeaderBand(paint, SET_THEMES.defense.band) && blackInk) ||
+        (sameHeaderBand(paint, PREVIOUS_OFFENSE_BAND) && blackInk) ||
+        (sameHeaderBand(paint, PREVIOUS_DEFENSE_BAND) && blackInk) ||
+        (sameHeaderBand(paint, LEGACY_PURPLE_BAND) && whiteInk);
+      if (!untouched) return paint;
+      paint.headerInk = headerInkFor({ band: paint.band });
+      return paint;
     }
 
     function defaultKindThemes(fallback) {
       const theme = normalizeTheme(fallback);
+      const copy = {
+        band: theme.band,
+        ink: theme.ink,
+        highlight: theme.highlight
+      };
+      if (theme.headerInk) copy.headerInk = theme.headerInk;
       return {
-        offense: { band: theme.band, ink: theme.ink, highlight: theme.highlight },
-        defense: { band: theme.band, ink: theme.ink, highlight: theme.highlight }
+        offense: Object.assign({}, copy),
+        defense: Object.assign({}, copy)
       };
     }
 
@@ -875,11 +939,13 @@
       const kind = book && book.bandKind === "defense" ? "defense" : "offense";
       const themes = kindThemesOf(activeVersion());
       const theme = themes[kind];
-      return {
+      const next = {
         band: normalizeHex(theme.band, DEFAULT_THEME.band),
         ink: normalizeHex(theme.ink, DEFAULT_THEME.ink),
         highlight: normalizeHex(theme.highlight, DEFAULT_THEME.highlight)
       };
+      if (theme.headerInk) next.headerInk = normalizeHex(theme.headerInk, headerInkFor(next));
+      return next;
     }
 
     function rowsToCalls(kind, rows) {
@@ -1442,7 +1508,12 @@
         grids: 6, // new cards stay at 6 blocks; do not drop this to 2 to enlarge the type
         signStart: 1,
         rowStart: 1,
-        theme: { band: SET_THEMES.offense.band, ink: SET_THEMES.offense.ink, highlight: "#ffffff" },
+        theme: {
+          band: SET_THEMES.offense.band,
+          ink: SET_THEMES.offense.ink,
+          highlight: "#ffffff",
+          headerInk: SET_THEMES.offense.headerInk
+        },
         sheet: defaultSheet(),
         cardSize: defaultCardSize(),
         numbering: "standard",
@@ -1456,10 +1527,7 @@
         updatedAt: Date.now()
       };
       const first = shuffleVersion(next, "Version A");
-      first.themes = {
-        offense: { band: SET_THEMES.offense.band, ink: SET_THEMES.offense.ink, highlight: "#ffffff" },
-        defense: { band: SET_THEMES.defense.band, ink: SET_THEMES.defense.ink, highlight: "#ffffff" }
-      };
+      first.themes = factoryThemes();
       next.versions = [first];
       next.activeVersionId = first.id;
       return next;
@@ -1611,11 +1679,13 @@
         });
       }
       if (!purple && !previous) return;
-      const themes = {
-        offense: { band: SET_THEMES.offense.band, ink: SET_THEMES.offense.ink, highlight: "#ffffff" },
-        defense: { band: SET_THEMES.defense.band, ink: SET_THEMES.defense.ink, highlight: "#ffffff" }
+      const themes = factoryThemes();
+      book.theme = {
+        band: themes.offense.band,
+        ink: themes.offense.ink,
+        highlight: themes.offense.highlight,
+        headerInk: themes.offense.headerInk
       };
-      book.theme = { band: themes.offense.band, ink: themes.offense.ink, highlight: "#ffffff" };
       if (purple) {
         book.rows = 5;
         book.cols = 5;
@@ -1625,11 +1695,34 @@
         book.cardSize = defaultCardSize();
       }
       versions.forEach(function (version) {
+        version.themes = factoryThemes();
+      });
+    }
+
+    function migrateReadableHeaders() {
+      if (!book) return;
+      book.theme = readableHeaderTheme(book.theme);
+      (book.versions || []).forEach(function (version) {
+        const themes = kindThemesOf(version);
         version.themes = {
-          offense: { band: themes.offense.band, ink: themes.offense.ink, highlight: "#ffffff" },
-          defense: { band: themes.defense.band, ink: themes.defense.ink, highlight: "#ffffff" }
+          offense: readableHeaderTheme(themes.offense),
+          defense: readableHeaderTheme(themes.defense)
         };
       });
+    }
+
+    function factoryDealIds(kind, total) {
+      const seen = {};
+      let filled = 0;
+      defaultLibrary().forEach(function (call) {
+        if (!call || call.kind !== kind || !call.id || filled >= total) return;
+        const n = Math.max(0, Math.round(Number(call.count) || 0));
+        if (n <= 0) return;
+        const take = Math.min(n, Math.max(0, total - filled));
+        if (take > 0) seen[call.id] = true;
+        filled += take;
+      });
+      return seen;
     }
 
     function libraryForReset(library, kind, onCardIds, total) {
@@ -1638,24 +1731,44 @@
       factory.forEach(function (call) { factoryById[call.id] = call; });
       const onCard = {};
       (onCardIds || []).forEach(function (id) { if (id) onCard[id] = true; });
-      if (kind === "defense") {
-        const keep = library.filter(function (call) {
-          if (!call || call.kind !== kind || !call.id) return false;
+      const deal = kind === "offense" ? factoryDealIds(kind, total) : null;
+      const keep = library.filter(function (call) {
+        if (!call || call.kind !== kind || !call.id) return false;
+        if (kind === "defense") {
           if (factoryById[call.id]) return true;
           return !!onCard[call.id];
-        });
-        const spread = evenSpreadCounts(keep, total);
-        return library.map(function (call) {
-          if (call.kind !== kind) return call;
-          return Object.assign({}, call, { count: spread[call.id] || 0 });
-        });
-      }
+        }
+        if (deal && deal[call.id]) return true;
+        if (factoryById[call.id]) return false;
+        return !!onCard[call.id];
+      });
+      const spread = evenSpreadCounts(keep, total);
       return library.map(function (call) {
         if (call.kind !== kind) return call;
-        const known = factoryById[call.id];
-        if (known) return Object.assign({}, call, { count: known.count });
-        if (onCard[call.id]) return Object.assign({}, call, { count: Math.max(1, call.count || 0) });
-        return Object.assign({}, call, { count: 0 });
+        return Object.assign({}, call, { count: spread[call.id] || 0 });
+      });
+    }
+
+    function libraryAfterRemoval(library, kind, removedId, total) {
+      const remaining = (library || []).filter(function (call) { return call && call.id !== removedId; });
+      const ofKind = remaining.filter(function (call) { return call.kind === kind && call.id; });
+      const onCard = ofKind.filter(function (call) { return (call.count || 0) > 0; });
+      const pool = onCard.length ? onCard : ofKind;
+      const spread = evenSpreadCounts(pool, total);
+      return remaining.map(function (call) {
+        if (call.kind !== kind) return call;
+        return Object.assign({}, call, { count: spread[call.id] || 0 });
+      });
+    }
+
+    function deleteVersion(current, id) {
+      const versions = current && current.versions ? current.versions : [];
+      if (!current || !id || versions.length < 2) return null;
+      const nextVersions = versions.filter(function (item) { return item.id !== id; });
+      if (nextVersions.length !== versions.length - 1) return null;
+      return Object.assign({}, current, {
+        versions: nextVersions,
+        activeVersionId: current.activeVersionId === id ? nextVersions[0].id : current.activeVersionId
       });
     }
 
@@ -1831,6 +1944,7 @@
         }
         item.cells = item.offenseCells;
       });
+      migrateReadableHeaders();
       book.theme = themeOf();
       const version = activeVersion();
       if (
@@ -2426,6 +2540,10 @@
       function originRow(halfIndex) {
         return halfIndex === 0 ? 0 : dataRows + 1;
       }
+      const headerInk = cardLook === "mono" ? "#ffffff" : headerInkFor({
+        band: look.bandFill,
+        headerInk: theme.headerInk
+      });
       for (let g = 0; g < layout.grids; g += 1) {
         const halfIndex = g < metrics.topCount ? 0 : 1;
         const acrossIndex = halfIndex === 0 ? g : g - metrics.topCount;
@@ -2442,7 +2560,6 @@
           "",
           cornerBand ? "band" : "data"
         );
-        const headerInk = "#ffffff";
         for (let col = 0; col < layout.cols; col += 1) {
           addCell(
             (col0 + col + 1) * cellW,
@@ -2514,7 +2631,7 @@
       const footerTop = barY;
       addText(stamp, 0, barY, wPt, cellH, footerPt, footerInk, "", null, look.bandFill, "footer");
       const card =
-        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-footer-ink="' + footerInk + '" data-footer-top="' + n(footerTop) + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-footer-ink="' + footerInk + '" data-footer-top="' + n(footerTop) + '" data-header-ink="' + headerInk + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="xMidYMid meet">' +
             '<defs>' + clips.join("") + '</defs>' +
             dataShapes.join("") +
@@ -2757,7 +2874,7 @@
               '</button>' +
               (book.versions.length > 1
                 ? '<button type="button" data-ver-del="' + escapeHtml(version.id) + '" class="ver-action text-slate-300 hover:text-red-300">Delete</button>'
-                : '<span class="ver-action text-transparent" aria-hidden="true">Delete</span>') +
+                : '<span class="ver-action invisible" aria-hidden="true">Delete</span>') +
             '</div>' +
           '</li>'
         );
@@ -3012,11 +3129,14 @@
 
     function renderThemeControls() {
       const theme = themeOf();
+      const header = headerInkFor(theme);
       document.getElementById("theme-band").value = theme.band;
       document.getElementById("theme-ink").value = theme.ink;
+      document.getElementById("theme-header").value = header;
       document.getElementById("theme-highlight").value = theme.highlight;
       document.getElementById("theme-band-hex").value = theme.band.toUpperCase();
       document.getElementById("theme-ink-hex").value = theme.ink.toUpperCase();
+      document.getElementById("theme-header-hex").value = header.toUpperCase();
       document.getElementById("theme-highlight-hex").value = theme.highlight.toUpperCase();
     }
 
@@ -3201,7 +3321,15 @@
       if (!version) return;
       const kind = book.bandKind === "defense" ? "defense" : "offense";
       version.themes = kindThemesOf(version);
-      version.themes[kind][field] = normalizeHex(value, version.themes[kind][field]);
+      const current = version.themes[kind];
+      if (field === "band") {
+        const previousBand = current.band;
+        const wasAuto = !current.headerInk || normalizeHex(current.headerInk, "") === headerInkFor({ band: previousBand });
+        current.band = normalizeHex(value, previousBand);
+        if (wasAuto) delete current.headerInk;
+      } else {
+        current[field] = normalizeHex(value, current[field] || headerInkFor(current));
+      }
       book.theme = themeOf();
       renderThemeControls();
       renderCard();
@@ -3322,8 +3450,8 @@
       render();
       scheduleSave();
     });
-    ["theme-band", "theme-ink", "theme-highlight"].forEach(function (id) {
-      const field = id.replace("theme-", "");
+    ["theme-band", "theme-ink", "theme-highlight", "theme-header"].forEach(function (id) {
+      const field = id === "theme-header" ? "headerInk" : id.replace("theme-", "");
       document.getElementById(id).addEventListener("input", function (event) {
         applyThemeField(field, event.target.value);
       });
@@ -3538,8 +3666,14 @@
       const id = target.getAttribute("data-call-del");
       if (!id) return;
       const removed = callById(id);
-      book.library = book.library.filter(function (item) { return item.id !== id; });
-      refillCard(removed && removed.kind ? removed.kind : book.bandKind);
+      const kind = removed && (removed.kind === "offense" || removed.kind === "defense") ? removed.kind : "";
+      if (kind) {
+        materializeKindCounts(kind, cardCounts(activeVersion(), kind));
+        book.library = libraryAfterRemoval(book.library, kind, id, cellCount(layoutFor(kind)));
+        refillCard(kind, "count");
+      } else {
+        book.library = book.library.filter(function (item) { return item.id !== id; });
+      }
       render();
       scheduleSave();
     }
@@ -3623,7 +3757,12 @@
       book.rows = 5;
       book.cols = 5;
       book.kindLayouts = { offense: { rows: 5, cols: 5 }, defense: { rows: 4, cols: 4 } };
-      book.theme = { band: SET_THEMES.offense.band, ink: SET_THEMES.offense.ink, highlight: "#ffffff" };
+      book.theme = {
+        band: SET_THEMES.offense.band,
+        ink: SET_THEMES.offense.ink,
+        highlight: "#ffffff",
+        headerInk: SET_THEMES.offense.headerInk
+      };
       const source = activeVersion();
       ["offense", "defense"].forEach(function (kind) {
         const onCard = [];
@@ -3635,10 +3774,7 @@
       book.fillPrefer = "count";
       try {
         book.versions.forEach(function (version) {
-          version.themes = {
-            offense: { band: SET_THEMES.offense.band, ink: SET_THEMES.offense.ink, highlight: "#ffffff" },
-            defense: { band: SET_THEMES.defense.band, ink: SET_THEMES.defense.ink, highlight: "#ffffff" }
-          };
+          version.themes = factoryThemes();
           version.offenseCells = buildKindCells(book, "offense");
           version.defenseCells = buildKindCells(book, "defense");
           version.cells = version.offenseCells;
@@ -3722,11 +3858,22 @@
       render();
       scheduleSave();
     });
+    function versionAction(event, name) {
+      const node = event.target && event.target.closest
+        ? event.target
+        : (event.target && event.target.parentElement);
+      if (!node || !node.closest) return null;
+      return node.closest("[data-ver-" + name + "]");
+    }
     document.getElementById("version-list").addEventListener("click", function (event) {
-      const printId = event.target.getAttribute("data-ver-print");
-      const useId = event.target.getAttribute("data-ver-use");
-      const lockId = event.target.getAttribute("data-ver-lock");
-      const delId = event.target.getAttribute("data-ver-del");
+      const printBtn = versionAction(event, "print");
+      const useBtn = versionAction(event, "use");
+      const lockBtn = versionAction(event, "lock");
+      const delBtn = versionAction(event, "del");
+      const printId = printBtn && printBtn.getAttribute("data-ver-print");
+      const useId = useBtn && useBtn.getAttribute("data-ver-use");
+      const lockId = lockBtn && lockBtn.getAttribute("data-ver-lock");
+      const delId = delBtn && delBtn.getAttribute("data-ver-del");
       if (printId) {
         printNow("cards", printId);
         return;
@@ -3735,6 +3882,7 @@
         book.activeVersionId = useId;
         render();
         scheduleSave();
+        return;
       }
       if (lockId) {
         const version = book.versions.find(function (item) { return item.id === lockId; });
@@ -3746,6 +3894,7 @@
         version.locked = true;
         render();
         scheduleSave();
+        return;
       }
       if (delId && book.versions.length > 1) openDeleteModal(delId);
     });
@@ -3763,12 +3912,16 @@
       document.getElementById("delete-modal-cancel").focus();
     }
     document.getElementById("delete-modal-cancel").addEventListener("click", closeDeleteModal);
+    document.getElementById("delete-modal").addEventListener("click", function (event) {
+      if (event.target && event.target.id === "delete-modal") closeDeleteModal();
+    });
     document.getElementById("delete-modal-confirm").addEventListener("click", function () {
       const delId = pendingDeleteId;
       closeDeleteModal();
-      if (!delId || book.versions.length < 2) return;
-      book.versions = book.versions.filter(function (item) { return item.id !== delId; });
-      if (book.activeVersionId === delId) book.activeVersionId = book.versions[0].id;
+      if (!book || !delId || book.versions.length < 2) return;
+      const next = deleteVersion(book, delId);
+      if (!next) return;
+      book = next;
       render();
       scheduleSave();
     });

@@ -239,6 +239,8 @@ export type WristTheme = {
   band: string;
   ink: string;
   highlight: string;
+  /** Column and row numbers. Absent means contrast against the band. */
+  headerInk?: string;
 };
 
 export type WristLayout = {
@@ -461,6 +463,32 @@ export function normalizeHex(value: unknown, fallback: string) {
   return fallback;
 }
 
+export const HEADER_INK_DARK = "#111111";
+export const HEADER_INK_LIGHT = "#ffffff";
+
+/** Simple luma. Below 150 the band needs white numbers; otherwise dark numbers. */
+export function hexLuma(hex: string) {
+  const raw = String(hex || "").trim().replace("#", "");
+  const full = raw.length === 3 ? raw.split("").map((ch) => ch + ch).join("") : raw;
+  const n = Number.parseInt(full, 16);
+  if (!Number.isFinite(n) || full.length !== 6) return 255;
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return (r * 299 + g * 587 + b * 114) / 1000;
+}
+
+export function autoHeaderInk(band: string) {
+  return hexLuma(band) < 150 ? HEADER_INK_LIGHT : HEADER_INK_DARK;
+}
+
+/** Coach-picked header numbers, or dark on pink and white on red when none is stored. */
+export function headerInkFor(theme: { band?: string; headerInk?: string } | null | undefined) {
+  const band = theme?.band || "#000000";
+  if (theme?.headerInk) return normalizeHex(theme.headerInk, autoHeaderInk(band));
+  return autoHeaderInk(band);
+}
+
 export function defaultKindTitles(fallback?: string): WristKindTitles {
   const base = String(fallback || "").trim();
   return {
@@ -500,8 +528,8 @@ export function defaultKindThemes(fallback?: WristTheme): WristKindThemes {
 export function defaultSetThemes(): WristKindThemes {
   const white = "#ffffff";
   return {
-    offense: { band: OFFENSE_BAND, ink: white, highlight: white },
-    defense: { band: DEFENSE_BAND, ink: "#000000", highlight: white },
+    offense: { band: OFFENSE_BAND, ink: white, highlight: white, headerInk: autoHeaderInk(OFFENSE_BAND) },
+    defense: { band: DEFENSE_BAND, ink: "#000000", highlight: white, headerInk: autoHeaderInk(DEFENSE_BAND) },
   };
 }
 
@@ -566,11 +594,16 @@ export function kindTheme(
 export function normalizeTheme(raw: unknown): WristTheme {
   const fallback = defaultTheme();
   const item = asRecord(raw);
-  return {
+  const theme: WristTheme = {
     band: normalizeHex(item?.band ?? item?.wristband, fallback.band),
     ink: normalizeHex(item?.ink ?? item?.text, fallback.ink),
     highlight: normalizeHex(item?.highlight ?? item?.cell, fallback.highlight),
   };
+  const picked = item?.headerInk;
+  if (picked != null && String(picked).trim()) {
+    theme.headerInk = normalizeHex(picked, autoHeaderInk(theme.band));
+  }
+  return theme;
 }
 
 function clampInt(value: unknown, fallback: number, min: number, max: number) {
@@ -1399,10 +1432,30 @@ export function spreadLibrary(library: WristCall[], kind: WristCallKind, total: 
 }
 
 /**
- * Counts for Reset. Offense keeps the factory counts a new book deals.
- * Defense keeps every factory call, spread evenly, which is how a new book
- * fills a defense card. A custom call stays only when it is already on the card.
- * Catalog calls a new book leaves off (count 0) stay off.
+ * Ids a new book actually deals. signBag slices the factory counts before it
+ * shuffles, so the set is the prefix of that bag (offense's 14), not every
+ * catalog call and not a play that sits past the cell total.
+ */
+function factoryDealIds(kind: WristCallKind, total: number) {
+  const seen = new Set<string>();
+  let filled = 0;
+  for (const call of defaultLibrary()) {
+    if (call.kind !== kind || !call.id) continue;
+    const n = Math.max(0, Math.round(call.count || 0));
+    if (n <= 0) continue;
+    const take = Math.min(n, Math.max(0, total - filled));
+    if (take > 0) seen.add(call.id);
+    filled += take;
+    if (filled >= total) break;
+  }
+  return seen;
+}
+
+/**
+ * Counts for Reset. Offense evens the plays a new book already deals.
+ * Defense evens every factory call, which is how a new book fills defense.
+ * A custom call stays only when it is already on the card.
+ * Catalog calls a new book leaves off stay off. Counts differ by at most 1.
  */
 export function libraryForReset(
   library: WristCall[],
@@ -1413,24 +1466,56 @@ export function libraryForReset(
   const factory = defaultLibrary().filter((call) => call.kind === kind);
   const factoryById = new Map(factory.map((call) => [call.id, call]));
   const onCard = new Set(onCardIds.filter(Boolean));
-  if (kind === "defense") {
-    const keep = library.filter((call) => {
-      if (call.kind !== kind || !call.id) return false;
+  const deal = kind === "offense" ? factoryDealIds(kind, total) : null;
+  const keep = library.filter((call) => {
+    if (call.kind !== kind || !call.id) return false;
+    if (kind === "defense") {
       if (factoryById.has(call.id)) return true;
       return onCard.has(call.id);
-    });
-    const spread = evenSpreadCounts(keep, total);
-    return library.map((call) =>
-      call.kind === kind ? { ...call, count: spread[call.id] || 0 } : call,
-    );
-  }
-  return library.map((call) => {
-    if (call.kind !== kind) return call;
-    const known = factoryById.get(call.id);
-    if (known) return { ...call, count: known.count };
-    if (onCard.has(call.id)) return { ...call, count: Math.max(1, call.count || 0) };
-    return { ...call, count: 0 };
+    }
+    if (deal?.has(call.id)) return true;
+    if (factoryById.has(call.id)) return false;
+    return onCard.has(call.id);
   });
+  const spread = evenSpreadCounts(keep, total);
+  return library.map((call) =>
+    call.kind === kind ? { ...call, count: spread[call.id] || 0 } : call,
+  );
+}
+
+/**
+ * Drop one call and deal its boxes back across the calls that remain on the
+ * card. The remaining counts differ by at most 1. A catalog call with no
+ * boxes stays off the card.
+ */
+export function libraryAfterRemoval(
+  library: WristCall[],
+  kind: WristCallKind,
+  removedId: string,
+  total: number,
+): WristCall[] {
+  const remaining = library.filter((call) => call.id !== removedId);
+  const ofKind = remaining.filter((call) => call.kind === kind && call.id);
+  const onCard = ofKind.filter((call) => (call.count || 0) > 0);
+  const pool = onCard.length ? onCard : ofKind;
+  const spread = evenSpreadCounts(pool, total);
+  return remaining.map((call) =>
+    call.kind === kind ? { ...call, count: spread[call.id] || 0 } : call,
+  );
+}
+
+/** Remove one version. The last version stays. Deleting the active one selects another. */
+export function deleteVersion(book: WristBook, id: string): WristBook | null {
+  const versions = book.versions || [];
+  if (!id || versions.length < 2) return null;
+  const next = versions.filter((item) => item.id !== id);
+  if (next.length !== versions.length - 1) return null;
+  return {
+    ...book,
+    versions: next,
+    activeVersionId: book.activeVersionId === id ? next[0].id : book.activeVersionId,
+    updatedAt: Date.now(),
+  };
 }
 
 export function bookLayout(
@@ -1794,6 +1879,28 @@ function paintUntouched(
   return true;
 }
 
+function isUntouchedFactorySide(theme: WristTheme, band: string, ink: "black" | "white") {
+  if (theme.headerInk) return false;
+  if (!sameHex(theme.band, band)) return false;
+  if (ink === "black" && !isFactoryBlackInk(theme.ink)) return false;
+  if (ink === "white" && !isFactoryWhite(theme.ink)) return false;
+  if (!isFactoryWhite(theme.highlight)) return false;
+  return true;
+}
+
+/** Untouched factory bands get a readable header color. A chosen header color stays. */
+export function readableHeaderTheme(theme: WristTheme): WristTheme {
+  if (theme.headerInk) return theme;
+  const untouched =
+    isUntouchedFactorySide(theme, OFFENSE_BAND, "white") ||
+    isUntouchedFactorySide(theme, DEFENSE_BAND, "black") ||
+    isUntouchedFactorySide(theme, PREVIOUS_OFFENSE_BAND, "black") ||
+    isUntouchedFactorySide(theme, PREVIOUS_DEFENSE_BAND, "black") ||
+    isUntouchedFactorySide(theme, LEGACY_PURPLE_BAND, "white");
+  if (!untouched) return theme;
+  return { ...theme, headerInk: autoHeaderInk(theme.band) };
+}
+
 /** Last round's red/pink factory pair, still on black ink. Custom colors return false. */
 export function isUntouchedPreviousColors(raw: unknown) {
   const item = asRecord(raw);
@@ -1937,6 +2044,14 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
   book.activeVersionId = book.versions.some((version) => version.id === active)
     ? active
     : book.versions[0].id;
+  book.theme = readableHeaderTheme(book.theme);
+  book.versions = book.versions.map((version) => ({
+    ...version,
+    themes: {
+      offense: readableHeaderTheme(version.themes.offense),
+      defense: readableHeaderTheme(version.themes.defense),
+    },
+  }));
   return book;
 }
 

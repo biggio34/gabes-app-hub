@@ -70,6 +70,12 @@ import {
   evenSpreadCounts,
   spreadLibrary,
   libraryForReset,
+  libraryAfterRemoval,
+  deleteVersion,
+  headerInkFor,
+  autoHeaderInk,
+  readableHeaderTheme,
+  HEADER_INK_DARK,
   paginateCoachSheet,
   coachSheetFrame,
   buildKindCells,
@@ -519,7 +525,7 @@ describe("wrist coach book", () => {
     assert.match(page, /data-ver-print="/);
     assert.match(page, />Reprint</);
     const reprint = page.slice(
-      page.indexOf('const printId = event.target.getAttribute("data-ver-print")'),
+      page.indexOf('const printId = printBtn && printBtn.getAttribute("data-ver-print")'),
       page.indexOf("if (useId)"),
     );
     assert.match(reprint, /printNow\("cards", printId\)/);
@@ -1527,15 +1533,173 @@ describe("wrist coach book", () => {
     );
     version.offenseCells = buildKindCells(book, "offense");
     version.defenseCells = buildKindCells(book, "defense");
-    assert.deepEqual(tally(version.offenseCells), tally(freshVersion.offenseCells));
+    const offenseIds = [...new Set(version.offenseCells.map((cell) => cell.callId))].sort();
+    const freshIds = [...new Set(freshVersion.offenseCells.map((cell) => cell.callId))].sort();
+    assert.deepEqual(offenseIds, freshIds);
+    assert.equal(offenseIds.length, 14);
+    const offenseCounts = offenseIds.map((id) => tally(version.offenseCells)[id] || 0);
+    assert.equal(offenseCounts.reduce((sum, count) => sum + count, 0), offenseTotal);
+    assert.ok(Math.max(...offenseCounts) - Math.min(...offenseCounts) <= 1);
+    const libraryCounts = book.library.filter((call) => call.kind === "offense" && call.count > 0).map((call) => call.count);
+    assert.equal(libraryCounts.reduce((sum, count) => sum + count, 0), offenseTotal);
+    assert.ok(Math.max(...libraryCounts) - Math.min(...libraryCounts) <= 1);
     assert.deepEqual(tally(version.defenseCells), tally(freshVersion.defenseCells));
-    for (const short of ["HA", "SWG", "SQZ", "DBL", "SLH", "BFH"]) {
+    for (const short of ["HA", "SWG", "SQZ", "DBL", "SLH", "BFH", "P"]) {
       const call = book.library.find((item) => item.kind === "offense" && item.short === short);
       assert.ok(call);
       assert.equal(call.count, 0);
       assert.equal(version.offenseCells.some((cell) => cell.callId === call.id), false);
     }
     assert.equal(new Set(version.offenseCells.map((cell) => cell.callId)).size < 28, true);
+    book.library.push({
+      id: "off-custom",
+      kind: "offense",
+      name: "Trick",
+      short: "TRK",
+      fill: "clear",
+      ink: "clear",
+      count: 4,
+    });
+    version.offenseCells[0] = { ...version.offenseCells[0], callId: "off-custom" };
+    book.library = libraryForReset(
+      book.library,
+      "offense",
+      version.offenseCells.map((cell) => cell.callId),
+      offenseTotal,
+    );
+    const custom = book.library.find((call) => call.id === "off-custom");
+    assert.ok(custom && custom.count > 0);
+    assert.equal(book.library.find((call) => call.short === "HA")?.count, 0);
+    const withCustom = book.library.filter((call) => call.kind === "offense" && call.count > 0).map((call) => call.count);
+    assert.equal(withCustom.reduce((sum, count) => sum + count, 0), offenseTotal);
+    assert.ok(Math.max(...withCustom) - Math.min(...withCustom) <= 1);
+  });
+
+  it("spreads freed boxes across the calls that remain", () => {
+    const book = emptyBook("coach-1");
+    const total = cellCount(layoutFor(book, "defense"));
+    const defense = book.library.filter((call) => call.kind === "defense");
+    const victim = defense.find((call) => call.short === "NS");
+    const hld = defense.find((call) => call.short === "HLD");
+    assert.ok(victim && hld);
+    book.library = book.library.map((call) => {
+      if (call.kind !== "defense") return call;
+      if (call.id === victim.id) return { ...call, count: total - (defense.length - 1) };
+      return { ...call, count: 1 };
+    });
+    assert.equal(book.library.find((call) => call.id === hld.id)?.count, 1);
+    const next = libraryAfterRemoval(book.library, "defense", victim.id, total);
+    assert.equal(next.some((call) => call.id === victim.id), false);
+    const counts = next.filter((call) => call.kind === "defense" && call.count > 0).map((call) => call.count);
+    assert.equal(counts.length, defense.length - 1);
+    assert.equal(counts.reduce((sum, count) => sum + count, 0), total);
+    assert.ok(Math.max(...counts) - Math.min(...counts) <= 1);
+    const hldAfter = next.find((call) => call.id === hld.id);
+    assert.ok(hldAfter);
+    assert.ok(hldAfter.count < 11);
+    assert.equal(next.find((call) => call.short === "HA")?.count, book.library.find((call) => call.short === "HA")?.count);
+    const withExtra = libraryAfterRemoval(
+      [...book.library, { id: "def-custom", kind: "defense", name: "Custom", short: "ZZ", fill: "clear", ink: "clear", count: 0 }],
+      "defense",
+      victim.id,
+      total,
+    );
+    assert.equal(withExtra.find((call) => call.id === "def-custom")?.count, 0);
+    assert.ok((withExtra.find((call) => call.id === hld.id)?.count || 0) < 11);
+  });
+
+  it("deletes a version, switches the active one, and refuses the last", () => {
+    const book = emptyBook("coach-1");
+    const first = activeVersion(book);
+    assert.ok(first);
+    const second = copyCurrentVersion(book, first);
+    second.name = "Version B";
+    book.versions = [first, second];
+    book.activeVersionId = second.id;
+    const removedActive = deleteVersion(book, second.id);
+    assert.ok(removedActive);
+    assert.deepEqual(removedActive.versions.map((version) => version.id), [first.id]);
+    assert.equal(removedActive.activeVersionId, first.id);
+    const kept = deleteVersion(removedActive, first.id);
+    assert.equal(kept, null);
+    assert.equal(removedActive.versions.length, 1);
+    book.activeVersionId = first.id;
+    const removedOther = deleteVersion(book, second.id);
+    assert.ok(removedOther);
+    assert.equal(removedOther.activeVersionId, first.id);
+    assert.equal(removedOther.versions.some((version) => version.id === second.id), false);
+    const saved = normalizeBook(removedOther, "coach-1");
+    assert.equal(saved.versions.some((version) => version.id === second.id), false);
+    assert.equal(saved.activeVersionId, first.id);
+    assert.equal(saved.versions.length, 1);
+  });
+
+  it("uses dark header numbers on pink and keeps a color the coach picked", () => {
+    const book = emptyBook("coach-1");
+    const version = activeVersion(book);
+    assert.ok(version);
+    assert.equal(version.themes.offense.headerInk, "#ffffff");
+    assert.equal(version.themes.defense.headerInk, HEADER_INK_DARK);
+    assert.equal(autoHeaderInk("#ff0000"), "#ffffff");
+    assert.equal(autoHeaderInk("#f7bad1"), "#111111");
+    assert.equal(headerInkFor({ band: "#f7bad1" }), "#111111");
+    assert.equal(headerInkFor({ band: "#ff0000" }), "#ffffff");
+    assert.equal(headerInkFor({ band: "#f7bad1", headerInk: "#123456" }), "#123456");
+    assert.equal(headerInkFor({ band: "#445566" }), "#ffffff");
+    const untouched = readableHeaderTheme({ band: "#f7bad1", ink: "#000000", highlight: "#ffffff" });
+    assert.equal(untouched.headerInk, "#111111");
+    const chosen = readableHeaderTheme({ band: "#f7bad1", ink: "#000000", highlight: "#ffffff", headerInk: "#123456" });
+    assert.equal(chosen.headerInk, "#123456");
+    const custom = readableHeaderTheme({ band: "#112233", ink: "#ffffff", highlight: "#ffffff" });
+    assert.equal(custom.headerInk, undefined);
+    const saved = normalizeBook({
+      title: "Factory",
+      theme: { band: "#ff0000", ink: "#ffffff", highlight: "#ffffff" },
+      library: defaultLibrary(),
+      kindLayouts: defaultKindLayouts(),
+      cardSize: { preset: "softball", widthIn: 3.5, heightIn: 2.25 },
+      rows: 5,
+      cols: 5,
+      grids: 6,
+      versions: [{
+        id: version.id,
+        name: version.name,
+        createdAt: version.createdAt,
+        themes: {
+          offense: { band: "#ff0000", ink: "#ffffff", highlight: "#ffffff" },
+          defense: { band: "#f7bad1", ink: "#000000", highlight: "#ffffff" },
+        },
+        offenseCells: version.offenseCells,
+        defenseCells: version.defenseCells,
+      }],
+      activeVersionId: version.id,
+    }, "coach-1");
+    assert.equal(activeVersion(saved)?.themes.defense.headerInk, "#111111");
+    assert.equal(activeVersion(saved)?.themes.offense.headerInk, "#ffffff");
+    const picked = normalizeBook({
+      title: "Picked",
+      theme: { band: "#112233", ink: "#ffffff", highlight: "#ffffff" },
+      library: defaultLibrary(),
+      kindLayouts: defaultKindLayouts(),
+      rows: 5,
+      cols: 5,
+      grids: 6,
+      versions: [{
+        id: version.id,
+        name: version.name,
+        createdAt: version.createdAt,
+        themes: {
+          offense: { band: "#112233", ink: "#ffffff", highlight: "#ffffff", headerInk: "#abcdef" },
+          defense: { band: "#445566", ink: "#ffffff", highlight: "#ffffff" },
+        },
+        offenseCells: version.offenseCells,
+        defenseCells: version.defenseCells,
+      }],
+      activeVersionId: version.id,
+    }, "coach-1");
+    assert.equal(activeVersion(picked)?.themes.offense.headerInk, "#abcdef");
+    assert.equal(activeVersion(picked)?.themes.defense.headerInk, undefined);
+    assert.equal(headerInkFor(activeVersion(picked)?.themes.defense), "#ffffff");
   });
 
   it("prints every starter and the full offense list on the coach sheet", () => {
@@ -1613,7 +1777,15 @@ describe("wrist coach book", () => {
     assert.match(page, /max-h-\[calc\(100dvh-2rem\)\]/);
     assert.match(page, /id="count-modal-panel"/);
     assert.match(page, /closest\("#count-modal-panel"\)/);
-    assert.match(page, /headerInk = "#ffffff"/);
+    assert.match(page, /function headerInkFor/);
+    assert.match(page, /id="theme-header"/);
+    assert.match(page, /data-header-ink/);
+    assert.match(page, /function deleteVersion/);
+    assert.match(page, /function libraryAfterRemoval/);
+    assert.match(page, /function versionAction/);
+    assert.match(page, /versionAction\(event, "del"\)/);
+    assert.match(page, /closest\("\[data-ver-" \+ name \+ "\]"\)/);
+    assert.doesNotMatch(page, /headerInk = "#ffffff"/);
     assert.match(page, /class="add-call/);
     assert.match(page, /class="swatch-line"/);
     assert.match(page, /name-decoy/);
@@ -1638,6 +1810,17 @@ describe("wrist coach book", () => {
     assert.doesNotMatch(reset, /evenSpreadCounts/);
     assert.doesNotMatch(reset, /cardSize/);
     assert.match(page, /The card size stays/);
+    const removeStart = page.indexOf('const id = target.getAttribute("data-call-del")');
+    const removeEnd = page.indexOf('getElementById("number-btns")');
+    const remove = page.slice(removeStart, removeEnd);
+    assert.match(remove, /libraryAfterRemoval/);
+    assert.match(remove, /refillCard\(kind, "count"\)/);
+    const confirmStart = page.indexOf('getElementById("delete-modal-confirm")');
+    const confirmEnd = page.indexOf('getElementById("print-cards")');
+    const confirm = page.slice(confirmStart, confirmEnd);
+    assert.match(confirm, /deleteVersion\(book, delId\)/);
+    assert.match(confirm, /scheduleSave\(\)/);
+    assert.match(confirm, /versions.length < 2/);
   });
 
   it("normalize repairs a missing book and keeps the user id", () => {
@@ -1646,6 +1829,6 @@ describe("wrist coach book", () => {
     assert.equal(book.title, "Coach book");
     assert.ok(book.versions.length >= 1);
     assert.ok(book.library.length > 0);
-    assert.deepEqual(book.theme, defaultTheme());
+    assert.deepEqual(book.theme, { ...defaultTheme(), headerInk: "#ffffff" });
   });
 });
