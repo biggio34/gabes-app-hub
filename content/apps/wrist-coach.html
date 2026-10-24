@@ -807,8 +807,16 @@
     const CARD_MAX_H = 8.91;
     const LAMINATE_BLEED_IN = 0.125;
     const CARD_RULE_PT = 0.25;
+    const CARD_MARK_PT = 0.6;
     const CARD_PAD_FRAC = 0.025;
     const CARD_TYPE_RATIO = 0.68;
+    const CARD_TEXT_RATIO = 0.59;
+    const COACH_HEADER_MIN_IN = 0.13;
+    const COACH_CODE_MIN_IN = 0.15;
+    const COACH_HEADER_CAP_IN = 0.26;
+    const COACH_HEADER_SCALE = 0.72;
+    const COACH_PRINT_WIDTH_IN = 7.7;
+    const COACH_PRINT_HEIGHT_IN = 8.9;
     const DEFAULT_THEME = { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
     const SET_THEMES = {
       offense: { band: "#ff0000", ink: "#ffffff", highlight: "#ffffff", headerInk: "#ffffff" },
@@ -1392,12 +1400,35 @@
       });
     }
 
-    function nextVersionName(versions) {
+    function versionLetter(name) {
+      const match = String(name || "").trim().match(/^version\s+([a-z])$/i);
+      return match ? match[1].toUpperCase() : "";
+    }
+
+    function rememberVersionLetter(current, name) {
+      const letter = versionLetter(name);
+      if (!letter || !current) return;
+      const spent = current.spentVersionLetters || [];
+      if (spent.indexOf(letter) === -1) current.spentVersionLetters = spent.concat([letter]);
+    }
+
+    function nextVersionName(versions, spent) {
       const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-      const used = new Set((versions || []).map(function (item) { return String(item.name || "").toUpperCase(); }));
+      const used = new Set((versions || []).map(function (item) { return String(item.name || "").trim().toUpperCase(); }));
+      const spentLetters = {};
+      (spent || []).forEach(function (letter) {
+        const ch = String(letter || "").trim().toUpperCase();
+        if (/^[A-Z]$/.test(ch)) spentLetters[ch] = true;
+      });
+      (versions || []).forEach(function (item) {
+        const letter = versionLetter(item && item.name);
+        if (letter) spentLetters[letter] = true;
+      });
       for (let i = 0; i < letters.length; i += 1) {
-        const name = "Version " + letters[i];
-        if (!used.has(name.toUpperCase())) return name;
+        const letter = letters[i];
+        const name = "Version " + letter;
+        if (spentLetters[letter] || used.has(name.toUpperCase())) continue;
+        return name;
       }
       return "Version " + ((versions || []).length + 1);
     }
@@ -1483,7 +1514,7 @@
       const defenseCells = buildKindCells(current, "defense");
       return {
         id: "ver-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
-        name: name || nextVersionName(current.versions || []),
+        name: name || nextVersionName(current.versions || [], current && current.spentVersionLetters),
         titles: kindTitlesOf(
           current && current.titles ? current : null,
           current && current.title ? current.title : undefined
@@ -1527,12 +1558,15 @@
         library: defaultLibrary(),
         versions: [],
         activeVersionId: "",
+        spentVersionLetters: [],
+        defenseFillMigrated: true,
         updatedAt: Date.now()
       };
       const first = shuffleVersion(next, "Version A");
       first.themes = factoryThemes();
       next.versions = [first];
       next.activeVersionId = first.id;
+      next.spentVersionLetters = ["A"];
       return next;
     }
 
@@ -1752,6 +1786,23 @@
       });
     }
 
+    function clearUntouchedDefenseColor(call) {
+      if (!call || call.kind !== "defense") return;
+      let factory = null;
+      for (let i = 0; i < DEFAULT_DEFENSE.length; i += 1) {
+        if (DEFAULT_DEFENSE[i][0] === call.id) {
+          factory = DEFAULT_DEFENSE[i];
+          break;
+        }
+      }
+      if (!factory) return;
+      if (String(call.name || "").trim().toLowerCase() !== String(factory[1]).trim().toLowerCase()) return;
+      if (String(call.short || "").toUpperCase() !== String(factory[2]).toUpperCase()) return;
+      if ((call.ink || "clear") !== "clear") return;
+      if (call.fill !== "blue" && call.fill !== "orange" && call.fill !== "green") return;
+      call.fill = "clear";
+    }
+
     function libraryAfterRemoval(library, kind, removedId, total) {
       const remaining = (library || []).filter(function (call) { return call && call.id !== removedId; });
       const ofKind = remaining.filter(function (call) { return call.kind === kind && call.id; });
@@ -1767,10 +1818,15 @@
     function deleteVersion(current, id) {
       const versions = current && current.versions ? current.versions : [];
       if (!current || !id || versions.length < 2) return null;
+      const removed = versions.find(function (item) { return item.id === id; });
       const nextVersions = versions.filter(function (item) { return item.id !== id; });
       if (nextVersions.length !== versions.length - 1) return null;
+      const spent = (current.spentVersionLetters || []).slice();
+      const letter = versionLetter(removed && removed.name);
+      if (letter && spent.indexOf(letter) === -1) spent.push(letter);
       return Object.assign({}, current, {
         versions: nextVersions,
+        spentVersionLetters: spent,
         activeVersionId: current.activeVersionId === id ? nextVersions[0].id : current.activeVersionId
       });
     }
@@ -1792,27 +1848,31 @@
       return counts;
     }
 
-    function coachSheetFrame(sheet) {
-      const cols = Math.max(1, Math.round(Number(sheet.cols)) || 1);
-      const minRows = Math.max(1, Math.round(Number(sheet.rows) || 1));
-      const heightIn = Number(sheet.heightIn) || 5.5;
-      const widthIn = Number(sheet.widthIn) || 3.5;
+    function coachPrintSheet(sheet) {
+      const source = sheet || {};
+      return Object.assign({}, source, {
+        widthIn: Math.max(Number(source.widthIn) || 0, COACH_PRINT_WIDTH_IN),
+        heightIn: Math.max(Number(source.heightIn) || 0, COACH_PRINT_HEIGHT_IN)
+      });
+    }
+
+    function coachSheetMetrics(sheet, groups, capHeader) {
+      const source = sheet || {};
+      const cols = Math.max(1, Math.round(Number(source.cols)) || 1);
+      const minRows = Math.max(1, Math.round(Number(source.rows) || 1));
+      const heightIn = Number(source.heightIn) || 5.5;
+      const widthIn = Number(source.widthIn) || 3.5;
       const innerH = Math.max(0.4, heightIn - 0.24);
       const innerW = Math.max(1, widthIn - 0.24);
-      const headerScale = 0.72;
-      let capacity = 1;
-      for (let groups = 1; groups <= 60; groups += 1) {
-        const headerCount = 1 + groups;
-        const codeCount = groups * minRows;
-        const codeH = innerH / (headerCount * headerScale + codeCount);
-        const headerH = codeH * headerScale;
-        if (headerH < 0.145 || codeH < 0.16) break;
-        capacity = groups;
+      const count = Math.max(1, Math.round(groups) || 1);
+      const headerCount = 1 + count;
+      const codeCount = count * minRows;
+      let codeIn = innerH / (headerCount * COACH_HEADER_SCALE + codeCount);
+      let headerIn = codeIn * COACH_HEADER_SCALE;
+      if (capHeader && headerIn > COACH_HEADER_CAP_IN) {
+        headerIn = COACH_HEADER_CAP_IN;
+        codeIn = headerIn / COACH_HEADER_SCALE;
       }
-      const packedHeaders = 1 + capacity;
-      const packedCodes = capacity * minRows;
-      const codeIn = innerH / (packedHeaders * headerScale + packedCodes);
-      const headerIn = codeIn * headerScale;
       const headerPx = headerIn * 96;
       const codePx = codeIn * 96;
       const colPx = (innerW / cols) * 96;
@@ -1823,13 +1883,34 @@
         cols: cols,
         minRows: minRows,
         innerH: innerH,
-        capacity: capacity,
+        capacity: count,
         headerIn: headerIn,
         codeIn: codeIn,
         codeSize: codeSize,
         playSize: playSize,
         bannerSize: bannerSize
       };
+    }
+
+    function coachSheetFrame(sheet) {
+      const source = sheet || {};
+      const minRows = Math.max(1, Math.round(Number(source.rows) || 1));
+      const heightIn = Number(source.heightIn) || 5.5;
+      const innerH = Math.max(0.4, heightIn - 0.24);
+      let capacity = 1;
+      for (let groups = 1; groups <= 60; groups += 1) {
+        const headerCount = 1 + groups;
+        const codeCount = groups * minRows;
+        const codeH = innerH / (headerCount * COACH_HEADER_SCALE + codeCount);
+        const headerH = codeH * COACH_HEADER_SCALE;
+        if (headerH < COACH_HEADER_MIN_IN || codeH < COACH_CODE_MIN_IN) break;
+        capacity = groups;
+      }
+      return coachSheetMetrics(source, capacity, false);
+    }
+
+    function coachSheetPageFrame(sheet, groupCount) {
+      return coachSheetMetrics(sheet || {}, groupCount, true);
     }
 
     function paginateCoachSheet(blocks, sheet) {
@@ -1906,6 +1987,10 @@
         book.library.push(call);
       });
       dedupeLibraryCalls();
+      if (!book.defenseFillMigrated) {
+        book.library.forEach(clearUntouchedDefenseColor);
+        book.defenseFillMigrated = true;
+      }
       migrateFactoryCard();
       if (book.numbering !== "ordered" && book.numbering !== "oneHand") book.numbering = "standard";
       if (!book.cardSize) book.cardSize = defaultCardSize();
@@ -1948,6 +2033,26 @@
         item.cells = item.offenseCells;
       });
       migrateReadableHeaders();
+      if (!Array.isArray(book.spentVersionLetters)) book.spentVersionLetters = [];
+      book.spentVersionLetters = book.spentVersionLetters.map(function (letter) {
+        return String(letter || "").trim().toUpperCase();
+      }).filter(function (letter, index, list) {
+        return /^[A-Z]$/.test(letter) && list.indexOf(letter) === index;
+      });
+      book.versions.forEach(function (item) {
+        rememberVersionLetter(book, item.name);
+      });
+      const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      let maxLetter = -1;
+      book.spentVersionLetters.forEach(function (letter) {
+        const index = alphabet.indexOf(letter);
+        if (index > maxLetter) maxLetter = index;
+      });
+      if (maxLetter >= 0) {
+        const through = [];
+        for (let i = 0; i <= maxLetter; i += 1) through.push(alphabet[i]);
+        book.spentVersionLetters = through;
+      }
       book.theme = themeOf();
       const version = activeVersion();
       if (
@@ -2014,7 +2119,7 @@
         : cloneCells(current.defenseCells);
       const version = {
         id: "ver-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
-        name: nextVersionName(book.versions),
+        name: nextVersionName(book.versions, book.spentVersionLetters),
         titles: kindTitlesOf(current),
         themes: kindThemesOf(current),
         createdAt: Date.now(),
@@ -2239,27 +2344,19 @@
       const em = isFinite(labelEm) && labelEm > 0 ? labelEm : 1;
       const grids = layout.grids;
       let fontPt;
-      let fontRatio;
       if (!isFinite(grids) || grids <= 3) {
         fontPt = Math.min(cellHPt, innerW / em);
-        fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
       } else {
-        fontRatio = CARD_TYPE_RATIO;
-        fontPt = cellHPt * fontRatio;
-        if (fontPt * em > innerW) {
-          fontPt = innerW / em;
-          fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
-        }
-        if (fontPt > cellHPt) {
-          fontPt = cellHPt;
-          fontRatio = cellHPt > 0 ? 1 : 0;
-        }
+        fontPt = cellWPt * CARD_TEXT_RATIO;
+        const heightCap = cellHPt * CARD_TYPE_RATIO;
+        if (fontPt > heightCap) fontPt = heightCap;
+        if (fontPt * em > innerW) fontPt = innerW / em;
+        if (fontPt > cellHPt) fontPt = cellHPt;
       }
       const minPt = 4 * 72 / 96;
-      if (fontPt < minPt) {
-        fontPt = minPt;
-        fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
-      }
+      if (fontPt < minPt) fontPt = minPt;
+      const fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
+      const textRatio = cellWPt > 0 ? fontPt / cellWPt : 0;
       return {
         padPt: padPt,
         padFrac: cellWPt > 0 ? padPt / cellWPt : 0,
@@ -2268,8 +2365,10 @@
         cellHPt: cellHPt,
         fontPt: fontPt,
         fontRatio: fontRatio,
+        textRatio: textRatio,
         align: "middle",
-        headerFill: "band"
+        headerFill: "band",
+        cornerFill: "band"
       };
     }
 
@@ -2446,6 +2545,7 @@
       );
       const fittedPt = fontPx * 72 / 96;
       const fontPt = layout.grids > 3 ? chrome.fontPt : fittedPt;
+      const markPt = layout.grids > 3 ? CARD_MARK_PT : 0;
       const uid = "wc" + (wristCardSeq += 1);
       const dataRows = layout.rows + 1;
       const look = cardPaint(theme);
@@ -2466,30 +2566,30 @@
           const x0 = start + cursor;
           const ch = value[i];
           if (ch === "0" && adv > 0) {
-            const sw = sizePt * 0.07;
+            const sw = markPt || sizePt * 0.07;
             marks += '<line x1="' + n(x0 + adv * 0.24) + '" y1="' + n(baseline - cap * 0.18) + '" x2="' + n(x0 + adv * 0.76) + '" y2="' + n(baseline - cap * 0.82) + '" stroke="' + color + '" stroke-width="' + n(sw) + '" stroke-linecap="butt"/>';
           } else if (ch === "I" && adv > sizePt * 0.08) {
-            const thick = sizePt * 0.055;
+            const thick = markPt || sizePt * 0.055;
             const ear = Math.min(adv * 0.08, sizePt * 0.02);
             const top = baseline - cap;
             marks += '<rect x="' + n(x0 + ear) + '" y="' + n(top) + '" width="' + n(Math.max(0, adv - ear * 2)) + '" height="' + n(thick) + '" fill="' + color + '"/>';
             marks += '<rect x="' + n(x0 + ear) + '" y="' + n(baseline - thick) + '" width="' + n(Math.max(0, adv - ear * 2)) + '" height="' + n(thick) + '" fill="' + color + '"/>';
           } else if (ch === "B" && adv > 0) {
-            const thick = sizePt * 0.06;
+            const thick = markPt || sizePt * 0.06;
             const top = baseline - cap;
             marks += '<rect x="' + n(x0 + adv * 0.02) + '" y="' + n(top) + '" width="' + n(adv * 0.32) + '" height="' + n(thick) + '" fill="' + color + '"/>';
             marks += '<rect x="' + n(x0 + adv * 0.02) + '" y="' + n(baseline - thick) + '" width="' + n(adv * 0.32) + '" height="' + n(thick) + '" fill="' + color + '"/>';
           } else if (ch === "8" && adv > 0) {
-            const thick = sizePt * 0.055;
+            const thick = markPt || sizePt * 0.055;
             const mid = baseline - cap * 0.52 - thick / 2;
             marks += '<rect x="' + n(x0 + adv * 0.3) + '" y="' + n(mid) + '" width="' + n(adv * 0.4) + '" height="' + n(thick) + '" fill="' + color + '"/>';
           } else if (ch === "5" && adv > 0) {
-            const thick = sizePt * 0.08;
+            const thick = markPt || sizePt * 0.08;
             const inset = adv * 0.12;
             const y5 = baseline - cap + sizePt * 0.02;
             marks += '<rect x="' + n(x0 + inset) + '" y="' + n(y5) + '" width="' + n(Math.max(0, adv - inset * 2)) + '" height="' + n(thick) + '" fill="' + color + '"/>';
           } else if (ch === "S" && adv > 0) {
-            const thick = sizePt * 0.05;
+            const thick = markPt || sizePt * 0.05;
             const yS = baseline - cap * 0.5 - thick / 2;
             marks += '<rect x="' + n(x0 + adv * 0.08) + '" y="' + n(yS) + '" width="' + n(adv * 0.22) + '" height="' + n(thick) + '" fill="' + color + '"/>';
             marks += '<rect x="' + n(x0 + adv * 0.7) + '" y="' + n(yS) + '" width="' + n(adv * 0.22) + '" height="' + n(thick) + '" fill="' + color + '"/>';
@@ -2674,7 +2774,7 @@
       const footerTop = barY;
       addText(stamp, 0, barY, wPt, cellH, footerPt, footerInk, "", null, look.bandFill, "footer");
       const card =
-        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-footer-ink="' + footerInk + '" data-footer-top="' + n(footerTop) + '" data-header-ink="' + headerInk + '" data-header-fill="' + look.bandFill + '" data-pad-pt="' + n(chrome.padPt) + '" data-rule-pt="' + n(chrome.borderPt) + '" data-font-ratio="' + n(chrome.fontRatio) + '" data-align="' + chrome.align + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-footer-ink="' + footerInk + '" data-footer-top="' + n(footerTop) + '" data-header-ink="' + headerInk + '" data-header-fill="' + look.bandFill + '" data-corner-fill="' + chrome.cornerFill + '" data-pad-pt="' + n(chrome.padPt) + '" data-rule-pt="' + n(chrome.borderPt) + '" data-font-ratio="' + n(chrome.fontRatio) + '" data-text-ratio="' + n(chrome.textRatio) + '" data-mark-pt="' + n(markPt || 0) + '" data-align="' + chrome.align + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="xMidYMid meet">' +
             '<defs>' + clips.join("") + '</defs>' +
             dataShapes.join("") +
@@ -2924,13 +3024,13 @@
       }).join("");
     }
 
-    function coachSheetHtml(version, groups) {
+    function coachSheetHtml(version, groups, sheetOverride) {
       if (!version) return "";
-      const sheet = sheetOf();
+      const sheet = sheetOverride || sheetOf();
       const theme = themeOf();
       const rows = groups || sheetGroups(version);
       const banner = escapeHtml(bandTitle() + " - CALLS ARE TOP + LEFT");
-      const frame = coachSheetFrame(sheet);
+      const frame = coachSheetPageFrame(sheet, rows.length);
       const blocks = rows.map(function (group) {
         const needed = Math.max(frame.minRows, Math.ceil(group.codes.length / frame.cols) || 1);
         return { group: group, needed: needed };
@@ -2968,11 +3068,11 @@
       );
     }
 
-    function coachSheetPages(version) {
-      const sheet = sheetOf();
+    function coachSheetPages(version, sheetOverride) {
+      const sheet = sheetOverride || sheetOf();
       const groups = sheetGroups(version);
       return paginateCoachSheet(groups, sheet).map(function (slice) {
-        return coachSheetHtml(version, slice);
+        return coachSheetHtml(version, slice, sheet);
       });
     }
 
@@ -3062,7 +3162,7 @@
         '</section>';
       const sheetGap = 0.16;
       const sheetFit = { cols: 1, rows: 1, count: 1 };
-      const sheetPages = coachSheetPages(version);
+      const sheetPages = coachSheetPages(version, coachPrintSheet(sheetOf()));
       const keyPages = [];
       for (let i = 0; i < sheetPages.length; i += sheetFit.count) {
         const chunk = sheetPages.slice(i, i + sheetFit.count);
@@ -3795,7 +3895,7 @@
     });
     document.getElementById("reset-defaults").addEventListener("click", function () {
       if (!book) return;
-      const ok = window.confirm("Reset colors and block sizes to the defaults? The card size stays. Calls and version names stay. Both cards are filled again.");
+      const ok = window.confirm("Reset colors, block sizes, and header-number colors to the defaults? The card size stays. Calls and version names stay. Both cards are filled again.");
       if (!ok) return;
       book.rows = 5;
       book.cols = 5;
@@ -3846,7 +3946,7 @@
       if (!current) return;
       const version = {
         id: "ver-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
-        name: nextVersionName(book.versions),
+        name: nextVersionName(book.versions, book.spentVersionLetters),
         titles: kindTitlesOf(current),
         themes: kindThemesOf(current),
         createdAt: Date.now(),
@@ -3885,7 +3985,10 @@
       if (nameId) {
         const version = book.versions.find(function (item) { return item.id === nameId; });
         if (!version) return;
+        const previousName = version.name;
         version.name = event.target.value.trim() || version.name;
+        rememberVersionLetter(book, previousName);
+        rememberVersionLetter(book, version.name);
         render();
         scheduleSave();
         return;

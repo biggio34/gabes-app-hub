@@ -16,7 +16,9 @@ import {
   cellChrome,
   CARD_PAD_FRAC,
   CARD_RULE_PT,
+  CARD_MARK_PT,
   CARD_TYPE_RATIO,
+  CARD_TEXT_RATIO,
   DEFAULT_ROWS,
   DEFAULT_SHEET_COLS,
   DEFAULT_SHEET_ROWS,
@@ -82,6 +84,10 @@ import {
   HEADER_INK_DARK,
   paginateCoachSheet,
   coachSheetFrame,
+  coachSheetPageFrame,
+  coachPrintSheet,
+  COACH_HEADER_CAP_IN,
+  COACH_PRINT_HEIGHT_IN,
   buildKindCells,
   kindTheme,
   kindTitle,
@@ -635,12 +641,22 @@ describe("wrist coach book", () => {
     assert.equal(defense.padPt, 0.42);
     assert.equal(offense.borderPt, defense.borderPt);
     assert.equal(offense.borderPt, CARD_RULE_PT);
-    assert.equal(offense.fontRatio, defense.fontRatio);
-    assert.equal(offense.fontRatio, CARD_TYPE_RATIO);
+    assert.equal(offense.textRatio, defense.textRatio);
+    assert.ok(Math.abs(offense.textRatio - CARD_TEXT_RATIO) < 1e-9);
+    assert.ok(Math.abs(defense.textRatio - CARD_TEXT_RATIO) < 1e-9);
+    assert.ok(offense.fontRatio <= CARD_TYPE_RATIO + 1e-9);
+    assert.ok(defense.fontRatio <= CARD_TYPE_RATIO + 1e-9);
     assert.equal(offense.align, defense.align);
     assert.equal(offense.align, "middle");
     assert.equal(offense.headerFill, "band");
     assert.equal(defense.headerFill, "band");
+    assert.equal(offense.cornerFill, "band");
+    assert.equal(defense.cornerFill, "band");
+    const shared = 1.17;
+    const offenseShared = cellChrome(size, { grids: 6, cols: 5, rows: 5 }, shared);
+    const defenseShared = cellChrome(size, { grids: 6, cols: 4, rows: 4 }, shared);
+    assert.ok(Math.abs(offenseShared.textRatio - defenseShared.textRatio) < 1e-9);
+    assert.ok(Math.abs(shared * offenseShared.fontPt / offenseShared.cellWPt - shared * defenseShared.fontPt / defenseShared.cellWPt) < 1e-9);
     assert.ok(Math.abs(offense.cellWPt * 18 - size.widthIn * 72) < 1e-6);
     assert.ok(Math.abs(defense.cellWPt * 15 - size.widthIn * 72) < 1e-6);
     assert.ok(Math.abs(offense.cellHPt * 13 - size.heightIn * 72) < 1e-6);
@@ -649,6 +665,7 @@ describe("wrist coach book", () => {
     assert.ok(defense.fontPt * 1.237 <= defense.cellWPt - defense.padPt * 2 + 1e-6);
     const tight = cellChrome(size, { grids: 6, cols: 5, rows: 5 }, 3);
     assert.ok(tight.fontRatio < CARD_TYPE_RATIO);
+    assert.ok(tight.textRatio < CARD_TEXT_RATIO);
     assert.ok(tight.fontPt * 3 <= tight.cellWPt - tight.padPt * 2 + 1e-6);
     assert.equal(tight.borderPt, offense.borderPt);
     assert.ok(Math.abs(tight.padFrac - offense.padFrac) < 1e-9);
@@ -659,17 +676,27 @@ describe("wrist coach book", () => {
     assert.match(page, /function cellChrome\(size, layout, labelEm\)/);
     assert.match(page, /headerFill: "band"/);
     assert.match(page, /const CARD_RULE_PT = 0\.25/);
+    assert.match(page, /const CARD_MARK_PT = 0\.6/);
     assert.match(page, /const CARD_TYPE_RATIO = 0\.68/);
+    assert.match(page, /const CARD_TEXT_RATIO = 0\.59/);
+    assert.match(page, /fontPt = cellWPt \* CARD_TEXT_RATIO/);
+    assert.match(page, /cornerFill: "band"/);
     assert.match(page, /data-header-fill="/);
+    assert.match(page, /data-corner-fill="/);
     assert.match(page, /data-pad-pt="/);
     assert.match(page, /data-rule-pt="/);
     assert.match(page, /data-font-ratio="/);
+    assert.match(page, /data-text-ratio="/);
+    assert.match(page, /data-mark-pt="/);
     assert.match(page, /data-align="/);
+    assert.equal(CARD_MARK_PT, 0.6);
     assert.doesNotMatch(page, /cornerBand/);
     assert.match(page, /bandStrokeW: CARD_RULE_PT/);
     assert.match(page, /dataStrokeW: CARD_RULE_PT/);
     const cardFn = page.slice(page.indexOf("function wristCardHtml"), page.indexOf("function cardPaint"));
     assert.match(cardFn, /look\.bandFill,\s*"",\s*headerInk/);
+    assert.match(cardFn, /const markPt = layout\.grids > 3 \? CARD_MARK_PT : 0/);
+    assert.match(cardFn, /const sw = markPt \|\| sizePt \* 0\.07/);
     assert.doesNotMatch(cardFn, /"#ffffff",\s*"",/);
     assert.doesNotMatch(cardFn, /bandKind !== "defense"/);
   });
@@ -1688,6 +1715,24 @@ describe("wrist coach book", () => {
     assert.equal(saved.versions.some((version) => version.id === second.id), false);
     assert.equal(saved.activeVersionId, first.id);
     assert.equal(saved.versions.length, 1);
+    assert.ok(saved.spentVersionLetters.includes("B"));
+    assert.equal(nextVersionName(saved.versions, saved.spentVersionLetters), "Version C");
+    const reused = copyCurrentVersion(saved, saved.versions[0]);
+    assert.equal(reused.name, "Version C");
+    const gapped = normalizeBook(
+      {
+        title: "Gap",
+        library: defaultLibrary(),
+        versions: [
+          { id: "ver-a", name: "Version A", createdAt: 1, offenseCells: first.offenseCells, defenseCells: first.defenseCells },
+          { id: "ver-c", name: "Version C", createdAt: 2, offenseCells: first.offenseCells, defenseCells: first.defenseCells },
+        ],
+        activeVersionId: "ver-a",
+      },
+      "coach-1",
+    );
+    assert.ok(gapped.spentVersionLetters.includes("B"));
+    assert.equal(nextVersionName(gapped.versions, gapped.spentVersionLetters), "Version D");
   });
 
   it("uses dark header numbers on pink and keeps a color the coach picked", () => {
@@ -1785,7 +1830,8 @@ describe("wrist coach book", () => {
   it("gives defense coach sheets a second page in the same row style", () => {
     const sheet = { cols: 15, rows: 1, widthIn: 3.5, heightIn: 5.5 };
     const frame = coachSheetFrame(sheet);
-    assert.equal(frame.capacity, 14);
+    assert.ok(frame.capacity >= 15);
+    assert.ok(frame.capacity < 20);
     assert.ok(frame.headerIn < 0.2);
     assert.ok(frame.headerIn > 0.12);
     assert.ok(frame.codeIn > frame.headerIn);
@@ -1794,10 +1840,15 @@ describe("wrist coach book", () => {
       const call = defense[index] || { name: `Extra ${index + 1}`, short: `E${index + 1}` };
       return { name: call.name, short: call.short, codes: ["11", "12", "13"] };
     });
+    const fifteen = paginateCoachSheet(blocksFor(15), sheet);
+    assert.equal(fifteen.length, 1);
+    assert.equal(fifteen[0][fifteen[0].length - 1].short, "NS");
+    assert.equal(fifteen[0][fifteen[0].length - 1].name, "No steal");
     const expectedPages = (count: number) => Math.ceil(count / frame.capacity);
-    for (const count of [15, 20, 30]) {
+    for (const count of [20, 30]) {
       const pages = paginateCoachSheet(blocksFor(count), sheet);
       assert.equal(pages.length, expectedPages(count), `${count} calls`);
+      assert.ok(pages.length > 1, `${count} calls`);
       assert.equal(pages[0].length, frame.capacity);
       const last = count % frame.capacity || frame.capacity;
       assert.equal(pages[pages.length - 1].length, last);
@@ -1808,11 +1859,20 @@ describe("wrist coach book", () => {
       );
       assert.equal(offensePages.length, pages.length);
     }
-    const fifteen = paginateCoachSheet(blocksFor(15), sheet);
-    assert.equal(fifteen.length, 2);
-    assert.equal(fifteen[1].length, 1);
-    assert.equal(fifteen[1][0].short, "NS");
-    assert.equal(fifteen[1][0].name, "No steal");
+    const printed = coachPrintSheet(sheet);
+    assert.ok(printed.heightIn >= COACH_PRINT_HEIGHT_IN);
+    assert.ok(printed.heightIn > sheet.heightIn);
+    const printedFifteen = paginateCoachSheet(blocksFor(15), printed);
+    assert.equal(printedFifteen.length, 1);
+    const filled = coachSheetPageFrame(printed, 15);
+    assert.ok(filled.headerIn <= COACH_HEADER_CAP_IN);
+    const used = (1 + 15) * filled.headerIn + 15 * filled.codeIn;
+    assert.ok(Math.abs(used - filled.innerH) < 1e-6);
+    const leftover = coachSheetPageFrame(printed, 1);
+    assert.ok(leftover.headerIn <= COACH_HEADER_CAP_IN);
+    assert.ok(leftover.headerIn < 0.4);
+    const thirty = paginateCoachSheet(blocksFor(30), printed);
+    assert.ok(thirty.length > 1);
     const partial = coachSheetFrame(sheet);
     assert.equal(partial.headerIn, frame.headerIn);
     assert.equal(partial.bannerSize, frame.bannerSize);
@@ -1847,6 +1907,13 @@ describe("wrist coach book", () => {
     assert.match(page, /name-decoy/);
     assert.match(page, /function paginateCoachSheet/);
     assert.match(page, /function coachSheetFrame/);
+    assert.match(page, /function coachSheetPageFrame/);
+    assert.match(page, /function coachPrintSheet/);
+    assert.match(page, /coachPrintSheet\(sheetOf\(\)\)/);
+    assert.match(page, /function clearUntouchedDefenseColor/);
+    assert.match(page, /function versionLetter/);
+    assert.match(page, /spentVersionLetters/);
+    assert.match(page, /defenseFillMigrated/);
     assert.match(page, /function libraryForReset/);
     assert.match(page, /const sheetFit = \{ cols: 1, rows: 1, count: 1 \}/);
     assert.match(page, /data-header-in/);
@@ -1866,6 +1933,7 @@ describe("wrist coach book", () => {
     assert.doesNotMatch(reset, /evenSpreadCounts/);
     assert.doesNotMatch(reset, /cardSize/);
     assert.match(page, /The card size stays/);
+    assert.match(reset, /header-number colors/);
     const removeStart = page.indexOf('const id = target.getAttribute("data-call-del")');
     const removeEnd = page.indexOf('getElementById("number-btns")');
     const remove = page.slice(removeStart, removeEnd);
@@ -1877,6 +1945,48 @@ describe("wrist coach book", () => {
     assert.match(confirm, /deleteVersion\(book, delId\)/);
     assert.match(confirm, /scheduleSave\(\)/);
     assert.match(confirm, /versions.length < 2/);
+  });
+
+  it("clears untouched factory defense colors and keeps a color the coach picked", () => {
+    const starter = (
+      id: string,
+      name: string,
+      short: string,
+      fill: "clear" | "blue" | "orange" | "green" | "red" | "black" | "white",
+      ink: "clear" | "white" | "black" = "clear",
+    ) => ({ id, kind: "defense" as const, name, short, fill, ink, count: 1 });
+    const library = [
+      starter("def-hld", "Hold", "HLD", "blue"),
+      starter("def-thr", "Throw through", "THR", "orange"),
+      starter("def-ns", "No steal", "NS", "green"),
+      starter("def-cut", "Cut", "CUT", "red"),
+      starter("def-pk", "Pickoff", "PK", "blue", "white"),
+      starter("def-bnd", "Bunt cover", "BND", "orange"),
+      starter("def-ifi", "Infield in", "IFI", "black"),
+      starter("def-custom", "Shift", "SH", "blue"),
+    ];
+    const migrated = normalizeBook({ library, versions: [], defenseFillMigrated: false }, "coach-1");
+    const fillOf = (id: string) => migrated.library.find((call) => call.id === id)?.fill;
+    assert.equal(fillOf("def-hld"), "clear");
+    assert.equal(fillOf("def-thr"), "clear");
+    assert.equal(fillOf("def-ns"), "clear");
+    assert.equal(fillOf("def-cut"), "red");
+    assert.equal(fillOf("def-pk"), "blue");
+    assert.equal(fillOf("def-bnd"), "orange");
+    assert.equal(fillOf("def-ifi"), "black");
+    assert.equal(fillOf("def-custom"), "blue");
+    assert.equal(migrated.defenseFillMigrated, true);
+    const picked = normalizeBook(
+      {
+        ...migrated,
+        library: migrated.library.map((call) => (call.id === "def-hld" ? { ...call, fill: "blue" as const } : call)),
+        versions: migrated.versions,
+        defenseFillMigrated: true,
+      },
+      "coach-1",
+    );
+    assert.equal(picked.library.find((call) => call.id === "def-hld")?.fill, "blue");
+    assert.equal(emptyBook("coach-1").library.find((call) => call.id === "def-hld")?.fill, "clear");
   });
 
   it("normalize repairs a missing book and keeps the user id", () => {

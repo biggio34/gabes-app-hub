@@ -360,13 +360,26 @@ export type WristBook = {
   library: WristCall[];
   versions: WristVersion[];
   activeVersionId: string;
+  /** Letters already given to a version, including ones the coach deleted or renamed. */
+  spentVersionLetters: string[];
+  /**
+   * Factory defense cells used to ship with blue, orange, and green fills.
+   * The first load clears only those untouched defaults. A color picked after that stays.
+   */
+  defenseFillMigrated: boolean;
   updatedAt: number;
 };
 
 type WristShuffleBook = Pick<
   WristBook,
   "grids" | "rows" | "cols" | "signStart" | "rowStart" | "bandKind" | "library" | "versions"
-> & { title?: string; theme?: WristTheme; kindLayouts?: WristKindLayouts; numbering?: WristNumbering };
+> & {
+  title?: string;
+  theme?: WristTheme;
+  kindLayouts?: WristKindLayouts;
+  numbering?: WristNumbering;
+  spentVersionLetters?: string[];
+};
 
 /** New cards use 6 blocks. A saved 2-block card stays 2 so it can match the reference samples. */
 export const DEFAULT_GRIDS = 6;
@@ -385,6 +398,12 @@ export function blocksAcross(grids: number): number {
 export const CARD_RULE_PT = 0.25;
 
 /**
+ * Look-alike marks on a card with more than three blocks.
+ * One weight on both cards. Two- and three-block cards still scale the mark with the type.
+ */
+export const CARD_MARK_PT = 0.6;
+
+/**
  * Side inset on a card with more than three blocks, as a fraction of cell width.
  * A 4×4 and a 5×5 then share one padding ratio.
  */
@@ -392,9 +411,16 @@ export const CARD_PAD_FRAC = 0.025;
 
 /**
  * Type size as a fraction of cell height when a card has more than three blocks.
- * A code that would overflow the cell shrinks; the ratio otherwise stays put.
+ * This is a cap. The shared text-to-cell ratio below is what both cards use.
  */
 export const CARD_TYPE_RATIO = 0.68;
+
+/**
+ * Type size as a fraction of cell width on a card with more than three blocks.
+ * A 4×4 and a 5×5 then put the same code in the same fraction of the cell.
+ * A code that would overflow still shrinks.
+ */
+export const CARD_TEXT_RATIO = 0.59;
 
 /**
  * Side inset for card type, in points.
@@ -417,9 +443,13 @@ export type CellChrome = {
   fontPt: number;
   /** fontPt divided by cell height. */
   fontRatio: number;
+  /** fontPt divided by cell width. Same on a 4×4 and a 5×5 unless a label must shrink. */
+  textRatio: number;
   align: "middle";
   /** Column, row, and corner cells paint with the card band. */
   headerFill: "band";
+  /** The corner cell is the band, the same shape as every other header cell. */
+  cornerFill: "band";
 };
 
 /**
@@ -440,27 +470,19 @@ export function cellChrome(
   const em = Number.isFinite(labelEm) && labelEm > 0 ? labelEm : 1;
   const grids = layout.grids;
   let fontPt: number;
-  let fontRatio: number;
   if (!Number.isFinite(grids) || grids <= 3) {
     fontPt = Math.min(cellHPt, innerW / em);
-    fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
   } else {
-    fontRatio = CARD_TYPE_RATIO;
-    fontPt = cellHPt * fontRatio;
-    if (fontPt * em > innerW) {
-      fontPt = innerW / em;
-      fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
-    }
-    if (fontPt > cellHPt) {
-      fontPt = cellHPt;
-      fontRatio = cellHPt > 0 ? 1 : 0;
-    }
+    fontPt = cellWPt * CARD_TEXT_RATIO;
+    const heightCap = cellHPt * CARD_TYPE_RATIO;
+    if (fontPt > heightCap) fontPt = heightCap;
+    if (fontPt * em > innerW) fontPt = innerW / em;
+    if (fontPt > cellHPt) fontPt = cellHPt;
   }
   const minPt = (4 * 72) / 96;
-  if (fontPt < minPt) {
-    fontPt = minPt;
-    fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
-  }
+  if (fontPt < minPt) fontPt = minPt;
+  const fontRatio = cellHPt > 0 ? fontPt / cellHPt : 0;
+  const textRatio = cellWPt > 0 ? fontPt / cellWPt : 0;
   return {
     padPt,
     padFrac: cellWPt > 0 ? padPt / cellWPt : 0,
@@ -469,8 +491,10 @@ export function cellChrome(
     cellHPt,
     fontPt,
     fontRatio,
+    textRatio,
     align: "middle",
     headerFill: "band",
+    cornerFill: "band",
   };
 }
 
@@ -965,9 +989,81 @@ export type CoachSheetFrame = {
   bannerSize: number;
 };
 
+/** Smallest play-name row that still reads on a packed sheet. */
+export const COACH_HEADER_MIN_IN = 0.13;
+/** Smallest code row that still reads on a packed sheet. */
+export const COACH_CODE_MIN_IN = 0.15;
+/** A leftover page may grow, but not into a banner. */
+export const COACH_HEADER_CAP_IN = 0.26;
+const COACH_HEADER_SCALE = 0.72;
+
 /**
- * Row size for a full coach sheet. Partial pages use these same heights so a
- * leftover call does not stretch into a giant header.
+ * Letter content box for a printed coach sheet, under the 0.4in margin and the
+ * 1in calibration row. A stored 5.5in sheet is shorter than this page.
+ */
+export const COACH_PRINT_WIDTH_IN =
+  Math.round((LETTER_SHEET.widthIn - LETTER_SHEET.marginIn * 2) * 100) / 100;
+export const COACH_PRINT_HEIGHT_IN =
+  Math.round(
+    (LETTER_SHEET.heightIn -
+      LETTER_SHEET.marginIn * 2 -
+      LETTER_SHEET.calibrateIn -
+      LETTER_SHEET.calibrateGapIn -
+      0.14) *
+      100,
+  ) / 100;
+
+/** Printed coach sheet uses the real Letter page when the stored sheet is smaller. */
+export function coachPrintSheet<T extends { widthIn?: number; heightIn?: number }>(sheet: T): T {
+  return {
+    ...sheet,
+    widthIn: Math.max(Number(sheet.widthIn) || 0, COACH_PRINT_WIDTH_IN),
+    heightIn: Math.max(Number(sheet.heightIn) || 0, COACH_PRINT_HEIGHT_IN),
+  };
+}
+
+function coachSheetMetrics(
+  sheet: { cols: number; rows?: number; widthIn?: number; heightIn: number },
+  groups: number,
+  capHeader: boolean,
+): CoachSheetFrame {
+  const cols = Math.max(1, Math.round(Number(sheet.cols)) || 1);
+  const minRows = Math.max(1, Math.round(Number(sheet.rows) || 1));
+  const heightIn = Number(sheet.heightIn) || 5.5;
+  const widthIn = Number(sheet.widthIn) || 3.5;
+  const innerH = Math.max(0.4, heightIn - 0.24);
+  const innerW = Math.max(1, widthIn - 0.24);
+  const count = Math.max(1, Math.round(groups) || 1);
+  const headerCount = 1 + count;
+  const codeCount = count * minRows;
+  let codeIn = innerH / (headerCount * COACH_HEADER_SCALE + codeCount);
+  let headerIn = codeIn * COACH_HEADER_SCALE;
+  if (capHeader && headerIn > COACH_HEADER_CAP_IN) {
+    headerIn = COACH_HEADER_CAP_IN;
+    codeIn = headerIn / COACH_HEADER_SCALE;
+  }
+  const headerPx = headerIn * 96;
+  const codePx = codeIn * 96;
+  const colPx = (innerW / cols) * 96;
+  const codeSize = Math.max(1, Math.min(codePx * 0.78, colPx * 0.55, Math.max(1, codePx - 1)));
+  const playSize = Math.max(1, Math.min(headerPx * 0.78, 28, Math.max(1, headerPx - 1)));
+  const bannerSize = Math.max(1, Math.min(headerPx * 0.72, innerW * 96 * 0.04, Math.max(1, headerPx - 1)));
+  return {
+    cols,
+    minRows,
+    innerH,
+    capacity: count,
+    headerIn,
+    codeIn,
+    codeSize,
+    playSize,
+    bannerSize,
+  };
+}
+
+/**
+ * How many calls fit when every row is at the packed size.
+ * Fifteen factory defense calls fit on the 5.5in sheet. Twenty do not.
  */
 export function coachSheetFrame(sheet: {
   cols: number;
@@ -975,33 +1071,30 @@ export function coachSheetFrame(sheet: {
   widthIn?: number;
   heightIn: number;
 }): CoachSheetFrame {
-  const cols = Math.max(1, Math.round(Number(sheet.cols)) || 1);
   const minRows = Math.max(1, Math.round(Number(sheet.rows) || 1));
   const heightIn = Number(sheet.heightIn) || 5.5;
-  const widthIn = Number(sheet.widthIn) || 3.5;
   const innerH = Math.max(0.4, heightIn - 0.24);
-  const innerW = Math.max(1, widthIn - 0.24);
-  const headerScale = 0.72;
   let capacity = 1;
   for (let groups = 1; groups <= 60; groups += 1) {
     const headerCount = 1 + groups;
     const codeCount = groups * minRows;
-    const codeH = innerH / (headerCount * headerScale + codeCount);
-    const headerH = codeH * headerScale;
-    if (headerH < 0.145 || codeH < 0.16) break;
+    const codeH = innerH / (headerCount * COACH_HEADER_SCALE + codeCount);
+    const headerH = codeH * COACH_HEADER_SCALE;
+    if (headerH < COACH_HEADER_MIN_IN || codeH < COACH_CODE_MIN_IN) break;
     capacity = groups;
   }
-  const headerCount = 1 + capacity;
-  const codeCount = capacity * minRows;
-  const codeIn = innerH / (headerCount * headerScale + codeCount);
-  const headerIn = codeIn * headerScale;
-  const headerPx = headerIn * 96;
-  const codePx = codeIn * 96;
-  const colPx = (innerW / cols) * 96;
-  const codeSize = Math.max(1, Math.min(codePx * 0.78, colPx * 0.55, Math.max(1, codePx - 1)));
-  const playSize = Math.max(1, Math.min(headerPx * 0.78, 28, Math.max(1, headerPx - 1)));
-  const bannerSize = Math.max(1, Math.min(headerPx * 0.72, innerW * 96 * 0.04, Math.max(1, headerPx - 1)));
-  return { cols, minRows, innerH, capacity, headerIn, codeIn, codeSize, playSize, bannerSize };
+  return coachSheetMetrics(sheet, capacity, false);
+}
+
+/**
+ * Row size for one printed page. A page with room grows until it fills the page.
+ * The play-name row stops at COACH_HEADER_CAP_IN so one leftover call stays a row.
+ */
+export function coachSheetPageFrame(
+  sheet: { cols: number; rows?: number; widthIn?: number; heightIn: number },
+  groupCount: number,
+): CoachSheetFrame {
+  return coachSheetMetrics(sheet, groupCount, true);
 }
 
 /**
@@ -1383,6 +1476,26 @@ export function dedupeLibrary(list: WristCall[]): { library: WristCall[]; alias:
   return { library, alias };
 }
 
+const FACTORY_DEFENSE_FILLS = new Set<WristColor>(["blue", "orange", "green"]);
+
+function factoryDefenseRow(id: string) {
+  return DEFAULT_DEFENSE.find((row) => row[0] === id) || null;
+}
+
+/** Old factory blue, orange, and green fills on an unedited defense starter. */
+export function clearUntouchedDefenseColors(list: WristCall[]): WristCall[] {
+  return list.map((call) => {
+    if (call.kind !== "defense") return call;
+    const factory = factoryDefenseRow(call.id);
+    if (!factory) return call;
+    if (call.name.trim().toLowerCase() !== factory[1].trim().toLowerCase()) return call;
+    if (call.short.toUpperCase() !== factory[2].toUpperCase()) return call;
+    if ((call.ink || "clear") !== "clear") return call;
+    if (!FACTORY_DEFENSE_FILLS.has(call.fill)) return call;
+    return { ...call, fill: "clear" };
+  });
+}
+
 export function migrateCalls(list: WristCall[]) {
   const next = reclassifyLocations(list).map(withOffenseAliases).map(stripStarterTee);
   if (isLegacyTwoGroupLibrary(list)) {
@@ -1405,12 +1518,52 @@ export function upgradeLibrary(list: WristCall[]) {
   return migrateCalls(list).library;
 }
 
-export function nextVersionName(existing: WristVersion[]) {
+/** The letter in "Version B". A custom name has none. */
+export function versionLetter(name: string): string {
+  const match = String(name || "").trim().match(/^version\s+([a-z])$/i);
+  return match ? match[1].toUpperCase() : "";
+}
+
+export function noteSpentLetter(spent: string[] | undefined, name: string): string[] {
+  const letter = versionLetter(name);
+  const next = Array.isArray(spent) ? spent.slice() : [];
+  if (letter && !next.includes(letter)) next.push(letter);
+  return next;
+}
+
+/** Letters up to the highest one already used. A gap such as A, C means B was used too. */
+export function spentThrough(letters: string[]): string[] {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let max = -1;
+  for (const letter of letters) {
+    const index = alphabet.indexOf(String(letter || "").trim().toUpperCase());
+    if (index > max) max = index;
+  }
+  const spent: string[] = [];
+  for (let i = 0; i <= max; i += 1) spent.push(alphabet[i]);
+  return spent;
+}
+
+/**
+ * Next version letter that has never been used in this book.
+ * A deleted or renamed letter stays spent, so it is not handed out again.
+ */
+export function nextVersionName(existing: WristVersion[], spent?: string[]) {
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const used = new Set(existing.map((item) => item.name.trim().toUpperCase()));
+  const used = new Set((existing || []).map((item) => item.name.trim().toUpperCase()));
+  const spentLetters = new Set<string>();
+  for (const letter of spent || []) {
+    const ch = String(letter || "").trim().toUpperCase();
+    if (/^[A-Z]$/.test(ch)) spentLetters.add(ch);
+  }
+  for (const item of existing || []) {
+    const letter = versionLetter(item.name);
+    if (letter) spentLetters.add(letter);
+  }
   for (const letter of letters) {
     const name = `Version ${letter}`;
-    if (!used.has(name.toUpperCase())) return name;
+    if (spentLetters.has(letter) || used.has(name.toUpperCase())) continue;
+    return name;
   }
   return `Version ${existing.length + 1}`;
 }
@@ -1580,15 +1733,17 @@ export function libraryAfterRemoval(
   );
 }
 
-/** Remove one version. The last version stays. Deleting the active one selects another. */
+/** Remove one version. The last version stays. Deleting the active one selects another. The letter stays spent. */
 export function deleteVersion(book: WristBook, id: string): WristBook | null {
   const versions = book.versions || [];
   if (!id || versions.length < 2) return null;
+  const removed = versions.find((item) => item.id === id);
   const next = versions.filter((item) => item.id !== id);
   if (next.length !== versions.length - 1) return null;
   return {
     ...book,
     versions: next,
+    spentVersionLetters: noteSpentLetter(book.spentVersionLetters, removed?.name || ""),
     activeVersionId: book.activeVersionId === id ? next[0].id : book.activeVersionId,
     updatedAt: Date.now(),
   };
@@ -1674,7 +1829,7 @@ export function shuffleVersion(
   const defenseCells = buildKindCells(book, "defense");
   return {
     id: `ver-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    name: name?.trim() || nextVersionName(book.versions),
+    name: name?.trim() || nextVersionName(book.versions, book.spentVersionLetters),
     titles: normalizeKindTitles(titles, book.title),
     themes: normalizeKindThemes(themes, book.theme),
     createdAt: Date.now(),
@@ -1686,14 +1841,14 @@ export function shuffleVersion(
 }
 
 export function copyCurrentVersion(
-  book: Pick<WristBook, "versions">,
+  book: Pick<WristBook, "versions"> & { spentVersionLetters?: string[] },
   version: WristVersion,
 ): WristVersion {
   const offenseCells = cloneCells(version.offenseCells || version.cells);
   const defenseCells = cloneCells(version.defenseCells);
   return {
     id: `ver-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    name: nextVersionName(book.versions),
+    name: nextVersionName(book.versions, book.spentVersionLetters),
     titles: normalizeKindTitles(version.titles),
     themes: normalizeKindThemes(version.themes),
     createdAt: Date.now(),
@@ -1729,7 +1884,7 @@ export function shuffleKeepingHistory(
   return {
     ...shuffled,
     id: `ver-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    name: nextVersionName(book.versions),
+    name: nextVersionName(book.versions, book.spentVersionLetters),
     createdAt: Date.now(),
     locked: false,
     cells: cloneCells(shuffled.cells),
@@ -1910,6 +2065,8 @@ function bookDraft(
     library: extra.library || defaultLibrary(),
     versions: extra.versions || [],
     activeVersionId: extra.activeVersionId || "",
+    spentVersionLetters: Array.isArray(extra.spentVersionLetters) ? extra.spentVersionLetters.slice() : [],
+    defenseFillMigrated: extra.defenseFillMigrated === true,
     updatedAt: extra.updatedAt || Date.now(),
   };
 }
@@ -1921,6 +2078,8 @@ export function emptyBook(userId: string, title?: string): WristBook {
   const first = shuffleVersion(draft, "Version A", defaultKindTitles(draft.title), defaultSetThemes());
   draft.versions = [first];
   draft.activeVersionId = first.id;
+  draft.spentVersionLetters = ["A"];
+  draft.defenseFillMigrated = true;
   return draft;
 }
 
@@ -2079,8 +2238,10 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
   const library = (Array.isArray(item.library) ? item.library : [])
     .map(normalizeCall)
     .filter((call): call is WristCall => Boolean(call));
-  const migrated = library.length
-    ? migrateCalls(library)
+  const defenseFillMigrated = item.defenseFillMigrated === true;
+  const prepared = !library.length || defenseFillMigrated ? library : clearUntouchedDefenseColors(library);
+  const migrated = prepared.length
+    ? migrateCalls(prepared)
     : { library: defaultLibrary(), alias: {} as Record<string, string> };
   const book = bookDraft(userId, String(item.title || "").trim() || title?.trim() || "My signs", {
     bandKind: normalizeKind(item.bandKind || item.kind || "offense"),
@@ -2091,6 +2252,7 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
     cardSize: migrateSize ? defaultCardSize() : normalizeCardSize(item.cardSize),
     numbering: normalizeNumbering(item.numbering),
     library: migrated.library,
+    defenseFillMigrated: true,
     updatedAt: Number(item.updatedAt) || Date.now(),
   });
   const offenseLayout = layoutFor(book, "offense");
@@ -2128,6 +2290,15 @@ export function normalizeBook(raw: unknown, userId: string, title?: string): Wri
       defense: readableHeaderTheme(version.themes.defense),
     },
   }));
+  const savedSpent = Array.isArray(item.spentVersionLetters) ? item.spentVersionLetters : [];
+  let spent: string[] = [];
+  for (const letter of savedSpent) {
+    const ch = String(letter || "").trim().toUpperCase();
+    if (/^[A-Z]$/.test(ch) && !spent.includes(ch)) spent.push(ch);
+  }
+  for (const version of book.versions) spent = noteSpentLetter(spent, version.name);
+  book.spentVersionLetters = spentThrough(spent);
+  book.defenseFillMigrated = true;
   return book;
 }
 
