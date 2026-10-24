@@ -20,17 +20,14 @@ async function requireWristCoach() {
   ) {
     return { error: NextResponse.json({ error: "Not allowed" }, { status: 403 }) };
   }
-  return {
-    session,
-    title: stored?.name ? `${stored.name}'s signs` : `${session.name}'s signs`,
-  };
+  return { session };
 }
 
 export async function GET() {
   const auth = await requireWristCoach();
   if (auth.error) return auth.error;
   try {
-    const result = await readWristCoachBook(auth.session.id, auth.title);
+    const result = await readWristCoachBook(auth.session.id);
     return NextResponse.json({
       book: result.book,
       updatedAt: result.updatedAt,
@@ -52,7 +49,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Missing Wrist Coach book." }, { status: 400 });
   }
   try {
-    const result = await writeWristCoachBook(auth.session.id, body.book, auth.title);
+    const result = await writeWristCoachBook(auth.session.id, body.book);
     return NextResponse.json({ ok: true, stored: result.stored, book: result.book });
   } catch (err) {
     return NextResponse.json(

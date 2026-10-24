@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   areaAndFeatureLinks,
@@ -9,6 +10,9 @@ import {
 import {
   DEFAULT_COLS,
   DEFAULT_GRIDS,
+  blocksAcross,
+  knockoutPt,
+  sidePadPt,
   DEFAULT_ROWS,
   DEFAULT_SHEET_COLS,
   DEFAULT_SHEET_ROWS,
@@ -26,6 +30,14 @@ import {
   moveLibraryCall,
   normalizeBook,
   normalizeCardSize,
+  maxCardInches,
+  cardGridMetrics,
+  CARD_SIZE_PRESETS,
+  LETTER_SHEET,
+  LAMINATE_BLEED_IN,
+  laminateCutInches,
+  letterSheetFit,
+  letterBlockFits,
   normalizeSheet,
   normalizeTheme,
   nextVersionName,
@@ -33,14 +45,28 @@ import {
   sheetCode,
   sheetGroups,
   signBag,
+  allocateCallCounts,
+  oneHandDigits,
+  columnLabel,
+  rowLabel,
+  signalCallCode,
+  normalizeNumbering,
   copyCurrentVersion,
   defaultKindTitles,
   defaultKindThemes,
+  defaultKindLayouts,
+  defaultSetThemes,
+  OFFENSE_BAND,
+  DEFENSE_BAND,
+  isUntouchedLegacyCard,
+  upgradeLibrary,
   kindTheme,
   kindTitle,
+  layoutFor,
   normalizeKindThemes,
   normalizeKindTitles,
   shuffleCurrentVersion,
+  shuffleKeepingHistory,
   shuffleVersion,
   setVersionLocked,
   versionCells,
@@ -173,9 +199,13 @@ describe("wrist coach book", () => {
     assert.equal(book.userId, "user-1");
     assert.equal(book.title, "Gabe's signs");
     assert.equal(book.bandKind, "offense");
+    assert.equal(DEFAULT_GRIDS, 6);
     assert.equal(book.grids, DEFAULT_GRIDS);
     assert.equal(book.rows, DEFAULT_ROWS);
     assert.equal(book.cols, DEFAULT_COLS);
+    assert.deepEqual(book.kindLayouts, defaultKindLayouts());
+    assert.equal(layoutFor(book, "defense").rows, 4);
+    assert.equal(layoutFor(book, "defense").cols, 4);
     assert.equal(book.versions.length, 1);
     const version = activeVersion(book);
     assert.ok(version);
@@ -195,7 +225,7 @@ describe("wrist coach book", () => {
 
   it("lets the coach pick wristband, text, and highlight colors", () => {
     const book = emptyBook("user-1");
-    assert.deepEqual(book.theme, defaultTheme());
+    assert.deepEqual(book.theme, defaultSetThemes().offense);
     assert.deepEqual(normalizeTheme({ band: "#9f1239", ink: "#fff", highlight: "#112233" }), {
       band: "#9f1239",
       ink: "#ffffff",
@@ -225,6 +255,82 @@ describe("wrist coach book", () => {
     const bag = signBag(library, "offense", 5);
     assert.equal(bag.filter((id) => id === "play-br").length, 3);
     assert.equal(bag.filter((id) => id === "play-x").length, 2);
+  });
+
+  it("deals rare weights into one or two cells and gives the rest to heavier calls", () => {
+    const counts = allocateCallCounts(
+      [
+        { id: "rare", weight: 1, rare: true },
+        { id: "often", weight: 15 },
+      ],
+      20,
+    );
+    assert.equal(counts.rare + counts.often, 20);
+    assert.ok(counts.rare === 1 || counts.rare === 2);
+    assert.ok(counts.often > counts.rare);
+    const capped = allocateCallCounts(
+      [
+        { id: "only", weight: 1, rare: true },
+        { id: "also", weight: 1, rare: true },
+      ],
+      10,
+    );
+    assert.equal(capped.only, 2);
+    assert.equal(capped.also, 2);
+    const library = [
+      { id: "play-rare", kind: "offense" as const, name: "Take", short: "T", fill: "clear" as const, ink: "clear" as const, count: 15, weight: 1 },
+      { id: "play-hit", kind: "offense" as const, name: "Hit", short: "H", fill: "clear" as const, ink: "clear" as const, count: 15, weight: 0 },
+      { id: "play-bunt", kind: "offense" as const, name: "Bunt", short: "B", fill: "clear" as const, ink: "clear" as const, count: 7, weight: 0 },
+    ];
+    const bag = signBag(library, "offense", 30);
+    const rare = bag.filter((id) => id === "play-rare").length;
+    const hit = bag.filter((id) => id === "play-hit").length;
+    const bunt = bag.filter((id) => id === "play-bunt").length;
+    assert.equal(bag.length, 30);
+    assert.ok(rare === 1 || rare === 2);
+    assert.ok(hit > rare);
+    assert.ok(bunt > 0);
+    assert.equal(hit + bunt + rare, 30);
+    const exact = signBag(library, "offense", 5, "count");
+    assert.equal(exact.filter((id) => id === "play-rare").length + exact.filter((id) => id === "play-hit").length + exact.filter((id) => id === "play-bunt").length, 5);
+  });
+
+  it("prints numbers in order and can limit every digit to 1-5", () => {
+    assert.equal(oneHandDigits(1), "1");
+    assert.equal(oneHandDigits(5), "5");
+    assert.equal(oneHandDigits(6), "11");
+    assert.equal(oneHandDigits(30), "55");
+    assert.equal(columnLabel(0, 0, 5, "ordered", 3), "1");
+    assert.equal(columnLabel(1, 0, 5, "ordered", 1), "6");
+    assert.equal(columnLabel(1, 0, 5, "oneHand", 1), "11");
+    assert.equal(columnLabel(0, 0, 5, "standard", 1), "01");
+    assert.equal(rowLabel(0, "ordered", 4), "1");
+    assert.equal(rowLabel(4, "oneHand", 1), "5");
+    assert.equal(rowLabel(5, "oneHand", 1), "11");
+    assert.equal(signalCallCode(1, 0, 0, 5, "ordered", 1, 1), "6-1");
+    assert.equal(signalCallCode(5, 4, 4, 5, "oneHand", 1, 1), "55-5");
+    for (let n = 1; n <= 150; n += 1) {
+      assert.match(oneHandDigits(n), /^[1-5]+$/);
+    }
+    const saved = normalizeBook(
+      {
+        title: "One hand",
+        numbering: "oneHand",
+        library: [
+          { id: "play-x", kind: "offense", name: "X", short: "X", count: 1, weight: 4 },
+        ],
+        versions: [],
+      },
+      "user-9",
+    );
+    assert.equal(saved.numbering, "oneHand");
+    assert.equal(saved.library.find((item) => item.id === "play-x")?.weight, 4);
+    assert.equal(normalizeNumbering("nope"), "standard");
+    const book = emptyBook("user-1");
+    assert.equal(book.numbering, "standard");
+    const ordered = normalizeBook({ ...book, numbering: "ordered", versions: book.versions }, "user-1");
+    const code = activeVersion(ordered)?.cells[0]?.code;
+    assert.equal(code, "1-1");
   });
 
   it("shuffle creates another mapping with a new version name", () => {
@@ -290,7 +396,9 @@ describe("wrist coach book", () => {
     assert.ok(first);
     assert.equal(playCardKind("defense"), "defense");
     assert.equal(first.offenseCells.length, first.cells.length);
-    assert.equal(first.defenseCells.length, first.cells.length);
+    assert.equal(first.offenseCells.length, cellCount(layoutFor(book, "offense")));
+    assert.equal(first.defenseCells.length, cellCount(layoutFor(book, "defense")));
+    assert.notEqual(first.defenseCells.length, first.offenseCells.length);
     const offenseIds = new Set(first.offenseCells.map((cell) => cell.callId));
     const defenseIds = new Set(first.defenseCells.map((cell) => cell.callId));
     assert.ok([...offenseIds].every((id) => book.library.find((call) => call.id === id)?.kind === "offense"));
@@ -353,6 +461,146 @@ describe("wrist coach book", () => {
     assert.equal(offenseBefore.split("|").length, first.offenseCells.length);
   });
 
+  it("keeps an older version viewable after shuffle and reprints that card", () => {
+    const book = emptyBook("user-1");
+    const first = activeVersion(book);
+    assert.ok(first);
+    const offenseBefore = first.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|");
+    const defenseBefore = first.defenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|");
+    const offenseRef = first.offenseCells;
+    const next = shuffleKeepingHistory(book, first, "offense");
+    assert.ok(next);
+    assert.notEqual(next.id, first.id);
+    assert.equal(next.name, "Version B");
+    assert.equal(next.locked, false);
+    assert.equal(first.offenseCells, offenseRef);
+    assert.equal(first.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), offenseBefore);
+    assert.equal(first.defenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), defenseBefore);
+    assert.notEqual(next.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), offenseBefore);
+    assert.equal(next.defenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), defenseBefore);
+    book.versions = [...book.versions, next];
+    book.activeVersionId = next.id;
+    const saved = normalizeBook(book, "user-1");
+    assert.equal(saved.versions.length, 2);
+    assert.equal(activeVersion(saved)?.id, next.id);
+    const older = saved.versions.find((version) => version.id === first.id);
+    assert.ok(older);
+    assert.equal(older.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), offenseBefore);
+    saved.activeVersionId = older.id;
+    const reprinted = normalizeBook(saved, "user-1");
+    assert.equal(activeVersion(reprinted)?.id, older.id);
+    assert.equal(
+      activeVersion(reprinted)?.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"),
+      offenseBefore,
+    );
+    const defenseNext = shuffleKeepingHistory({ ...book, bandKind: "defense" }, first, "defense");
+    assert.ok(defenseNext);
+    assert.equal(defenseNext.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), offenseBefore);
+    assert.notEqual(defenseNext.defenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), defenseBefore);
+    assert.equal(shuffleKeepingHistory(book, setVersionLocked(first, true), "offense"), null);
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    const shuffleFn = page.slice(page.indexOf("function shuffleCurrent()"), page.indexOf("function activeVersion()"));
+    assert.match(shuffleFn, /book\.versions\.push\(version\)/);
+    assert.match(shuffleFn, /book\.activeVersionId = version\.id/);
+    assert.doesNotMatch(shuffleFn, /refillCard/);
+    assert.match(page, /data-ver-print="/);
+    assert.match(page, />Reprint</);
+    const reprint = page.slice(
+      page.indexOf('const printId = event.target.getAttribute("data-ver-print")'),
+      page.indexOf("if (useId)"),
+    );
+    assert.match(reprint, /printNow\("cards", printId\)/);
+    assert.doesNotMatch(reprint, /activeVersionId/);
+    assert.match(page, /printNow\("cards"\)/);
+    assert.match(page, /Shuffle this card keeps this version/);
+    assert.doesNotMatch(page, /6×6|5×9|5×12|kid mode|kid-friendly/i);
+  });
+
+  it("keeps a block size for each set and leaves older books on one shared size", () => {
+    const book = emptyBook("user-1");
+    assert.deepEqual(layoutFor(book, "offense"), {
+      grids: DEFAULT_GRIDS,
+      rows: 5,
+      cols: 5,
+      signStart: 1,
+      rowStart: 1,
+    });
+    assert.deepEqual(layoutFor(book, "defense"), {
+      grids: DEFAULT_GRIDS,
+      rows: 4,
+      cols: 4,
+      signStart: 1,
+      rowStart: 1,
+    });
+    const legacy = normalizeBook(
+      {
+        title: "Saved card",
+        rows: 5,
+        cols: 5,
+        grids: 6,
+        library: defaultLibrary(),
+        versions: [],
+      },
+      "user-1",
+    );
+    assert.equal(layoutFor(legacy, "offense").rows, 5);
+    assert.equal(layoutFor(legacy, "defense").cols, 5);
+    assert.equal(activeVersion(legacy)?.defenseCells.length, 6 * 5 * 5);
+    const split = normalizeBook(
+      {
+        title: "Split size",
+        rows: 5,
+        cols: 5,
+        grids: 2,
+        kindLayouts: {
+          offense: { rows: 5, cols: 5 },
+          defense: { rows: 4, cols: 4 },
+        },
+        library: defaultLibrary(),
+        versions: [],
+      },
+      "user-1",
+    );
+    assert.equal(activeVersion(split)?.offenseCells.length, 2 * 5 * 5);
+    assert.equal(activeVersion(split)?.defenseCells.length, 2 * 4 * 4);
+    assert.equal(activeVersion(split)?.offenseCells.some((cell) => cell.code === "01-1"), true);
+    assert.equal(activeVersion(split)?.defenseCells.some((cell) => cell.code === "11-1"), true);
+    assert.equal(activeVersion(split)?.defenseCells.some((cell) => cell.col === 4), false);
+  });
+
+  it("keeps six blocks on a new card and the reference gap on a two-block card", () => {
+    assert.equal(DEFAULT_GRIDS, 6);
+    assert.equal(emptyBook("user-1", "New card").grids, 6);
+    assert.equal(sidePadPt(21, 2), 0.9);
+    assert.equal(sidePadPt(19.5, 2), 0.9);
+    assert.equal(sidePadPt(28.8, 2), 0.9);
+    assert.equal(sidePadPt(13, 3), 0.9);
+    assert.equal(blocksAcross(6), 3);
+    assert.equal(blocksAcross(2), 2);
+    assert.equal(blocksAcross(1), 1);
+    assert.equal(blocksAcross(8), 4);
+    assert.ok(emptyBook("user-1", "Offense").cardSize.widthIn > emptyBook("user-1", "Offense").cardSize.heightIn);
+    assert.equal(sidePadPt(13, 6), 0.35);
+    assert.equal(sidePadPt(20, 6), 0.9);
+    assert.equal(sidePadPt(15.6, 6), 0.497);
+    assert.ok(sidePadPt(13, 6) < sidePadPt(21, 2));
+    assert.equal(knockoutPt(15.9), 0.4);
+    assert.equal(knockoutPt(21.825), 0.4);
+    assert.ok(knockoutPt(9.158) < 0.4);
+    assert.ok(knockoutPt(9.158) >= 0.22);
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /function blocksAcross\(grids\)/);
+    assert.match(page, /blocksAcross\(layout\.grids\)/);
+    assert.match(page, /n\(hPt\) \+ '" preserveAspectRatio="xMidYMid meet"/);
+    assert.doesNotMatch(page, /preserveAspectRatio="none"/);
+    assert.match(page, /grids: 6/);
+    assert.match(page, /function sidePadPt\(cellW, grids\)/);
+    assert.match(page, /if \(!isFinite\(grids\) \|\| grids <= 3\) return 0\.9/);
+    assert.match(page, /sidePadPt\(cellW, layout\.grids\)/);
+    assert.match(page, /knockoutPt\(fontPt\)/);
+    assert.doesNotMatch(page, /const padPt = 0\.9/);
+  });
+
   it("gives offense and defense their own names on a version", () => {
     const book = emptyBook("user-1", "PURPLE OFFENSE");
     const first = activeVersion(book);
@@ -398,7 +646,7 @@ describe("wrist coach book", () => {
     const book = emptyBook("user-1");
     const first = activeVersion(book);
     assert.ok(first);
-    assert.deepEqual(first.themes, defaultKindThemes(defaultTheme()));
+    assert.deepEqual(first.themes, defaultSetThemes());
     first.themes = {
       offense: { band: "#7e22ce", ink: "#ffffff", highlight: "#f8fafc" },
       defense: { band: "#1e3a8a", ink: "#fde68a", highlight: "#0f172a" },
@@ -453,16 +701,259 @@ describe("wrist coach book", () => {
       widthIn: 5,
       heightIn: 3,
     });
+    assert.deepEqual(normalizeCardSize({ preset: "youth" }), {
+      preset: "youth",
+      widthIn: 4.5,
+      heightIn: 2.5,
+    });
+    assert.deepEqual(normalizeCardSize({ preset: "tripleYouth" }), {
+      preset: "tripleYouth",
+      widthIn: 3.5,
+      heightIn: 2.75,
+    });
+    assert.deepEqual(normalizeCardSize({ preset: "triplePeewee" }), {
+      preset: "triplePeewee",
+      widthIn: 2.75,
+      heightIn: 2.15,
+    });
+    assert.deepEqual(normalizeCardSize({ preset: "triplePanel" }), {
+      preset: "triplePanel",
+      widthIn: 4.75,
+      heightIn: 2.25,
+    });
     assert.deepEqual(normalizeCardSize({ preset: "custom", widthIn: 4.25, heightIn: 2.5 }), {
       preset: "custom",
       widthIn: 4.25,
       heightIn: 2.5,
     });
+    assert.deepEqual(maxCardInches(), { widthIn: 7.42, heightIn: 8.91 });
     assert.deepEqual(normalizeCardSize({ preset: "custom", widthIn: 99, heightIn: 0 }), {
       preset: "custom",
-      widthIn: 8.5,
+      widthIn: 7.42,
       heightIn: 1,
     });
+  });
+
+  it("keeps equal boxes and one type size at every preset and odd custom size", () => {
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    const oddSizes = [
+      { widthIn: 3.33, heightIn: 2.17 },
+      { widthIn: 6.2, heightIn: 2.05 },
+      { widthIn: 2.13, heightIn: 1.63 },
+      { widthIn: 4.125, heightIn: 2.333 },
+      { widthIn: 7.42, heightIn: 4.1 },
+    ];
+    assert.deepEqual(normalizeCardSize({ preset: "custom", widthIn: 4.125, heightIn: 2.333 }), {
+      preset: "custom",
+      widthIn: 4.13,
+      heightIn: 2.33,
+    });
+    assert.deepEqual(normalizeCardSize({ widthIn: 6.2, heightIn: 2.05 }), {
+      preset: "custom",
+      widthIn: 6.2,
+      heightIn: 2.05,
+    });
+    assert.deepEqual(normalizeCardSize({ preset: "custom", widthIn: 0.2, heightIn: 20 }), {
+      preset: "custom",
+      widthIn: 1,
+      heightIn: 8.91,
+    });
+    const layouts = [
+      { grids: 6, cols: 5, rows: 5 },
+      { grids: 2, cols: 4, rows: 4 },
+      { grids: 1, cols: 3, rows: 8 },
+      { grids: 7, cols: 6, rows: 3 },
+    ];
+    const sizes = [...Object.values(CARD_SIZE_PRESETS), ...oddSizes.map((size) => normalizeCardSize({ preset: "custom", ...size }))];
+    for (const size of sizes) {
+      for (const layout of layouts) {
+        const metrics = cardGridMetrics(size, layout);
+        assert.ok(metrics.cellW > 0 && metrics.cellH > 0);
+        assert.ok(Math.abs(metrics.cellW * metrics.colSlots - size.widthIn) < 1e-9);
+        assert.ok(Math.abs(metrics.cellH * metrics.rowSlots - size.heightIn) < 1e-9);
+        assert.equal(metrics.topCount, blocksAcross(layout.grids));
+        assert.equal(metrics.topCount + metrics.bottomCount, layout.grids);
+      }
+    }
+    assert.match(page, /function cardGridMetrics\(size, layout\)/);
+    assert.match(page, /const metrics = cardGridMetrics\(size, layout\)/);
+    assert.match(page, /data-type-pt="/);
+    assert.match(page, /const fontPt = fontPx \* 72 \/ 96/);
+    assert.match(page, /const CARD_MAX_W = 7\.42/);
+    assert.match(page, /const CARD_MAX_H = 8\.91/);
+    assert.match(page, /id="card-w"/);
+    assert.match(page, /id="card-h"/);
+    assert.match(page, /data-size="youth"/);
+    assert.match(page, /data-size="tripleYouth"/);
+    assert.match(page, /data-size="triplePeewee"/);
+    assert.match(page, /data-size="triplePanel"/);
+    assert.match(page, /widthIn: 4\.5/);
+    assert.match(page, /heightIn: 2\.5/);
+    assert.match(page, /heightIn: 2\.75/);
+    assert.match(page, /widthIn: 2\.75/);
+    assert.match(page, /heightIn: 2\.15/);
+    assert.match(page, /widthIn: 4\.75/);
+    for (const name of Object.keys(CARD_SIZE_PRESETS)) {
+      assert.match(page, new RegExp(`data-size="${name}"`));
+    }
+  });
+
+  it("fits a full Letter sheet of cards beside a 1 inch calibration square", () => {
+    const cardGap = 0.28;
+    const cardReserve = LETTER_SHEET.calibrateIn + LETTER_SHEET.calibrateGapIn + LETTER_SHEET.markOutIn;
+    const cardSide = LETTER_SHEET.markPadIn + LETTER_SHEET.markOutIn;
+    const expected: Record<string, { cols: number; rows: number; count: number }> = {
+      band: { cols: 1, rows: 4, count: 4 },
+      play: { cols: 2, rows: 4, count: 8 },
+      wrist: { cols: 2, rows: 4, count: 8 },
+      softball: { cols: 2, rows: 3, count: 6 },
+      large: { cols: 1, rows: 2, count: 2 },
+      youth: { cols: 1, rows: 3, count: 3 },
+      tripleYouth: { cols: 2, rows: 3, count: 6 },
+      triplePeewee: { cols: 2, rows: 3, count: 6 },
+      triplePanel: { cols: 1, rows: 3, count: 3 },
+    };
+    for (const [name, size] of Object.entries(CARD_SIZE_PRESETS)) {
+      const fit = letterSheetFit(size.widthIn, size.heightIn, cardGap, {
+        reserveIn: cardReserve,
+        sidePadIn: cardSide,
+      });
+      assert.deepEqual(fit, expected[name], name);
+      assert.equal(
+        letterBlockFits(size.widthIn, size.heightIn, fit.cols, fit.rows, cardGap, {
+          reserveIn: cardReserve,
+          sidePadIn: cardSide,
+        }),
+        true,
+        name,
+      );
+    }
+    const sheet = letterSheetFit(3.5, 5.5, 0.16, {
+      reserveIn: LETTER_SHEET.calibrateIn + LETTER_SHEET.calibrateGapIn,
+    });
+    assert.deepEqual(sheet, { cols: 2, rows: 1, count: 2 });
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /Print at 100% \/ Actual size/);
+    assert.match(page, /Do not choose Fit to page/);
+    assert.match(page, /class="print-inch"/);
+    assert.match(page, /const LETTER_MARGIN = 0\.4/);
+    assert.match(page, /const CALIBRATE_IN = 1/);
+  });
+
+  it("keeps the printed card exact and moves the cut line out when laminate is on", () => {
+    assert.equal(LAMINATE_BLEED_IN, 0.125);
+    const samples = [
+      { widthIn: 3.25, heightIn: 2 },
+      { widthIn: 4.5, heightIn: 2.5 },
+      { widthIn: 3.5, heightIn: 2.25 },
+      { widthIn: 5, heightIn: 3 },
+      { widthIn: 3.63, heightIn: 2.12 },
+      { widthIn: 2.75, heightIn: 2.15 },
+      { widthIn: 4.75, heightIn: 2.25 },
+    ];
+    for (const size of samples) {
+      const off = laminateCutInches(size.widthIn, size.heightIn, false);
+      assert.deepEqual(off, {
+        bleedIn: 0,
+        contentWidthIn: size.widthIn,
+        contentHeightIn: size.heightIn,
+        cutWidthIn: size.widthIn,
+        cutHeightIn: size.heightIn,
+      });
+      const on = laminateCutInches(size.widthIn, size.heightIn, true);
+      assert.equal(on.bleedIn, 0.125);
+      assert.equal(on.contentWidthIn, size.widthIn);
+      assert.equal(on.contentHeightIn, size.heightIn);
+      assert.equal(on.cutWidthIn, Math.round((size.widthIn + 0.25) * 1000) / 1000);
+      assert.equal(on.cutHeightIn, Math.round((size.heightIn + 0.25) * 1000) / 1000);
+      assert.equal(on.cutWidthIn - on.contentWidthIn, 0.25);
+      assert.equal(on.cutHeightIn - on.contentHeightIn, 0.25);
+    }
+    const cardGap = 0.03;
+    const cardReserve = LETTER_SHEET.calibrateIn + LETTER_SHEET.calibrateGapIn + LETTER_SHEET.markOutIn;
+    const cardSide = LETTER_SHEET.markPadIn;
+    const fitOpts = { reserveIn: cardReserve, sidePadIn: cardSide };
+    const onFit: Record<string, { cols: number; rows: number; count: number }> = {
+      wrist: { cols: 2, rows: 3, count: 6 },
+      youth: { cols: 1, rows: 3, count: 3 },
+      softball: { cols: 2, rows: 3, count: 6 },
+      large: { cols: 1, rows: 2, count: 2 },
+      play: { cols: 2, rows: 3, count: 6 },
+      triplePeewee: { cols: 2, rows: 3, count: 6 },
+    };
+    for (const [name, expectFit] of Object.entries(onFit)) {
+      const size = CARD_SIZE_PRESETS[name as keyof typeof CARD_SIZE_PRESETS];
+      const cut = laminateCutInches(size.widthIn, size.heightIn, true);
+      const fit = letterSheetFit(cut.cutWidthIn, cut.cutHeightIn, cardGap, fitOpts);
+      assert.deepEqual(fit, expectFit, name);
+      assert.equal(letterBlockFits(cut.cutWidthIn, cut.cutHeightIn, fit.cols, fit.rows, cardGap, fitOpts), true, name);
+    }
+    const custom = laminateCutInches(3.63, 2.12, true);
+    assert.deepEqual(custom, {
+      bleedIn: 0.125,
+      contentWidthIn: 3.63,
+      contentHeightIn: 2.12,
+      cutWidthIn: 3.88,
+      cutHeightIn: 2.37,
+    });
+    assert.deepEqual(letterSheetFit(custom.cutWidthIn, custom.cutHeightIn, cardGap, fitOpts), {
+      cols: 1,
+      rows: 3,
+      count: 3,
+    });
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /id="laminate"/);
+    assert.match(page, /const LAMINATE_BLEED_IN = 0\.125/);
+    assert.match(page, /let laminateOn = false/);
+    assert.match(page, /class="laminate-inset"/);
+    assert.match(page, /data-laminate="/);
+    assert.match(page, /data-content-w="/);
+    assert.match(page, /data-cut-w="/);
+    assert.match(page, /A clear 1\/8 in border sits on every side/);
+    assert.match(page, /getElementById\("laminate"\)\.addEventListener\("change", function \(event\) \{\s*laminateOn = !!event\.target\.checked;\s*render\(\);\s*\}\);/);
+    assert.match(page, /const cardGap = laminateOn \? 0\.03 : 0\.28/);
+    assert.match(page, /const cardSide = laminateOn \? MARK_PAD : MARK_PAD \+ MARK_OUT/);
+    const cardFn = page.slice(page.indexOf("function wristCardHtml"), page.indexOf("function cardPaint"));
+    assert.match(cardFn, /const fontPt = fontPx \* 72 \/ 96/);
+    assert.doesNotMatch(cardFn.slice(0, cardFn.indexOf("const fontPt")), /laminateOn/);
+    assert.doesNotMatch(cardFn, /fontPt = [^;]*laminate/);
+  });
+
+  it("keeps the Wrist Coach editor usable on a phone", () => {
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /Card setup/);
+    assert.match(page, /Name on the card/);
+    assert.match(page, /Card you are editing/);
+    assert.match(page, /First column/);
+    assert.match(page, /First row/);
+    assert.match(page, />\s*Blocks\s*</);
+    assert.match(page, /Empty boxes/);
+    assert.match(page, /data-library="pitch"/);
+    assert.match(page, /data-library="location"/);
+    assert.match(page, /let libraryKind = "offense"/);
+    assert.match(page, /id="name-key"/);
+    assert.match(page, /id="letter-preview"/);
+    assert.match(page, /id="laminate"/);
+    assert.match(page, /id="delete-modal"/);
+    assert.match(page, /role="dialog"/);
+    assert.match(page, /aria-modal="true"/);
+    assert.match(page, /button:focus-visible/);
+    assert.match(page, /\.swatch \{\s*width: 40px;/);
+    assert.match(page, /Block columns/);
+    assert.match(page, /Block rows/);
+    assert.match(page, /aria-controls="library-panel-pitch"/);
+    assert.match(page, /role="tabpanel"/);
+    assert.match(page, /aria-label="Width in inches"/);
+    assert.match(page, /\.count-step \{\s*width: 40px;/);
+    assert.match(page, />Codes</);
+    assert.match(page, />Names</);
+    assert.match(page, /data-numbering="ordered"/);
+    assert.match(page, /data-numbering="oneHand"/);
+    assert.match(page, /data-call-weight/);
+    assert.match(page, /One hand uses only the digits 1/);
+    assert.doesNotMatch(page, /Copy and Create New Version/);
+    assert.doesNotMatch(page, />Sign start</);
+    assert.doesNotMatch(page, />Highlight</);
   });
 
   it("keeps cell and text colors on each call", () => {
@@ -632,6 +1123,190 @@ describe("wrist coach book", () => {
       rebalanceCounts(book.library, firstId, secondId, source.count + other.count + 1),
       null,
     );
+  });
+
+  it("uses the reference pink and red as defaults and migrates only an untouched purple card", () => {
+    const fresh = emptyBook("coach-1");
+    assert.equal(fresh.title, "My signs");
+    assert.equal(fresh.theme.band, OFFENSE_BAND);
+    assert.equal(OFFENSE_BAND, "#c00000");
+    assert.equal(DEFENSE_BAND, "#f87080");
+    assert.equal(activeVersion(fresh)?.themes.offense.band, "#c00000");
+    assert.equal(activeVersion(fresh)?.themes.defense.band, "#f87080");
+    assert.equal(layoutFor(fresh, "offense").rows, 5);
+    assert.equal(layoutFor(fresh, "offense").cols, 5);
+    assert.equal(layoutFor(fresh, "defense").rows, 4);
+    assert.equal(layoutFor(fresh, "defense").cols, 4);
+    assert.equal(fresh.cardSize.preset, "wrist");
+    assert.equal(fresh.cardSize.widthIn, 3.25);
+    assert.equal(fresh.cardSize.heightIn, 2);
+    const offense = defaultLibrary().filter((call) => call.kind === "offense");
+    for (const code of ["X", "P", "B1", "FBS", "SAS", "H+R", "SS3B"]) {
+      assert.ok(offense.some((call) => call.short === code), code);
+    }
+    assert.equal(offense.find((call) => call.short === "X")?.decoy, true);
+    assert.equal(offense.some((call) => call.short === "H&R"), false);
+    assert.equal(offense.find((call) => call.short === "SS3B")?.short, "SS3B");
+
+    const kept = upgradeLibrary([
+      { id: "play-hr", kind: "offense", name: "Hit and run", short: "H&R", fill: "clear", ink: "clear", count: 4, weight: 2 },
+      { id: "play-x", kind: "offense", name: "X", short: "X", fill: "clear", ink: "clear", count: 3, weight: 0 },
+      { id: "custom", kind: "offense", name: "Team play", short: "ZZ", fill: "clear", ink: "clear", count: 2, weight: 0 },
+      { id: "def-hld", kind: "defense", name: "Hold", short: "HLD", fill: "clear", ink: "clear", count: 1, weight: 0 },
+      { id: "loc-in", kind: "location", name: "Inside", short: "IN", fill: "clear", ink: "clear", count: 0, weight: 0 },
+    ]);
+    assert.equal(kept.find((call) => call.id === "play-hr")?.short, "H+R");
+    assert.equal(kept.find((call) => call.id === "play-hr")?.count, 4);
+    assert.equal(kept.find((call) => call.id === "play-x")?.decoy, true);
+    assert.equal(kept.find((call) => call.id === "play-x")?.count, 3);
+    assert.equal(kept.find((call) => call.id === "custom")?.count, 2);
+    assert.equal(kept.filter((call) => call.short === "H+R").length, 1);
+    assert.equal(kept.find((call) => call.short === "P")?.count, 0);
+    assert.equal(kept.find((call) => call.short === "SS3B")?.count, 0);
+
+    function fill(rows: number, cols: number, callId: string) {
+      const cells = [];
+      for (let grid = 0; grid < 6; grid += 1) {
+        for (let row = 0; row < rows; row += 1) {
+          for (let col = 0; col < cols; col += 1) {
+            cells.push({ grid, row, col, code: `${grid}${row}${col}`, callId });
+          }
+        }
+      }
+      return cells;
+    }
+    const offenseCells = fill(5, 5, "play-x");
+    const defenseCells = fill(5, 5, "def-hld");
+    const purple = {
+      title: "SOFTBALLBOT'S SIGNS",
+      theme: { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" },
+      cardSize: { preset: "large", widthIn: 5, heightIn: 3 },
+      rows: 5,
+      cols: 5,
+      grids: 6,
+      kindLayouts: { offense: { rows: 5, cols: 5 }, defense: { rows: 5, cols: 5 } },
+      library: defaultLibrary().map((call) =>
+        call.id === "play-hr" ? { ...call, short: "H&R", count: 9 } : call,
+      ).filter((call) => call.short !== "P" && call.short !== "SS3B"),
+      activeVersionId: "ver-c",
+      versions: [
+        {
+          id: "ver-b",
+          name: "Version B",
+          createdAt: 10,
+          titles: { offense: "SOFTBALLBOT'S SIGNS", defense: "Defense" },
+          themes: {
+            offense: { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" },
+            defense: { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" },
+          },
+          offenseCells,
+          defenseCells,
+        },
+        { id: "ver-c", name: "Version C", createdAt: 11, offenseCells, defenseCells },
+      ],
+    };
+    assert.equal(isUntouchedLegacyCard(purple), true);
+    assert.equal(isUntouchedLegacyCard({
+      theme: { band: "#c00000" },
+      cardSize: { preset: "large", widthIn: 5, heightIn: 3 },
+      rows: 5,
+      cols: 5,
+      kindLayouts: { offense: { rows: 5, cols: 5 }, defense: { rows: 5, cols: 5 } },
+    }), false);
+    assert.equal(isUntouchedLegacyCard({
+      theme: { band: "#7e22ce" },
+      cardSize: { preset: "wrist", widthIn: 3.25, heightIn: 2 },
+      rows: 5,
+      cols: 5,
+      kindLayouts: { offense: { rows: 5, cols: 5 }, defense: { rows: 5, cols: 5 } },
+    }), false);
+    assert.equal(isUntouchedLegacyCard({
+      theme: { band: "#7e22ce" },
+      cardSize: { preset: "large", widthIn: 5, heightIn: 3 },
+      kindLayouts: { offense: { rows: 5, cols: 5 }, defense: { rows: 4, cols: 4 } },
+    }), false);
+    const migrated = normalizeBook(purple, "softballbot", "softballbot's signs");
+    assert.equal(migrated.title, "SOFTBALLBOT'S SIGNS");
+    assert.equal(migrated.theme.band, "#c00000");
+    assert.equal(migrated.cardSize.preset, "wrist");
+    assert.equal(migrated.cardSize.widthIn, 3.25);
+    assert.equal(migrated.kindLayouts.defense.rows, 4);
+    assert.equal(migrated.kindLayouts.defense.cols, 4);
+    assert.equal(migrated.kindLayouts.offense.rows, 5);
+    assert.equal(migrated.versions.map((version) => version.name).join(","), "Version B,Version C");
+    assert.equal(migrated.activeVersionId, "ver-c");
+    const keptVersion = migrated.versions[0];
+    assert.equal(keptVersion.titles.offense, "SOFTBALLBOT'S SIGNS");
+    assert.equal(keptVersion.themes.defense.band, "#f87080");
+    assert.equal(keptVersion.offenseCells.length, 150);
+    assert.ok(keptVersion.offenseCells.every((cell) => cell.callId === "play-x"));
+    assert.equal(keptVersion.defenseCells.length, 96);
+    assert.equal(migrated.library.find((call) => call.id === "play-hr")?.short, "H+R");
+    assert.equal(migrated.library.find((call) => call.id === "play-hr")?.count, 9);
+    assert.equal(migrated.library.find((call) => call.short === "P")?.count, 0);
+    assert.equal(migrated.library.find((call) => call.short === "SS3B")?.count, 0);
+    assert.equal(migrated.library.find((call) => call.short === "X")?.decoy, true);
+
+    const chosen = normalizeBook({
+      title: "My navy card",
+      theme: { band: "#112233", ink: "#ffffff", highlight: "#ffffff" },
+      cardSize: { preset: "large", widthIn: 5, heightIn: 3 },
+      rows: 5,
+      cols: 5,
+      grids: 6,
+      kindLayouts: { offense: { rows: 5, cols: 5 }, defense: { rows: 5, cols: 5 } },
+      library: defaultLibrary(),
+      versions: [{
+        id: "ver-a",
+        name: "Version A",
+        createdAt: 1,
+        themes: {
+          offense: { band: "#112233", ink: "#ffffff", highlight: "#ffffff" },
+          defense: { band: "#445566", ink: "#ffffff", highlight: "#ffffff" },
+        },
+        offenseCells,
+        defenseCells,
+      }],
+    }, "coach-1");
+    assert.equal(chosen.title, "My navy card");
+    assert.equal(chosen.theme.band, "#112233");
+    assert.equal(chosen.cardSize.preset, "large");
+    assert.equal(chosen.cardSize.widthIn, 5);
+    assert.equal(chosen.kindLayouts.defense.rows, 5);
+    assert.equal(activeVersion(chosen)?.themes.defense.band, "#445566");
+    assert.equal(activeVersion(chosen)?.defenseCells.length, 150);
+
+    const coded = normalizeBook({
+      title: "Codes",
+      library: [{ id: "play-ss3b", kind: "offense", name: "Steal second and third", short: "ss3b" }],
+      versions: [],
+    }, "coach-1");
+    assert.equal(coded.library.find((call) => call.id === "play-ss3b")?.short, "SS3B");
+
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /id="reset-defaults"/);
+    assert.match(page, /id="name-search"/);
+    assert.match(page, /id="name-box"/);
+    assert.match(page, /title: "My signs"/);
+    assert.doesNotMatch(page, /function hubName/);
+    assert.doesNotMatch(page, /userName/);
+    assert.doesNotMatch(page, /Saved on the server/);
+    assert.match(page, /setStatus\("Saved", true\)/);
+    assert.match(page, /#c00000/);
+    assert.match(page, /#f87080/);
+    assert.match(page, /Math\.max\(8, barPt \* 0\.8\)/);
+    assert.match(page, /slice\(0, 5\)/);
+    assert.match(page, /count: 1/);
+    assert.match(page, /if \(pendingCount\) return/);
+    assert.match(page, /background: #fff/);
+    assert.match(page, /width: min\(100%, 8\.5in\)/);
+    assert.match(page, /items-start/);
+    assert.match(page, /\.version-row/);
+    const route = readFileSync(new URL("../../src/app/api/softball/wrist-coach/route.ts", import.meta.url), "utf8");
+    assert.doesNotMatch(route, /'s signs/);
+    assert.doesNotMatch(route, /session\.name/);
+    assert.doesNotMatch(route, /stored\?\.name/);
+    assert.doesNotMatch(route, /password|token|email/i);
   });
 
   it("normalize repairs a missing book and keeps the user id", () => {
