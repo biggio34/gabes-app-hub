@@ -62,6 +62,7 @@ import {
   normalizeKindThemes,
   normalizeKindTitles,
   shuffleCurrentVersion,
+  shuffleKeepingHistory,
   shuffleVersion,
   setVersionLocked,
   versionCells,
@@ -454,6 +455,55 @@ describe("wrist coach book", () => {
       ),
     );
     assert.equal(offenseBefore.split("|").length, first.offenseCells.length);
+  });
+
+  it("keeps an older version viewable after shuffle and reprints that card", () => {
+    const book = emptyBook("user-1");
+    const first = activeVersion(book);
+    assert.ok(first);
+    const offenseBefore = first.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|");
+    const defenseBefore = first.defenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|");
+    const offenseRef = first.offenseCells;
+    const next = shuffleKeepingHistory(book, first, "offense");
+    assert.ok(next);
+    assert.notEqual(next.id, first.id);
+    assert.equal(next.name, "Version B");
+    assert.equal(next.locked, false);
+    assert.equal(first.offenseCells, offenseRef);
+    assert.equal(first.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), offenseBefore);
+    assert.equal(first.defenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), defenseBefore);
+    assert.notEqual(next.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), offenseBefore);
+    assert.equal(next.defenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), defenseBefore);
+    book.versions = [...book.versions, next];
+    book.activeVersionId = next.id;
+    const saved = normalizeBook(book, "user-1");
+    assert.equal(saved.versions.length, 2);
+    assert.equal(activeVersion(saved)?.id, next.id);
+    const older = saved.versions.find((version) => version.id === first.id);
+    assert.ok(older);
+    assert.equal(older.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), offenseBefore);
+    saved.activeVersionId = older.id;
+    const reprinted = normalizeBook(saved, "user-1");
+    assert.equal(activeVersion(reprinted)?.id, older.id);
+    assert.equal(
+      activeVersion(reprinted)?.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"),
+      offenseBefore,
+    );
+    const defenseNext = shuffleKeepingHistory({ ...book, bandKind: "defense" }, first, "defense");
+    assert.ok(defenseNext);
+    assert.equal(defenseNext.offenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), offenseBefore);
+    assert.notEqual(defenseNext.defenseCells.map((cell) => `${cell.code}:${cell.callId}`).join("|"), defenseBefore);
+    assert.equal(shuffleKeepingHistory(book, setVersionLocked(first, true), "offense"), null);
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    const shuffleFn = page.slice(page.indexOf("function shuffleCurrent()"), page.indexOf("function activeVersion()"));
+    assert.match(shuffleFn, /book\.versions\.push\(version\)/);
+    assert.match(shuffleFn, /book\.activeVersionId = version\.id/);
+    assert.doesNotMatch(shuffleFn, /refillCard/);
+    assert.match(page, /data-ver-print="/);
+    assert.match(page, />Reprint</);
+    assert.match(page, /printNow\("cards"\)/);
+    assert.match(page, /Shuffle this card keeps this version/);
+    assert.doesNotMatch(page, /6×6|5×9|5×12|kid mode|kid-friendly/i);
   });
 
   it("keeps a block size for each set and leaves older books on one shared size", () => {

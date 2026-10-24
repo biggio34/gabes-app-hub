@@ -446,7 +446,7 @@
           </button>
         </div>
       </div>
-      <p class="text-sm text-slate-400 -mt-1">New version copies this one and does not shuffle. Shuffle this card mixes only the offense or defense card you are editing. Lock freezes both cards on that version.</p>
+      <p class="text-sm text-slate-400 -mt-1">Shuffle this card keeps this version and adds the next one with a new mix of the offense or defense card you are editing. New version copies this one and does not shuffle. Reprint prints that saved card. Lock freezes both cards on that version.</p>
       <ul id="version-list" class="grid gap-2"></ul>
     </section>
 
@@ -1474,7 +1474,27 @@
     function shuffleCurrent() {
       const current = activeVersion();
       if (!current || current.locked) return false;
-      return refillCard(book.bandKind);
+      const kind = book.bandKind === "defense" ? "defense" : "offense";
+      const offense = kind === "defense"
+        ? cloneCells(current.offenseCells || current.cells)
+        : buildKindCells(book, "offense");
+      const defense = kind === "defense"
+        ? buildKindCells(book, "defense")
+        : cloneCells(current.defenseCells);
+      const version = {
+        id: "ver-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
+        name: nextVersionName(book.versions),
+        titles: kindTitlesOf(current),
+        themes: kindThemesOf(current),
+        createdAt: Date.now(),
+        locked: false,
+        cells: offense,
+        offenseCells: offense,
+        defenseCells: defense
+      };
+      book.versions.push(version);
+      book.activeVersionId = version.id;
+      return true;
     }
 
     function activeVersion() {
@@ -2263,6 +2283,7 @@
               '<p class="mt-2 text-xs text-slate-500">' + escapeHtml(when) + (active ? " · Active" : "") + (version.locked ? " · Locked (both cards)" : "") + '</p>' +
             '</div>' +
             '<div class="flex flex-wrap items-center gap-2 pt-1">' +
+              '<button type="button" data-ver-print="' + escapeHtml(version.id) + '" class="ver-action text-slate-200 hover:text-red-300">Reprint</button>' +
               (active
                 ? '<span class="ver-action text-red-300">Using</span>'
                 : '<button type="button" data-ver-use="' + escapeHtml(version.id) + '" class="ver-action text-slate-200 hover:text-red-300">Use</button>') +
@@ -3127,9 +3148,17 @@
       scheduleSave();
     });
     document.getElementById("version-list").addEventListener("click", function (event) {
+      const printId = event.target.getAttribute("data-ver-print");
       const useId = event.target.getAttribute("data-ver-use");
       const lockId = event.target.getAttribute("data-ver-lock");
       const delId = event.target.getAttribute("data-ver-del");
+      if (printId) {
+        book.activeVersionId = printId;
+        render();
+        scheduleSave();
+        printNow("cards");
+        return;
+      }
       if (useId) {
         book.activeVersionId = useId;
         render();

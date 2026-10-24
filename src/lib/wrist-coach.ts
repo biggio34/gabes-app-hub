@@ -1236,6 +1236,30 @@ export function shuffleCurrentVersion(
   return withVersionCells(version, cardKind, buildKindCells(book, cardKind));
 }
 
+/**
+ * Shuffle one card onto a new version and leave the previous version untouched,
+ * so a coach can open it again and reprint it.
+ */
+export function shuffleKeepingHistory(
+  book: WristShuffleBook,
+  version: WristVersion,
+  kind?: WristCallKind | string,
+): WristVersion | null {
+  if (version.locked) return null;
+  const cardKind = playCardKind(kind || book.bandKind);
+  const shuffled = withVersionCells(version, cardKind, buildKindCells(book, cardKind));
+  return {
+    ...shuffled,
+    id: `ver-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    name: nextVersionName(book.versions),
+    createdAt: Date.now(),
+    locked: false,
+    cells: cloneCells(shuffled.cells),
+    offenseCells: cloneCells(shuffled.offenseCells),
+    defenseCells: cloneCells(shuffled.defenseCells),
+  };
+}
+
 export function refillVersionCards(
   book: WristShuffleBook,
   version: WristVersion,
