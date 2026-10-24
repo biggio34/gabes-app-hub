@@ -79,6 +79,86 @@
     .cut-marks line {
       stroke-width: 0.9;
     }
+    button:focus-visible,
+    a:focus-visible,
+    input:focus-visible {
+      outline: 2px solid #fca5a5 !important;
+      outline-offset: 2px;
+    }
+    .kind-btn,
+    .size-btn,
+    .look-btn,
+    .sheet-size-btn,
+    .library-tab,
+    #view-player,
+    #view-coach,
+    .ver-action,
+    .print-actions button {
+      min-height: 40px;
+    }
+    .print-actions button { min-height: 44px; }
+    input[type="checkbox"] {
+      width: 1.15rem;
+      height: 1.15rem;
+    }
+    #count-modal button,
+    #unlock-modal button,
+    #delete-modal button {
+      min-height: 44px;
+    }
+    .call-columns { display: none; }
+    .call-remove {
+      min-width: 40px;
+      min-height: 40px;
+      border-radius: 8px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 1.15rem;
+      line-height: 1;
+    }
+    .ver-action {
+      padding: 0.35rem 0.75rem;
+      border-radius: 0.65rem;
+      background: #1e293b;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    #name-key { display: grid; gap: 0.35rem; }
+    #name-key[hidden] { display: none; }
+    .name-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.75rem;
+      align-items: baseline;
+      border-radius: 0.75rem;
+      background: #020617;
+      padding: 0.5rem 0.75rem;
+    }
+    .name-row b { letter-spacing: 0.04em; }
+    .name-row .codes { color: #cbd5e1; font-variant-numeric: tabular-nums; }
+    #letter-preview {
+      overflow: hidden;
+      border-radius: 1rem;
+      background: #cbd5e1;
+    }
+    .letter-page {
+      width: 8.5in;
+      box-sizing: border-box;
+      padding: 0.4in;
+      background: #fff;
+    }
+    @media (min-width: 721px) {
+      .call-columns {
+        display: grid;
+        grid-template-columns: auto 3.5rem minmax(0, 1fr) auto auto;
+        gap: 0.5rem;
+        align-items: end;
+        color: #94a3b8;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+    }
     @media (max-width: 720px) {
       .call-edit {
         grid-template-columns: auto 4.25rem minmax(0, 1fr) !important;
@@ -88,6 +168,10 @@
         grid-column: 1 / -1;
         justify-self: start;
       }
+    }
+    @media (max-width: 640px) {
+      .print-actions { width: 100%; }
+      .print-actions button { flex: 1 1 30%; }
     }
     .coach-sheet-page {
       background: #fff;
@@ -134,16 +218,16 @@
       overflow: hidden;
     }
     .swatch {
-      width: 14px;
-      height: 14px;
+      width: 40px;
+      height: 40px;
       border-radius: 999px;
       border: 1px solid #64748b;
       padding: 0;
     }
     .swatch[data-on="1"] { outline: 2px solid #f8fafc; outline-offset: 1px; }
     .count-step {
-      width: 28px;
-      height: 28px;
+      width: 40px;
+      height: 40px;
       border-radius: 8px;
       border: 1px solid #475569;
       background: #0f172a;
@@ -201,25 +285,25 @@
 </head>
 <body class="min-h-dvh bg-slate-950 text-slate-200">
   <div class="no-print mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 sm:px-6">
-    <header class="flex items-start justify-between gap-3">
+    <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div class="flex items-center gap-3 min-w-0">
         <a href="/" class="text-sm text-slate-400 hover:text-red-400 shrink-0">← Hub</a>
         <div class="flex size-12 items-center justify-center rounded-2xl bg-red-700 shrink-0">
-          <i class="fa-solid fa-hand text-white text-lg"></i>
+          <i class="fa-solid fa-hand text-white text-lg" aria-hidden="true"></i>
         </div>
         <div class="min-w-0">
           <h1 class="title-font text-2xl font-semibold">Wrist Coach</h1>
           <p id="book-subtitle" class="text-sm text-slate-400"></p>
         </div>
       </div>
-      <div class="flex flex-wrap justify-end gap-2 shrink-0">
-        <button type="button" id="print-cards" class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">
+      <div class="print-actions flex flex-wrap gap-2">
+        <button type="button" id="print-cards" class="rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
           Print player cards
         </button>
-        <button type="button" id="print-key" class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">
+        <button type="button" id="print-key" class="rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
           Print coach sheet
         </button>
-        <button type="button" id="print-both" class="rounded-xl bg-red-700 px-3 py-2 text-xs font-semibold hover:bg-red-600">
+        <button type="button" id="print-both" class="rounded-xl bg-red-700 px-3 py-2 text-sm font-semibold hover:bg-red-600">
           Print / PDF
         </button>
       </div>
@@ -227,16 +311,16 @@
     <p id="save-status" class="hidden text-xs text-slate-500"></p>
     <p id="load-error" class="hidden text-sm text-red-400"></p>
 
-    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
-      <h2 class="font-semibold">Formatting</h2>
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
+      <h2 class="font-semibold">Card setup</h2>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label class="grid gap-1.5 text-sm">
-          Wristband name
+          Name on the card
           <input id="book-title" maxlength="60" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
         <div class="grid gap-1.5 text-sm">
-          Type
-          <div id="kind-btns" class="flex flex-wrap gap-1.5">
+          Card you are editing
+          <div id="kind-btns" class="flex flex-wrap gap-1.5" role="group" aria-label="Card you are editing">
             <button type="button" data-kind="offense" class="kind-btn rounded-full px-3 py-1.5 text-xs font-semibold">Offense</button>
             <button type="button" data-kind="defense" class="kind-btn rounded-full px-3 py-1.5 text-xs font-semibold">Defense</button>
           </div>
@@ -251,9 +335,9 @@
             <button type="button" data-size="large" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">5 × 3 in</button>
             <button type="button" data-size="custom" class="size-btn rounded-full px-3 py-1 text-xs font-semibold">Custom</button>
             <div id="custom-size" class="hidden items-center gap-2 text-sm">
-              <input id="card-w" inputmode="decimal" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              <input id="card-w" inputmode="decimal" aria-label="Width in inches" class="min-h-10 w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
               <span>×</span>
-              <input id="card-h" inputmode="decimal" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              <input id="card-h" inputmode="decimal" aria-label="Height in inches" class="min-h-10 w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
               <span class="text-slate-500">in</span>
             </div>
           </div>
@@ -262,30 +346,30 @@
       </div>
       <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <label class="grid gap-1.5 text-sm">
-          Sign start
-          <input id="sign-start" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          First column
+          <input id="sign-start" inputmode="numeric" aria-describedby="block-size-note" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
         <label class="grid gap-1.5 text-sm">
-          Row start
-          <input id="row-start" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          First row
+          <input id="row-start" inputmode="numeric" aria-describedby="block-size-note" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
         <label class="grid gap-1.5 text-sm">
-          Grids
-          <input id="grid-count" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          Blocks
+          <input id="grid-count" inputmode="numeric" aria-describedby="block-size-note" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
         <label class="grid gap-1.5 text-sm">
-          Columns
-          <input id="grid-cols" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          Block columns
+          <input id="grid-cols" inputmode="numeric" aria-label="Block columns" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
         <label class="grid gap-1.5 text-sm">
-          Rows
-          <input id="grid-rows" inputmode="numeric" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          Block rows
+          <input id="grid-rows" inputmode="numeric" aria-label="Block rows" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
       </div>
-      <p id="block-size-note" class="text-xs text-slate-500"></p>
+      <p id="block-size-note" class="text-sm text-slate-400"></p>
       <div class="flex flex-wrap items-center gap-2 text-sm">
         <span class="text-slate-400">Readability</span>
-        <div id="look-btns" class="flex flex-wrap gap-1.5">
+        <div id="look-btns" class="flex flex-wrap gap-1.5" role="group" aria-label="Readability">
           <button type="button" data-look="field" class="look-btn rounded-full px-3 py-1 text-xs font-semibold">Field</button>
           <button type="button" data-look="sun" class="look-btn rounded-full px-3 py-1 text-xs font-semibold">Sun</button>
           <button type="button" data-look="mono" class="look-btn rounded-full px-3 py-1 text-xs font-semibold">Black &amp; white</button>
@@ -299,122 +383,148 @@
           Shade rows
         </label>
       </div>
-      <p class="text-xs text-slate-500">Field keeps the wristband colors. Shade rows is off until you turn it on. Sun, black &amp; white, trim, and row shading change this print only. They do not change the saved signs.</p>
+      <p class="text-sm text-slate-400">Field keeps the wristband colors. Shade rows is off until you turn it on. Sun, black &amp; white, trim, and row shading change this print only. They do not change the saved signs.</p>
       <div class="grid gap-3 sm:grid-cols-3">
         <label class="grid gap-1.5 text-sm">
-          Wristband
+          Band color
           <span class="flex items-center gap-2">
-            <input type="color" id="theme-band" class="color-pick" aria-label="Wristband color">
-            <input id="theme-band-hex" maxlength="7" class="w-28 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-red-500">
+            <input type="color" id="theme-band" class="color-pick" aria-label="Band color">
+            <input id="theme-band-hex" maxlength="7" aria-label="Band color hex" class="w-28 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-red-500">
           </span>
         </label>
         <label class="grid gap-1.5 text-sm">
-          Wristband text
+          Band text
           <span class="flex items-center gap-2">
-            <input type="color" id="theme-ink" class="color-pick" aria-label="Wristband text color">
-            <input id="theme-ink-hex" maxlength="7" class="w-28 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-red-500">
+            <input type="color" id="theme-ink" class="color-pick" aria-label="Band text color">
+            <input id="theme-ink-hex" maxlength="7" aria-label="Band text hex" class="w-28 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-red-500">
           </span>
         </label>
         <label class="grid gap-1.5 text-sm">
-          Highlight
+          Empty boxes
           <span class="flex items-center gap-2">
-            <input type="color" id="theme-highlight" class="color-pick" aria-label="Highlight color">
-            <input id="theme-highlight-hex" maxlength="7" class="w-28 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-red-500">
+            <input type="color" id="theme-highlight" class="color-pick" aria-label="Empty box color">
+            <input id="theme-highlight-hex" maxlength="7" aria-label="Empty box color hex" class="w-28 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm uppercase outline-none focus:border-red-500">
           </span>
         </label>
       </div>
     </section>
 
-    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="font-semibold">Versions</h2>
         <div class="flex flex-wrap gap-2">
-          <button type="button" id="shuffle-current" class="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">
+          <button type="button" id="shuffle-current" class="min-h-11 rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">
             Shuffle this card
           </button>
-          <button type="button" id="shuffle-version" class="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold hover:bg-red-600">
-            Copy and Create New Version
+          <button type="button" id="shuffle-version" class="min-h-11 rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold hover:bg-red-600">
+            New version
           </button>
         </div>
       </div>
-      <p class="text-xs text-slate-500 -mt-1">Lock and unlock freeze or free both cards. Shuffle and sign edits only change the Offense or Defense card you are viewing.</p>
+      <p class="text-sm text-slate-400 -mt-1">New version copies this one and does not shuffle. Shuffle this card mixes only the offense or defense card you are editing. Lock freezes both cards on that version.</p>
       <ul id="version-list" class="grid gap-2"></ul>
     </section>
 
-    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
-      <div class="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="signs-heading" class="font-semibold">Signs</h2>
-        <p id="sign-tally" class="text-xs text-slate-500"></p>
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
+      <div class="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 id="signs-heading" class="font-semibold">Offense calls</h2>
+          <p class="text-sm text-slate-400">Offense and defense fill the card. Pitches and locations stay in the library.</p>
+        </div>
+        <p id="sign-tally" class="text-sm text-slate-300"></p>
+      </div>
+      <div id="library-tabs" class="flex flex-wrap gap-2" role="tablist" aria-label="Call lists">
+        <button type="button" id="library-tab-offense" data-library="offense" class="library-tab rounded-full px-3 py-1.5 text-xs font-semibold" role="tab" aria-controls="library-panel-offense">Offense</button>
+        <button type="button" id="library-tab-defense" data-library="defense" class="library-tab rounded-full px-3 py-1.5 text-xs font-semibold" role="tab" aria-controls="library-panel-defense">Defense</button>
+        <button type="button" id="library-tab-pitch" data-library="pitch" class="library-tab rounded-full px-3 py-1.5 text-xs font-semibold" role="tab" aria-controls="library-panel-pitch">Pitches</button>
+        <button type="button" id="library-tab-location" data-library="location" class="library-tab rounded-full px-3 py-1.5 text-xs font-semibold" role="tab" aria-controls="library-panel-location">Locations</button>
       </div>
       <div class="grid gap-5 max-w-2xl">
-        <div data-kind-panel="pitch">
-          <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Pitches</p>
+        <div id="library-panel-pitch" data-kind-panel="pitch" class="hidden" role="tabpanel" aria-labelledby="library-tab-pitch">
+          <div class="call-columns" aria-hidden="true"><span></span><span>Code</span><span>Name</span><span>On this card</span><span></span></div>
           <div id="pitch-list" class="grid gap-2"></div>
-          <form id="add-pitch" class="mt-3 grid gap-2">
-            <input id="pitch-name" placeholder="New pitch" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
-            <div class="flex gap-2">
-              <input id="pitch-short" maxlength="4" placeholder="FB" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
-              <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add</button>
-            </div>
+          <form id="add-pitch" class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto] sm:items-end">
+            <label class="grid gap-1 text-sm">Name
+              <input id="pitch-name" placeholder="New pitch" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
+            </label>
+            <label class="grid gap-1 text-sm">Code
+              <input id="pitch-short" maxlength="4" placeholder="FB" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+            </label>
+            <button class="min-h-11 rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">Add pitch</button>
           </form>
         </div>
-        <div data-kind-panel="location">
-          <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Locations</p>
+        <div id="library-panel-location" data-kind-panel="location" class="hidden" role="tabpanel" aria-labelledby="library-tab-location">
+          <div class="call-columns" aria-hidden="true"><span></span><span>Code</span><span>Name</span><span>On this card</span><span></span></div>
           <div id="location-list" class="grid gap-2"></div>
-          <form id="add-location" class="mt-3 grid gap-2">
-            <input id="location-name" placeholder="New location" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
-            <div class="flex gap-2">
-              <input id="location-short" maxlength="4" placeholder="IN" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
-              <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add</button>
-            </div>
+          <form id="add-location" class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto] sm:items-end">
+            <label class="grid gap-1 text-sm">Name
+              <input id="location-name" placeholder="New location" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
+            </label>
+            <label class="grid gap-1 text-sm">Code
+              <input id="location-short" maxlength="4" placeholder="IN" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+            </label>
+            <button class="min-h-11 rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">Add location</button>
           </form>
         </div>
-        <div data-kind-panel="offense">
-          <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Offense</p>
+        <div id="library-panel-offense" data-kind-panel="offense" role="tabpanel" aria-labelledby="library-tab-offense">
+          <div class="call-columns" aria-hidden="true"><span></span><span>Code</span><span>Name</span><span>On this card</span><span></span></div>
           <div id="play-list" class="grid gap-2"></div>
-          <form id="add-play" class="mt-3 grid gap-2">
-            <input id="play-name" placeholder="New play" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
-            <div class="flex gap-2">
-              <input id="play-short" maxlength="4" placeholder="HA" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
-              <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add</button>
-            </div>
+          <form id="add-play" class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto] sm:items-end">
+            <label class="grid gap-1 text-sm">Name
+              <input id="play-name" placeholder="New play" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
+            </label>
+            <label class="grid gap-1 text-sm">Code
+              <input id="play-short" maxlength="4" placeholder="HA" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+            </label>
+            <button class="min-h-11 rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">Add play</button>
           </form>
         </div>
-        <div data-kind-panel="defense">
-          <p class="mb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Defense</p>
+        <div id="library-panel-defense" data-kind-panel="defense" class="hidden" role="tabpanel" aria-labelledby="library-tab-defense">
+          <div class="call-columns" aria-hidden="true"><span></span><span>Code</span><span>Name</span><span>On this card</span><span></span></div>
           <div id="defense-list" class="grid gap-2"></div>
-          <form id="add-defense" class="mt-3 grid gap-2">
-            <input id="defense-name" placeholder="New call" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
-            <div class="flex gap-2">
-              <input id="defense-short" maxlength="4" placeholder="HLD" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
-              <button class="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold hover:bg-slate-700">Add</button>
-            </div>
+          <form id="add-defense" class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto] sm:items-end">
+            <label class="grid gap-1 text-sm">Name
+              <input id="defense-name" placeholder="New call" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-red-500">
+            </label>
+            <label class="grid gap-1 text-sm">Code
+              <input id="defense-short" maxlength="4" placeholder="HLD" class="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase outline-none focus:border-red-500">
+            </label>
+            <button class="min-h-11 rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">Add call</button>
           </form>
         </div>
       </div>
     </section>
 
-    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="font-semibold">Player card</h2>
-        <div class="flex gap-2">
-          <button type="button" id="view-player" class="rounded-full px-3 py-1 text-xs font-semibold bg-red-700 text-white">Card</button>
-          <button type="button" id="view-coach" class="rounded-full px-3 py-1 text-xs font-semibold bg-slate-800 text-slate-400">Key</button>
+        <div class="flex gap-2" role="group" aria-label="Card preview">
+          <button type="button" id="view-player" aria-pressed="true" class="rounded-full px-3 py-1 text-xs font-semibold bg-red-700 text-white">Codes</button>
+          <button type="button" id="view-coach" aria-pressed="false" class="rounded-full px-3 py-1 text-xs font-semibold bg-slate-800 text-slate-400">Names</button>
         </div>
       </div>
+      <p class="text-sm text-slate-400">Codes is the card a player reads. Names lists each call and the box numbers that mean it.</p>
       <div id="card-preview" class="flex justify-center overflow-x-auto"></div>
+      <div id="name-key" hidden></div>
     </section>
 
-    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
+      <h2 class="font-semibold">Letter sheet</h2>
+      <p id="letter-preview-note" class="text-sm text-slate-300"></p>
+      <p class="text-sm text-slate-400">Scaled to this screen. On paper the square is 1 inch, so print at 100% / Actual size.</p>
+      <div id="letter-preview"></div>
+    </section>
+
+    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
       <h2 class="font-semibold">Coach sheet</h2>
       <div class="flex flex-wrap items-end gap-3">
         <label class="grid gap-1.5 text-sm">
-          Columns
-          <input id="sheet-cols" inputmode="numeric" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          Code columns
+          <input id="sheet-cols" inputmode="numeric" aria-label="Coach sheet code columns" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
         <label class="grid gap-1.5 text-sm">
-          Rows
-          <input id="sheet-rows" inputmode="numeric" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
+          Code rows
+          <input id="sheet-rows" inputmode="numeric" aria-label="Coach sheet code rows" class="w-20 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
         <div class="grid gap-1.5 text-sm">
           Size
@@ -425,9 +535,9 @@
             <button type="button" data-sheet-size="index" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">5 × 8 in</button>
             <button type="button" data-sheet-size="custom" class="sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold">Custom</button>
             <div id="sheet-custom-size" class="hidden items-center gap-2 text-sm">
-              <input id="sheet-w" inputmode="decimal" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              <input id="sheet-w" inputmode="decimal" aria-label="Coach sheet width in inches" class="min-h-10 w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
               <span>×</span>
-              <input id="sheet-h" inputmode="decimal" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
+              <input id="sheet-h" inputmode="decimal" aria-label="Coach sheet height in inches" class="min-h-10 w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm outline-none focus:border-red-500">
               <span class="text-slate-500">in</span>
             </div>
           </div>
@@ -437,27 +547,42 @@
     </section>
   </div>
 
-  <div id="count-modal" class="hidden no-print fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4">
+  <div id="count-modal" class="hidden no-print fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-labelledby="count-modal-title">
     <div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-5">
       <p id="count-modal-title" class="font-semibold"></p>
-      <p id="count-modal-sub" class="mt-1 text-sm text-slate-400"></p>
+      <p id="count-modal-sub" class="mt-1 text-sm text-slate-300"></p>
       <div id="count-modal-choices" class="mt-4 grid gap-2"></div>
-      <button type="button" id="count-modal-cancel" class="mt-4 w-full rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
+      <button type="button" id="count-modal-cancel" class="mt-4 min-h-11 w-full rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
         Cancel
       </button>
     </div>
   </div>
 
-  <div id="unlock-modal" class="hidden no-print fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4">
+  <div id="unlock-modal" class="hidden no-print fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-labelledby="unlock-modal-title">
     <div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-5">
       <p id="unlock-modal-title" class="font-semibold">Unlock this version?</p>
-      <p id="unlock-modal-sub" class="mt-1 text-sm text-slate-400">Offense and defense cards on this version can be shuffled again.</p>
+      <p id="unlock-modal-sub" class="mt-1 text-sm text-slate-300">Offense and defense cards on this version can be shuffled again.</p>
       <div class="mt-4 grid gap-2 sm:grid-cols-2">
         <button type="button" id="unlock-modal-cancel" class="rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
           Cancel
         </button>
-        <button type="button" id="unlock-modal-confirm" class="rounded-xl bg-red-700 px-3 py-2 text-sm font-semibold hover:bg-red-600">
+        <button type="button" id="unlock-modal-confirm" class="min-h-11 rounded-xl bg-red-700 px-3 py-2 text-sm font-semibold hover:bg-red-600">
           Unlock
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="delete-modal" class="hidden no-print fixed inset-0 z-50 grid place-items-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+    <div class="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-5">
+      <p id="delete-modal-title" class="font-semibold">Delete this version?</p>
+      <p id="delete-modal-sub" class="mt-1 text-sm text-slate-300">This removes that version’s offense and defense cards.</p>
+      <div class="mt-4 grid gap-2 sm:grid-cols-2">
+        <button type="button" id="delete-modal-cancel" class="min-h-11 rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
+          Keep it
+        </button>
+        <button type="button" id="delete-modal-confirm" class="min-h-11 rounded-xl bg-red-700 px-3 py-2 text-sm font-semibold hover:bg-red-600">
+          Delete
         </button>
       </div>
     </div>
@@ -563,6 +688,7 @@
     let showTrim = true;
     let shadeRows = false;
     let showCoachOnCard = false;
+    let libraryKind = "offense";
     let saveTimer = null;
     let printMode = "both";
     let pendingCount = null;
@@ -1277,7 +1403,7 @@
       return PALETTE.map(function (color) {
         const bg = color === "clear" ? "linear-gradient(135deg,#fff 50%,#cbd5e1 50%)" : COLOR_HEX[color];
         return (
-          '<button type="button" class="swatch" data-call-' + field + '="' + escapeHtml(id) + '" data-color="' + color + '" data-on="' + (selected === color ? "1" : "0") + '" title="' + color + '" style="background:' + bg + '"></button>'
+          '<button type="button" class="swatch" data-call-' + field + '="' + escapeHtml(id) + '" data-color="' + color + '" data-on="' + (selected === color ? "1" : "0") + '" aria-pressed="' + (selected === color ? "true" : "false") + '" aria-label="' + (field === "fill" ? "Cell color " : "Text color ") + color + '" title="' + color + '" style="background:' + bg + '"></button>'
         );
       }).join("");
     }
@@ -1285,7 +1411,7 @@
     function renderLibraryKind(kind, mountId) {
       const mount = document.getElementById(mountId);
       const items = book.library.filter(function (item) { return item.kind === kind; });
-      const onCard = cardCounts(activeVersion());
+      const onCard = cardCounts(activeVersion(), kind);
       mount.innerHTML = items.map(function (item, index) {
         const fill = normalizeColor(item.fill);
         const ink = normalizeColor(item.ink);
@@ -1294,23 +1420,23 @@
           '<div class="grid gap-1.5">' +
             '<div class="call-edit grid grid-cols-[auto_3.5rem_minmax(0,1fr)_auto_auto] gap-2 items-center">' +
               '<div class="grid gap-1">' +
-                '<button type="button" data-call-move="' + escapeHtml(item.id) + '" data-dir="-1" class="count-step" aria-label="Move up"' + (index === 0 ? " disabled" : "") + '>↑</button>' +
-                '<button type="button" data-call-move="' + escapeHtml(item.id) + '" data-dir="1" class="count-step" aria-label="Move down"' + (index === items.length - 1 ? " disabled" : "") + '>↓</button>' +
+                '<button type="button" data-call-move="' + escapeHtml(item.id) + '" data-dir="-1" class="count-step" aria-label="Move ' + escapeHtml(item.name) + ' up"' + (index === 0 ? " disabled" : "") + '>↑</button>' +
+                '<button type="button" data-call-move="' + escapeHtml(item.id) + '" data-dir="1" class="count-step" aria-label="Move ' + escapeHtml(item.name) + ' down"' + (index === items.length - 1 ? " disabled" : "") + '>↓</button>' +
               '</div>' +
-              '<input data-call-short="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.short) + '" maxlength="4" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs uppercase outline-none focus:border-red-500">' +
-              '<input data-call-name="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.name) + '" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm outline-none focus:border-red-500">' +
+              '<input data-call-short="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.short) + '" maxlength="4" aria-label="Code for ' + escapeHtml(item.name) + '" class="min-h-10 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs uppercase outline-none focus:border-red-500">' +
+              '<input data-call-name="' + escapeHtml(item.id) + '" value="' + escapeHtml(item.name) + '" aria-label="Name for ' + escapeHtml(item.short) + '" class="min-h-10 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm outline-none focus:border-red-500">' +
               '<div class="flex items-center gap-1">' +
-                '<button type="button" data-call-less="' + escapeHtml(item.id) + '" class="count-step" aria-label="Fewer">−</button>' +
-                '<input data-call-count="' + escapeHtml(item.id) + '" value="' + escapeHtml(String(count)) + '" inputmode="numeric" class="w-12 rounded-lg border border-slate-700 bg-slate-950 px-1 py-1.5 text-center text-xs outline-none focus:border-red-500" aria-label="On card">' +
-                '<button type="button" data-call-more="' + escapeHtml(item.id) + '" class="count-step" aria-label="More">+</button>' +
+                '<button type="button" data-call-less="' + escapeHtml(item.id) + '" class="count-step" aria-label="Fewer boxes for ' + escapeHtml(item.name) + '">−</button>' +
+                '<input data-call-count="' + escapeHtml(item.id) + '" value="' + escapeHtml(String(count)) + '" inputmode="numeric" class="min-h-10 w-14 rounded-lg border border-slate-700 bg-slate-950 px-1 py-1.5 text-center text-xs outline-none focus:border-red-500" aria-label="Boxes for ' + escapeHtml(item.name) + '">' +
+                '<button type="button" data-call-more="' + escapeHtml(item.id) + '" class="count-step" aria-label="More boxes for ' + escapeHtml(item.name) + '">+</button>' +
               '</div>' +
-              '<button type="button" data-call-del="' + escapeHtml(item.id) + '" class="text-xs text-slate-500 hover:text-red-400" aria-label="Remove">×</button>' +
+              '<button type="button" data-call-del="' + escapeHtml(item.id) + '" class="call-remove" aria-label="Remove ' + escapeHtml(item.name) + '">×</button>' +
             '</div>' +
             '<div class="flex flex-wrap items-center gap-2">' +
-              '<span class="text-[10px] text-slate-500">Cell</span>' +
-              '<div class="flex gap-1">' + swatchRow(item.id, "fill", fill) + '</div>' +
-              '<span class="text-[10px] text-slate-500">Text</span>' +
-              '<div class="flex gap-1">' + swatchRow(item.id, "ink", ink) + '</div>' +
+              '<span class="text-xs text-slate-400">Cell</span>' +
+              '<div class="flex flex-wrap gap-1.5">' + swatchRow(item.id, "fill", fill) + '</div>' +
+              '<span class="text-xs text-slate-400">Text</span>' +
+              '<div class="flex flex-wrap gap-1.5">' + swatchRow(item.id, "ink", ink) + '</div>' +
             '</div>' +
           '</div>'
         );
@@ -1847,6 +1973,33 @@
       scaler.style.height = ((naturalH + trim * 2) * scale) + "px";
     }
 
+    function renderNameKey() {
+      const mount = document.getElementById("name-key");
+      const player = document.getElementById("view-player");
+      const coach = document.getElementById("view-coach");
+      if (player) player.setAttribute("aria-pressed", showCoachOnCard ? "false" : "true");
+      if (coach) coach.setAttribute("aria-pressed", showCoachOnCard ? "true" : "false");
+      if (!mount) return;
+      if (!showCoachOnCard) {
+        mount.hidden = true;
+        mount.innerHTML = "";
+        return;
+      }
+      const groups = sheetGroups(activeVersion());
+      mount.hidden = false;
+      if (!groups.length) {
+        mount.innerHTML = '<p class="text-sm text-slate-400">No calls on this card yet.</p>';
+        return;
+      }
+      mount.innerHTML = groups.map(function (group) {
+        return (
+          '<div class="name-row"><b>' + escapeHtml(group.short) + '</b><span>' +
+            escapeHtml(group.name) + '</span><span class="codes">' +
+            escapeHtml(group.codes.join("  ")) + '</span></div>'
+        );
+      }).join("");
+    }
+
     function renderCard() {
       const mount = document.getElementById("card-preview");
       mount.innerHTML = '<div class="card-scaler">' + wristCardHtml(activeVersion(), showCoachOnCard, "shadow-xl") + '</div>';
@@ -1855,6 +2008,7 @@
         "rounded-full px-3 py-1 text-xs font-semibold " + (showCoachOnCard ? "bg-slate-800 text-slate-400" : "bg-red-700 text-white");
       document.getElementById("view-coach").className =
         "rounded-full px-3 py-1 text-xs font-semibold " + (showCoachOnCard ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+      renderNameKey();
     }
 
     function renderVersions() {
@@ -1862,7 +2016,7 @@
       const shuffleBtn = document.getElementById("shuffle-current");
       const locked = !!(current && current.locked);
       shuffleBtn.disabled = locked;
-      shuffleBtn.className = "rounded-xl px-4 py-2 text-sm font-semibold " +
+      shuffleBtn.className = "min-h-11 rounded-xl px-4 py-2 text-sm font-semibold " +
         (locked ? "bg-slate-800 text-slate-500 cursor-not-allowed" : "bg-slate-800 hover:bg-slate-700");
       const mount = document.getElementById("version-list");
       mount.innerHTML = book.versions.map(function (version) {
@@ -1870,28 +2024,28 @@
         const when = new Date(version.createdAt).toLocaleString();
         const titles = kindTitlesOf(version);
         return (
-          '<li class="flex flex-wrap items-start justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3">' +
+          '<li class="flex flex-wrap items-start justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3"' + (active ? ' aria-current="true"' : "") + '>' +
             '<div class="min-w-0 grow">' +
-              '<input data-ver-name="' + escapeHtml(version.id) + '" value="' + escapeHtml(version.name) + '" class="bg-transparent text-sm font-semibold outline-none focus:text-red-300">' +
+              '<input data-ver-name="' + escapeHtml(version.id) + '" value="' + escapeHtml(version.name) + '" aria-label="Version name" class="min-h-10 w-full bg-transparent text-sm font-semibold outline-none focus:text-red-300">' +
               '<div class="mt-2 grid gap-2 sm:grid-cols-2">' +
-                '<label class="grid gap-1 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Offense' +
-                  '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="offense" maxlength="60" value="' + escapeHtml(titles.offense) + '" class="rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
+                '<label class="grid gap-1 text-xs font-semibold text-slate-400">Offense title' +
+                  '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="offense" maxlength="60" aria-label="Offense title" value="' + escapeHtml(titles.offense) + '" class="min-h-10 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
                 '</label>' +
-                '<label class="grid gap-1 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">Defense' +
-                  '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="defense" maxlength="60" value="' + escapeHtml(titles.defense) + '" class="rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
+                '<label class="grid gap-1 text-xs font-semibold text-slate-400">Defense title' +
+                  '<input data-ver-title="' + escapeHtml(version.id) + '" data-ver-kind="defense" maxlength="60" aria-label="Defense title" value="' + escapeHtml(titles.defense) + '" class="min-h-10 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 text-sm font-normal tracking-normal text-slate-100 normal-case outline-none focus:border-red-500">' +
                 '</label>' +
               '</div>' +
               '<p class="mt-2 text-xs text-slate-500">' + escapeHtml(when) + (active ? " · Active" : "") + (version.locked ? " · Locked (both cards)" : "") + '</p>' +
             '</div>' +
-            '<div class="flex items-center gap-3 pt-1">' +
+            '<div class="flex flex-wrap items-center gap-2 pt-1">' +
               (active
-                ? '<span class="text-xs font-semibold text-red-400">Using</span>'
-                : '<button type="button" data-ver-use="' + escapeHtml(version.id) + '" class="text-xs text-slate-400 hover:text-red-400">Use</button>') +
-              '<button type="button" data-ver-lock="' + escapeHtml(version.id) + '" class="text-xs ' + (version.locked ? "font-semibold text-red-400" : "text-slate-400 hover:text-red-400") + '">' +
+                ? '<span class="ver-action text-red-300">Using</span>'
+                : '<button type="button" data-ver-use="' + escapeHtml(version.id) + '" class="ver-action text-slate-200 hover:text-red-300">Use</button>') +
+              '<button type="button" data-ver-lock="' + escapeHtml(version.id) + '" class="ver-action ' + (version.locked ? "font-semibold text-red-300" : "text-slate-200 hover:text-red-300") + '">' +
                 (version.locked ? "Unlock" : "Lock") +
               '</button>' +
               (book.versions.length > 1
-                ? '<button type="button" data-ver-del="' + escapeHtml(version.id) + '" class="text-xs text-slate-500 hover:text-red-400">Delete</button>'
+                ? '<button type="button" data-ver-del="' + escapeHtml(version.id) + '" class="ver-action text-slate-300 hover:text-red-300">Delete</button>'
                 : "") +
             '</div>' +
           '</li>'
@@ -2051,10 +2205,32 @@
       else root.innerHTML = cardPage + keyPage;
       if (fitNote) {
         const noun = cardFit.count === 1 ? "card fits" : "cards fit";
-        fitNote.textContent =
+        const fitText =
           cardFit.count + " " + noun + " on one Letter sheet (" + cardFit.cols + " across × " + cardFit.rows +
           " down), with cut marks. Print at 100% / Actual size — the sheet has a 1 inch square to measure.";
+        fitNote.textContent = fitText;
+        const previewNote = document.getElementById("letter-preview-note");
+        if (previewNote) previewNote.textContent = fitText;
       }
+      mountLetterPreview(cardPage);
+    }
+
+    function mountLetterPreview(cardPage) {
+      const frame = document.getElementById("letter-preview");
+      if (!frame) return;
+      frame.innerHTML = '<div class="letter-page">' + cardPage + '</div>';
+      scaleLetterPreview();
+    }
+
+    function scaleLetterPreview() {
+      const frame = document.getElementById("letter-preview");
+      const page = frame ? frame.querySelector(".letter-page") : null;
+      if (!frame || !page) return;
+      const naturalW = 8.5 * 96;
+      const scale = Math.min(1, Math.max(1, frame.clientWidth) / naturalW);
+      page.style.transform = "scale(" + scale + ")";
+      page.style.transformOrigin = "top left";
+      frame.style.height = Math.ceil(page.scrollHeight * scale) + "px";
     }
 
     function renderSizeControls() {
@@ -2063,6 +2239,7 @@
         const on = btn.getAttribute("data-size") === size.preset;
         btn.className = "size-btn rounded-full px-3 py-1 text-xs font-semibold " +
           (on ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
       });
       const custom = document.getElementById("custom-size");
       custom.classList.toggle("hidden", size.preset !== "custom");
@@ -2071,18 +2248,38 @@
       document.getElementById("card-h").value = String(size.heightIn);
     }
 
+    function libraryHeading(kind) {
+      if (kind === "pitch") return "Pitches";
+      if (kind === "location") return "Locations";
+      if (kind === "defense") return "Defense calls";
+      return "Offense calls";
+    }
+
+    function renderLibrary() {
+      const kind = libraryKind || "offense";
+      document.querySelectorAll(".library-tab").forEach(function (btn) {
+        const on = btn.getAttribute("data-library") === kind;
+        btn.className = "library-tab rounded-full px-3 py-1.5 text-xs font-semibold " +
+          (on ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      document.querySelectorAll("[data-kind-panel]").forEach(function (panel) {
+        panel.classList.toggle("hidden", panel.getAttribute("data-kind-panel") !== kind);
+      });
+      const heading = document.getElementById("signs-heading");
+      if (heading) heading.textContent = libraryHeading(kind);
+    }
+
     function renderKindControls() {
       const kind = book.bandKind || "offense";
       document.querySelectorAll(".kind-btn").forEach(function (btn) {
         const on = btn.getAttribute("data-kind") === kind;
         btn.className = "kind-btn rounded-full px-3 py-1.5 text-xs font-semibold " +
           (on ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
       });
-      document.querySelectorAll("[data-kind-panel]").forEach(function (panel) {
-        panel.classList.toggle("hidden", panel.getAttribute("data-kind-panel") !== kind);
-      });
-      const heading = document.getElementById("signs-heading");
-      if (heading) heading.textContent = kindLabel(kind);
+      renderLibrary();
     }
 
     function renderThemeControls() {
@@ -2105,7 +2302,7 @@
       const note = document.getElementById("block-size-note");
       if (note) {
         const name = book.bandKind === "defense" ? "Defense" : "Offense";
-        note.textContent = name + " blocks are " + layout.cols + " × " + layout.rows + ". Offense and defense each keep their own block size. The center band uses this set’s color and name.";
+        note.textContent = name + " uses " + layout.grids + " blocks of " + layout.cols + " columns by " + layout.rows + " rows. Column numbers start at " + layout.signStart + " and row numbers start at " + layout.rowStart + ". Offense and defense each keep their own columns and rows.";
       }
     }
 
@@ -2117,6 +2314,7 @@
         const on = btn.getAttribute("data-sheet-size") === sheet.preset;
         btn.className = "sheet-size-btn rounded-full px-3 py-1 text-xs font-semibold " +
           (on ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
       });
       const custom = document.getElementById("sheet-custom-size");
       custom.classList.toggle("hidden", sheet.preset !== "custom");
@@ -2126,14 +2324,20 @@
     }
 
     function renderTally() {
-      const layout = layoutFor(book.bandKind);
-      const kind = book.bandKind || "offense";
-      const onCard = cardCounts(activeVersion());
+      const tally = document.getElementById("sign-tally");
+      const shown = libraryKind || "offense";
+      if (shown === "pitch" || shown === "location") {
+        const n = book.library.filter(function (item) { return item.kind === shown; }).length;
+        const card = book.bandKind === "defense" ? "defense" : "offense";
+        tally.textContent = n + " in the library. This card prints " + card + " calls.";
+        return;
+      }
+      const layout = layoutFor(shown);
+      const onCard = cardCounts(activeVersion(), shown);
       const used = book.library
-        .filter(function (item) { return item.kind === kind; })
+        .filter(function (item) { return item.kind === shown; })
         .reduce(function (sum, item) { return sum + (onCard[item.id] || 0); }, 0);
-      const total = cellCount(layout);
-      document.getElementById("sign-tally").textContent = used + " / " + total;
+      tally.textContent = used + " of " + cellCount(layout) + " boxes on this card";
     }
 
     function renderLookControls() {
@@ -2141,6 +2345,7 @@
         const on = btn.getAttribute("data-look") === cardLook;
         btn.className = "look-btn rounded-full px-3 py-1 text-xs font-semibold " +
           (on ? "bg-red-700 text-white" : "bg-slate-800 text-slate-400");
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
       });
       const box = document.getElementById("trim-guides");
       if (box) box.checked = showTrim;
@@ -2298,6 +2503,15 @@
       render();
       scheduleSave();
     });
+    document.getElementById("library-tabs").addEventListener("click", function (event) {
+      const btn = event.target.closest("[data-library]");
+      if (!btn) return;
+      const kind = btn.getAttribute("data-library");
+      if (kind !== "offense" && kind !== "defense" && kind !== "pitch" && kind !== "location") return;
+      if (kind === libraryKind) return;
+      libraryKind = kind;
+      render();
+    });
     document.getElementById("kind-btns").addEventListener("click", function (event) {
       const btn = event.target.closest("[data-kind]");
       if (!btn) return;
@@ -2305,6 +2519,7 @@
       if (kind !== "offense" && kind !== "defense") return;
       if (kind === book.bandKind) return;
       book.bandKind = kind;
+      libraryKind = kind;
       render();
       scheduleSave();
     });
@@ -2414,17 +2629,20 @@
       pendingCount = { id: id, next: next, current: current };
       document.getElementById("count-modal-title").textContent =
         call.name + " · " + current + " → " + next;
-      document.getElementById("count-modal-sub").textContent =
-        delta > 0 ? "Reduce" : "Add to";
+      document.getElementById("count-modal-sub").textContent = delta > 0
+        ? "Pick the call that gives up those boxes. The card is filled again after you choose."
+        : "Pick the call that receives those boxes. The card is filled again after you choose.";
       document.getElementById("count-modal-choices").innerHTML = others.map(function (item) {
         return (
-          '<button type="button" data-count-other="' + escapeHtml(item.id) + '" class="flex items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm hover:border-red-500">' +
+          '<button type="button" data-count-other="' + escapeHtml(item.id) + '" class="flex min-h-11 items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-left text-sm hover:border-red-500">' +
             '<span>' + escapeHtml(item.name) + ' (' + escapeHtml(item.short) + ')</span>' +
             '<span class="text-slate-400">' + escapeHtml(String(item.count)) + '</span>' +
           '</button>'
         );
       }).join("");
       document.getElementById("count-modal").classList.remove("hidden");
+      const firstChoice = document.querySelector("#count-modal-choices button");
+      (firstChoice || document.getElementById("count-modal-cancel")).focus();
     }
 
     function onCallEdit(event) {
@@ -2592,6 +2810,7 @@
       pendingUnlockId = version.id;
       document.getElementById("unlock-modal-title").textContent = "Unlock " + version.name + "?";
       document.getElementById("unlock-modal").classList.remove("hidden");
+      document.getElementById("unlock-modal-cancel").focus();
     }
     document.getElementById("unlock-modal-cancel").addEventListener("click", closeUnlockModal);
     document.getElementById("unlock-modal-confirm").addEventListener("click", function () {
@@ -2643,19 +2862,53 @@
         render();
         scheduleSave();
       }
-      if (delId && book.versions.length > 1) {
-        book.versions = book.versions.filter(function (item) { return item.id !== delId; });
-        if (book.activeVersionId === delId) book.activeVersionId = book.versions[0].id;
-        render();
-        scheduleSave();
-      }
+      if (delId && book.versions.length > 1) openDeleteModal(delId);
+    });
+    let pendingDeleteId = null;
+    function closeDeleteModal() {
+      pendingDeleteId = null;
+      document.getElementById("delete-modal").classList.add("hidden");
+    }
+    function openDeleteModal(id) {
+      const version = book.versions.find(function (item) { return item.id === id; });
+      if (!version) return;
+      pendingDeleteId = id;
+      document.getElementById("delete-modal-title").textContent = "Delete " + version.name + "?";
+      document.getElementById("delete-modal").classList.remove("hidden");
+      document.getElementById("delete-modal-cancel").focus();
+    }
+    document.getElementById("delete-modal-cancel").addEventListener("click", closeDeleteModal);
+    document.getElementById("delete-modal-confirm").addEventListener("click", function () {
+      const delId = pendingDeleteId;
+      closeDeleteModal();
+      if (!delId || book.versions.length < 2) return;
+      book.versions = book.versions.filter(function (item) { return item.id !== delId; });
+      if (book.activeVersionId === delId) book.activeVersionId = book.versions[0].id;
+      render();
+      scheduleSave();
     });
     document.getElementById("print-cards").addEventListener("click", function () { printNow("cards"); });
     document.getElementById("print-key").addEventListener("click", function () { printNow("key"); });
     document.getElementById("print-both").addEventListener("click", function () { printNow("both"); });
 
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape") return;
+      const countModal = document.getElementById("count-modal");
+      const unlockModal = document.getElementById("unlock-modal");
+      const deleteModal = document.getElementById("delete-modal");
+      if (countModal && !countModal.classList.contains("hidden")) {
+        closeCountModal();
+        render();
+      } else if (unlockModal && !unlockModal.classList.contains("hidden")) {
+        closeUnlockModal();
+      } else if (deleteModal && !deleteModal.classList.contains("hidden")) {
+        closeDeleteModal();
+      }
+    });
     window.addEventListener("resize", function () {
-      if (book) scaleCardPreview();
+      if (!book) return;
+      scaleCardPreview();
+      scaleLetterPreview();
     });
     let cardFontReady = false;
     function armCardFont() {

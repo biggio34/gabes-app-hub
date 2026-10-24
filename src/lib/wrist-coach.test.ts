@@ -568,6 +568,38 @@ describe("wrist coach book", () => {
     assert.match(page, /const CALIBRATE_IN = 1/);
   });
 
+  it("keeps the Wrist Coach editor usable on a phone", () => {
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /Card setup/);
+    assert.match(page, /Name on the card/);
+    assert.match(page, /Card you are editing/);
+    assert.match(page, /First column/);
+    assert.match(page, /First row/);
+    assert.match(page, />\s*Blocks\s*</);
+    assert.match(page, /Empty boxes/);
+    assert.match(page, /data-library="pitch"/);
+    assert.match(page, /data-library="location"/);
+    assert.match(page, /let libraryKind = "offense"/);
+    assert.match(page, /id="name-key"/);
+    assert.match(page, /id="letter-preview"/);
+    assert.match(page, /id="delete-modal"/);
+    assert.match(page, /role="dialog"/);
+    assert.match(page, /aria-modal="true"/);
+    assert.match(page, /button:focus-visible/);
+    assert.match(page, /\.swatch \{\s*width: 40px;/);
+    assert.match(page, /Block columns/);
+    assert.match(page, /Block rows/);
+    assert.match(page, /aria-controls="library-panel-pitch"/);
+    assert.match(page, /role="tabpanel"/);
+    assert.match(page, /aria-label="Width in inches"/);
+    assert.match(page, /\.count-step \{\s*width: 40px;/);
+    assert.match(page, />Codes</);
+    assert.match(page, />Names</);
+    assert.doesNotMatch(page, /Copy and Create New Version/);
+    assert.doesNotMatch(page, />Sign start</);
+    assert.doesNotMatch(page, />Highlight</);
+  });
+
   it("keeps cell and text colors on each call", () => {
     const book = normalizeBook(
       {
