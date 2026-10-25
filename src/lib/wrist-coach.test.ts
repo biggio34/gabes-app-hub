@@ -804,6 +804,33 @@ describe("wrist coach book", () => {
     assert.equal((rendered.defense.match(/data-block-outline="1"/g) || []).length, 6);
   });
 
+  it("looks up a name and a box number in both Codes and Names view", () => {
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    const tools = page.slice(page.indexOf('<div id="name-tools"'), page.indexOf('id="name-box-hit"'));
+    assert.doesNotMatch(tools, /\bhidden\b/);
+    const nameFn = page.slice(page.indexOf("function renderNameKey"), page.indexOf("function renderCard"));
+    assert.match(nameFn, /name-search/);
+    assert.match(nameFn, /name-box/);
+    assert.doesNotMatch(nameFn, /if \(!showCoachOnCard\)/);
+    const looked = lookupNamesInBothViews(page);
+    for (const view of ["codes", "names"] as const) {
+      const result = looked[view];
+      assert.equal(result.steal.toolsHidden, false, view);
+      assert.equal(result.steal.keyHidden, false, view);
+      assert.match(result.steal.list, /No steal/, view);
+      assert.match(result.steal.list, />NS</, view);
+      assert.doesNotMatch(result.steal.list, /Hold/, view);
+      assert.equal(result.steal.hitHidden, true, view);
+      assert.equal(result.box.hitHidden, false, view);
+      assert.equal(result.box.hit, "032 is Hold (HLD)", view);
+      assert.equal(result.missing.hitHidden, false, view);
+      assert.equal(result.missing.hit, "No box 99", view);
+    }
+    assert.equal(looked.codes.steal.list, looked.names.steal.list);
+    assert.equal(looked.codes.box.hit, looked.names.box.hit);
+    assert.equal(looked.codes.missing.hit, looked.names.missing.hit);
+  });
+
   it("gives offense and defense their own names on a version", () => {
     const book = emptyBook("user-1", "PURPLE OFFENSE");
     const first = activeVersion(book);
@@ -2212,4 +2239,102 @@ function cardViewBox(markup: string) {
   const match = markup.match(/<svg viewBox="0 0 ([0-9.]+) ([0-9.]+)"/);
   assert.ok(match, markup.slice(0, 240));
   return { w: Number(match[1]), h: Number(match[2]) };
+}
+
+function lookupNamesInBothViews(page: string) {
+  const start = page.indexOf("<script>");
+  const boot = page.lastIndexOf("armCardFont();");
+  assert.ok(start > 0 && boot > start);
+  const elements = new Map<string, ReturnType<typeof lookupElement>>();
+  function elementFor(id: string) {
+    let el = elements.get(id);
+    if (!el) {
+      el = lookupElement();
+      elements.set(id, el);
+    }
+    return el;
+  }
+  const source = page.slice(start + "<script>".length, boot) + `
+    book = emptyBook();
+    book.bandKind = "defense";
+    book.versions[0].defenseCells = [
+      { grid: 0, row: 1, col: 2, code: "032", callId: "def-hld" },
+      { grid: 0, row: 0, col: 0, code: "011", callId: "def-ns" }
+    ];
+    function ask(search, box) {
+      document.getElementById("name-search").value = search;
+      document.getElementById("name-box").value = box;
+      renderNameKey();
+      return {
+        toolsHidden: document.getElementById("name-tools").classList.contains("hidden"),
+        keyHidden: document.getElementById("name-key").hidden,
+        list: document.getElementById("name-key").innerHTML,
+        hitHidden: document.getElementById("name-box-hit").classList.contains("hidden"),
+        hit: document.getElementById("name-box-hit").textContent
+      };
+    }
+    function runView(names) {
+      showCoachOnCard = names;
+      return { steal: ask("steal", ""), box: ask("", "032"), missing: ask("", "99") };
+    }
+    globalThis.__lookup = { codes: runView(false), names: runView(true) };
+  `;
+  const hub = { userId: "test-user" };
+  const sandbox: { __lookup?: { codes: LookupSnap; names: LookupSnap }; HUB_SOFTBALL: { userId: string } } = {
+    HUB_SOFTBALL: hub,
+    console,
+    setTimeout,
+    clearTimeout,
+    document: {
+      getElementById(id: string) { return elementFor(id); },
+      querySelector() { return elementFor("query"); },
+      querySelectorAll() { return []; },
+      addEventListener() {},
+      createElement() { return elementFor("created"); },
+    },
+    window: {
+      addEventListener() {},
+      HUB_SOFTBALL: hub,
+      confirm() { return false; },
+      alert() {},
+    },
+  } as { __lookup?: { codes: LookupSnap; names: LookupSnap }; HUB_SOFTBALL: { userId: string } };
+  runInContext(source, createContext(sandbox), { filename: "wrist-coach.html" });
+  assert.ok(sandbox.__lookup);
+  return sandbox.__lookup;
+}
+
+type LookupSnap = {
+  steal: { toolsHidden: boolean; keyHidden: boolean; list: string; hitHidden: boolean; hit: string };
+  box: { hitHidden: boolean; hit: string };
+  missing: { hitHidden: boolean; hit: string };
+};
+
+function lookupElement() {
+  const classes = new Set<string>();
+  return {
+    classList: {
+      add(...names: string[]) { for (const name of names) classes.add(name); },
+      remove(...names: string[]) { for (const name of names) classes.delete(name); },
+      toggle() {},
+      contains(name: string) { return classes.has(name); },
+    },
+    style: {},
+    dataset: {},
+    hidden: false,
+    textContent: "",
+    innerHTML: "",
+    value: "",
+    checked: false,
+    className: "",
+    addEventListener() {},
+    removeEventListener() {},
+    setAttribute() {},
+    getAttribute() { return null; },
+    querySelector() { return lookupElement(); },
+    querySelectorAll() { return []; },
+    focus() {},
+    closest() { return null; },
+    appendChild() {},
+  };
 }
