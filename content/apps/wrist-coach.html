@@ -614,7 +614,7 @@
       </div>
       <p class="text-sm text-slate-400">Codes is the card a player reads. Names lists each call and the box numbers that mean it.</p>
       <div id="card-preview" class="flex justify-center overflow-x-auto"></div>
-      <div id="name-tools" class="hidden gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-end">
+      <div id="name-tools" class="gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-end">
         <label class="grid min-w-0 gap-1 text-sm">Search
           <input id="name-search" placeholder="Code or name" autocomplete="off" class="w-full min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-red-500">
         </label>
@@ -2938,18 +2938,6 @@
       const coach = document.getElementById("view-coach");
       if (player) player.setAttribute("aria-pressed", showCoachOnCard ? "false" : "true");
       if (coach) coach.setAttribute("aria-pressed", showCoachOnCard ? "true" : "false");
-      if (!showCoachOnCard) {
-        if (mount) {
-          mount.hidden = true;
-          mount.innerHTML = "";
-        }
-        if (tools) tools.classList.add("hidden");
-        if (hit) {
-          hit.classList.add("hidden");
-          hit.textContent = "";
-        }
-        return;
-      }
       if (tools) tools.classList.remove("hidden");
       const query = String((document.getElementById("name-search") || {}).value || "").trim().toLowerCase();
       const box = String((document.getElementById("name-box") || {}).value || "").trim();
