@@ -1966,7 +1966,7 @@ describe("wrist coach book", () => {
     assert.deepEqual(tiny.flat().map((block) => block.short), starters);
   });
 
-  it("gives defense coach sheets a second page in the same row style", () => {
+  it("packs a coach sheet at the readable row size and lets offense continue on the next page", () => {
     const sheet = { cols: 15, rows: 1, widthIn: 3.5, heightIn: 5.5 };
     const frame = coachSheetFrame(sheet);
     assert.ok(frame.capacity >= 15);
@@ -2018,7 +2018,7 @@ describe("wrist coach book", () => {
     assert.equal(partial.codeSize, frame.codeSize);
   });
 
-  it("sends defense coach calls to the next page instead of clipping them", () => {
+  it("keeps every defense coach call on one page at each sheet size", () => {
     const sheet = { cols: 15, rows: 1, widthIn: 3.5, heightIn: 5.5 };
     const printed = coachPrintSheet(sheet);
     const defense = defaultLibrary().filter((call) => call.kind === "defense");
@@ -2029,25 +2029,34 @@ describe("wrist coach book", () => {
     }));
     const shortPages = layoutDefenseCoachSheet(shortDefense, sheet);
     assert.equal(shortPages.length, 1);
+    assert.equal(shortPages[0].rows.length, shortDefense.length);
     assert.equal(shortPages[0].rows.at(-1)?.short, "NS");
+    assert.ok(Math.abs(shortPages[0].playSize - DEFENSE_PLAY_MIN_PX) < 1e-6);
     assertCoachSheetFits(shortDefense, sheet);
     assertCoachSheetFits(shortDefense, printed);
     const sixteen = shortDefense.concat([{ name: "Extra coverage", short: "E16", codes: ["011"] }]);
     const sixteenPages = layoutDefenseCoachSheet(sixteen, sheet);
-    assert.equal(sixteenPages.length, 2);
-    assert.equal(sixteenPages[0].rows.length, 15);
-    assert.equal(sixteenPages[1].rows.length, 1);
+    assert.equal(sixteenPages.length, 1);
+    assert.equal(sixteenPages[0].rows.length, 16);
+    assert.ok(sixteenPages[0].playSize < DEFENSE_PLAY_MIN_PX);
+    assertCoachSheetFits(sixteen, sheet);
     assert.equal(paginateCoachSheet(sixteen, sheet).length, 1);
     const longName = "Steal second and third on the first pitch after the fake when the runner reads the catcher";
     const longDefense = defense.map((call) => ({ name: longName, short: call.short, codes: ["011", "30-5"] }));
     const longScreen = layoutDefenseCoachSheet(longDefense, sheet);
     const longPrint = layoutDefenseCoachSheet(longDefense, printed);
-    assert.ok(longScreen.length > 1);
+    assert.equal(longScreen.length, 1);
+    assert.equal(longPrint.length, 1);
+    assert.ok(longScreen[0].playSize < DEFENSE_PLAY_MIN_PX);
+    assert.ok(longScreen[0].rows.every((row) => row.lines === 1));
     assert.equal(paginateCoachSheet(longDefense, sheet).length, 1);
-    assert.ok(longScreen.some((page) => page.rows.some((row) => row.lines > 1)));
-    assert.ok(longPrint.every((page) => page.playSize + 1e-9 >= DEFENSE_PLAY_MIN_PX));
     assertCoachSheetFits(longDefense, sheet);
     assertCoachSheetFits(longDefense, printed);
+    const crowded = defense.map((call) => ({
+      name: longName,
+      short: call.short,
+      codes: Array.from({ length: 45 }, (_, index) => String(index + 1)),
+    }));
     const sizes = [
       { name: "card", widthIn: 3.5, heightIn: 5.5 },
       { name: "letter", widthIn: 8.5, heightIn: 11 },
@@ -2057,16 +2066,14 @@ describe("wrist coach book", () => {
     ];
     for (const size of sizes) {
       const sized = { cols: 15, rows: 1, widthIn: size.widthIn, heightIn: size.heightIn };
-      const pages = layoutDefenseCoachSheet(longDefense, sized);
-      assert.ok(pages.length >= 1, size.name);
-      assert.deepEqual(pages.flatMap((page) => page.rows.map((row) => row.short)), longDefense.map((block) => block.short));
-      for (const page of pages) {
-        assert.ok(page.playSize + 1e-6 >= DEFENSE_PLAY_MIN_PX || page.rows.length === 1, size.name);
+      for (const book of [shortDefense, sixteen, longDefense, crowded]) {
+        const pages = layoutDefenseCoachSheet(book, sized);
+        assert.equal(pages.length, 1, size.name);
+        assert.equal(pages[0].rows.length, book.length, size.name);
+        assert.deepEqual(pages[0].rows.map((row) => row.short), book.map((block) => block.short), size.name);
+        assertCoachSheetFits(book, sized);
       }
-      assertCoachSheetFits(longDefense, sized);
     }
-    assert.equal(layoutDefenseCoachSheet(longDefense, { cols: 15, rows: 1, widthIn: 8.5, heightIn: 5.5 }).length, 1);
-    assert.ok(layoutDefenseCoachSheet(longDefense, { cols: 15, rows: 1, widthIn: 3.5, heightIn: 5.5 }).length > 1);
     const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
     assert.match(page, /\[data-kind="defense"\] \.sheet-code \{[^}]*overflow: visible/);
     assert.match(page, /\.coach-sheet \.sheet-code \{[^}]*overflow: hidden/);
@@ -2369,6 +2376,7 @@ function assertCoachSheetFits(
   sheet: { cols: number; rows?: number; widthIn?: number; heightIn: number },
 ) {
   const pages = layoutDefenseCoachSheet(blocks, sheet);
+  assert.equal(pages.length, 1);
   const innerW = coachSheetInnerWidth(sheet);
   const flat = pages.flatMap((page) => page.rows);
   assert.deepEqual(flat.map((row) => row.name), blocks.map((block) => block.name));
@@ -2393,9 +2401,11 @@ function assertCoachSheetFits(
       assert.ok(row.lines >= 1);
       const needed = coachPlayHeaderIn(row.label, { playSize: page.playSize, headerIn: page.bannerIn }, innerW);
       assert.ok(row.headerIn + 1e-9 >= needed);
+      assert.ok(page.playSize <= row.headerIn * 96 + 0.05, row.label);
       height += row.headerIn + row.codeRows * page.codeIn;
       const chars = row.codes.reduce((max, code) => Math.max(max, String(code || "").length), 1);
       assert.ok(page.codeSize * chars * COACH_CODE_CHAR_EM <= colPx - 4 + 0.05, row.label);
+      assert.ok(page.codeSize <= page.codeIn * 96 + 0.05, row.label);
     }
     assert.ok(height <= page.innerH + 1e-6, `page content ${height} exceeds ${page.innerH}`);
   }

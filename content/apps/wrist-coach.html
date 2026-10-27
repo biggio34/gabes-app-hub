@@ -1975,27 +1975,17 @@
       };
     }
 
-    function coachSheetHeight(items, metrics, innerW) {
-      let height = metrics.headerIn;
-      items.forEach(function (item) {
-        height += coachPlayHeaderIn(coachPlayLabel(item.block), metrics, innerW);
-        height += item.codeRows * metrics.codeIn;
-      });
-      return height;
-    }
-
-    var DEFENSE_PLAY_MIN_PX = coachSheetPageFrame({ cols: 15, rows: 1, widthIn: 3.5, heightIn: 5.5 }, 15).playSize;
-
-    function defensePlaySize(items, frame, innerW) {
-      var start = frame.playSize;
-      if (start <= DEFENSE_PLAY_MIN_PX + 1e-6) return start;
+    function defensePlaySize(items, limitPx, innerW) {
+      var start = Math.max(0.01, limitPx);
+      if (!items.length) return start;
       var labels = items.map(function (item) { return coachPlayLabel(item.block); });
       function oneLine(px) {
         return labels.every(function (label) { return coachPlayLines(label, px, innerW) <= 1; });
       }
       if (oneLine(start)) return start;
-      if (!oneLine(DEFENSE_PLAY_MIN_PX)) return DEFENSE_PLAY_MIN_PX;
-      var lo = DEFENSE_PLAY_MIN_PX;
+      var floor = 1 / COACH_PLAY_CHAR_EM;
+      if (!oneLine(floor)) return start;
+      var lo = floor;
       var hi = start;
       for (var step = 0; step < 12; step += 1) {
         var mid = (lo + hi) / 2;
@@ -2005,103 +1995,84 @@
       return lo;
     }
 
+    function defenseBoxFont(boxPx, ratio, widthCap) {
+      return Math.min(boxPx * ratio, widthCap, Math.max(boxPx * 0.5, boxPx - 1));
+    }
+
     function layoutDefenseCoachSheet(blocks, sheet) {
       var source = sheet || {};
-      var sample = coachSheetPageFrame(source, 1);
+      var list = blocks || [];
+      if (!list.length) return [];
+      var frame = coachSheetPageFrame(source, list.length);
       var innerW = coachSheetInnerWidth(source);
-      var innerH = sample.innerH;
-      var cols = sample.cols;
-      var minRows = sample.minRows;
-      var pieces = (blocks || []).map(function (block) {
+      var innerH = frame.innerH;
+      var cols = frame.cols;
+      var minRows = frame.minRows;
+      var pieces = list.map(function (block) {
         return coachPiece(block, cols, minRows);
       });
-      function fits(items) {
-        if (!items.length) return true;
-        var frame = coachSheetPageFrame(source, items.length);
-        if (frame.playSize + 1e-6 < DEFENSE_PLAY_MIN_PX) return false;
-        var playSize = defensePlaySize(items, frame, innerW);
-        var metrics = Object.assign({}, frame, { playSize: playSize });
-        return coachSheetHeight(items, metrics, innerW) <= innerH + 1e-6;
-      }
-      function paint(items) {
-        var frame = coachSheetPageFrame(source, Math.max(1, items.length));
-        var playSize = defensePlaySize(items, frame, innerW);
-        var rows = items.map(function (item) {
+      var colPx = (innerW / cols) * 96;
+      function paint(scale) {
+        var headerIn = frame.headerIn * scale;
+        var codeIn = frame.codeIn * scale;
+        var headerPx = headerIn * 96;
+        var codePx = codeIn * 96;
+        var rowFont = defenseBoxFont(headerPx, 0.78, 28);
+        var playSize = Math.min(rowFont, defensePlaySize(pieces, rowFont, innerW));
+        var rows = pieces.map(function (item) {
           var label = coachPlayLabel(item.block);
           return {
             name: item.block.name,
             short: item.block.short,
             label: label,
             lines: coachPlayLines(label, playSize, innerW),
-            headerIn: coachPlayHeaderIn(label, { playSize: playSize, headerIn: frame.headerIn }, innerW),
+            headerIn: coachPlayHeaderIn(label, { playSize: playSize, headerIn: headerIn }, innerW),
             codes: (item.block.codes || []).slice(),
             codeRows: item.codeRows
           };
         });
-        var used = frame.headerIn;
-        rows.forEach(function (row) {
-          used += row.headerIn + row.codeRows * frame.codeIn;
-        });
-        if (rows.length === 1 && used > innerH + 1e-6) {
-          var size = playSize;
-          for (var guard = 0; guard < 8 && used > innerH + 1e-6 && size > 7; guard += 1) {
-            size = Math.max(7, size * 0.82);
-            var label = rows[0].label;
-            var headerIn = coachPlayHeaderIn(label, { playSize: size, headerIn: frame.headerIn }, innerW);
-            rows = [Object.assign({}, rows[0], {
-              lines: coachPlayLines(label, size, innerW),
-              headerIn: headerIn
-            })];
-            used = frame.headerIn + headerIn + rows[0].codeRows * frame.codeIn;
-            playSize = size;
-          }
-        }
         var maxChars = 1;
         rows.forEach(function (row) {
           row.codes.forEach(function (code) {
             maxChars = Math.max(maxChars, String(code || "").length);
           });
         });
-        var colPx = (innerW / cols) * 96;
+        var naturalCode = defenseBoxFont(codePx, 0.78, colPx * 0.55);
+        var fittedCode = coachCodeSizePx(colPx, maxChars, naturalCode);
         return {
           innerH: innerH,
           innerW: innerW,
           cols: frame.cols,
-          bannerIn: frame.headerIn,
-          codeIn: frame.codeIn,
+          bannerIn: headerIn,
+          codeIn: codeIn,
           playSize: playSize,
-          codeSize: coachCodeSizePx(colPx, maxChars, frame.codeSize),
-          bannerSize: frame.bannerSize,
+          codeSize: Math.min(fittedCode, Math.max(0.01, codePx * 0.9)),
+          bannerSize: defenseBoxFont(headerPx, 0.72, innerW * 96 * 0.04),
           rows: rows
         };
       }
-      if (!pieces.length) return [];
-      if (fits(pieces)) return [paint(pieces)];
-      var pages = [];
-      var current = [];
-      pieces.forEach(function (piece) {
-        if (current.length && !fits(current.concat([piece]))) {
-          pages.push(paint(current));
-          current = [];
+      function pageHeight(page) {
+        var height = page.bannerIn;
+        page.rows.forEach(function (row) {
+          height += row.headerIn + row.codeRows * page.codeIn;
+        });
+        return height;
+      }
+      function fits(scale) {
+        return pageHeight(paint(scale)) <= innerH + 1e-6;
+      }
+      var scale = 1;
+      if (!fits(1)) {
+        var lo = 0;
+        var hi = 1;
+        for (var step = 0; step < 16; step += 1) {
+          var mid = (lo + hi) / 2;
+          if (fits(mid)) lo = mid;
+          else hi = mid;
         }
-        if (!current.length && !fits([piece])) {
-          var frame = coachSheetPageFrame(source, 1);
-          var playSize = defensePlaySize([piece], frame, innerW);
-          var headerIn = coachPlayHeaderIn(coachPlayLabel(piece.block), { playSize: playSize, headerIn: frame.headerIn }, innerW);
-          var room = innerH - frame.headerIn - headerIn;
-          var roomRows = Math.max(1, Math.floor((room + 1e-9) / frame.codeIn));
-          var perPage = roomRows * cols;
-          var codes = piece.block.codes.length ? piece.block.codes : [""];
-          for (var start = 0; start < codes.length; start += perPage) {
-            var slice = Object.assign({}, piece.block, { codes: codes.slice(start, start + perPage) });
-            pages.push(paint([coachPiece(slice, cols, minRows)]));
-          }
-          return;
-        }
-        current.push(piece);
-      });
-      if (current.length) pages.push(paint(current));
-      return pages;
+        scale = lo;
+      }
+      return [paint(scale)];
     }
 
     function paginateCoachSheet(blocks, sheet) {
