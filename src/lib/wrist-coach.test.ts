@@ -2097,6 +2097,40 @@ describe("wrist coach book", () => {
     }
   });
 
+  it("prints the coach sheet at the selected page size", () => {
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /@page \{ size: letter; margin: 0\.4in; \}/);
+    assert.match(page, /\.print-key \{ page: coach-sheet;/);
+    const sizes = [
+      { preset: "card", widthIn: 3.5, heightIn: 5.5 },
+      { preset: "letter", widthIn: 8.5, heightIn: 11 },
+      { preset: "half", widthIn: 8.5, heightIn: 5.5 },
+      { preset: "index", widthIn: 5, heightIn: 8 },
+      { preset: "custom", widthIn: 4, heightIn: 6 },
+    ];
+    for (const size of sizes) {
+      for (const kind of ["defense", "offense"] as const) {
+        for (const mode of ["key", "both"] as const) {
+          const html = coachPrintHtmlFromPage(page, size, kind, mode);
+          const rule = mode === "key"
+            ? `@page { size: ${size.widthIn}in ${size.heightIn}in; margin: 0; } @page coach-sheet { size: ${size.widthIn}in ${size.heightIn}in; margin: 0; }`
+            : `@page coach-sheet { size: ${size.widthIn}in ${size.heightIn}in; margin: 0; }`;
+          assert.ok(html.includes(rule), `${kind} ${mode} ${size.preset}`);
+          assert.ok(
+            html.includes(`class="print-page print-key" style="page:coach-sheet;width:${size.widthIn}in;height:${size.heightIn}in;`),
+            `${kind} ${mode} ${size.preset} section`,
+          );
+          assert.ok(html.includes(`style="width:${size.widthIn}in;height:${size.heightIn}in;padding:0.12in"`), size.preset);
+          assert.equal(html.includes("width:7.7in"), false, size.preset);
+          if (mode === "both") {
+            assert.ok(html.includes('class="print-page print-cards"'), kind);
+            assert.equal(html.includes("@page { size:"), false, kind);
+          }
+        }
+      }
+    }
+  });
+
   it("marks decoys on the names sheet and keeps the round 16 page controls", () => {
     const book = emptyBook("coach-1");
     const version = activeVersion(book);
@@ -2127,7 +2161,10 @@ describe("wrist coach book", () => {
     assert.match(page, /function coachSheetFrame/);
     assert.match(page, /function coachSheetPageFrame/);
     assert.match(page, /function coachPrintSheet/);
-    assert.match(page, /coachPrintSheet\(sheetOf\(\)\)/);
+    assert.match(page, /function coachSheetPageRule/);
+    assert.match(page, /const sheet = sheetOf\(\)/);
+    assert.match(page, /coachSheetPages\(version, sheet\)/);
+    assert.doesNotMatch(page, /coachSheetPages\(version, coachPrintSheet/);
     assert.match(page, /function clearUntouchedDefenseColor/);
     assert.match(page, /function versionLetter/);
     assert.match(page, /spentVersionLetters/);
@@ -2362,6 +2399,68 @@ function assertCoachSheetFits(
     }
     assert.ok(height <= page.innerH + 1e-6, `page content ${height} exceeds ${page.innerH}`);
   }
+}
+
+function coachPrintHtmlFromPage(
+  page: string,
+  size: { preset: string; widthIn: number; heightIn: number },
+  kind: "defense" | "offense",
+  mode: "key" | "both",
+) {
+  const start = page.indexOf("<script>");
+  const boot = page.lastIndexOf("armCardFont();");
+  assert.ok(start > 0 && boot > start);
+  const source = page.slice(start + "<script>".length, boot) + `
+    book = emptyBook();
+    book.bandKind = ${JSON.stringify(kind)};
+    book.sheet = ${JSON.stringify({ cols: 15, rows: 1, ...size })};
+    printMode = ${JSON.stringify(mode)};
+    renderPrint();
+    globalThis.__printHtml = document.getElementById("print-root").innerHTML;
+  `;
+  const elements = new Map<string, ReturnType<typeof stubCardElement>>();
+  function elementFor(id: string) {
+    let el = elements.get(id);
+    if (!el) {
+      el = stubCardElement();
+      elements.set(id, el);
+    }
+    return el;
+  }
+  const hub = { userId: "test-user" };
+  const sandbox: { __printHtml?: string; HUB_SOFTBALL: { userId: string } } = {
+    HUB_SOFTBALL: hub,
+    console,
+    setTimeout,
+    clearTimeout,
+    document: {
+      getElementById(id: string) { return elementFor(id); },
+      querySelector() { return elementFor("query"); },
+      querySelectorAll() { return []; },
+      addEventListener() {},
+      createElement(tag: string) {
+        if (tag !== "canvas") return elementFor(tag);
+        const ctx = {
+          font: "",
+          measureText(text: string) {
+            const px = Number(String(ctx.font).match(/([\d.]+)px/)?.[1] || 16);
+            return { width: String(text || "").length * px * 0.387 };
+          },
+        };
+        return { getContext() { return ctx; } };
+      },
+      fonts: { load() { return Promise.resolve(); } },
+    },
+    window: {
+      addEventListener() {},
+      HUB_SOFTBALL: hub,
+      confirm() { return false; },
+      alert() {},
+    },
+  };
+  runInContext(source, createContext(sandbox), { filename: "wrist-coach.html" });
+  assert.ok(sandbox.__printHtml);
+  return sandbox.__printHtml;
 }
 
 function coachSheetLayoutFromPage(

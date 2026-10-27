@@ -354,6 +354,8 @@
       .print-only { display: block !important; }
       .print-page { page-break-after: always; break-after: page; }
       .print-page:last-child { page-break-after: auto; break-after: auto; }
+      .print-cards { page: auto; }
+      .print-key { page: coach-sheet; margin: 0 !important; padding: 0 !important; }
       .band-card,
       .cut-card,
       .coach-sheet-page {
@@ -1870,6 +1872,15 @@
         widthIn: Math.max(Number(source.widthIn) || 0, COACH_PRINT_WIDTH_IN),
         heightIn: Math.max(Number(source.heightIn) || 0, COACH_PRINT_HEIGHT_IN)
       });
+    }
+
+    function coachSheetPageRule(sheet) {
+      const width = Number(sheet && sheet.widthIn) || 3.5;
+      const height = Number(sheet && sheet.heightIn) || 5.5;
+      const size = width + "in " + height + "in";
+      const named = "@page coach-sheet { size: " + size + "; margin: 0; }";
+      if (printMode === "key") return "@page { size: " + size + "; margin: 0; } " + named;
+      return named;
     }
 
     function coachSheetMetrics(sheet, groups, capHeader) {
@@ -3393,30 +3404,19 @@
           calibrationHtml(escapeHtml(cardCopy)) +
           '<div style="display:flex;flex-wrap:wrap;gap:' + cardGap + 'in;padding-left:11pt">' + cards.join("") + '</div>' +
         '</section>';
-      const sheetGap = 0.16;
+      const sheet = sheetOf();
       const sheetFit = { cols: 1, rows: 1, count: 1 };
-      const sheetPages = coachSheetPages(version, coachPrintSheet(sheetOf()));
+      const sheetPages = coachSheetPages(version, sheet);
       const keyPages = [];
       for (let i = 0; i < sheetPages.length; i += sheetFit.count) {
         const chunk = sheetPages.slice(i, i + sheetFit.count);
-        const pageNo = Math.floor(i / sheetFit.count) + 1;
-        const pageCount = Math.max(1, Math.ceil(sheetPages.length / sheetFit.count));
-        const keyCopy =
-          "Print at 100% / Actual size. Do not choose Fit to page or Scale to fit. " +
-          "This square is 1 inch — measure it before you cut. " +
-          "Coach sheet " + pageNo + " of " + pageCount + " (" +
-          sheetPages.length + " page" + (sheetPages.length === 1 ? "" : "s") + " so every call prints, " +
-          sheetFit.cols + " across × " + sheetFit.rows + " down). " +
-          "Turn on Background graphics so the colors print. " +
-          escapeHtml(versionStamp(version)) + ".";
         keyPages.push(
-          '<section class="print-page print-key" style="color:#0f172a">' +
-            calibrationHtml(keyCopy) +
-            '<div style="display:flex;flex-wrap:wrap;gap:' + sheetGap + 'in">' + chunk.join("") + '</div>' +
+          '<section class="print-page print-key" style="page:coach-sheet;width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;margin:0;padding:0;color:#0f172a">' +
+            chunk.join("") +
           '</section>'
         );
       }
-      const keyPage = keyPages.join("");
+      const keyPage = '<style id="coach-page-rule">' + coachSheetPageRule(sheet) + '</style>' + keyPages.join("");
       if (printMode === "cards") root.innerHTML = cardPage;
       else if (printMode === "key") root.innerHTML = keyPage;
       else root.innerHTML = cardPage + keyPage;
