@@ -286,12 +286,16 @@
       color: #111;
       letter-spacing: 0.05em;
       text-transform: uppercase;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      padding: 0 2px;
     }
     .coach-sheet .sheet-code {
       font-variant-numeric: tabular-nums;
       letter-spacing: 0;
-      padding: 0;
-      overflow: hidden;
+      padding: 0 1px;
+      overflow: visible;
+      white-space: nowrap;
     }
     .swatch {
       width: 40px;
@@ -818,6 +822,9 @@
     const COACH_CODE_MIN_IN = 0.15;
     const COACH_HEADER_CAP_IN = 0.26;
     const COACH_HEADER_SCALE = 0.72;
+    const COACH_PLAY_CHAR_EM = 0.46;
+    const COACH_PLAY_LINE = 1.25;
+    const COACH_CODE_CHAR_EM = 0.5;
     const COACH_PRINT_WIDTH_IN = 7.7;
     const COACH_PRINT_HEIGHT_IN = 8.9;
     const DEFAULT_THEME = { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
@@ -1916,49 +1923,177 @@
       return coachSheetMetrics(sheet || {}, groupCount, true);
     }
 
-    function paginateCoachSheet(blocks, sheet) {
-      const frame = coachSheetFrame(sheet || {});
-      const cols = frame.cols;
-      const minRows = frame.minRows;
-      const innerH = frame.innerH;
-      const headerIn = frame.headerIn;
-      const codeIn = frame.codeIn;
-      const pieces = (blocks || []).map(function (block) {
-        return {
-          block: block,
-          codeRows: Math.max(minRows, Math.ceil(block.codes.length / cols) || 1)
-        };
+    function coachPlayLabel(block) {
+      return String(block.name || "") + " (" + String(block.short || "") + ")";
+    }
+
+    function coachSheetInnerWidth(sheet) {
+      return Math.max(1, (Number(sheet && sheet.widthIn) || 3.5) - 0.24);
+    }
+
+    function coachPlayLines(label, playSizePx, innerWIn) {
+      const charPx = Math.max(1, playSizePx * COACH_PLAY_CHAR_EM);
+      const perLine = Math.max(1, Math.floor((innerWIn * 96 - 8) / charPx));
+      const text = String(label || "").toUpperCase();
+      if (!text) return 1;
+      return Math.max(1, Math.ceil(text.length / perLine));
+    }
+
+    function coachPlayHeaderIn(label, metrics, innerWIn) {
+      const lines = coachPlayLines(label, metrics.playSize, innerWIn);
+      if (lines <= 1) return metrics.headerIn;
+      return metrics.headerIn + ((lines - 1) * metrics.playSize * COACH_PLAY_LINE) / 96;
+    }
+
+    function coachCodeSizePx(colPx, maxChars, fallbackPx) {
+      const chars = Math.max(1, Math.round(maxChars) || 1);
+      const fit = (colPx - 4) / (chars * COACH_CODE_CHAR_EM);
+      return Math.max(1, Math.min(fallbackPx, fit));
+    }
+
+    function coachPiece(block, cols, minRows) {
+      return {
+        block: block,
+        codeRows: Math.max(minRows, Math.ceil((block.codes || []).length / cols) || 1)
+      };
+    }
+
+    function coachPackedHeight(items, packed, innerW) {
+      let height = packed.headerIn;
+      items.forEach(function (item) {
+        height += coachPlayHeaderIn(coachPlayLabel(item.block), packed, innerW);
+        height += item.codeRows * packed.codeIn;
       });
-      function heightOf(items) {
-        let height = headerIn;
-        items.forEach(function (item) { height += headerIn + item.codeRows * codeIn; });
-        return height;
+      return height;
+    }
+
+    function layoutCoachSheet(blocks, sheet) {
+      const source = sheet || {};
+      const packed = coachSheetFrame(source);
+      const innerW = coachSheetInnerWidth(source);
+      const innerH = packed.innerH;
+      const pieces = (blocks || []).map(function (block) {
+        return coachPiece(block, packed.cols, packed.minRows);
+      });
+      function fits(items) {
+        return coachPackedHeight(items, packed, innerW) <= innerH + 1e-6;
       }
-      if (!pieces.length || heightOf(pieces) <= innerH + 1e-6) return [(blocks || []).slice()];
+      function paint(items) {
+        const grown = coachSheetPageFrame(source, Math.max(1, items.length));
+        const grownWraps = items.some(function (item) {
+          return coachPlayLines(coachPlayLabel(item.block), grown.playSize, innerW) > 1;
+        });
+        const grownHeight = coachPackedHeight(items, grown, innerW);
+        const useGrown = !grownWraps && grownHeight <= innerH + 1e-6;
+        let metrics = useGrown ? grown : packed;
+        let playSize = metrics.playSize;
+        const packedOneLine = items.every(function (item) {
+          return coachPlayLines(coachPlayLabel(item.block), packed.playSize, innerW) <= 1;
+        });
+        if (!useGrown && packedOneLine && grown.playSize > packed.playSize + 0.1) {
+          let low = packed.playSize;
+          let high = grown.playSize;
+          let fitted = low;
+          for (let step = 0; step < 12; step += 1) {
+            const mid = (low + high) / 2;
+            const wraps = items.some(function (item) {
+              return coachPlayLines(coachPlayLabel(item.block), mid, innerW) > 1;
+            });
+            if (wraps) high = mid;
+            else {
+              fitted = mid;
+              low = mid;
+            }
+          }
+          const probe = Object.assign({}, grown, { playSize: fitted });
+          if (coachPackedHeight(items, probe, innerW) <= innerH + 1e-6) {
+            metrics = probe;
+            playSize = fitted;
+          }
+        }
+        let rows = items.map(function (item) {
+          const label = coachPlayLabel(item.block);
+          return {
+            name: item.block.name,
+            short: item.block.short,
+            label: label,
+            lines: coachPlayLines(label, playSize, innerW),
+            headerIn: coachPlayHeaderIn(label, { playSize: playSize, headerIn: metrics.headerIn }, innerW),
+            codes: (item.block.codes || []).slice(),
+            codeRows: item.codeRows
+          };
+        });
+        let used = metrics.headerIn;
+        rows.forEach(function (row) {
+          used += row.headerIn + row.codeRows * metrics.codeIn;
+        });
+        if (rows.length === 1 && used > innerH + 1e-6) {
+          let size = playSize;
+          for (let guard = 0; guard < 8 && used > innerH + 1e-6 && size > 7; guard += 1) {
+            size = Math.max(7, size * 0.82);
+            const label = rows[0].label;
+            const headerIn = coachPlayHeaderIn(label, { playSize: size, headerIn: metrics.headerIn }, innerW);
+            rows = [Object.assign({}, rows[0], {
+              lines: coachPlayLines(label, size, innerW),
+              headerIn: headerIn
+            })];
+            used = metrics.headerIn + headerIn + rows[0].codeRows * metrics.codeIn;
+            playSize = size;
+          }
+        }
+        let maxChars = 1;
+        rows.forEach(function (row) {
+          row.codes.forEach(function (code) {
+            maxChars = Math.max(maxChars, String(code || "").length);
+          });
+        });
+        const colPx = (innerW / metrics.cols) * 96;
+        return {
+          innerH: innerH,
+          innerW: innerW,
+          cols: metrics.cols,
+          bannerIn: metrics.headerIn,
+          codeIn: metrics.codeIn,
+          playSize: playSize,
+          codeSize: coachCodeSizePx(colPx, maxChars, metrics.codeSize),
+          bannerSize: metrics.bannerSize,
+          rows: rows
+        };
+      }
+      if (!pieces.length) return [];
+      if (fits(pieces)) return [paint(pieces)];
       const pages = [];
       let current = [];
-      let currentPieces = [];
       pieces.forEach(function (piece) {
-        const alone = headerIn + headerIn + piece.codeRows * codeIn;
-        if (current.length && heightOf(currentPieces.concat([piece])) > innerH + 1e-6) {
-          pages.push(current);
+        if (current.length && !fits(current.concat([piece]))) {
+          pages.push(paint(current));
           current = [];
-          currentPieces = [];
         }
-        if (!current.length && alone > innerH + 1e-6) {
-          const roomRows = Math.max(1, Math.floor((innerH - headerIn - headerIn) / codeIn));
-          const perPage = roomRows * cols;
+        if (!current.length && !fits([piece])) {
+          const label = coachPlayLabel(piece.block);
+          const headerIn = coachPlayHeaderIn(label, packed, innerW);
+          const room = innerH - packed.headerIn - headerIn;
+          const roomRows = Math.max(1, Math.floor((room + 1e-9) / packed.codeIn));
+          const perPage = roomRows * packed.cols;
           const codes = piece.block.codes.length ? piece.block.codes : [""];
           for (let start = 0; start < codes.length; start += perPage) {
-            pages.push([Object.assign({}, piece.block, { codes: codes.slice(start, start + perPage) })]);
+            const slice = Object.assign({}, piece.block, { codes: codes.slice(start, start + perPage) });
+            pages.push(paint([coachPiece(slice, packed.cols, packed.minRows)]));
           }
           return;
         }
-        current.push(piece.block);
-        currentPieces.push(piece);
+        current.push(piece);
       });
-      if (current.length) pages.push(current);
+      if (current.length) pages.push(paint(current));
       return pages;
+    }
+
+    function paginateCoachSheet(blocks, sheet) {
+      return layoutCoachSheet(blocks, sheet).map(function (page) {
+        return page.rows.map(function (row) {
+          return { name: row.name, short: row.short, codes: row.codes.slice() };
+        });
+      });
     }
 
     function ensureBookShape() {
@@ -3038,43 +3173,33 @@
       }).join("");
     }
 
-    function coachSheetHtml(version, groups, sheetOverride) {
-      if (!version) return "";
-      const sheet = sheetOverride || sheetOf();
-      const theme = themeOf();
-      const rows = groups || sheetGroups(version);
-      const banner = escapeHtml(bandTitle() + " - CALLS ARE TOP + LEFT");
-      const frame = coachSheetPageFrame(sheet, rows.length);
-      const blocks = rows.map(function (group) {
-        const needed = Math.max(frame.minRows, Math.ceil(group.codes.length / frame.cols) || 1);
-        return { group: group, needed: needed };
-      });
-      const codeSize = frame.codeSize;
-      const playSize = frame.playSize;
-      const bannerSize = frame.bannerSize;
-      const headerStyle = "height:" + frame.headerIn + "in";
-      const codeStyle = "height:" + frame.codeIn + "in";
-      const body = blocks.map(function (block) {
+    function coachPageHtml(page, sheet, banner, band) {
+      const cols = page.cols;
+      const bannerStyle = "height:" + page.bannerIn + "in";
+      const codeStyle = "height:" + page.codeIn + "in";
+      const body = page.rows.map(function (row) {
+        const playStyle = "height:" + row.headerIn + "in;font-size:" + page.playSize + "px;" +
+          (row.lines > 1 ? "line-height:" + COACH_PLAY_LINE + ";" : "");
         const playRow =
-          '<tr style="' + headerStyle + '"><th class="sheet-play" colspan="' + sheet.cols + '" style="font-size:' + playSize + 'px">' +
-            escapeHtml(block.group.name + " (" + block.group.short + ")") +
+          '<tr style="height:' + row.headerIn + 'in"><th class="sheet-play" colspan="' + cols + '" data-lines="' + row.lines + '" style="' + playStyle + '">' +
+            escapeHtml(row.label) +
           '</th></tr>';
         const codeRows = [];
-        for (let r = 0; r < block.needed; r += 1) {
+        for (let r = 0; r < row.codeRows; r += 1) {
           const cells = [];
-          for (let c = 0; c < sheet.cols; c += 1) {
-            const code = block.group.codes[r * sheet.cols + c] || "";
-            cells.push('<td class="sheet-code" style="font-size:' + codeSize + 'px">' + escapeHtml(code) + '</td>');
+          for (let c = 0; c < cols; c += 1) {
+            const code = row.codes[r * cols + c] || "";
+            cells.push('<td class="sheet-code" style="font-size:' + page.codeSize + 'px">' + escapeHtml(code) + '</td>');
           }
           codeRows.push('<tr style="' + codeStyle + '">' + cells.join("") + '</tr>');
         }
         return playRow + codeRows.join("");
       }).join("");
       return (
-        '<div class="coach-sheet-page shadow-xl" data-header-in="' + frame.headerIn + '" data-code-in="' + frame.codeIn + '" data-banner-px="' + bannerSize + '" style="width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;padding:0.12in">' +
+        '<div class="coach-sheet-page shadow-xl" data-header-in="' + page.bannerIn + '" data-code-in="' + page.codeIn + '" data-banner-px="' + page.bannerSize + '" data-play-px="' + page.playSize + '" style="width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;padding:0.12in">' +
           '<table class="coach-sheet">' +
-            '<thead><tr class="sheet-banner-row" style="' + headerStyle + '"><th class="sheet-banner" colspan="' + sheet.cols + '" style="background:' + theme.band + ';color:' + (hexLuma(theme.band) < 150 ? "#ffffff" : "#111111") + ';font-size:' + bannerSize + 'px;text-shadow:none">' +
-              banner +
+            '<thead><tr class="sheet-banner-row" style="' + bannerStyle + '"><th class="sheet-banner" colspan="' + cols + '" style="background:' + band + ';color:' + (hexLuma(band) < 150 ? "#ffffff" : "#111111") + ';font-size:' + page.bannerSize + 'px;text-shadow:none">' +
+              escapeHtml(banner) +
             '</th></tr></thead>' +
             '<tbody>' + body + '</tbody>' +
           '</table>' +
@@ -3083,10 +3208,12 @@
     }
 
     function coachSheetPages(version, sheetOverride) {
+      if (!version) return [];
       const sheet = sheetOverride || sheetOf();
-      const groups = sheetGroups(version);
-      return paginateCoachSheet(groups, sheet).map(function (slice) {
-        return coachSheetHtml(version, slice, sheet);
+      const theme = themeOf();
+      const banner = bandTitle() + " - CALLS ARE TOP + LEFT";
+      return layoutCoachSheet(sheetGroups(version), sheet).map(function (page) {
+        return coachPageHtml(page, sheet, banner, theme.band);
       });
     }
 

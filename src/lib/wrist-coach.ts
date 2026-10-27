@@ -1068,6 +1068,15 @@ export const COACH_CODE_MIN_IN = 0.15;
 /** A leftover page may grow, but not into a banner. */
 export const COACH_HEADER_CAP_IN = 0.26;
 const COACH_HEADER_SCALE = 0.72;
+/**
+ * Barlow Condensed caps are about 0.40em, plus the 0.05em play-name tracking.
+ * A little extra so a name wraps before the cell clips it.
+ */
+export const COACH_PLAY_CHAR_EM = 0.46;
+/** Extra play-name lines use this line height. The first line stays in the packed row. */
+export const COACH_PLAY_LINE = 1.25;
+/** Digit width used so a code stays inside its column. */
+export const COACH_CODE_CHAR_EM = 0.5;
 
 /**
  * Letter content box for a printed coach sheet, under the 0.4in margin and the
@@ -1169,55 +1178,215 @@ export function coachSheetPageFrame(
   return coachSheetMetrics(sheet, groupCount, true);
 }
 
-/**
- * Split a coach sheet so every call prints. Rows stay the full-page size.
- * A call that does not fit starts the next page. One huge play splits only
- * when it cannot fit on a page alone.
- */
-export function paginateCoachSheet(
-  blocks: CoachSheetBlock[],
-  sheet: { cols: number; rows?: number; widthIn?: number; heightIn: number },
-): CoachSheetBlock[][] {
-  const frame = coachSheetFrame(sheet);
-  const cols = frame.cols;
-  const minRows = frame.minRows;
-  const innerH = frame.innerH;
-  const headerIn = frame.headerIn;
-  const codeIn = frame.codeIn;
-  const pieces = blocks.map((block) => ({
+export type CoachSheetSpec = { cols: number; rows?: number; widthIn?: number; heightIn: number };
+
+/** Play name as it is painted, before the uppercase style. */
+export function coachPlayLabel(block: { name: string; short: string }): string {
+  return `${block.name} (${block.short})`;
+}
+
+export function coachSheetInnerWidth(sheet: { widthIn?: number }): number {
+  return Math.max(1, (Number(sheet.widthIn) || 3.5) - 0.24);
+}
+
+/** How many lines the uppercase play name needs at this font and sheet width. */
+export function coachPlayLines(label: string, playSizePx: number, innerWIn: number): number {
+  const charPx = Math.max(1, playSizePx * COACH_PLAY_CHAR_EM);
+  const perLine = Math.max(1, Math.floor((innerWIn * 96 - 8) / charPx));
+  const text = String(label || "").toUpperCase();
+  if (!text) return 1;
+  return Math.max(1, Math.ceil(text.length / perLine));
+}
+
+/** Row height for a play name. One line keeps the shared header. Wrapped lines add room. */
+export function coachPlayHeaderIn(
+  label: string,
+  metrics: { playSize: number; headerIn: number },
+  innerWIn: number,
+): number {
+  const lines = coachPlayLines(label, metrics.playSize, innerWIn);
+  if (lines <= 1) return metrics.headerIn;
+  return metrics.headerIn + ((lines - 1) * metrics.playSize * COACH_PLAY_LINE) / 96;
+}
+
+/** Code type that stays inside the column, including a 4-character code such as 30-5. */
+export function coachCodeSizePx(codePx: number, colPx: number, maxChars: number, fallbackPx: number): number {
+  const chars = Math.max(1, Math.round(maxChars) || 1);
+  const fit = (colPx - 4) / (chars * COACH_CODE_CHAR_EM);
+  return Math.max(1, Math.min(fallbackPx, fit));
+}
+
+export type CoachSheetRowLayout = {
+  name: string;
+  short: string;
+  label: string;
+  lines: number;
+  headerIn: number;
+  codes: string[];
+  codeRows: number;
+};
+
+export type CoachSheetPageLayout = {
+  innerH: number;
+  innerW: number;
+  cols: number;
+  bannerIn: number;
+  codeIn: number;
+  playSize: number;
+  codeSize: number;
+  bannerSize: number;
+  rows: CoachSheetRowLayout[];
+};
+
+type CoachPiece = { block: CoachSheetBlock; codeRows: number };
+
+function coachPiece(block: CoachSheetBlock, cols: number, minRows: number): CoachPiece {
+  return {
     block,
     codeRows: Math.max(minRows, Math.ceil(block.codes.length / cols) || 1),
-  }));
-  const heightOf = (items: typeof pieces) => {
-    let height = headerIn;
-    for (const item of items) height += headerIn + item.codeRows * codeIn;
-    return height;
   };
-  if (!pieces.length || heightOf(pieces) <= innerH + 1e-6) return [blocks.slice()];
-  const pages: CoachSheetBlock[][] = [];
-  let current: CoachSheetBlock[] = [];
-  let currentPieces: typeof pieces = [];
-  for (const piece of pieces) {
-    const alone = headerIn + headerIn + piece.codeRows * codeIn;
-    if (current.length && heightOf(currentPieces.concat([piece])) > innerH + 1e-6) {
-      pages.push(current);
-      current = [];
-      currentPieces = [];
+}
+
+function coachPackedHeight(
+  items: CoachPiece[],
+  packed: CoachSheetFrame,
+  innerW: number,
+): number {
+  let height = packed.headerIn;
+  for (const item of items) {
+    height += coachPlayHeaderIn(coachPlayLabel(item.block), packed, innerW);
+    height += item.codeRows * packed.codeIn;
+  }
+  return height;
+}
+
+/**
+ * Split a coach sheet so every call prints. A one-line page still fills the sheet.
+ * A name that wraps keeps its full text and takes the next page instead of being clipped.
+ * One huge play splits its codes only when the name and the codes cannot share a page.
+ */
+export function layoutCoachSheet(blocks: CoachSheetBlock[], sheet: CoachSheetSpec): CoachSheetPageLayout[] {
+  const packed = coachSheetFrame(sheet);
+  const innerW = coachSheetInnerWidth(sheet);
+  const innerH = packed.innerH;
+  const pieces = (blocks || []).map((block) => coachPiece(block, packed.cols, packed.minRows));
+  const fits = (items: CoachPiece[]) => coachPackedHeight(items, packed, innerW) <= innerH + 1e-6;
+
+  function paint(items: CoachPiece[]): CoachSheetPageLayout {
+    const grown = coachSheetPageFrame(sheet, Math.max(1, items.length));
+    const grownWraps = items.some(
+      (item) => coachPlayLines(coachPlayLabel(item.block), grown.playSize, innerW) > 1,
+    );
+    const grownHeight = coachPackedHeight(items, grown, innerW);
+    const useGrown = !grownWraps && grownHeight <= innerH + 1e-6;
+    let metrics = useGrown ? grown : packed;
+    let playSize = metrics.playSize;
+    const packedOneLine = items.every(
+      (item) => coachPlayLines(coachPlayLabel(item.block), packed.playSize, innerW) <= 1,
+    );
+    if (!useGrown && packedOneLine && grown.playSize > packed.playSize + 0.1) {
+      let low = packed.playSize;
+      let high = grown.playSize;
+      let fitted = low;
+      for (let step = 0; step < 12; step += 1) {
+        const mid = (low + high) / 2;
+        const wraps = items.some((item) => coachPlayLines(coachPlayLabel(item.block), mid, innerW) > 1);
+        if (wraps) high = mid;
+        else {
+          fitted = mid;
+          low = mid;
+        }
+      }
+      const probe = { ...grown, playSize: fitted };
+      if (coachPackedHeight(items, probe, innerW) <= innerH + 1e-6) {
+        metrics = probe;
+        playSize = fitted;
+      }
     }
-    if (!current.length && alone > innerH + 1e-6) {
-      const roomRows = Math.max(1, Math.floor((innerH - headerIn - headerIn) / codeIn));
-      const perPage = roomRows * cols;
+    let rows: CoachSheetRowLayout[] = items.map((item) => {
+      const label = coachPlayLabel(item.block);
+      const lines = coachPlayLines(label, playSize, innerW);
+      return {
+        name: item.block.name,
+        short: item.block.short,
+        label,
+        lines,
+        headerIn: coachPlayHeaderIn(label, { playSize, headerIn: metrics.headerIn }, innerW),
+        codes: item.block.codes.slice(),
+        codeRows: item.codeRows,
+      };
+    });
+    let used = metrics.headerIn;
+    for (const row of rows) {
+      used += row.headerIn;
+      used += row.codeRows * metrics.codeIn;
+    }
+    if (rows.length === 1 && used > innerH + 1e-6) {
+      let size = playSize;
+      for (let guard = 0; guard < 8 && used > innerH + 1e-6 && size > 7; guard += 1) {
+        size = Math.max(7, size * 0.82);
+        const label = rows[0].label;
+        const headerIn = coachPlayHeaderIn(label, { playSize: size, headerIn: metrics.headerIn }, innerW);
+        rows = [{
+          ...rows[0],
+          lines: coachPlayLines(label, size, innerW),
+          headerIn,
+        }];
+        used = metrics.headerIn + headerIn + rows[0].codeRows * metrics.codeIn;
+        playSize = size;
+      }
+    }
+    const codeIn = metrics.codeIn;
+    const maxChars = rows.reduce((widest, row) => {
+      const rowWidest = row.codes.reduce((max, code) => Math.max(max, String(code || "").length), 1);
+      return Math.max(widest, rowWidest);
+    }, 1);
+    const colPx = (innerW / metrics.cols) * 96;
+    return {
+      innerH,
+      innerW,
+      cols: metrics.cols,
+      bannerIn: metrics.headerIn,
+      codeIn,
+      playSize,
+      codeSize: coachCodeSizePx(metrics.codeIn * 96, colPx, maxChars, metrics.codeSize),
+      bannerSize: metrics.bannerSize,
+      rows,
+    };
+  }
+
+  if (!pieces.length) return [];
+  if (fits(pieces)) return [paint(pieces)];
+  const pages: CoachSheetPageLayout[] = [];
+  let current: CoachPiece[] = [];
+  for (const piece of pieces) {
+    if (current.length && !fits(current.concat([piece]))) {
+      pages.push(paint(current));
+      current = [];
+    }
+    if (!current.length && !fits([piece])) {
+      const label = coachPlayLabel(piece.block);
+      const headerIn = coachPlayHeaderIn(label, packed, innerW);
+      const room = innerH - packed.headerIn - headerIn;
+      const roomRows = Math.max(1, Math.floor((room + 1e-9) / packed.codeIn));
+      const perPage = roomRows * packed.cols;
       const codes = piece.block.codes.length ? piece.block.codes : [""];
       for (let start = 0; start < codes.length; start += perPage) {
-        pages.push([{ ...piece.block, codes: codes.slice(start, start + perPage) }]);
+        const slice = { ...piece.block, codes: codes.slice(start, start + perPage) };
+        pages.push(paint([coachPiece(slice, packed.cols, packed.minRows)]));
       }
       continue;
     }
-    current.push(piece.block);
-    currentPieces.push(piece);
+    current.push(piece);
   }
-  if (current.length) pages.push(current);
+  if (current.length) pages.push(paint(current));
   return pages;
+}
+
+export function paginateCoachSheet(blocks: CoachSheetBlock[], sheet: CoachSheetSpec): CoachSheetBlock[][] {
+  return layoutCoachSheet(blocks, sheet).map((page) =>
+    page.rows.map((row) => ({ name: row.name, short: row.short, codes: row.codes })),
+  );
 }
 
 export function cardCounts(
