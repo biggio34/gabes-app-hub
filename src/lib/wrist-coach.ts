@@ -1247,80 +1247,57 @@ function coachPiece(block: CoachSheetBlock, cols: number, minRows: number): Coac
   };
 }
 
-function coachPackedHeight(
+/** Defense stays at the 15-call row size. A 16th call or a taller name starts the next page. */
+const DEFENSE_SHEET_CALLS = 15;
+
+function coachSheetHeight(
   items: CoachPiece[],
-  packed: CoachSheetFrame,
+  metrics: CoachSheetFrame,
   innerW: number,
 ): number {
-  let height = packed.headerIn;
+  let height = metrics.headerIn;
   for (const item of items) {
-    height += coachPlayHeaderIn(coachPlayLabel(item.block), packed, innerW);
-    height += item.codeRows * packed.codeIn;
+    height += coachPlayHeaderIn(coachPlayLabel(item.block), metrics, innerW);
+    height += item.codeRows * metrics.codeIn;
   }
   return height;
 }
 
 /**
- * Split a coach sheet so every call prints. A one-line page still fills the sheet.
- * A name that wraps keeps its full text and takes the next page instead of being clipped.
- * One huge play splits its codes only when the name and the codes cannot share a page.
+ * Defense coach sheet. Fifteen short calls still fill one page.
+ * A longer name, or a call past that row size, starts the next page instead of shrinking the row.
  */
-export function layoutCoachSheet(blocks: CoachSheetBlock[], sheet: CoachSheetSpec): CoachSheetPageLayout[] {
-  const packed = coachSheetFrame(sheet);
+export function layoutDefenseCoachSheet(
+  blocks: CoachSheetBlock[],
+  sheet: CoachSheetSpec,
+): CoachSheetPageLayout[] {
+  const readable = coachSheetPageFrame(sheet, DEFENSE_SHEET_CALLS);
   const innerW = coachSheetInnerWidth(sheet);
-  const innerH = packed.innerH;
-  const pieces = (blocks || []).map((block) => coachPiece(block, packed.cols, packed.minRows));
-  const fits = (items: CoachPiece[]) => coachPackedHeight(items, packed, innerW) <= innerH + 1e-6;
+  const innerH = readable.innerH;
+  const pieces = (blocks || []).map((block) => coachPiece(block, readable.cols, readable.minRows));
+  const fits = (items: CoachPiece[]) => coachSheetHeight(items, readable, innerW) <= innerH + 1e-6;
 
   function paint(items: CoachPiece[]): CoachSheetPageLayout {
     const grown = coachSheetPageFrame(sheet, Math.max(1, items.length));
-    const grownWraps = items.some(
-      (item) => coachPlayLines(coachPlayLabel(item.block), grown.playSize, innerW) > 1,
+    const oneLine = items.every(
+      (item) => coachPlayLines(coachPlayLabel(item.block), grown.playSize, innerW) <= 1,
     );
-    const grownHeight = coachPackedHeight(items, grown, innerW);
-    const useGrown = !grownWraps && grownHeight <= innerH + 1e-6;
-    let metrics = useGrown ? grown : packed;
+    const metrics = oneLine && coachSheetHeight(items, grown, innerW) <= innerH + 1e-6 ? grown : readable;
     let playSize = metrics.playSize;
-    const packedOneLine = items.every(
-      (item) => coachPlayLines(coachPlayLabel(item.block), packed.playSize, innerW) <= 1,
-    );
-    if (!useGrown && packedOneLine && grown.playSize > packed.playSize + 0.1) {
-      let low = packed.playSize;
-      let high = grown.playSize;
-      let fitted = low;
-      for (let step = 0; step < 12; step += 1) {
-        const mid = (low + high) / 2;
-        const wraps = items.some((item) => coachPlayLines(coachPlayLabel(item.block), mid, innerW) > 1);
-        if (wraps) high = mid;
-        else {
-          fitted = mid;
-          low = mid;
-        }
-      }
-      const probe = { ...grown, playSize: fitted };
-      if (coachPackedHeight(items, probe, innerW) <= innerH + 1e-6) {
-        metrics = probe;
-        playSize = fitted;
-      }
-    }
     let rows: CoachSheetRowLayout[] = items.map((item) => {
       const label = coachPlayLabel(item.block);
-      const lines = coachPlayLines(label, playSize, innerW);
       return {
         name: item.block.name,
         short: item.block.short,
         label,
-        lines,
+        lines: coachPlayLines(label, playSize, innerW),
         headerIn: coachPlayHeaderIn(label, { playSize, headerIn: metrics.headerIn }, innerW),
         codes: item.block.codes.slice(),
         codeRows: item.codeRows,
       };
     });
     let used = metrics.headerIn;
-    for (const row of rows) {
-      used += row.headerIn;
-      used += row.codeRows * metrics.codeIn;
-    }
+    for (const row of rows) used += row.headerIn + row.codeRows * metrics.codeIn;
     if (rows.length === 1 && used > innerH + 1e-6) {
       let size = playSize;
       for (let guard = 0; guard < 8 && used > innerH + 1e-6 && size > 7; guard += 1) {
@@ -1336,18 +1313,17 @@ export function layoutCoachSheet(blocks: CoachSheetBlock[], sheet: CoachSheetSpe
         playSize = size;
       }
     }
-    const codeIn = metrics.codeIn;
     const maxChars = rows.reduce((widest, row) => {
       const rowWidest = row.codes.reduce((max, code) => Math.max(max, String(code || "").length), 1);
       return Math.max(widest, rowWidest);
     }, 1);
-    const colPx = (innerW / metrics.cols) * 96;
+    const colPx = (innerW / readable.cols) * 96;
     return {
       innerH,
       innerW,
       cols: metrics.cols,
       bannerIn: metrics.headerIn,
-      codeIn,
+      codeIn: metrics.codeIn,
       playSize,
       codeSize: coachCodeSizePx(metrics.codeIn * 96, colPx, maxChars, metrics.codeSize),
       bannerSize: metrics.bannerSize,
@@ -1365,15 +1341,14 @@ export function layoutCoachSheet(blocks: CoachSheetBlock[], sheet: CoachSheetSpe
       current = [];
     }
     if (!current.length && !fits([piece])) {
-      const label = coachPlayLabel(piece.block);
-      const headerIn = coachPlayHeaderIn(label, packed, innerW);
-      const room = innerH - packed.headerIn - headerIn;
-      const roomRows = Math.max(1, Math.floor((room + 1e-9) / packed.codeIn));
-      const perPage = roomRows * packed.cols;
+      const headerIn = coachPlayHeaderIn(coachPlayLabel(piece.block), readable, innerW);
+      const room = innerH - readable.headerIn - headerIn;
+      const roomRows = Math.max(1, Math.floor((room + 1e-9) / readable.codeIn));
+      const perPage = roomRows * readable.cols;
       const codes = piece.block.codes.length ? piece.block.codes : [""];
       for (let start = 0; start < codes.length; start += perPage) {
         const slice = { ...piece.block, codes: codes.slice(start, start + perPage) };
-        pages.push(paint([coachPiece(slice, packed.cols, packed.minRows)]));
+        pages.push(paint([coachPiece(slice, readable.cols, readable.minRows)]));
       }
       continue;
     }
@@ -1383,10 +1358,51 @@ export function layoutCoachSheet(blocks: CoachSheetBlock[], sheet: CoachSheetSpe
   return pages;
 }
 
+/**
+ * Split a coach sheet so every call prints. Rows stay the full-page size.
+ * A call that does not fit starts the next page. One huge play splits only
+ * when it cannot fit on a page alone.
+ * Offense uses this path. Defense uses layoutDefenseCoachSheet so a long name
+ * or a 16th call continues on the next page.
+ */
 export function paginateCoachSheet(blocks: CoachSheetBlock[], sheet: CoachSheetSpec): CoachSheetBlock[][] {
-  return layoutCoachSheet(blocks, sheet).map((page) =>
-    page.rows.map((row) => ({ name: row.name, short: row.short, codes: row.codes })),
-  );
+  const frame = coachSheetFrame(sheet);
+  const cols = frame.cols;
+  const minRows = frame.minRows;
+  const innerH = frame.innerH;
+  const headerIn = frame.headerIn;
+  const codeIn = frame.codeIn;
+  const pieces = (blocks || []).map((block) => coachPiece(block, cols, minRows));
+  const heightOf = (items: CoachPiece[]) => {
+    let height = headerIn;
+    for (const item of items) height += headerIn + item.codeRows * codeIn;
+    return height;
+  };
+  if (!pieces.length || heightOf(pieces) <= innerH + 1e-6) return [(blocks || []).slice()];
+  const pages: CoachSheetBlock[][] = [];
+  let current: CoachSheetBlock[] = [];
+  let currentPieces: CoachPiece[] = [];
+  for (const piece of pieces) {
+    const alone = headerIn + headerIn + piece.codeRows * codeIn;
+    if (current.length && heightOf(currentPieces.concat([piece])) > innerH + 1e-6) {
+      pages.push(current);
+      current = [];
+      currentPieces = [];
+    }
+    if (!current.length && alone > innerH + 1e-6) {
+      const roomRows = Math.max(1, Math.floor((innerH - headerIn - headerIn) / codeIn));
+      const perPage = roomRows * cols;
+      const codes = piece.block.codes.length ? piece.block.codes : [""];
+      for (let start = 0; start < codes.length; start += perPage) {
+        pages.push([{ ...piece.block, codes: codes.slice(start, start + perPage) }]);
+      }
+      continue;
+    }
+    current.push(piece.block);
+    currentPieces.push(piece);
+  }
+  if (current.length) pages.push(current);
+  return pages;
 }
 
 export function cardCounts(

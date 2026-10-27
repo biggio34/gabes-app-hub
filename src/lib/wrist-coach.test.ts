@@ -88,7 +88,7 @@ import {
   readableHeaderTheme,
   HEADER_INK_DARK,
   paginateCoachSheet,
-  layoutCoachSheet,
+  layoutDefenseCoachSheet,
   coachPlayLabel,
   coachPlayLines,
   coachPlayHeaderIn,
@@ -2017,7 +2017,7 @@ describe("wrist coach book", () => {
     assert.equal(partial.codeSize, frame.codeSize);
   });
 
-  it("keeps every coach-sheet play name and code on the page", () => {
+  it("sends defense coach calls to the next page instead of clipping them", () => {
     const sheet = { cols: 15, rows: 1, widthIn: 3.5, heightIn: 5.5 };
     const printed = coachPrintSheet(sheet);
     const defense = defaultLibrary().filter((call) => call.kind === "defense");
@@ -2026,35 +2026,36 @@ describe("wrist coach book", () => {
       short: call.short,
       codes: ["011", "12", "30-5"],
     }));
-    const shortPages = layoutCoachSheet(shortDefense, sheet);
+    const shortPages = layoutDefenseCoachSheet(shortDefense, sheet);
     assert.equal(shortPages.length, 1);
+    assert.equal(shortPages[0].rows.at(-1)?.short, "NS");
     assertCoachSheetFits(shortDefense, sheet);
     assertCoachSheetFits(shortDefense, printed);
+    const sixteen = shortDefense.concat([{ name: "Extra coverage", short: "E16", codes: ["011"] }]);
+    const sixteenPages = layoutDefenseCoachSheet(sixteen, sheet);
+    assert.equal(sixteenPages.length, 2);
+    assert.equal(sixteenPages[0].rows.length, 15);
+    assert.equal(sixteenPages[1].rows.length, 1);
+    assert.equal(paginateCoachSheet(sixteen, sheet).length, 1);
     const longName = "Steal second and third on the first pitch after the fake when the runner reads the catcher";
-    const longDefense = [
-      ...defense.map((call) => ({ name: longName, short: call.short, codes: ["011", "30-5"] })),
-      { name: longName, short: "E16", codes: ["145", "30-5"] },
-    ];
-    const longScreen = layoutCoachSheet(longDefense, sheet);
+    const longDefense = defense.map((call) => ({ name: longName, short: call.short, codes: ["011", "30-5"] }));
+    const longScreen = layoutDefenseCoachSheet(longDefense, sheet);
+    const longPrint = layoutDefenseCoachSheet(longDefense, printed);
     assert.ok(longScreen.length > 1);
+    assert.ok(longPrint.length > 1);
+    assert.equal(paginateCoachSheet(longDefense, sheet).length, 1);
     assert.ok(longScreen.some((page) => page.rows.some((row) => row.lines > 1)));
     assertCoachSheetFits(longDefense, sheet);
-    const longPrint = layoutCoachSheet(longDefense.slice(0, 15), printed);
-    assert.equal(longPrint.length, 1);
-    assertCoachSheetFits(longDefense.slice(0, 15), printed);
-    const offense = defaultLibrary()
-      .filter((call) => call.kind === "offense")
-      .map((call) => ({ name: `${call.name} with the full spoken play name`, short: call.short, codes: ["032"] }));
-    const offensePages = layoutCoachSheet(offense, sheet);
-    assert.ok(offensePages.length > 1);
-    assertCoachSheetFits(offense, sheet);
-    assertCoachSheetFits(offense, printed);
+    assertCoachSheetFits(longDefense, printed);
     const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
-    assert.match(page, /\.sheet-code \{[^}]*overflow: visible/);
-    assert.match(page, /overflow-wrap: anywhere/);
+    assert.match(page, /\[data-kind="defense"\] \.sheet-code \{[^}]*overflow: visible/);
+    assert.match(page, /\.coach-sheet \.sheet-code \{[^}]*overflow: hidden/);
+    assert.match(page, /function layoutDefenseCoachSheet/);
+    assert.match(page, /bandKind === "defense"/);
     const fromPage = coachSheetLayoutFromPage(page, longDefense, sheet);
     assert.deepEqual(JSON.parse(JSON.stringify(fromPage.layout)), JSON.parse(JSON.stringify(longScreen)));
     const html = fromPage.html;
+    assert.match(html, /data-kind="defense"/);
     for (const block of longDefense) {
       assert.ok(html.includes(`${block.name} (${block.short})`), block.short);
     }
@@ -2310,7 +2311,7 @@ function assertCoachSheetFits(
   blocks: { name: string; short: string; codes: string[] }[],
   sheet: { cols: number; rows?: number; widthIn?: number; heightIn: number },
 ) {
-  const pages = layoutCoachSheet(blocks, sheet);
+  const pages = layoutDefenseCoachSheet(blocks, sheet);
   const innerW = coachSheetInnerWidth(sheet);
   const flat = pages.flatMap((page) => page.rows);
   assert.deepEqual(flat.map((row) => row.name), blocks.map((block) => block.name));
@@ -2354,7 +2355,7 @@ function coachSheetLayoutFromPage(
   const source = page.slice(start + "<script>".length, boot) + `
     const blocks = ${JSON.stringify(blocks)};
     const sheet = ${JSON.stringify(sheet)};
-    const layout = layoutCoachSheet(blocks, sheet);
+    const layout = layoutDefenseCoachSheet(blocks, sheet);
     globalThis.__coach = {
       layout: layout,
       html: layout.map(function (item) {
