@@ -89,6 +89,7 @@ import {
   HEADER_INK_DARK,
   paginateCoachSheet,
   layoutDefenseCoachSheet,
+  DEFENSE_PLAY_MIN_PX,
   coachPlayLabel,
   coachPlayLines,
   coachPlayHeaderIn,
@@ -2042,11 +2043,30 @@ describe("wrist coach book", () => {
     const longScreen = layoutDefenseCoachSheet(longDefense, sheet);
     const longPrint = layoutDefenseCoachSheet(longDefense, printed);
     assert.ok(longScreen.length > 1);
-    assert.ok(longPrint.length > 1);
     assert.equal(paginateCoachSheet(longDefense, sheet).length, 1);
     assert.ok(longScreen.some((page) => page.rows.some((row) => row.lines > 1)));
+    assert.ok(longPrint.every((page) => page.playSize + 1e-9 >= DEFENSE_PLAY_MIN_PX));
     assertCoachSheetFits(longDefense, sheet);
     assertCoachSheetFits(longDefense, printed);
+    const sizes = [
+      { name: "card", widthIn: 3.5, heightIn: 5.5 },
+      { name: "letter", widthIn: 8.5, heightIn: 11 },
+      { name: "half", widthIn: 8.5, heightIn: 5.5 },
+      { name: "index", widthIn: 5, heightIn: 8 },
+      { name: "custom", widthIn: 4, heightIn: 6 },
+    ];
+    for (const size of sizes) {
+      const sized = { cols: 15, rows: 1, widthIn: size.widthIn, heightIn: size.heightIn };
+      const pages = layoutDefenseCoachSheet(longDefense, sized);
+      assert.ok(pages.length >= 1, size.name);
+      assert.deepEqual(pages.flatMap((page) => page.rows.map((row) => row.short)), longDefense.map((block) => block.short));
+      for (const page of pages) {
+        assert.ok(page.playSize + 1e-6 >= DEFENSE_PLAY_MIN_PX || page.rows.length === 1, size.name);
+      }
+      assertCoachSheetFits(longDefense, sized);
+    }
+    assert.equal(layoutDefenseCoachSheet(longDefense, { cols: 15, rows: 1, widthIn: 8.5, heightIn: 5.5 }).length, 1);
+    assert.ok(layoutDefenseCoachSheet(longDefense, { cols: 15, rows: 1, widthIn: 3.5, heightIn: 5.5 }).length > 1);
     const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
     assert.match(page, /\[data-kind="defense"\] \.sheet-code \{[^}]*overflow: visible/);
     assert.match(page, /\.coach-sheet \.sheet-code \{[^}]*overflow: hidden/);

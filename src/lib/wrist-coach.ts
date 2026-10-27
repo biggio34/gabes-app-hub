@@ -1247,8 +1247,17 @@ function coachPiece(block: CoachSheetBlock, cols: number, minRows: number): Coac
   };
 }
 
-/** Defense stays at the 15-call row size. A 16th call or a taller name starts the next page. */
+/** Fifteen short calls are the full card. A smaller row than that is no longer readable. */
 const DEFENSE_SHEET_CALLS = 15;
+
+/**
+ * Smallest defense play name that still reads: the type used by 15 calls on a 3.5×5.5 card.
+ * Taller sheets may start larger, then shrink down to this before a call moves to the next page.
+ */
+export const DEFENSE_PLAY_MIN_PX = coachSheetPageFrame(
+  { cols: 15, rows: 1, widthIn: 3.5, heightIn: 5.5 },
+  DEFENSE_SHEET_CALLS,
+).playSize;
 
 function coachSheetHeight(
   items: CoachPiece[],
@@ -1263,27 +1272,51 @@ function coachSheetHeight(
   return height;
 }
 
+/** Largest type at or under the page size that keeps every name on one line, down to the readable floor. */
+function defensePlaySize(items: CoachPiece[], frame: CoachSheetFrame, innerW: number): number {
+  const start = frame.playSize;
+  if (start <= DEFENSE_PLAY_MIN_PX + 1e-6) return start;
+  const labels = items.map((item) => coachPlayLabel(item.block));
+  const oneLine = (px: number) => labels.every((label) => coachPlayLines(label, px, innerW) <= 1);
+  if (oneLine(start)) return start;
+  if (!oneLine(DEFENSE_PLAY_MIN_PX)) return DEFENSE_PLAY_MIN_PX;
+  let lo = DEFENSE_PLAY_MIN_PX;
+  let hi = start;
+  for (let step = 0; step < 12; step += 1) {
+    const mid = (lo + hi) / 2;
+    if (oneLine(mid)) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
 /**
- * Defense coach sheet. Fifteen short calls still fill one page.
- * A longer name, or a call past that row size, starts the next page instead of shrinking the row.
+ * Defense coach sheet for every sheet size.
+ * Type may shrink down to the readable floor so a name fits. Past that, the next call
+ * starts another page. Fifteen short calls still fill the 3.5×5.5 card.
  */
 export function layoutDefenseCoachSheet(
   blocks: CoachSheetBlock[],
   sheet: CoachSheetSpec,
 ): CoachSheetPageLayout[] {
-  const readable = coachSheetPageFrame(sheet, DEFENSE_SHEET_CALLS);
+  const sample = coachSheetPageFrame(sheet, 1);
   const innerW = coachSheetInnerWidth(sheet);
-  const innerH = readable.innerH;
-  const pieces = (blocks || []).map((block) => coachPiece(block, readable.cols, readable.minRows));
-  const fits = (items: CoachPiece[]) => coachSheetHeight(items, readable, innerW) <= innerH + 1e-6;
+  const innerH = sample.innerH;
+  const cols = sample.cols;
+  const minRows = sample.minRows;
+  const pieces = (blocks || []).map((block) => coachPiece(block, cols, minRows));
+
+  function fits(items: CoachPiece[]): boolean {
+    if (!items.length) return true;
+    const frame = coachSheetPageFrame(sheet, items.length);
+    if (frame.playSize + 1e-6 < DEFENSE_PLAY_MIN_PX) return false;
+    const playSize = defensePlaySize(items, frame, innerW);
+    return coachSheetHeight(items, { ...frame, playSize }, innerW) <= innerH + 1e-6;
+  }
 
   function paint(items: CoachPiece[]): CoachSheetPageLayout {
-    const grown = coachSheetPageFrame(sheet, Math.max(1, items.length));
-    const oneLine = items.every(
-      (item) => coachPlayLines(coachPlayLabel(item.block), grown.playSize, innerW) <= 1,
-    );
-    const metrics = oneLine && coachSheetHeight(items, grown, innerW) <= innerH + 1e-6 ? grown : readable;
-    let playSize = metrics.playSize;
+    const frame = coachSheetPageFrame(sheet, Math.max(1, items.length));
+    let playSize = defensePlaySize(items, frame, innerW);
     let rows: CoachSheetRowLayout[] = items.map((item) => {
       const label = coachPlayLabel(item.block);
       return {
@@ -1291,25 +1324,25 @@ export function layoutDefenseCoachSheet(
         short: item.block.short,
         label,
         lines: coachPlayLines(label, playSize, innerW),
-        headerIn: coachPlayHeaderIn(label, { playSize, headerIn: metrics.headerIn }, innerW),
+        headerIn: coachPlayHeaderIn(label, { playSize, headerIn: frame.headerIn }, innerW),
         codes: item.block.codes.slice(),
         codeRows: item.codeRows,
       };
     });
-    let used = metrics.headerIn;
-    for (const row of rows) used += row.headerIn + row.codeRows * metrics.codeIn;
+    let used = frame.headerIn;
+    for (const row of rows) used += row.headerIn + row.codeRows * frame.codeIn;
     if (rows.length === 1 && used > innerH + 1e-6) {
       let size = playSize;
       for (let guard = 0; guard < 8 && used > innerH + 1e-6 && size > 7; guard += 1) {
         size = Math.max(7, size * 0.82);
         const label = rows[0].label;
-        const headerIn = coachPlayHeaderIn(label, { playSize: size, headerIn: metrics.headerIn }, innerW);
+        const headerIn = coachPlayHeaderIn(label, { playSize: size, headerIn: frame.headerIn }, innerW);
         rows = [{
           ...rows[0],
           lines: coachPlayLines(label, size, innerW),
           headerIn,
         }];
-        used = metrics.headerIn + headerIn + rows[0].codeRows * metrics.codeIn;
+        used = frame.headerIn + headerIn + rows[0].codeRows * frame.codeIn;
         playSize = size;
       }
     }
@@ -1317,16 +1350,16 @@ export function layoutDefenseCoachSheet(
       const rowWidest = row.codes.reduce((max, code) => Math.max(max, String(code || "").length), 1);
       return Math.max(widest, rowWidest);
     }, 1);
-    const colPx = (innerW / readable.cols) * 96;
+    const colPx = (innerW / cols) * 96;
     return {
       innerH,
       innerW,
-      cols: metrics.cols,
-      bannerIn: metrics.headerIn,
-      codeIn: metrics.codeIn,
+      cols: frame.cols,
+      bannerIn: frame.headerIn,
+      codeIn: frame.codeIn,
       playSize,
-      codeSize: coachCodeSizePx(metrics.codeIn * 96, colPx, maxChars, metrics.codeSize),
-      bannerSize: metrics.bannerSize,
+      codeSize: coachCodeSizePx(frame.codeIn * 96, colPx, maxChars, frame.codeSize),
+      bannerSize: frame.bannerSize,
       rows,
     };
   }
@@ -1341,14 +1374,16 @@ export function layoutDefenseCoachSheet(
       current = [];
     }
     if (!current.length && !fits([piece])) {
-      const headerIn = coachPlayHeaderIn(coachPlayLabel(piece.block), readable, innerW);
-      const room = innerH - readable.headerIn - headerIn;
-      const roomRows = Math.max(1, Math.floor((room + 1e-9) / readable.codeIn));
-      const perPage = roomRows * readable.cols;
+      const frame = coachSheetPageFrame(sheet, 1);
+      const playSize = defensePlaySize([piece], frame, innerW);
+      const headerIn = coachPlayHeaderIn(coachPlayLabel(piece.block), { playSize, headerIn: frame.headerIn }, innerW);
+      const room = innerH - frame.headerIn - headerIn;
+      const roomRows = Math.max(1, Math.floor((room + 1e-9) / frame.codeIn));
+      const perPage = roomRows * cols;
       const codes = piece.block.codes.length ? piece.block.codes : [""];
       for (let start = 0; start < codes.length; start += perPage) {
         const slice = { ...piece.block, codes: codes.slice(start, start + perPage) };
-        pages.push(paint([coachPiece(slice, readable.cols, readable.minRows)]));
+        pages.push(paint([coachPiece(slice, cols, minRows)]));
       }
       continue;
     }
