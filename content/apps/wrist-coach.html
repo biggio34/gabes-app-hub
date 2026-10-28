@@ -293,6 +293,16 @@
       padding: 0;
       overflow: hidden;
     }
+    .coach-sheet-page[data-kind="defense"] .sheet-play {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      padding: 0 2px;
+    }
+    .coach-sheet-page[data-kind="defense"] .sheet-code {
+      overflow: visible;
+      white-space: nowrap;
+      padding: 0 1px;
+    }
     .swatch {
       width: 40px;
       height: 40px;
@@ -344,6 +354,8 @@
       .print-only { display: block !important; }
       .print-page { page-break-after: always; break-after: page; }
       .print-page:last-child { page-break-after: auto; break-after: auto; }
+      .print-cards { page: auto; }
+      .print-key { page: coach-sheet; margin: 0 !important; padding: 0 !important; }
       .band-card,
       .cut-card,
       .coach-sheet-page {
@@ -361,7 +373,7 @@
 </head>
 <body class="min-h-dvh bg-slate-950 text-slate-200">
   <div class="no-print mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 sm:px-6">
-    <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <header class="sticky top-0 z-30 -mx-4 flex flex-col gap-4 bg-slate-950 px-4 py-3 sm:-mx-6 sm:flex-row sm:items-start sm:justify-between sm:px-6">
       <div class="flex items-center gap-3 min-w-0">
         <a href="/" class="text-sm text-slate-400 hover:text-red-400 shrink-0">← Hub</a>
         <div class="flex size-12 items-center justify-center rounded-2xl bg-red-700 shrink-0">
@@ -379,8 +391,8 @@
         <button type="button" id="print-key" class="rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
           Print coach sheet
         </button>
-        <button type="button" id="print-both" class="rounded-xl bg-red-700 px-3 py-2 text-sm font-semibold hover:bg-red-600">
-          Print / PDF
+        <button type="button" id="print-both" class="rounded-xl bg-red-700 px-3 py-2 text-sm font-semibold hover:bg-red-600" aria-label="Print / PDF cards">
+          Print / PDF cards
         </button>
       </div>
     </header>
@@ -604,7 +616,7 @@
       </div>
     </section>
 
-    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
+    <section id="player-card-section" class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="font-semibold">Player card</h2>
         <div class="flex gap-2" role="group" aria-label="Card preview">
@@ -626,14 +638,14 @@
       <div id="name-key" hidden></div>
     </section>
 
-    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
+    <section id="letter-sheet-section" class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
       <h2 class="font-semibold">Letter sheet</h2>
       <p id="letter-preview-note" class="text-sm text-slate-300"></p>
       <p class="text-sm text-slate-400">Scaled to this screen. On paper the square is 1 inch, so print at 100% / Actual size.</p>
       <div id="letter-preview"></div>
     </section>
 
-    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
+    <section id="coach-sheet-section" class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
       <h2 class="font-semibold">Coach sheet</h2>
       <div class="flex flex-wrap items-end gap-3">
         <label class="grid gap-1.5 text-sm">
@@ -818,6 +830,9 @@
     const COACH_CODE_MIN_IN = 0.15;
     const COACH_HEADER_CAP_IN = 0.26;
     const COACH_HEADER_SCALE = 0.72;
+    const COACH_PLAY_CHAR_EM = 0.46;
+    const COACH_PLAY_LINE = 1.25;
+    const COACH_CODE_CHAR_EM = 0.5;
     const COACH_PRINT_WIDTH_IN = 7.7;
     const COACH_PRINT_HEIGHT_IN = 8.9;
     const DEFAULT_THEME = { band: "#7e22ce", ink: "#ffffff", highlight: "#ffffff" };
@@ -1859,6 +1874,15 @@
       });
     }
 
+    function coachSheetPageRule(sheet) {
+      const width = Number(sheet && sheet.widthIn) || 3.5;
+      const height = Number(sheet && sheet.heightIn) || 5.5;
+      const size = width + "in " + height + "in";
+      const named = "@page coach-sheet { size: " + size + "; margin: 0; }";
+      if (printMode === "key") return "@page { size: " + size + "; margin: 0; } " + named;
+      return named;
+    }
+
     function coachSheetMetrics(sheet, groups, capHeader) {
       const source = sheet || {};
       const cols = Math.max(1, Math.round(Number(source.cols)) || 1);
@@ -1914,6 +1938,141 @@
 
     function coachSheetPageFrame(sheet, groupCount) {
       return coachSheetMetrics(sheet || {}, groupCount, true);
+    }
+
+    function coachPlayLabel(block) {
+      return String(block.name || "") + " (" + String(block.short || "") + ")";
+    }
+
+    function coachSheetInnerWidth(sheet) {
+      return Math.max(1, (Number(sheet && sheet.widthIn) || 3.5) - 0.24);
+    }
+
+    function coachPlayLines(label, playSizePx, innerWIn) {
+      const charPx = Math.max(1, playSizePx * COACH_PLAY_CHAR_EM);
+      const perLine = Math.max(1, Math.floor((innerWIn * 96 - 8) / charPx));
+      const text = String(label || "").toUpperCase();
+      if (!text) return 1;
+      return Math.max(1, Math.ceil(text.length / perLine));
+    }
+
+    function coachPlayHeaderIn(label, metrics, innerWIn) {
+      const lines = coachPlayLines(label, metrics.playSize, innerWIn);
+      if (lines <= 1) return metrics.headerIn;
+      return metrics.headerIn + ((lines - 1) * metrics.playSize * COACH_PLAY_LINE) / 96;
+    }
+
+    function coachCodeSizePx(colPx, maxChars, fallbackPx) {
+      const chars = Math.max(1, Math.round(maxChars) || 1);
+      const fit = (colPx - 4) / (chars * COACH_CODE_CHAR_EM);
+      return Math.max(1, Math.min(fallbackPx, fit));
+    }
+
+    function coachPiece(block, cols, minRows) {
+      return {
+        block: block,
+        codeRows: Math.max(minRows, Math.ceil((block.codes || []).length / cols) || 1)
+      };
+    }
+
+    function defensePlaySize(items, limitPx, innerW) {
+      var start = Math.max(0.01, limitPx);
+      if (!items.length) return start;
+      var labels = items.map(function (item) { return coachPlayLabel(item.block); });
+      function oneLine(px) {
+        return labels.every(function (label) { return coachPlayLines(label, px, innerW) <= 1; });
+      }
+      if (oneLine(start)) return start;
+      var floor = 1 / COACH_PLAY_CHAR_EM;
+      if (!oneLine(floor)) return start;
+      var lo = floor;
+      var hi = start;
+      for (var step = 0; step < 12; step += 1) {
+        var mid = (lo + hi) / 2;
+        if (oneLine(mid)) lo = mid;
+        else hi = mid;
+      }
+      return lo;
+    }
+
+    function defenseBoxFont(boxPx, ratio, widthCap) {
+      return Math.min(boxPx * ratio, widthCap, Math.max(boxPx * 0.5, boxPx - 1));
+    }
+
+    function layoutDefenseCoachSheet(blocks, sheet) {
+      var source = sheet || {};
+      var list = blocks || [];
+      if (!list.length) return [];
+      var frame = coachSheetPageFrame(source, list.length);
+      var innerW = coachSheetInnerWidth(source);
+      var innerH = frame.innerH;
+      var cols = frame.cols;
+      var minRows = frame.minRows;
+      var pieces = list.map(function (block) {
+        return coachPiece(block, cols, minRows);
+      });
+      var colPx = (innerW / cols) * 96;
+      function paint(scale) {
+        var headerIn = frame.headerIn * scale;
+        var codeIn = frame.codeIn * scale;
+        var headerPx = headerIn * 96;
+        var codePx = codeIn * 96;
+        var rowFont = defenseBoxFont(headerPx, 0.78, 28);
+        var playSize = Math.min(rowFont, defensePlaySize(pieces, rowFont, innerW));
+        var rows = pieces.map(function (item) {
+          var label = coachPlayLabel(item.block);
+          return {
+            name: item.block.name,
+            short: item.block.short,
+            label: label,
+            lines: coachPlayLines(label, playSize, innerW),
+            headerIn: coachPlayHeaderIn(label, { playSize: playSize, headerIn: headerIn }, innerW),
+            codes: (item.block.codes || []).slice(),
+            codeRows: item.codeRows
+          };
+        });
+        var maxChars = 1;
+        rows.forEach(function (row) {
+          row.codes.forEach(function (code) {
+            maxChars = Math.max(maxChars, String(code || "").length);
+          });
+        });
+        var naturalCode = defenseBoxFont(codePx, 0.78, colPx * 0.55);
+        var fittedCode = coachCodeSizePx(colPx, maxChars, naturalCode);
+        return {
+          innerH: innerH,
+          innerW: innerW,
+          cols: frame.cols,
+          bannerIn: headerIn,
+          codeIn: codeIn,
+          playSize: playSize,
+          codeSize: Math.min(fittedCode, Math.max(0.01, codePx * 0.9)),
+          bannerSize: defenseBoxFont(headerPx, 0.72, innerW * 96 * 0.04),
+          rows: rows
+        };
+      }
+      function pageHeight(page) {
+        var height = page.bannerIn;
+        page.rows.forEach(function (row) {
+          height += row.headerIn + row.codeRows * page.codeIn;
+        });
+        return height;
+      }
+      function fits(scale) {
+        return pageHeight(paint(scale)) <= innerH + 1e-6;
+      }
+      var scale = 1;
+      if (!fits(1)) {
+        var lo = 0;
+        var hi = 1;
+        for (var step = 0; step < 16; step += 1) {
+          var mid = (lo + hi) / 2;
+          if (fits(mid)) lo = mid;
+          else hi = mid;
+        }
+        scale = lo;
+      }
+      return [paint(scale)];
     }
 
     function paginateCoachSheet(blocks, sheet) {
@@ -3038,6 +3197,40 @@
       }).join("");
     }
 
+    function coachPageHtml(page, sheet, banner, band) {
+      const cols = page.cols;
+      const bannerStyle = "height:" + page.bannerIn + "in";
+      const codeStyle = "height:" + page.codeIn + "in";
+      const body = page.rows.map(function (row) {
+        const playStyle = "height:" + row.headerIn + "in;font-size:" + page.playSize + "px;" +
+          (row.lines > 1 ? "line-height:" + COACH_PLAY_LINE + ";" : "");
+        const playRow =
+          '<tr style="height:' + row.headerIn + 'in"><th class="sheet-play" colspan="' + cols + '" data-lines="' + row.lines + '" style="' + playStyle + '">' +
+            escapeHtml(row.label) +
+          '</th></tr>';
+        const codeRows = [];
+        for (let r = 0; r < row.codeRows; r += 1) {
+          const cells = [];
+          for (let c = 0; c < cols; c += 1) {
+            const code = row.codes[r * cols + c] || "";
+            cells.push('<td class="sheet-code" style="font-size:' + page.codeSize + 'px">' + escapeHtml(code) + '</td>');
+          }
+          codeRows.push('<tr style="' + codeStyle + '">' + cells.join("") + '</tr>');
+        }
+        return playRow + codeRows.join("");
+      }).join("");
+      return (
+        '<div class="coach-sheet-page shadow-xl" data-kind="defense" data-header-in="' + page.bannerIn + '" data-code-in="' + page.codeIn + '" data-banner-px="' + page.bannerSize + '" data-play-px="' + page.playSize + '" style="width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;padding:0.12in">' +
+          '<table class="coach-sheet">' +
+            '<thead><tr class="sheet-banner-row" style="' + bannerStyle + '"><th class="sheet-banner" colspan="' + cols + '" style="background:' + band + ';color:' + (hexLuma(band) < 150 ? "#ffffff" : "#111111") + ';font-size:' + page.bannerSize + 'px;text-shadow:none">' +
+              escapeHtml(banner) +
+            '</th></tr></thead>' +
+            '<tbody>' + body + '</tbody>' +
+          '</table>' +
+        '</div>'
+      );
+    }
+
     function coachSheetHtml(version, groups, sheetOverride) {
       if (!version) return "";
       const sheet = sheetOverride || sheetOf();
@@ -3083,8 +3276,16 @@
     }
 
     function coachSheetPages(version, sheetOverride) {
+      if (!version) return [];
       const sheet = sheetOverride || sheetOf();
       const groups = sheetGroups(version);
+      if (book && book.bandKind === "defense") {
+        const theme = themeOf();
+        const banner = bandTitle() + " - CALLS ARE TOP + LEFT";
+        return layoutDefenseCoachSheet(groups, sheet).map(function (page) {
+          return coachPageHtml(page, sheet, banner, theme.band);
+        });
+      }
       return paginateCoachSheet(groups, sheet).map(function (slice) {
         return coachSheetHtml(version, slice, sheet);
       });
@@ -3174,30 +3375,19 @@
           calibrationHtml(escapeHtml(cardCopy)) +
           '<div style="display:flex;flex-wrap:wrap;gap:' + cardGap + 'in;padding-left:11pt">' + cards.join("") + '</div>' +
         '</section>';
-      const sheetGap = 0.16;
+      const sheet = sheetOf();
       const sheetFit = { cols: 1, rows: 1, count: 1 };
-      const sheetPages = coachSheetPages(version, coachPrintSheet(sheetOf()));
+      const sheetPages = coachSheetPages(version, sheet);
       const keyPages = [];
       for (let i = 0; i < sheetPages.length; i += sheetFit.count) {
         const chunk = sheetPages.slice(i, i + sheetFit.count);
-        const pageNo = Math.floor(i / sheetFit.count) + 1;
-        const pageCount = Math.max(1, Math.ceil(sheetPages.length / sheetFit.count));
-        const keyCopy =
-          "Print at 100% / Actual size. Do not choose Fit to page or Scale to fit. " +
-          "This square is 1 inch — measure it before you cut. " +
-          "Coach sheet " + pageNo + " of " + pageCount + " (" +
-          sheetPages.length + " page" + (sheetPages.length === 1 ? "" : "s") + " so every call prints, " +
-          sheetFit.cols + " across × " + sheetFit.rows + " down). " +
-          "Turn on Background graphics so the colors print. " +
-          escapeHtml(versionStamp(version)) + ".";
         keyPages.push(
-          '<section class="print-page print-key" style="color:#0f172a">' +
-            calibrationHtml(keyCopy) +
-            '<div style="display:flex;flex-wrap:wrap;gap:' + sheetGap + 'in">' + chunk.join("") + '</div>' +
+          '<section class="print-page print-key" style="page:coach-sheet;width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;margin:0;padding:0;color:#0f172a">' +
+            chunk.join("") +
           '</section>'
         );
       }
-      const keyPage = keyPages.join("");
+      const keyPage = '<style id="coach-page-rule">' + coachSheetPageRule(sheet) + '</style>' + keyPages.join("");
       if (printMode === "cards") root.innerHTML = cardPage;
       else if (printMode === "key") root.innerHTML = keyPage;
       else root.innerHTML = cardPage + keyPage;
@@ -3405,6 +3595,7 @@
       renderVersions();
       renderCoachKey();
       renderPrint();
+      syncPrintButton();
     }
 
     function fullestOther(kind, exceptId) {
@@ -3462,6 +3653,55 @@
       render();
       scheduleSave();
       return true;
+    }
+
+    let previewView = "cards";
+
+    function mainPrintMode() {
+      return previewView === "sheet" ? "key" : "cards";
+    }
+
+    function syncPrintButton() {
+      const btn = document.getElementById("print-both");
+      if (!btn) return;
+      const label = previewView === "sheet" ? "Print / PDF coach sheet" : "Print / PDF cards";
+      btn.textContent = label;
+      btn.setAttribute("aria-label", label);
+    }
+
+    function setPreviewView(view) {
+      const next = view === "sheet" ? "sheet" : "cards";
+      if (next === previewView) return;
+      previewView = next;
+      syncPrintButton();
+    }
+
+    function watchPreviewView() {
+      const sections = [
+        { id: "player-card-section", view: "cards" },
+        { id: "letter-sheet-section", view: "cards" },
+        { id: "coach-sheet-section", view: "sheet" }
+      ];
+      sections.forEach(function (item) {
+        const node = document.getElementById(item.id);
+        if (!node) return;
+        node.addEventListener("pointerdown", function () { setPreviewView(item.view); });
+      });
+      if (!window.IntersectionObserver) return;
+      const visible = {};
+      const observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          visible[entry.target.id] = entry.isIntersecting ? entry.intersectionRect.height : 0;
+        });
+        const sheet = visible["coach-sheet-section"] || 0;
+        const cards = Math.max(visible["player-card-section"] || 0, visible["letter-sheet-section"] || 0);
+        if (sheet < 80 && cards < 80) return;
+        setPreviewView(sheet > cards ? "sheet" : "cards");
+      }, { threshold: [0, 0.1, 0.25, 0.5, 0.75] });
+      sections.forEach(function (item) {
+        const node = document.getElementById(item.id);
+        if (node) observer.observe(node);
+      });
     }
 
     function printNow(mode, versionId) {
@@ -4087,7 +4327,9 @@
     });
     document.getElementById("print-cards").addEventListener("click", function () { printNow("cards"); });
     document.getElementById("print-key").addEventListener("click", function () { printNow("key"); });
-    document.getElementById("print-both").addEventListener("click", function () { printNow("both"); });
+    document.getElementById("print-both").addEventListener("click", function () { printNow(mainPrintMode()); });
+    watchPreviewView();
+    syncPrintButton();
 
     document.addEventListener("keydown", function (event) {
       if (event.key !== "Escape") return;

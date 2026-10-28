@@ -1068,6 +1068,15 @@ export const COACH_CODE_MIN_IN = 0.15;
 /** A leftover page may grow, but not into a banner. */
 export const COACH_HEADER_CAP_IN = 0.26;
 const COACH_HEADER_SCALE = 0.72;
+/**
+ * Barlow Condensed caps are about 0.40em, plus the 0.05em play-name tracking.
+ * A little extra so a name wraps before the cell clips it.
+ */
+export const COACH_PLAY_CHAR_EM = 0.46;
+/** Extra play-name lines use this line height. The first line stays in the packed row. */
+export const COACH_PLAY_LINE = 1.25;
+/** Digit width used so a code stays inside its column. */
+export const COACH_CODE_CHAR_EM = 0.5;
 
 /**
  * Letter content box for a printed coach sheet, under the 0.4in margin and the
@@ -1169,34 +1178,212 @@ export function coachSheetPageFrame(
   return coachSheetMetrics(sheet, groupCount, true);
 }
 
+export type CoachSheetSpec = { cols: number; rows?: number; widthIn?: number; heightIn: number };
+
+/** Play name as it is painted, before the uppercase style. */
+export function coachPlayLabel(block: { name: string; short: string }): string {
+  return `${block.name} (${block.short})`;
+}
+
+export function coachSheetInnerWidth(sheet: { widthIn?: number }): number {
+  return Math.max(1, (Number(sheet.widthIn) || 3.5) - 0.24);
+}
+
+/** How many lines the uppercase play name needs at this font and sheet width. */
+export function coachPlayLines(label: string, playSizePx: number, innerWIn: number): number {
+  const charPx = Math.max(1, playSizePx * COACH_PLAY_CHAR_EM);
+  const perLine = Math.max(1, Math.floor((innerWIn * 96 - 8) / charPx));
+  const text = String(label || "").toUpperCase();
+  if (!text) return 1;
+  return Math.max(1, Math.ceil(text.length / perLine));
+}
+
+/** Row height for a play name. One line keeps the shared header. Wrapped lines add room. */
+export function coachPlayHeaderIn(
+  label: string,
+  metrics: { playSize: number; headerIn: number },
+  innerWIn: number,
+): number {
+  const lines = coachPlayLines(label, metrics.playSize, innerWIn);
+  if (lines <= 1) return metrics.headerIn;
+  return metrics.headerIn + ((lines - 1) * metrics.playSize * COACH_PLAY_LINE) / 96;
+}
+
+/** Code type that stays inside the column, including a 4-character code such as 30-5. */
+export function coachCodeSizePx(codePx: number, colPx: number, maxChars: number, fallbackPx: number): number {
+  const chars = Math.max(1, Math.round(maxChars) || 1);
+  const fit = (colPx - 4) / (chars * COACH_CODE_CHAR_EM);
+  return Math.max(1, Math.min(fallbackPx, fit));
+}
+
+export type CoachSheetRowLayout = {
+  name: string;
+  short: string;
+  label: string;
+  lines: number;
+  headerIn: number;
+  codes: string[];
+  codeRows: number;
+};
+
+export type CoachSheetPageLayout = {
+  innerH: number;
+  innerW: number;
+  cols: number;
+  bannerIn: number;
+  codeIn: number;
+  playSize: number;
+  codeSize: number;
+  bannerSize: number;
+  rows: CoachSheetRowLayout[];
+};
+
+type CoachPiece = { block: CoachSheetBlock; codeRows: number };
+
+function coachPiece(block: CoachSheetBlock, cols: number, minRows: number): CoachPiece {
+  return {
+    block,
+    codeRows: Math.max(minRows, Math.ceil(block.codes.length / cols) || 1),
+  };
+}
+
+/** Fifteen short calls are the full 3.5×5.5 card at its natural type. */
+const DEFENSE_SHEET_CALLS = 15;
+
+/** Play-name size of 15 short calls on a 3.5×5.5 card. Larger sheets may start above this. */
+export const DEFENSE_PLAY_MIN_PX = coachSheetPageFrame(
+  { cols: 15, rows: 1, widthIn: 3.5, heightIn: 5.5 },
+  DEFENSE_SHEET_CALLS,
+).playSize;
+
+/** Largest type at or under the row that keeps every name on one line. */
+function defensePlaySize(items: CoachPiece[], limitPx: number, innerW: number): number {
+  const start = Math.max(0.01, limitPx);
+  if (!items.length) return start;
+  const labels = items.map((item) => coachPlayLabel(item.block));
+  const oneLine = (px: number) => labels.every((label) => coachPlayLines(label, px, innerW) <= 1);
+  if (oneLine(start)) return start;
+  const floor = 1 / COACH_PLAY_CHAR_EM;
+  if (!oneLine(floor)) return start;
+  let lo = floor;
+  let hi = start;
+  for (let step = 0; step < 12; step += 1) {
+    const mid = (lo + hi) / 2;
+    if (oneLine(mid)) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function defenseBoxFont(boxPx: number, ratio: number, widthCap: number): number {
+  return Math.min(boxPx * ratio, widthCap, Math.max(boxPx * 0.5, boxPx - 1));
+}
+
 /**
- * Split a coach sheet so every call prints. Rows stay the full-page size.
+ * Every defense call stays on one page at the selected sheet size.
+ * Row boxes divide that page. Type shrinks so each name and code fits in its box.
+ * A book with extra code rows scales the boxes and the type down together.
+ */
+export function layoutDefenseCoachSheet(
+  blocks: CoachSheetBlock[],
+  sheet: CoachSheetSpec,
+): CoachSheetPageLayout[] {
+  const list = blocks || [];
+  if (!list.length) return [];
+  const frame = coachSheetPageFrame(sheet, list.length);
+  const innerW = coachSheetInnerWidth(sheet);
+  const innerH = frame.innerH;
+  const cols = frame.cols;
+  const minRows = frame.minRows;
+  const pieces = list.map((block) => coachPiece(block, cols, minRows));
+  const colPx = (innerW / cols) * 96;
+
+  function paint(scale: number): CoachSheetPageLayout {
+    const headerIn = frame.headerIn * scale;
+    const codeIn = frame.codeIn * scale;
+    const headerPx = headerIn * 96;
+    const codePx = codeIn * 96;
+    const rowFont = defenseBoxFont(headerPx, 0.78, 28);
+    const playSize = Math.min(rowFont, defensePlaySize(pieces, rowFont, innerW));
+    const rows: CoachSheetRowLayout[] = pieces.map((item) => {
+      const label = coachPlayLabel(item.block);
+      return {
+        name: item.block.name,
+        short: item.block.short,
+        label,
+        lines: coachPlayLines(label, playSize, innerW),
+        headerIn: coachPlayHeaderIn(label, { playSize, headerIn }, innerW),
+        codes: item.block.codes.slice(),
+        codeRows: item.codeRows,
+      };
+    });
+    let maxChars = 1;
+    for (const row of rows) {
+      for (const code of row.codes) maxChars = Math.max(maxChars, String(code || "").length);
+    }
+    const naturalCode = defenseBoxFont(codePx, 0.78, colPx * 0.55);
+    const fittedCode = coachCodeSizePx(codePx, colPx, maxChars, naturalCode);
+    return {
+      innerH,
+      innerW,
+      cols: frame.cols,
+      bannerIn: headerIn,
+      codeIn,
+      playSize,
+      codeSize: Math.min(fittedCode, Math.max(0.01, codePx * 0.9)),
+      bannerSize: defenseBoxFont(headerPx, 0.72, innerW * 96 * 0.04),
+      rows,
+    };
+  }
+
+  function pageHeight(page: CoachSheetPageLayout): number {
+    let height = page.bannerIn;
+    for (const row of page.rows) height += row.headerIn + row.codeRows * page.codeIn;
+    return height;
+  }
+
+  function fits(scale: number): boolean {
+    return pageHeight(paint(scale)) <= innerH + 1e-6;
+  }
+
+  let scale = 1;
+  if (!fits(1)) {
+    let lo = 0;
+    let hi = 1;
+    for (let step = 0; step < 16; step += 1) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) lo = mid;
+      else hi = mid;
+    }
+    scale = lo;
+  }
+  return [paint(scale)];
+}
+
+/**
+ * Split an offense coach sheet so every call prints. Rows stay the full-page size.
  * A call that does not fit starts the next page. One huge play splits only
  * when it cannot fit on a page alone.
+ * Defense does not use this. layoutDefenseCoachSheet keeps every defense call
+ * on one page and scales the boxes and type to fit.
  */
-export function paginateCoachSheet(
-  blocks: CoachSheetBlock[],
-  sheet: { cols: number; rows?: number; widthIn?: number; heightIn: number },
-): CoachSheetBlock[][] {
+export function paginateCoachSheet(blocks: CoachSheetBlock[], sheet: CoachSheetSpec): CoachSheetBlock[][] {
   const frame = coachSheetFrame(sheet);
   const cols = frame.cols;
   const minRows = frame.minRows;
   const innerH = frame.innerH;
   const headerIn = frame.headerIn;
   const codeIn = frame.codeIn;
-  const pieces = blocks.map((block) => ({
-    block,
-    codeRows: Math.max(minRows, Math.ceil(block.codes.length / cols) || 1),
-  }));
-  const heightOf = (items: typeof pieces) => {
+  const pieces = (blocks || []).map((block) => coachPiece(block, cols, minRows));
+  const heightOf = (items: CoachPiece[]) => {
     let height = headerIn;
     for (const item of items) height += headerIn + item.codeRows * codeIn;
     return height;
   };
-  if (!pieces.length || heightOf(pieces) <= innerH + 1e-6) return [blocks.slice()];
+  if (!pieces.length || heightOf(pieces) <= innerH + 1e-6) return [(blocks || []).slice()];
   const pages: CoachSheetBlock[][] = [];
   let current: CoachSheetBlock[] = [];
-  let currentPieces: typeof pieces = [];
+  let currentPieces: CoachPiece[] = [];
   for (const piece of pieces) {
     const alone = headerIn + headerIn + piece.codeRows * codeIn;
     if (current.length && heightOf(currentPieces.concat([piece])) > innerH + 1e-6) {

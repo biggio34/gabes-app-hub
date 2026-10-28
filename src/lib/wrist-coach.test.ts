@@ -88,6 +88,13 @@ import {
   readableHeaderTheme,
   HEADER_INK_DARK,
   paginateCoachSheet,
+  layoutDefenseCoachSheet,
+  DEFENSE_PLAY_MIN_PX,
+  coachPlayLabel,
+  coachPlayLines,
+  coachPlayHeaderIn,
+  coachSheetInnerWidth,
+  COACH_CODE_CHAR_EM,
   coachSheetFrame,
   coachSheetPageFrame,
   coachPrintSheet,
@@ -1959,7 +1966,7 @@ describe("wrist coach book", () => {
     assert.deepEqual(tiny.flat().map((block) => block.short), starters);
   });
 
-  it("gives defense coach sheets a second page in the same row style", () => {
+  it("packs a coach sheet at the readable row size and lets offense continue on the next page", () => {
     const sheet = { cols: 15, rows: 1, widthIn: 3.5, heightIn: 5.5 };
     const frame = coachSheetFrame(sheet);
     assert.ok(frame.capacity >= 15);
@@ -2011,6 +2018,153 @@ describe("wrist coach book", () => {
     assert.equal(partial.codeSize, frame.codeSize);
   });
 
+  it("keeps every defense coach call on one page at each sheet size", () => {
+    const sheet = { cols: 15, rows: 1, widthIn: 3.5, heightIn: 5.5 };
+    const printed = coachPrintSheet(sheet);
+    const defense = defaultLibrary().filter((call) => call.kind === "defense");
+    const shortDefense = defense.map((call) => ({
+      name: call.name,
+      short: call.short,
+      codes: ["011", "12", "30-5"],
+    }));
+    const shortPages = layoutDefenseCoachSheet(shortDefense, sheet);
+    assert.equal(shortPages.length, 1);
+    assert.equal(shortPages[0].rows.length, shortDefense.length);
+    assert.equal(shortPages[0].rows.at(-1)?.short, "NS");
+    assert.ok(Math.abs(shortPages[0].playSize - DEFENSE_PLAY_MIN_PX) < 1e-6);
+    assertCoachSheetFits(shortDefense, sheet);
+    assertCoachSheetFits(shortDefense, printed);
+    const sixteen = shortDefense.concat([{ name: "Extra coverage", short: "E16", codes: ["011"] }]);
+    const sixteenPages = layoutDefenseCoachSheet(sixteen, sheet);
+    assert.equal(sixteenPages.length, 1);
+    assert.equal(sixteenPages[0].rows.length, 16);
+    assert.ok(sixteenPages[0].playSize < DEFENSE_PLAY_MIN_PX);
+    assertCoachSheetFits(sixteen, sheet);
+    assert.equal(paginateCoachSheet(sixteen, sheet).length, 1);
+    const longName = "Steal second and third on the first pitch after the fake when the runner reads the catcher";
+    const longDefense = defense.map((call) => ({ name: longName, short: call.short, codes: ["011", "30-5"] }));
+    const longScreen = layoutDefenseCoachSheet(longDefense, sheet);
+    const longPrint = layoutDefenseCoachSheet(longDefense, printed);
+    assert.equal(longScreen.length, 1);
+    assert.equal(longPrint.length, 1);
+    assert.ok(longScreen[0].playSize < DEFENSE_PLAY_MIN_PX);
+    assert.ok(longScreen[0].rows.every((row) => row.lines === 1));
+    assert.equal(paginateCoachSheet(longDefense, sheet).length, 1);
+    assertCoachSheetFits(longDefense, sheet);
+    assertCoachSheetFits(longDefense, printed);
+    const crowded = defense.map((call) => ({
+      name: longName,
+      short: call.short,
+      codes: Array.from({ length: 45 }, (_, index) => String(index + 1)),
+    }));
+    const sizes = [
+      { name: "card", widthIn: 3.5, heightIn: 5.5 },
+      { name: "letter", widthIn: 8.5, heightIn: 11 },
+      { name: "half", widthIn: 8.5, heightIn: 5.5 },
+      { name: "index", widthIn: 5, heightIn: 8 },
+      { name: "custom", widthIn: 4, heightIn: 6 },
+    ];
+    for (const size of sizes) {
+      const sized = { cols: 15, rows: 1, widthIn: size.widthIn, heightIn: size.heightIn };
+      for (const book of [shortDefense, sixteen, longDefense, crowded]) {
+        const pages = layoutDefenseCoachSheet(book, sized);
+        assert.equal(pages.length, 1, size.name);
+        assert.equal(pages[0].rows.length, book.length, size.name);
+        assert.deepEqual(pages[0].rows.map((row) => row.short), book.map((block) => block.short), size.name);
+        assertCoachSheetFits(book, sized);
+      }
+    }
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /\[data-kind="defense"\] \.sheet-code \{[^}]*overflow: visible/);
+    assert.match(page, /\.coach-sheet \.sheet-code \{[^}]*overflow: hidden/);
+    assert.match(page, /function layoutDefenseCoachSheet/);
+    assert.match(page, /bandKind === "defense"/);
+    const fromPage = coachSheetLayoutFromPage(page, longDefense, sheet);
+    assert.deepEqual(JSON.parse(JSON.stringify(fromPage.layout)), JSON.parse(JSON.stringify(longScreen)));
+    const html = fromPage.html;
+    assert.match(html, /data-kind="defense"/);
+    for (const block of longDefense) {
+      assert.ok(html.includes(`${block.name} (${block.short})`), block.short);
+    }
+    const playRows = [...html.matchAll(/data-lines="(\d+)" style="height:([0-9.]+)in;font-size:([0-9.]+)px/g)];
+    assert.equal(playRows.length, longDefense.length);
+    let seen = 0;
+    for (const layoutPage of longScreen) {
+      let height = layoutPage.bannerIn;
+      for (const row of layoutPage.rows) {
+        const painted = playRows[seen];
+        assert.ok(painted);
+        assert.equal(Number(painted[1]), row.lines);
+        assert.ok(Math.abs(Number(painted[2]) - row.headerIn) < 1e-9);
+        assert.ok(Math.abs(Number(painted[3]) - layoutPage.playSize) < 1e-9);
+        height += row.headerIn + row.codeRows * layoutPage.codeIn;
+        seen += 1;
+      }
+      assert.ok(height <= layoutPage.innerH + 1e-6);
+    }
+  });
+
+  it("prints the open view from the main Print / PDF button", () => {
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /Print \/ PDF cards/);
+    assert.match(page, /Print \/ PDF coach sheet/);
+    assert.match(page, /function mainPrintMode/);
+    assert.match(page, /printNow\(mainPrintMode\(\)\)/);
+    assert.doesNotMatch(page, /printNow\("both"\)/);
+    assert.match(page, /id="coach-sheet-section"/);
+    assert.match(page, /id="player-card-section"/);
+    const size = { preset: "card", widthIn: 3.5, heightIn: 5.5 };
+    for (const kind of ["defense", "offense"] as const) {
+      const sheet = mainPrintFromPage(page, "sheet", size, kind);
+      assert.equal(sheet.label, "Print / PDF coach sheet", kind);
+      assert.equal(sheet.mode, "key", kind);
+      assert.ok(sheet.html.includes("@page { size: 3.5in 5.5in; margin: 0; }"), kind);
+      assert.ok(sheet.html.includes("width:3.5in;height:5.5in"), kind);
+      assert.equal(sheet.html.includes('class="print-page print-cards"'), false, kind);
+      assert.equal(sheet.html.includes("width:7.7in"), false, kind);
+      const cards = mainPrintFromPage(page, "cards", size, kind);
+      assert.equal(cards.label, "Print / PDF cards", kind);
+      assert.equal(cards.mode, "cards", kind);
+      assert.ok(cards.html.includes('class="print-page print-cards"'), kind);
+      assert.equal(cards.html.includes('class="print-page print-key"'), false, kind);
+      assert.equal(cards.html.includes("@page coach-sheet"), false, kind);
+    }
+  });
+
+  it("prints the coach sheet at the selected page size", () => {
+    const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
+    assert.match(page, /@page \{ size: letter; margin: 0\.4in; \}/);
+    assert.match(page, /\.print-key \{ page: coach-sheet;/);
+    const sizes = [
+      { preset: "card", widthIn: 3.5, heightIn: 5.5 },
+      { preset: "letter", widthIn: 8.5, heightIn: 11 },
+      { preset: "half", widthIn: 8.5, heightIn: 5.5 },
+      { preset: "index", widthIn: 5, heightIn: 8 },
+      { preset: "custom", widthIn: 4, heightIn: 6 },
+    ];
+    for (const size of sizes) {
+      for (const kind of ["defense", "offense"] as const) {
+        for (const mode of ["key", "both"] as const) {
+          const html = coachPrintHtmlFromPage(page, size, kind, mode);
+          const rule = mode === "key"
+            ? `@page { size: ${size.widthIn}in ${size.heightIn}in; margin: 0; } @page coach-sheet { size: ${size.widthIn}in ${size.heightIn}in; margin: 0; }`
+            : `@page coach-sheet { size: ${size.widthIn}in ${size.heightIn}in; margin: 0; }`;
+          assert.ok(html.includes(rule), `${kind} ${mode} ${size.preset}`);
+          assert.ok(
+            html.includes(`class="print-page print-key" style="page:coach-sheet;width:${size.widthIn}in;height:${size.heightIn}in;`),
+            `${kind} ${mode} ${size.preset} section`,
+          );
+          assert.ok(html.includes(`style="width:${size.widthIn}in;height:${size.heightIn}in;padding:0.12in"`), size.preset);
+          assert.equal(html.includes("width:7.7in"), false, size.preset);
+          if (mode === "both") {
+            assert.ok(html.includes('class="print-page print-cards"'), kind);
+            assert.equal(html.includes("@page { size:"), false, kind);
+          }
+        }
+      }
+    }
+  });
+
   it("marks decoys on the names sheet and keeps the round 16 page controls", () => {
     const book = emptyBook("coach-1");
     const version = activeVersion(book);
@@ -2041,7 +2195,10 @@ describe("wrist coach book", () => {
     assert.match(page, /function coachSheetFrame/);
     assert.match(page, /function coachSheetPageFrame/);
     assert.match(page, /function coachPrintSheet/);
-    assert.match(page, /coachPrintSheet\(sheetOf\(\)\)/);
+    assert.match(page, /function coachSheetPageRule/);
+    assert.match(page, /const sheet = sheetOf\(\)/);
+    assert.match(page, /coachSheetPages\(version, sheet\)/);
+    assert.doesNotMatch(page, /coachSheetPages\(version, coachPrintSheet/);
     assert.match(page, /function clearUntouchedDefenseColor/);
     assert.match(page, /function versionLetter/);
     assert.match(page, /spentVersionLetters/);
@@ -2239,6 +2396,219 @@ function cardViewBox(markup: string) {
   const match = markup.match(/<svg viewBox="0 0 ([0-9.]+) ([0-9.]+)"/);
   assert.ok(match, markup.slice(0, 240));
   return { w: Number(match[1]), h: Number(match[2]) };
+}
+
+function assertCoachSheetFits(
+  blocks: { name: string; short: string; codes: string[] }[],
+  sheet: { cols: number; rows?: number; widthIn?: number; heightIn: number },
+) {
+  const pages = layoutDefenseCoachSheet(blocks, sheet);
+  assert.equal(pages.length, 1);
+  const innerW = coachSheetInnerWidth(sheet);
+  const flat = pages.flatMap((page) => page.rows);
+  assert.deepEqual(flat.map((row) => row.name), blocks.map((block) => block.name));
+  assert.deepEqual(flat.map((row) => row.short), blocks.map((block) => block.short));
+  let cursor = 0;
+  for (const block of blocks) {
+    const codes: string[] = [];
+    while (cursor < flat.length && flat[cursor].name === block.name && flat[cursor].short === block.short) {
+      codes.push(...flat[cursor].codes);
+      cursor += 1;
+      if (codes.length >= block.codes.length) break;
+    }
+    assert.deepEqual(codes, block.codes, block.short);
+  }
+  assert.equal(cursor, flat.length);
+  for (const page of pages) {
+    let height = page.bannerIn;
+    const colPx = (page.innerW / page.cols) * 96;
+    for (const row of page.rows) {
+      assert.equal(row.label, coachPlayLabel(row));
+      assert.equal(row.lines, coachPlayLines(row.label, page.playSize, innerW));
+      assert.ok(row.lines >= 1);
+      const needed = coachPlayHeaderIn(row.label, { playSize: page.playSize, headerIn: page.bannerIn }, innerW);
+      assert.ok(row.headerIn + 1e-9 >= needed);
+      assert.ok(page.playSize <= row.headerIn * 96 + 0.05, row.label);
+      height += row.headerIn + row.codeRows * page.codeIn;
+      const chars = row.codes.reduce((max, code) => Math.max(max, String(code || "").length), 1);
+      assert.ok(page.codeSize * chars * COACH_CODE_CHAR_EM <= colPx - 4 + 0.05, row.label);
+      assert.ok(page.codeSize <= page.codeIn * 96 + 0.05, row.label);
+    }
+    assert.ok(height <= page.innerH + 1e-6, `page content ${height} exceeds ${page.innerH}`);
+  }
+}
+
+function mainPrintFromPage(
+  page: string,
+  view: "sheet" | "cards",
+  size: { preset: string; widthIn: number; heightIn: number },
+  kind: "defense" | "offense",
+) {
+  const start = page.indexOf("<script>");
+  const boot = page.lastIndexOf("armCardFont();");
+  assert.ok(start > 0 && boot > start);
+  const source = page.slice(start + "<script>".length, boot) + `
+    book = emptyBook();
+    book.bandKind = ${JSON.stringify(kind)};
+    book.sheet = ${JSON.stringify({ cols: 15, rows: 1, ...size })};
+    setPreviewView(${JSON.stringify(view)});
+    printNow(mainPrintMode());
+    globalThis.__print = {
+      html: document.getElementById("print-root").innerHTML,
+      label: document.getElementById("print-both").textContent,
+      mode: printMode
+    };
+  `;
+  const elements = new Map<string, ReturnType<typeof stubCardElement>>();
+  function elementFor(id: string) {
+    let el = elements.get(id);
+    if (!el) {
+      el = stubCardElement();
+      elements.set(id, el);
+    }
+    return el;
+  }
+  const hub = { userId: "test-user" };
+  const sandbox: { __print?: { html: string; label: string; mode: string }; HUB_SOFTBALL: { userId: string } } = {
+    HUB_SOFTBALL: hub,
+    console,
+    setTimeout,
+    clearTimeout,
+    document: {
+      getElementById(id: string) { return elementFor(id); },
+      querySelector() { return elementFor("query"); },
+      querySelectorAll() { return []; },
+      addEventListener() {},
+      createElement(tag: string) {
+        if (tag !== "canvas") return elementFor(tag);
+        const ctx = {
+          font: "",
+          measureText(text: string) {
+            const px = Number(String(ctx.font).match(/([\d.]+)px/)?.[1] || 16);
+            return { width: String(text || "").length * px * 0.387 };
+          },
+        };
+        return { getContext() { return ctx; } };
+      },
+      fonts: { load() { return Promise.resolve(); } },
+    },
+    window: {
+      addEventListener() {},
+      HUB_SOFTBALL: hub,
+      confirm() { return false; },
+      alert() {},
+      print() {},
+    },
+  };
+  runInContext(source, createContext(sandbox), { filename: "wrist-coach.html" });
+  assert.ok(sandbox.__print);
+  return sandbox.__print;
+}
+
+function coachPrintHtmlFromPage(
+  page: string,
+  size: { preset: string; widthIn: number; heightIn: number },
+  kind: "defense" | "offense",
+  mode: "key" | "both",
+) {
+  const start = page.indexOf("<script>");
+  const boot = page.lastIndexOf("armCardFont();");
+  assert.ok(start > 0 && boot > start);
+  const source = page.slice(start + "<script>".length, boot) + `
+    book = emptyBook();
+    book.bandKind = ${JSON.stringify(kind)};
+    book.sheet = ${JSON.stringify({ cols: 15, rows: 1, ...size })};
+    printMode = ${JSON.stringify(mode)};
+    renderPrint();
+    globalThis.__printHtml = document.getElementById("print-root").innerHTML;
+  `;
+  const elements = new Map<string, ReturnType<typeof stubCardElement>>();
+  function elementFor(id: string) {
+    let el = elements.get(id);
+    if (!el) {
+      el = stubCardElement();
+      elements.set(id, el);
+    }
+    return el;
+  }
+  const hub = { userId: "test-user" };
+  const sandbox: { __printHtml?: string; HUB_SOFTBALL: { userId: string } } = {
+    HUB_SOFTBALL: hub,
+    console,
+    setTimeout,
+    clearTimeout,
+    document: {
+      getElementById(id: string) { return elementFor(id); },
+      querySelector() { return elementFor("query"); },
+      querySelectorAll() { return []; },
+      addEventListener() {},
+      createElement(tag: string) {
+        if (tag !== "canvas") return elementFor(tag);
+        const ctx = {
+          font: "",
+          measureText(text: string) {
+            const px = Number(String(ctx.font).match(/([\d.]+)px/)?.[1] || 16);
+            return { width: String(text || "").length * px * 0.387 };
+          },
+        };
+        return { getContext() { return ctx; } };
+      },
+      fonts: { load() { return Promise.resolve(); } },
+    },
+    window: {
+      addEventListener() {},
+      HUB_SOFTBALL: hub,
+      confirm() { return false; },
+      alert() {},
+    },
+  };
+  runInContext(source, createContext(sandbox), { filename: "wrist-coach.html" });
+  assert.ok(sandbox.__printHtml);
+  return sandbox.__printHtml;
+}
+
+function coachSheetLayoutFromPage(
+  page: string,
+  blocks: { name: string; short: string; codes: string[] }[],
+  sheet: { cols: number; rows?: number; widthIn?: number; heightIn: number },
+) {
+  const start = page.indexOf("<script>");
+  const boot = page.lastIndexOf("armCardFont();");
+  assert.ok(start > 0 && boot > start);
+  const source = page.slice(start + "<script>".length, boot) + `
+    const blocks = ${JSON.stringify(blocks)};
+    const sheet = ${JSON.stringify(sheet)};
+    const layout = layoutDefenseCoachSheet(blocks, sheet);
+    globalThis.__coach = {
+      layout: layout,
+      html: layout.map(function (item) {
+        return coachPageHtml(item, sheet, "MY SIGNS - CALLS ARE TOP + LEFT", "#ff0000");
+      }).join("")
+    };
+  `;
+  const hub = { userId: "test-user" };
+  const sandbox: { __coach?: { layout: unknown; html: string }; HUB_SOFTBALL: { userId: string } } = {
+    HUB_SOFTBALL: hub,
+    console,
+    setTimeout,
+    clearTimeout,
+    document: {
+      getElementById() { return lookupElement(); },
+      querySelector() { return lookupElement(); },
+      querySelectorAll() { return []; },
+      addEventListener() {},
+      createElement() { return lookupElement(); },
+    },
+    window: {
+      addEventListener() {},
+      HUB_SOFTBALL: hub,
+      confirm() { return false; },
+      alert() {},
+    },
+  };
+  runInContext(source, createContext(sandbox), { filename: "wrist-coach.html" });
+  assert.ok(sandbox.__coach);
+  return sandbox.__coach;
 }
 
 function lookupNamesInBothViews(page: string) {
