@@ -797,11 +797,12 @@ describe("wrist coach book", () => {
         assert.ok(ratio, card.name);
         assert.ok(Math.abs(Number(ratio[1]) - 0.663) < 0.001, card.name + " " + ratio[1]);
       }
-      const stamp = card.html.match(/<text x="[^"]+" y="([^"]+)"[^>]*>MY SIGNS \u00b7 VA \u00b7 [^<]*<\/text>/);
-      assert.ok(stamp, card.name + " stamp");
-      const stampY = Number(stamp[1]);
-      assert.equal(Number.isFinite(stampY), true, card.name);
-      assert.ok(stampY > box.h * 0.4 && stampY < box.h, card.name + " stamp y " + stampY);
+      assert.match(card.html, />My signs</, card.name);
+      assert.doesNotMatch(card.html, />MY SIGNS</, card.name);
+      assert.doesNotMatch(card.html, /data-stamp=/, card.name);
+      assert.doesNotMatch(card.html, /\u00b7/, card.name);
+      assert.doesNotMatch(card.html, />VA</, card.name);
+      assert.doesNotMatch(card.html, />Card</, card.name);
       const footer = card.html.match(/<rect x="0" y="([^"]+)" width="[^"]+" height="([^"]+)" fill="/);
       assert.ok(footer, card.name);
       assert.equal(Number.isFinite(Number(footer[1])), true);
@@ -809,6 +810,15 @@ describe("wrist coach book", () => {
     }
     assert.equal((rendered.offense.match(/data-block-outline="1"/g) || []).length, 6);
     assert.equal((rendered.defense.match(/data-block-outline="1"/g) || []).length, 6);
+    assert.match(rendered.red, />Red</);
+    assert.doesNotMatch(rendered.red, />RED</);
+    assert.doesNotMatch(rendered.red, /\u00b7|vA|>VA</);
+    assert.doesNotMatch(rendered.blank, />Card</);
+    assert.doesNotMatch(rendered.blank, />My signs</);
+    assert.doesNotMatch(rendered.blank, />Red</);
+    assert.doesNotMatch(rendered.blank, />Offense</);
+    assert.doesNotMatch(rendered.blank, />Defense</);
+    assert.doesNotMatch(rendered.blank, /\u00b7/);
   });
 
   it("looks up a name and a box number in both Codes and Names view", () => {
@@ -1543,8 +1553,16 @@ describe("wrist coach book", () => {
     assert.match(page, /#f7bad1/);
     assert.match(page, /PREVIOUS_OFFENSE_BAND = "#c00000"/);
     assert.match(page, /PREVIOUS_DEFENSE_BAND = "#f87080"/);
-    assert.match(page, /footerPt = 8/);
-    assert.match(page, /addText\(stamp, 0, barY, wPt, footerH, footerPt, footerInk, "", null, look\.bandFill, "footer"\)/);
+    assert.match(page, /function cardSetName/);
+    assert.match(page, /addText\(setName,/);
+    assert.match(page, /version\.titles\.offense = clean;/);
+    assert.doesNotMatch(page, /clean \|\| "Offense"/);
+    assert.doesNotMatch(page, /clean \|\| "Defense"/);
+    assert.doesNotMatch(page, /clean \|\| "Card"/);
+    assert.doesNotMatch(page, /function versionStamp/);
+    assert.doesNotMatch(page, /function versionToken/);
+    assert.doesNotMatch(page, /function versionDate/);
+    assert.doesNotMatch(page, /data-stamp=/);
     assert.doesNotMatch(page, /hPt - footerSlot/);
     assert.doesNotMatch(page, /addText\(bandTitle\(\)/);
     assert.match(page, /slice\(0, 5\)/);
@@ -2231,7 +2249,8 @@ describe("wrist coach book", () => {
     assert.match(page, /function libraryForReset/);
     assert.match(page, /const sheetFit = \{ cols: 1, rows: 1, count: 1 \}/);
     assert.match(page, /data-header-in/);
-    assert.match(page, /data-footer-top/);
+    assert.doesNotMatch(page, /data-footer-top/);
+    assert.doesNotMatch(page, /data-stamp=/);
     assert.match(page, /#111111/);
     assert.match(page, /text-shadow: none/);
     assert.match(page, /text-shadow:none/);
@@ -2354,15 +2373,23 @@ function renderWristCards(page: string) {
       book.cardSize = size || { preset: "softball", widthIn: 3.5, heightIn: 2.25 };
       return wristCardHtml(version, false, "");
     }
+    function paintNamed(kind, title) {
+      book.bandKind = kind;
+      book.title = title;
+      version.titles = { offense: title, defense: title };
+      return wristCardHtml(version, false, "");
+    }
     globalThis.__rendered = {
       offense: paintCard("offense"),
       defense: paintCard("defense"),
-      custom: paintCard("offense", { preset: "custom", widthIn: 4.25, heightIn: 2.5 })
+      custom: paintCard("offense", { preset: "custom", widthIn: 4.25, heightIn: 2.5 }),
+      red: paintNamed("offense", "Red"),
+      blank: paintNamed("defense", "")
     };
   `;
   const hub = { userId: "test-user" };
   const sandbox: {
-    __rendered?: { offense: string; defense: string; custom: string };
+    __rendered?: { offense: string; defense: string; custom: string; red: string; blank: string };
     HUB_SOFTBALL: { userId: string };
     console: typeof console;
     setTimeout: typeof setTimeout;

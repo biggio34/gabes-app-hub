@@ -1099,12 +1099,19 @@
       return book && book.bandKind === "defense" ? titles.defense : titles.offense;
     }
 
+    function cardSetName(version) {
+      const kind = book && book.bandKind === "defense" ? "defense" : "offense";
+      const titles = version && version.titles;
+      const raw = titles ? titles[kind] : "";
+      return String(raw == null ? "" : raw).trim();
+    }
+
     function setKindTitle(version, kind, value) {
       if (!version) return;
       version.titles = kindTitlesOf(version);
       const clean = String(value || "").trim();
-      if (kind === "defense") version.titles.defense = clean || "Defense";
-      else version.titles.offense = clean || "Offense";
+      if (kind === "defense") version.titles.defense = clean;
+      else version.titles.offense = clean;
     }
 
     function layoutOf(current) {
@@ -2636,7 +2643,7 @@
         colSlots: metrics.colSlots,
         rowSlots: metrics.rowSlots,
         contentRows: metrics.contentRows,
-        // The second block row and the footer stamp sit under this band. Dropping it makes their y NaN.
+        // The second block row sits under this band. Dropping it makes that row's y NaN.
         footerIn: metrics.footerIn,
         cellW: metrics.cellW,
         cellH: metrics.cellH,
@@ -2713,26 +2720,6 @@
       }
       const fill = rgbToHex(r, g, b);
       return { fill: fill, ink: bestInk(fill, "#000000") };
-    }
-
-    function versionToken(version) {
-      const raw = String(version && version.name || "").replace(/^version\s+/i, "").trim();
-      return "v" + (raw || "1");
-    }
-
-    function versionDate(version) {
-      const ms = Number(version && version.createdAt);
-      if (!Number.isFinite(ms) || ms <= 0) return "";
-      const when = new Date(ms);
-      return (when.getMonth() + 1) + "/" + when.getDate();
-    }
-
-    function versionStamp(version, setName) {
-      const set = String(setName != null ? setName : bandTitle()).trim() || "Card";
-      const parts = [set, versionToken(version)];
-      const date = versionDate(version);
-      if (date) parts.push(date);
-      return parts.join(" \u00b7 ");
     }
 
     function shadeFill(fill) {
@@ -2821,8 +2808,8 @@
         }
         return marks;
       }
-      function addText(text, x, y, w, h, sizePt, color, anchor, clipBox, fill, role) {
-        const value = String(text || "").toUpperCase();
+      function addText(text, x, y, w, h, sizePt, color, anchor, clipBox, fill, plain) {
+        const value = plain ? String(text || "") : String(text || "").toUpperCase();
         if (!value) return;
         const box = clipBox || { x: x, y: y, w: w, h: h };
         const id = uid + "c" + (clipN += 1);
@@ -2834,12 +2821,11 @@
         const widthPt = emWidth(value) * sizePt;
         const tx = align === "end" ? x + w : x + w / 2;
         const start = align === "end" ? tx - widthPt : tx - widthPt / 2;
-        const isFooter = role === "footer";
-        const halo = !isFooter && fill && hexLuma(fill) < 150 && hexLuma(color) < 100;
+        const halo = !plain && fill && hexLuma(fill) < 150 && hexLuma(color) < 100;
         const haloAttr = halo
           ? ' stroke="#ffffff" stroke-width="' + n(knockoutPt(fontPt)) + '" paint-order="stroke fill" stroke-linejoin="round"'
           : "";
-        const fontAttr = isFooter
+        const fontAttr = plain
           ? ' font-family="WristCard, Arial Narrow, sans-serif" font-weight="700" letter-spacing="0"'
           : "";
         const strokeAttr = halo ? "" : ' stroke="none"';
@@ -2993,22 +2979,18 @@
           '<rect x="0" y="0" width="' + n(wPt) + '" height="' + n(hPt) + '" fill="none" stroke="#000000" stroke-width="0.6"/>'
         );
       }
-      const stamp = versionStamp(version, bandTitle());
-      const footerInk = hexLuma(look.bandFill) < 150 ? "#ffffff" : "#111111";
-      const footerRoom = Math.max(1, wPt - 1.8);
-      let footerPt = 8;
-      const titles = kindTitlesOf(version);
-      ["offense", "defense"].forEach(function (kind) {
-        const em = emWidth(versionStamp(version, titles[kind]));
+      const setName = cardSetName(version);
+      if (setName) {
+        const footerInk = hexLuma(look.bandFill) < 150 ? "#ffffff" : "#111111";
+        const footerRoom = Math.max(1, wPt - 1.8);
+        let footerPt = 8;
+        const em = emWidth(setName);
         if (em > 0 && em * footerPt > footerRoom) footerPt = footerRoom / em;
-        const bandPt = cardGridMetrics(size, layoutFor(kind)).footerIn * 72;
-        if (footerPt > bandPt - 1) footerPt = Math.max(1, bandPt - 1);
-      });
-      const stampPt = footerPt;
-      const footerTop = barY;
-      addText(stamp, 0, barY, wPt, footerH, footerPt, footerInk, "", null, look.bandFill, "footer");
+        if (footerPt > footerH - 1) footerPt = Math.max(1, footerH - 1);
+        addText(setName, 0, barY, wPt, footerH, footerPt, footerInk, "", null, look.bandFill, true);
+      }
       const card =
-        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-footer-ink="' + footerInk + '" data-footer-top="' + n(footerTop) + '" data-header-ink="' + headerInk + '" data-header-fill="' + look.bandFill + '" data-corner-fill="' + chrome.cornerFill + '" data-pad-pt="' + n(chrome.padPt) + '" data-rule-pt="' + n(chrome.borderPt) + '" data-font-ratio="' + n(chrome.fontRatio) + '" data-text-ratio="' + n(chrome.textRatio) + '" data-mark-pt="' + n(markPt || 0) + '" data-block-pt="' + n(CARD_BLOCK_PT) + '" data-align="' + chrome.align + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-header-ink="' + headerInk + '" data-header-fill="' + look.bandFill + '" data-corner-fill="' + chrome.cornerFill + '" data-pad-pt="' + n(chrome.padPt) + '" data-rule-pt="' + n(chrome.borderPt) + '" data-font-ratio="' + n(chrome.fontRatio) + '" data-text-ratio="' + n(chrome.textRatio) + '" data-mark-pt="' + n(markPt || 0) + '" data-block-pt="' + n(CARD_BLOCK_PT) + '" data-align="' + chrome.align + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="xMidYMid meet">' +
             '<defs>' + clips.join("") + '</defs>' +
             dataShapes.join("") +
@@ -3632,7 +3614,7 @@
 
     function render() {
       if (!book) return;
-      document.getElementById("book-title").value = bandTitle();
+      document.getElementById("book-title").value = cardSetName(activeVersion());
       document.getElementById("book-subtitle").textContent = bandTitle();
       renderKindControls();
       renderNumberControls();
