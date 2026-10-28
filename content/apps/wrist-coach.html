@@ -373,7 +373,7 @@
 </head>
 <body class="min-h-dvh bg-slate-950 text-slate-200">
   <div class="no-print mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 sm:px-6">
-    <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <header class="sticky top-0 z-30 -mx-4 flex flex-col gap-4 bg-slate-950 px-4 py-3 sm:-mx-6 sm:flex-row sm:items-start sm:justify-between sm:px-6">
       <div class="flex items-center gap-3 min-w-0">
         <a href="/" class="text-sm text-slate-400 hover:text-red-400 shrink-0">← Hub</a>
         <div class="flex size-12 items-center justify-center rounded-2xl bg-red-700 shrink-0">
@@ -391,8 +391,8 @@
         <button type="button" id="print-key" class="rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold hover:bg-slate-700">
           Print coach sheet
         </button>
-        <button type="button" id="print-both" class="rounded-xl bg-red-700 px-3 py-2 text-sm font-semibold hover:bg-red-600">
-          Print / PDF
+        <button type="button" id="print-both" class="rounded-xl bg-red-700 px-3 py-2 text-sm font-semibold hover:bg-red-600" aria-label="Print / PDF cards">
+          Print / PDF cards
         </button>
       </div>
     </header>
@@ -616,7 +616,7 @@
       </div>
     </section>
 
-    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
+    <section id="player-card-section" class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="font-semibold">Player card</h2>
         <div class="flex gap-2" role="group" aria-label="Card preview">
@@ -638,14 +638,14 @@
       <div id="name-key" hidden></div>
     </section>
 
-    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
+    <section id="letter-sheet-section" class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
       <h2 class="font-semibold">Letter sheet</h2>
       <p id="letter-preview-note" class="text-sm text-slate-300"></p>
       <p class="text-sm text-slate-400">Scaled to this screen. On paper the square is 1 inch, so print at 100% / Actual size.</p>
       <div id="letter-preview"></div>
     </section>
 
-    <section class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
+    <section id="coach-sheet-section" class="grid gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
       <h2 class="font-semibold">Coach sheet</h2>
       <div class="flex flex-wrap items-end gap-3">
         <label class="grid gap-1.5 text-sm">
@@ -3595,6 +3595,7 @@
       renderVersions();
       renderCoachKey();
       renderPrint();
+      syncPrintButton();
     }
 
     function fullestOther(kind, exceptId) {
@@ -3652,6 +3653,55 @@
       render();
       scheduleSave();
       return true;
+    }
+
+    let previewView = "cards";
+
+    function mainPrintMode() {
+      return previewView === "sheet" ? "key" : "cards";
+    }
+
+    function syncPrintButton() {
+      const btn = document.getElementById("print-both");
+      if (!btn) return;
+      const label = previewView === "sheet" ? "Print / PDF coach sheet" : "Print / PDF cards";
+      btn.textContent = label;
+      btn.setAttribute("aria-label", label);
+    }
+
+    function setPreviewView(view) {
+      const next = view === "sheet" ? "sheet" : "cards";
+      if (next === previewView) return;
+      previewView = next;
+      syncPrintButton();
+    }
+
+    function watchPreviewView() {
+      const sections = [
+        { id: "player-card-section", view: "cards" },
+        { id: "letter-sheet-section", view: "cards" },
+        { id: "coach-sheet-section", view: "sheet" }
+      ];
+      sections.forEach(function (item) {
+        const node = document.getElementById(item.id);
+        if (!node) return;
+        node.addEventListener("pointerdown", function () { setPreviewView(item.view); });
+      });
+      if (!window.IntersectionObserver) return;
+      const visible = {};
+      const observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          visible[entry.target.id] = entry.isIntersecting ? entry.intersectionRect.height : 0;
+        });
+        const sheet = visible["coach-sheet-section"] || 0;
+        const cards = Math.max(visible["player-card-section"] || 0, visible["letter-sheet-section"] || 0);
+        if (sheet < 80 && cards < 80) return;
+        setPreviewView(sheet > cards ? "sheet" : "cards");
+      }, { threshold: [0, 0.1, 0.25, 0.5, 0.75] });
+      sections.forEach(function (item) {
+        const node = document.getElementById(item.id);
+        if (node) observer.observe(node);
+      });
     }
 
     function printNow(mode, versionId) {
@@ -4277,7 +4327,9 @@
     });
     document.getElementById("print-cards").addEventListener("click", function () { printNow("cards"); });
     document.getElementById("print-key").addEventListener("click", function () { printNow("key"); });
-    document.getElementById("print-both").addEventListener("click", function () { printNow("both"); });
+    document.getElementById("print-both").addEventListener("click", function () { printNow(mainPrintMode()); });
+    watchPreviewView();
+    syncPrintButton();
 
     document.addEventListener("keydown", function (event) {
       if (event.key !== "Escape") return;
