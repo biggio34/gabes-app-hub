@@ -112,6 +112,14 @@
     .cut-marks line {
       stroke-width: 0.9;
     }
+    .coach-print-sheet { position: absolute; }
+    .coach-crop {
+      position: absolute;
+      left: -0.28in;
+      top: -0.28in;
+      pointer-events: none;
+      overflow: visible;
+    }
     button:focus-visible,
     a:focus-visible,
     input:focus-visible {
@@ -355,7 +363,7 @@
       .print-page { page-break-after: always; break-after: page; }
       .print-page:last-child { page-break-after: auto; break-after: auto; }
       .print-cards { page: auto; }
-      .print-key { page: coach-sheet; margin: 0 !important; padding: 0 !important; }
+      .print-key { page: coach-sheet; margin: 0 !important; padding: 0 !important; background: #fff !important; }
       .band-card,
       .cut-card,
       .coach-sheet-page {
@@ -673,6 +681,7 @@
           </div>
         </div>
       </div>
+      <p class="text-sm text-slate-400">This size is the piece you cut out. Print puts it at the top left of a Letter page, 0.5 in in from the corner, with cut marks.</p>
       <div id="coach-key" class="overflow-x-auto rounded-2xl bg-slate-950 p-3"></div>
     </section>
   </div>
@@ -1874,12 +1883,53 @@
       });
     }
 
-    function coachSheetPageRule(sheet) {
-      const width = Number(sheet && sheet.widthIn) || 3.5;
-      const height = Number(sheet && sheet.heightIn) || 5.5;
-      const size = width + "in " + height + "in";
-      const named = "@page coach-sheet { size: " + size + "; margin: 0; }";
-      if (printMode === "key") return "@page { size: " + size + "; margin: 0; } " + named;
+    function coachInches(value) {
+      return Math.round(Number(value) * 10000) / 10000;
+    }
+
+    // The selected size is the cut-out. The paper is always Letter.
+    // The table sits at the top left. A 0.5 in margin is used when the table
+    // still fits; the margin shrinks only so an exact-size table stays on the page.
+    // A table larger than Letter is scaled down to the page. That is not a normal size.
+    function coachPrintPlacement(sheet) {
+      const rawW = Number(sheet && sheet.widthIn) || 3.5;
+      const rawH = Number(sheet && sheet.heightIn) || 5.5;
+      let scale = 1;
+      if (rawW > 8.5 + 1e-6 || rawH > 11 + 1e-6) scale = Math.min(8.5 / rawW, 11 / rawH);
+      const widthIn = coachInches(rawW * scale);
+      const heightIn = coachInches(rawH * scale);
+      let left = 0.5;
+      let top = 0.5;
+      if (left + widthIn > 8.5) left = Math.max(0, coachInches(8.5 - widthIn));
+      if (top + heightIn > 11) top = Math.max(0, coachInches(11 - heightIn));
+      return { widthIn: widthIn, heightIn: heightIn, left: left, top: top, scale: scale };
+    }
+
+    function coachCropSvg(widthIn, heightIn) {
+      const w = widthIn * 72;
+      const h = heightIn * 72;
+      const pad = 20;
+      function corner(x, y, sx, sy) {
+        const gap = 3;
+        const len = 12;
+        return '<line x1="' + (x + sx * gap) + '" y1="' + y + '" x2="' + (x + sx * (gap + len)) + '" y2="' + y + '"/>' +
+          '<line x1="' + x + '" y1="' + (y + sy * gap) + '" x2="' + x + '" y2="' + (y + sy * (gap + len)) + '"/>';
+      }
+      return (
+        '<svg class="coach-crop" aria-hidden="true" viewBox="' + (-pad) + " " + (-pad) + " " + (w + pad * 2) + " " + (h + pad * 2) + '" width="' + coachInches(widthIn + 0.56) + 'in" height="' + coachInches(heightIn + 0.56) + 'in">' +
+          '<g fill="none" stroke="#000000" stroke-width="0.4" stroke-linecap="square">' +
+            corner(0, 0, -1, -1) +
+            corner(w, 0, 1, -1) +
+            corner(0, h, -1, 1) +
+            corner(w, h, 1, 1) +
+          "</g>" +
+        "</svg>"
+      );
+    }
+
+    function coachSheetPageRule() {
+      const named = "@page coach-sheet { size: letter; margin: 0; }";
+      if (printMode === "key") return "@page { size: letter; margin: 0; } " + named;
       return named;
     }
 
@@ -3377,17 +3427,22 @@
         '</section>';
       const sheet = sheetOf();
       const sheetFit = { cols: 1, rows: 1, count: 1 };
-      const sheetPages = coachSheetPages(version, sheet);
+      const place = coachPrintPlacement(sheet);
+      const fitted = Object.assign({}, sheet, { widthIn: place.widthIn, heightIn: place.heightIn });
+      const sheetPages = coachSheetPages(version, fitted);
       const keyPages = [];
       for (let i = 0; i < sheetPages.length; i += sheetFit.count) {
         const chunk = sheetPages.slice(i, i + sheetFit.count);
         keyPages.push(
-          '<section class="print-page print-key" style="page:coach-sheet;width:' + sheet.widthIn + 'in;height:' + sheet.heightIn + 'in;margin:0;padding:0;color:#0f172a">' +
-            chunk.join("") +
-          '</section>'
+          '<section class="print-page print-key" data-paper="letter" style="page:coach-sheet;width:8.5in;height:11in;margin:0;padding:0;position:relative;overflow:hidden;color:#0f172a">' +
+            '<div class="coach-print-sheet" data-placement="top-left" data-left="' + place.left + '" data-top="' + place.top + '" data-width="' + place.widthIn + '" data-height="' + place.heightIn + '" style="left:' + place.left + 'in;top:' + place.top + 'in;width:' + place.widthIn + 'in;height:' + place.heightIn + 'in">' +
+              coachCropSvg(place.widthIn, place.heightIn) +
+              chunk.join("") +
+            "</div>" +
+          "</section>"
         );
       }
-      const keyPage = '<style id="coach-page-rule">' + coachSheetPageRule(sheet) + '</style>' + keyPages.join("");
+      const keyPage = '<style id="coach-page-rule">' + coachSheetPageRule() + "</style>" + keyPages.join("");
       if (printMode === "cards") root.innerHTML = cardPage;
       else if (printMode === "key") root.innerHTML = keyPage;
       else root.innerHTML = cardPage + keyPage;
