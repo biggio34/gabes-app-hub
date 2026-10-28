@@ -1555,6 +1555,10 @@ describe("wrist coach book", () => {
     assert.match(page, /PREVIOUS_DEFENSE_BAND = "#f87080"/);
     assert.match(page, /function cardSetName/);
     assert.match(page, /addText\(setName,/);
+    assert.match(page, /version\.titles\.offense = clean;/);
+    assert.doesNotMatch(page, /clean \|\| "Offense"/);
+    assert.doesNotMatch(page, /clean \|\| "Defense"/);
+    assert.doesNotMatch(page, /clean \|\| "Card"/);
     assert.doesNotMatch(page, /function versionStamp/);
     assert.doesNotMatch(page, /function versionToken/);
     assert.doesNotMatch(page, /function versionDate/);

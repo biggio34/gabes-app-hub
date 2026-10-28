@@ -1110,8 +1110,8 @@
       if (!version) return;
       version.titles = kindTitlesOf(version);
       const clean = String(value || "").trim();
-      if (kind === "defense") version.titles.defense = clean || "Defense";
-      else version.titles.offense = clean || "Offense";
+      if (kind === "defense") version.titles.defense = clean;
+      else version.titles.offense = clean;
     }
 
     function layoutOf(current) {
@@ -3614,7 +3614,7 @@
 
     function render() {
       if (!book) return;
-      document.getElementById("book-title").value = bandTitle();
+      document.getElementById("book-title").value = cardSetName(activeVersion());
       document.getElementById("book-subtitle").textContent = bandTitle();
       renderKindControls();
       renderNumberControls();
