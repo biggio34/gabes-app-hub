@@ -797,11 +797,9 @@ describe("wrist coach book", () => {
         assert.ok(ratio, card.name);
         assert.ok(Math.abs(Number(ratio[1]) - 0.663) < 0.001, card.name + " " + ratio[1]);
       }
-      const stamp = card.html.match(/<text x="[^"]+" y="([^"]+)"[^>]*>MY SIGNS \u00b7 VA \u00b7 [^<]*<\/text>/);
-      assert.ok(stamp, card.name + " stamp");
-      const stampY = Number(stamp[1]);
-      assert.equal(Number.isFinite(stampY), true, card.name);
-      assert.ok(stampY > box.h * 0.4 && stampY < box.h, card.name + " stamp y " + stampY);
+      assert.doesNotMatch(card.html, /data-stamp=/, card.name);
+      assert.doesNotMatch(card.html, /\u00b7 VA \u00b7/, card.name);
+      assert.doesNotMatch(card.html, /<text[^>]*>[^<]*\u00b7/, card.name);
       const footer = card.html.match(/<rect x="0" y="([^"]+)" width="[^"]+" height="([^"]+)" fill="/);
       assert.ok(footer, card.name);
       assert.equal(Number.isFinite(Number(footer[1])), true);
@@ -1543,8 +1541,11 @@ describe("wrist coach book", () => {
     assert.match(page, /#f7bad1/);
     assert.match(page, /PREVIOUS_OFFENSE_BAND = "#c00000"/);
     assert.match(page, /PREVIOUS_DEFENSE_BAND = "#f87080"/);
-    assert.match(page, /footerPt = 8/);
-    assert.match(page, /addText\(stamp, 0, barY, wPt, footerH, footerPt, footerInk, "", null, look\.bandFill, "footer"\)/);
+    assert.doesNotMatch(page, /function versionStamp/);
+    assert.doesNotMatch(page, /function versionToken/);
+    assert.doesNotMatch(page, /function versionDate/);
+    assert.doesNotMatch(page, /data-stamp=/);
+    assert.doesNotMatch(page, /footerPt = 8/);
     assert.doesNotMatch(page, /hPt - footerSlot/);
     assert.doesNotMatch(page, /addText\(bandTitle\(\)/);
     assert.match(page, /slice\(0, 5\)/);
@@ -2231,7 +2232,8 @@ describe("wrist coach book", () => {
     assert.match(page, /function libraryForReset/);
     assert.match(page, /const sheetFit = \{ cols: 1, rows: 1, count: 1 \}/);
     assert.match(page, /data-header-in/);
-    assert.match(page, /data-footer-top/);
+    assert.doesNotMatch(page, /data-footer-top/);
+    assert.doesNotMatch(page, /data-stamp=/);
     assert.match(page, /#111111/);
     assert.match(page, /text-shadow: none/);
     assert.match(page, /text-shadow:none/);

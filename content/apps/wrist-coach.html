@@ -2636,7 +2636,7 @@
         colSlots: metrics.colSlots,
         rowSlots: metrics.rowSlots,
         contentRows: metrics.contentRows,
-        // The second block row and the footer stamp sit under this band. Dropping it makes their y NaN.
+        // The second block row sits under this band. Dropping it makes that row's y NaN.
         footerIn: metrics.footerIn,
         cellW: metrics.cellW,
         cellH: metrics.cellH,
@@ -2713,26 +2713,6 @@
       }
       const fill = rgbToHex(r, g, b);
       return { fill: fill, ink: bestInk(fill, "#000000") };
-    }
-
-    function versionToken(version) {
-      const raw = String(version && version.name || "").replace(/^version\s+/i, "").trim();
-      return "v" + (raw || "1");
-    }
-
-    function versionDate(version) {
-      const ms = Number(version && version.createdAt);
-      if (!Number.isFinite(ms) || ms <= 0) return "";
-      const when = new Date(ms);
-      return (when.getMonth() + 1) + "/" + when.getDate();
-    }
-
-    function versionStamp(version, setName) {
-      const set = String(setName != null ? setName : bandTitle()).trim() || "Card";
-      const parts = [set, versionToken(version)];
-      const date = versionDate(version);
-      if (date) parts.push(date);
-      return parts.join(" \u00b7 ");
     }
 
     function shadeFill(fill) {
@@ -2821,7 +2801,7 @@
         }
         return marks;
       }
-      function addText(text, x, y, w, h, sizePt, color, anchor, clipBox, fill, role) {
+      function addText(text, x, y, w, h, sizePt, color, anchor, clipBox, fill) {
         const value = String(text || "").toUpperCase();
         if (!value) return;
         const box = clipBox || { x: x, y: y, w: w, h: h };
@@ -2834,18 +2814,14 @@
         const widthPt = emWidth(value) * sizePt;
         const tx = align === "end" ? x + w : x + w / 2;
         const start = align === "end" ? tx - widthPt : tx - widthPt / 2;
-        const isFooter = role === "footer";
-        const halo = !isFooter && fill && hexLuma(fill) < 150 && hexLuma(color) < 100;
+        const halo = fill && hexLuma(fill) < 150 && hexLuma(color) < 100;
         const haloAttr = halo
           ? ' stroke="#ffffff" stroke-width="' + n(knockoutPt(fontPt)) + '" paint-order="stroke fill" stroke-linejoin="round"'
-          : "";
-        const fontAttr = isFooter
-          ? ' font-family="WristCard, Arial Narrow, sans-serif" font-weight="700" letter-spacing="0"'
           : "";
         const strokeAttr = halo ? "" : ' stroke="none"';
         labels.push(
           '<g clip-path="url(#' + id + ')"' + haloAttr + '>' +
-            '<text x="' + n(tx) + '" y="' + n(baseline) + '" font-size="' + n(sizePt) + '" text-anchor="' + align + '" fill="' + color + '"' + fontAttr + strokeAttr + '>' +
+            '<text x="' + n(tx) + '" y="' + n(baseline) + '" font-size="' + n(sizePt) + '" text-anchor="' + align + '" fill="' + color + '"' + strokeAttr + '>' +
               escapeHtml(value) +
             '</text>' +
             glyphMarks(value, start, baseline, sizePt, color) +
@@ -2993,22 +2969,8 @@
           '<rect x="0" y="0" width="' + n(wPt) + '" height="' + n(hPt) + '" fill="none" stroke="#000000" stroke-width="0.6"/>'
         );
       }
-      const stamp = versionStamp(version, bandTitle());
-      const footerInk = hexLuma(look.bandFill) < 150 ? "#ffffff" : "#111111";
-      const footerRoom = Math.max(1, wPt - 1.8);
-      let footerPt = 8;
-      const titles = kindTitlesOf(version);
-      ["offense", "defense"].forEach(function (kind) {
-        const em = emWidth(versionStamp(version, titles[kind]));
-        if (em > 0 && em * footerPt > footerRoom) footerPt = footerRoom / em;
-        const bandPt = cardGridMetrics(size, layoutFor(kind)).footerIn * 72;
-        if (footerPt > bandPt - 1) footerPt = Math.max(1, bandPt - 1);
-      });
-      const stampPt = footerPt;
-      const footerTop = barY;
-      addText(stamp, 0, barY, wPt, footerH, footerPt, footerInk, "", null, look.bandFill, "footer");
       const card =
-        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-stamp="' + escapeHtml(stamp) + '" data-stamp-pt="' + n(stampPt) + '" data-footer-ink="' + footerInk + '" data-footer-top="' + n(footerTop) + '" data-header-ink="' + headerInk + '" data-header-fill="' + look.bandFill + '" data-corner-fill="' + chrome.cornerFill + '" data-pad-pt="' + n(chrome.padPt) + '" data-rule-pt="' + n(chrome.borderPt) + '" data-font-ratio="' + n(chrome.fontRatio) + '" data-text-ratio="' + n(chrome.textRatio) + '" data-mark-pt="' + n(markPt || 0) + '" data-block-pt="' + n(CARD_BLOCK_PT) + '" data-align="' + chrome.align + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
+        '<div class="band-card ' + (extraClass || "") + '" data-look="' + look.name + '" data-header-ink="' + headerInk + '" data-header-fill="' + look.bandFill + '" data-corner-fill="' + chrome.cornerFill + '" data-pad-pt="' + n(chrome.padPt) + '" data-rule-pt="' + n(chrome.borderPt) + '" data-font-ratio="' + n(chrome.fontRatio) + '" data-text-ratio="' + n(chrome.textRatio) + '" data-mark-pt="' + n(markPt || 0) + '" data-block-pt="' + n(CARD_BLOCK_PT) + '" data-align="' + chrome.align + '" data-shade="' + (shadeRows ? "1" : "0") + '" data-type-pt="' + n(fontPt) + '" style="width:' + size.widthIn + 'in;height:' + size.heightIn + 'in">' +
           '<svg viewBox="0 0 ' + n(wPt) + ' ' + n(hPt) + '" preserveAspectRatio="xMidYMid meet">' +
             '<defs>' + clips.join("") + '</defs>' +
             dataShapes.join("") +
