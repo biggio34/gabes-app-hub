@@ -2118,8 +2118,14 @@ describe("wrist coach book", () => {
       const sheet = mainPrintFromPage(page, "sheet", size, kind);
       assert.equal(sheet.label, "Print / PDF coach sheet", kind);
       assert.equal(sheet.mode, "key", kind);
-      assert.ok(sheet.html.includes("@page { size: 3.5in 5.5in; margin: 0; }"), kind);
-      assert.ok(sheet.html.includes("width:3.5in;height:5.5in"), kind);
+      assert.ok(sheet.html.includes("@page { size: letter; margin: 0; }"), kind);
+      assert.ok(sheet.html.includes("@page coach-sheet { size: letter; margin: 0; }"), kind);
+      assert.ok(sheet.html.includes('class="print-page print-key"'), kind);
+      assert.ok(sheet.html.includes("width:8.5in;height:11in"), kind);
+      const box = sheet.html.match(/class="coach-print-sheet" data-placement="top-left" data-left="([0-9.]+)" data-top="([0-9.]+)" data-width="([0-9.]+)" data-height="([0-9.]+)"/);
+      assert.ok(box, kind);
+      assert.ok(Math.abs(Number(box[3]) - 3.5) <= 0.02, kind);
+      assert.ok(Math.abs(Number(box[4]) - 5.5) <= 0.02, kind);
       assert.equal(sheet.html.includes('class="print-page print-cards"'), false, kind);
       assert.equal(sheet.html.includes("width:7.7in"), false, kind);
       const cards = mainPrintFromPage(page, "cards", size, kind);
@@ -2131,10 +2137,11 @@ describe("wrist coach book", () => {
     }
   });
 
-  it("prints the coach sheet at the selected page size", () => {
+  it("prints the coach sheet at the selected size on Letter paper", () => {
     const page = readFileSync(new URL("../../content/apps/wrist-coach.html", import.meta.url), "utf8");
     assert.match(page, /@page \{ size: letter; margin: 0\.4in; \}/);
     assert.match(page, /\.print-key \{ page: coach-sheet;/);
+    assert.match(page, /@page coach-sheet \{ size: letter; margin: 0; \}/);
     const sizes = [
       { preset: "card", widthIn: 3.5, heightIn: 5.5 },
       { preset: "letter", widthIn: 8.5, heightIn: 11 },
@@ -2146,16 +2153,27 @@ describe("wrist coach book", () => {
       for (const kind of ["defense", "offense"] as const) {
         for (const mode of ["key", "both"] as const) {
           const html = coachPrintHtmlFromPage(page, size, kind, mode);
-          const rule = mode === "key"
-            ? `@page { size: ${size.widthIn}in ${size.heightIn}in; margin: 0; } @page coach-sheet { size: ${size.widthIn}in ${size.heightIn}in; margin: 0; }`
-            : `@page coach-sheet { size: ${size.widthIn}in ${size.heightIn}in; margin: 0; }`;
-          assert.ok(html.includes(rule), `${kind} ${mode} ${size.preset}`);
-          assert.ok(
-            html.includes(`class="print-page print-key" style="page:coach-sheet;width:${size.widthIn}in;height:${size.heightIn}in;`),
-            `${kind} ${mode} ${size.preset} section`,
-          );
-          assert.ok(html.includes(`style="width:${size.widthIn}in;height:${size.heightIn}in;padding:0.12in"`), size.preset);
+          assert.match(html, /@page coach-sheet \{ size: letter; margin: 0; \}/, `${kind} ${mode} ${size.preset}`);
+          assert.match(html, /data-paper="letter"/, size.preset);
+          assert.match(html, /width:8\.5in;height:11in/, size.preset);
+          assert.match(html, /class="coach-crop"/, size.preset);
+          const boxes = [...html.matchAll(/class="coach-print-sheet" data-placement="top-left" data-left="([0-9.]+)" data-top="([0-9.]+)" data-width="([0-9.]+)" data-height="([0-9.]+)"/g)];
+          assert.ok(boxes.length >= 1, size.preset);
+          for (const box of boxes) {
+            assert.ok(Math.abs(Number(box[3]) - size.widthIn) <= 0.02, `${size.preset} width ${box[3]}`);
+            assert.ok(Math.abs(Number(box[4]) - size.heightIn) <= 0.02, `${size.preset} height ${box[4]}`);
+            assert.ok(Number(box[1]) + Number(box[3]) <= 8.5 + 0.02, size.preset);
+            assert.ok(Number(box[2]) + Number(box[4]) <= 11 + 0.02, size.preset);
+          }
+          const tables = [...html.matchAll(/class="coach-sheet-page[^"]*"[^>]*style="width:([0-9.]+)in;height:([0-9.]+)in/g)];
+          assert.equal(tables.length, boxes.length, size.preset);
+          for (const table of tables) {
+            assert.ok(Math.abs(Number(table[1]) - size.widthIn) <= 0.02, size.preset);
+            assert.ok(Math.abs(Number(table[2]) - size.heightIn) <= 0.02, size.preset);
+          }
           assert.equal(html.includes("width:7.7in"), false, size.preset);
+          assert.doesNotMatch(html, /@page coach-sheet \{ size: \d/, size.preset);
+          if (mode === "key") assert.match(html, /@page \{ size: letter; margin: 0; \}/, kind);
           if (mode === "both") {
             assert.ok(html.includes('class="print-page print-cards"'), kind);
             assert.equal(html.includes("@page { size:"), false, kind);
@@ -2163,6 +2181,13 @@ describe("wrist coach book", () => {
         }
       }
     }
+    const oversized = coachPrintHtmlFromPage(page, { preset: "custom", widthIn: 9, heightIn: 12 }, "defense", "key");
+    const big = oversized.match(/data-width="([0-9.]+)" data-height="([0-9.]+)"/);
+    assert.ok(big);
+    assert.ok(Number(big[1]) <= 8.5 + 0.02);
+    assert.ok(Number(big[2]) <= 11 + 0.02);
+    assert.ok(Number(big[1]) < 9);
+    assert.match(oversized, /@page \{ size: letter; margin: 0; \}/);
   });
 
   it("marks decoys on the names sheet and keeps the round 16 page controls", () => {
@@ -2197,7 +2222,7 @@ describe("wrist coach book", () => {
     assert.match(page, /function coachPrintSheet/);
     assert.match(page, /function coachSheetPageRule/);
     assert.match(page, /const sheet = sheetOf\(\)/);
-    assert.match(page, /coachSheetPages\(version, sheet\)/);
+    assert.match(page, /coachSheetPages\(version, fitted\)/);
     assert.doesNotMatch(page, /coachSheetPages\(version, coachPrintSheet/);
     assert.match(page, /function clearUntouchedDefenseColor/);
     assert.match(page, /function versionLetter/);
