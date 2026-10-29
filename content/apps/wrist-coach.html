@@ -2798,11 +2798,6 @@
             const inset = adv * 0.12;
             const y5 = baseline - cap + sizePt * 0.02;
             marks += '<rect x="' + n(x0 + inset) + '" y="' + n(y5) + '" width="' + n(Math.max(0, adv - inset * 2)) + '" height="' + n(thick) + '" fill="' + color + '"/>';
-          } else if (ch === "S" && adv > 0) {
-            const thick = markPt || sizePt * 0.05;
-            const yS = baseline - cap * 0.5 - thick / 2;
-            marks += '<rect x="' + n(x0 + adv * 0.08) + '" y="' + n(yS) + '" width="' + n(adv * 0.22) + '" height="' + n(thick) + '" fill="' + color + '"/>';
-            marks += '<rect x="' + n(x0 + adv * 0.7) + '" y="' + n(yS) + '" width="' + n(adv * 0.22) + '" height="' + n(thick) + '" fill="' + color + '"/>';
           }
           cursor += adv;
         }

@@ -721,6 +721,8 @@ describe("wrist coach book", () => {
     assert.match(cardFn, /look\.bandFill,\s*"",\s*headerInk/);
     assert.match(cardFn, /const markPt = layout\.grids > 3 \? CARD_MARK_PT : 0/);
     assert.match(cardFn, /const sw = markPt \|\| sizePt \* 0\.07/);
+    assert.match(cardFn, /ch === "5"/);
+    assert.doesNotMatch(cardFn, /ch === "S"/);
     assert.match(cardFn, /data-block-outline="1"/);
     assert.match(cardFn, /n\(CARD_BLOCK_PT\)/);
     assert.match(cardFn, /CARD_BLOCK_STROKE/);
@@ -810,6 +812,13 @@ describe("wrist coach book", () => {
     }
     assert.equal((rendered.offense.match(/data-block-outline="1"/g) || []).length, 6);
     assert.equal((rendered.defense.match(/data-block-outline="1"/g) || []).length, 6);
+    const plainS = rendered.offense.match(/<text[^>]*>S<\/text>([\s\S]*?)<\/g>/);
+    assert.ok(plainS, "offense has a lone S");
+    assert.doesNotMatch(plainS[1], /<(?:rect|line)\b/, "S has no bar through it");
+    const numbered = rendered.offense.match(/<text[^>]*>05<\/text>([\s\S]*?)<\/g>/);
+    assert.ok(numbered, "offense has a 05 header");
+    assert.match(numbered[1], /<line\b/, "0 still has its slash");
+    assert.match(numbered[1], /<rect\b/, "5 still has its top bar");
     assert.match(rendered.red, />Red</);
     assert.doesNotMatch(rendered.red, />RED</);
     assert.doesNotMatch(rendered.red, /\u00b7|vA|>VA</);
