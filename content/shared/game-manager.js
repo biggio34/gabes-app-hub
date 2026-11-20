@@ -233,6 +233,7 @@
       scheduledInnings: clampScheduledInnings(input && input.scheduledInnings),
       tiebreaker: false,
       endedReason: "",
+      outs: 0,
       players: Array.isArray(input.players) ? input.players.map(slimPlayer).filter(Boolean) : [],
       lineupSnapshot: snapshot,
       gameName: snapshot.name,
@@ -271,7 +272,26 @@
     next.finalUs = board.usTotal;
     next.finalOpp = board.oppTotal;
     next.tiebreaker = false;
+    next.outs = 0;
     return next;
+  }
+
+  function clampOuts(value) {
+    const n = parseInt(value, 10);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.min(3, n);
+  }
+
+  function addOut(state, now) {
+    if (!state || state.status !== "live") throw new Error("This game is not in progress.");
+    const outs = Math.min(3, clampOuts(state.outs) + 1);
+    return Object.assign({}, state, { outs: outs, updatedAt: now || Date.now() });
+  }
+
+  function undoOut(state, now) {
+    if (!state || state.status !== "live") throw new Error("This game is not in progress.");
+    const outs = Math.max(0, clampOuts(state.outs) - 1);
+    return Object.assign({}, state, { outs: outs, updatedAt: now || Date.now() });
   }
 
   function recordRuns(state, runs, now) {
@@ -342,6 +362,7 @@
       openingDefense: onDefense ? cloneDefense(defense) : null,
       tiebreaker: false,
       endedReason: "",
+      outs: 0,
     });
   }
 
@@ -629,6 +650,7 @@
       endedReason: raw.endedReason === "home-lead" || raw.endedReason === "final" || raw.endedReason === "manual"
         ? raw.endedReason
         : "",
+      outs: clampOuts(raw.outs),
       players: Array.isArray(raw.players) ? raw.players.map(slimPlayer).filter(Boolean) : [],
       lineupSnapshot: snapshot,
       gameName: String(raw.gameName || (snapshot && snapshot.name) || "Untitled Game"),
@@ -696,6 +718,9 @@
     recordRuns: recordRuns,
     setDefense: setDefense,
     setTiebreaker: setTiebreaker,
+    clampOuts: clampOuts,
+    addOut: addOut,
+    undoOut: undoOut,
     scoreboard: scoreboard,
     endGame: endGame,
     unplayedGames: unplayedGames,

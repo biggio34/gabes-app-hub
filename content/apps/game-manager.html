@@ -281,6 +281,31 @@
 
     .inn.skip { color: var(--red); }
 
+    .outs {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+      min-height: 48px;
+    }
+
+    .dot {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 3px solid var(--line);
+      background: transparent;
+      flex: none;
+    }
+
+    .dot.on { background: var(--ink); }
+
+    .outs-label {
+      margin-left: 4px;
+      font-size: 1.2rem;
+      font-weight: 900;
+    }
+
     .primary, .big {
       width: 100%;
       min-height: 68px;
@@ -582,6 +607,15 @@
       return '<div id="half-indicator" class="banner ' + board.role + '"><p class="half">' + esc(board.label) + '</p><p class="role">' + role + "</p></div>";
     }
 
+    function outsHtml(session) {
+      var outs = GameManager.clampOuts(session.outs);
+      var dots = [0, 1, 2].map(function (index) {
+        return '<span class="dot' + (index < outs ? " on" : "") + '"></span>';
+      }).join("");
+      var label = outs === 1 ? "1 out" : outs + " outs";
+      return '<div id="outs" class="outs" aria-label="' + esc(label) + '">' + dots + '<span class="outs-label">' + esc(label) + "</span></div>";
+    }
+
     function tiebreakerHtml(session) {
       if (!GameManager.isExtraHalf(session)) return "";
       var on = !!session.tiebreaker;
@@ -713,6 +747,7 @@
         + headerHtml(session.gameName, teamName + " · Saved on this phone", "Games")
         + scoreboardHtml(session)
         + bannerHtml(session)
+        + outsHtml(session)
         + tiebreakerHtml(session)
         + "</div>"
         + "<main>"
@@ -722,7 +757,9 @@
         + trackerHtml(session)
         + "</main>"
         + '<div class="dock">'
-        + '<button type="button" class="primary" data-action="ask-runs">End half inning</button>'
+        + '<button type="button" class="primary" id="add-out" data-action="add-out">+1 Out</button>'
+        + '<button type="button" class="end-game" id="undo-out" data-action="undo-out"' + (GameManager.clampOuts(session.outs) === 0 ? " disabled" : "") + ">Undo out</button>"
+        + '<button type="button" class="end-game" data-action="ask-runs">End half inning</button>'
         + '<button type="button" class="end-game" id="end-game" data-action="ask-end">End Game</button>'
         + "</div>"
         + runSheet(session)
@@ -908,6 +945,23 @@
         remember(session);
         render();
         window.scrollTo(0, 0);
+        return;
+      }
+      if (action === "add-out") {
+        var withOut = GameManager.addOut(sessionFor(gameId));
+        if (withOut.outs === 3) {
+          sheet = "runs";
+          runDigits = "";
+        }
+        remember(withOut);
+        render();
+        return;
+      }
+      if (action === "undo-out") {
+        var fewer = GameManager.undoOut(sessionFor(gameId));
+        if (sheet === "runs" && fewer.outs < 3) sheet = "";
+        remember(fewer);
+        render();
         return;
       }
       if (action === "ask-runs") {

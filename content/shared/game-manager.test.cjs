@@ -360,6 +360,61 @@ describe("game length, skip bottom, and extras", () => {
   });
 });
 
+describe("outs", () => {
+  it("counts outs up to 3 and undoes one at a time", () => {
+    let state = start("away");
+    assert.equal(state.outs, 0);
+    state = GameManager.addOut(state, 1);
+    state = GameManager.addOut(state, 2);
+    assert.equal(state.outs, 2);
+    state = GameManager.undoOut(state, 3);
+    assert.equal(state.outs, 1);
+    state = GameManager.undoOut(state, 4);
+    state = GameManager.undoOut(state, 5);
+    assert.equal(state.outs, 0);
+    state = GameManager.addOut(state, 6);
+    state = GameManager.addOut(state, 7);
+    state = GameManager.addOut(state, 8);
+    state = GameManager.addOut(state, 9);
+    assert.equal(state.outs, 3);
+  });
+
+  it("resets outs on the next half and still ends a half before 3 outs", () => {
+    let state = start("away");
+    state = GameManager.addOut(state, 1);
+    state = GameManager.addOut(state, 2);
+    state = GameManager.recordRuns(state, 1, 3);
+    assert.equal(state.outs, 0);
+    assert.equal(state.half, "bottom");
+    assert.equal(GameManager.scoreboard(state).usTotal, 1);
+    state = GameManager.addOut(state, 4);
+    state = GameManager.recordRuns(state, 0, 5);
+    assert.equal(state.status, "live");
+    assert.equal(state.outs, 0);
+    assert.equal(state.half, "top");
+  });
+
+  it("keeps the out count on the phone after a refresh", () => {
+    let state = start("away");
+    state = GameManager.addOut(state, 2);
+    state = GameManager.addOut(state, 3);
+    const store = GameManager.normalizeStore({
+      version: 1,
+      teams: {
+        "team-16u-fransen": {
+          games: [sampleGame()],
+          players: players(),
+          sessions: { "game-eagles": state },
+        },
+      },
+    });
+    const restored = store.teams["team-16u-fransen"].sessions["game-eagles"];
+    assert.equal(restored.outs, 2);
+    assert.equal(restored.status, "live");
+    assert.equal(restored.half, "top");
+  });
+});
+
 describe("game manager saved games", () => {
   it("ends at any point and locks the score and defensive innings so far", () => {
     const games = [sampleGame(), { id: "later", name: "vs. Hawks", battingOrder: ["mia"] }];
@@ -461,6 +516,9 @@ describe("game manager page", () => {
     assert.match(html, /Keep playing/);
     assert.match(html, /id="ended-summary"/);
     assert.match(html, /id="inning-count"/);
+    assert.match(html, /id="outs"/);
+    assert.match(html, /\+1 Out/);
+    assert.match(html, /id="undo-out"/);
     assert.match(html, /id="tiebreaker"/);
     assert.match(html, /Tiebreaker/);
   });
