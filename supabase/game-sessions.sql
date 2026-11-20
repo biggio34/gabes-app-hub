@@ -12,7 +12,13 @@ create table if not exists hub_game_manager (
 alter table hub_game_manager enable row level security;
 
 -- No policies for anon or authenticated. The hub API uses the service role,
--- which bypasses RLS. Browsers never receive that key and never query this table.
-
--- Realtime. Ignore "already member of publication" if you run this twice.
-alter publication supabase_realtime add table hub_game_manager;
+-- which bypasses RLS. Browsers never query this table.
+--
+-- Live updates are a Realtime Broadcast on channel game-manager:<club_id>.
+-- The message is only { "revision": <number> }. Do not add this table to the
+-- supabase_realtime publication. Postgres changes are not used, so row
+-- payloads are not copied onto the realtime stream.
+--
+-- Broadcast is on for Supabase projects by default. No extra policy is required
+-- because the channel is public and carries no game data. The signed-in hub
+-- API is what returns the document after a phone hears a new revision.

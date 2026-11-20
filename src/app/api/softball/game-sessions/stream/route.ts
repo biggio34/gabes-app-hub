@@ -1,11 +1,23 @@
-import { requireGameManager } from "@/lib/game-session-auth";
-import { subscribeGameDocument, subscribeSupabaseGameDocuments } from "@/lib/game-session-hub";
+import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/db/supabase";
+import { requireGameManager } from "@/lib/game-session-auth";
+import { subscribeGameRevision } from "@/lib/game-session-hub";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * Local-dev stand-in for the Realtime revision ping. Production Game Manager
+ * does not call this. When Supabase is configured the route refuses the stream
+ * so a serverless function is not held open.
+ */
 export async function GET(request: Request) {
+  if (isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Game Manager live updates use Supabase Realtime. This stream is for local dev only." },
+      { status: 404 },
+    );
+  }
   const auth = await requireGameManager();
   if ("error" in auth && auth.error) return auth.error;
   const clubId = auth.clubId;
@@ -22,21 +34,13 @@ export async function GET(request: Request) {
           closed = true;
         }
       };
-      const unsubscribeLocal = subscribeGameDocument(clubId, (document) => {
-        send("document", { document });
+      const unsubscribe = subscribeGameRevision(clubId, (revision) => {
+        send("revision", { revision });
       });
-      const unsubscribeRemote = isSupabaseConfigured()
-        ? subscribeSupabaseGameDocuments(clubId, (document) => {
-            send("document", { document });
-          })
-        : () => {};
-      const ping = setInterval(() => send("ping", {}), 15000);
       const abort = () => {
         if (closed) return;
         closed = true;
-        clearInterval(ping);
-        unsubscribeLocal();
-        unsubscribeRemote();
+        unsubscribe();
         try {
           controller.close();
         } catch {
@@ -44,7 +48,7 @@ export async function GET(request: Request) {
         }
       };
       request.signal.addEventListener("abort", abort);
-      send("ready", { clubId });
+      send("ready", {});
     },
   });
 

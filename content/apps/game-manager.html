@@ -1564,12 +1564,22 @@
           if (!response.ok) throw new Error(data.error || "Could not save Game Manager.");
           return { document: data.document };
         },
-        subscribe: function (onDocument, onState) {
+        subscribe: function (onRevision, onState) {
+          var cfg = window.HUB_GAME_SYNC || {};
+          if (cfg.anonKey && cfg.url && cfg.clubId && window.GameSync && GameSync.openBroadcast) {
+            return GameSync.openBroadcast({
+              url: cfg.url,
+              anonKey: cfg.anonKey,
+              topic: "game-manager:" + cfg.clubId,
+              onRevision: onRevision,
+              onState: onState,
+            });
+          }
           var source = new EventSource("/api/softball/game-sessions/stream");
-          source.addEventListener("document", function (event) {
+          source.addEventListener("revision", function (event) {
             try {
               var payload = JSON.parse(event.data);
-              if (payload && payload.document) onDocument(payload.document);
+              if (payload && typeof payload.revision === "number") onRevision(payload.revision);
             } catch (e) {}
           });
           source.onopen = function () { if (onState) onState(true); };

@@ -35,6 +35,8 @@ Optional env:
 - `HUB_SESSION_SECRET` — cookie signing secret
 - `SUPABASE_URL` — defaults to the existing lineup project
 - `SUPABASE_SERVICE_ROLE_KEY` — server-only secret; do not put this in the browser
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — public anon key. Game Manager’s browser uses it only to hear a Realtime revision ping. It is not a secret. Without it, production phones fall back to a slow refresh.
+- `NEXT_PUBLIC_SUPABASE_URL` — optional. Defaults to `SUPABASE_URL`, then the existing project URL.
 - `GMAIL_USER` — Gmail address that sends invite emails
 - `GMAIL_APP_PASSWORD` — 16-character Google app password (not your normal Gmail password)
 - `HUB_PUBLIC_URL` — optional, defaults to the live Netlify site

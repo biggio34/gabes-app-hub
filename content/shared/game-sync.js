@@ -17,6 +17,99 @@
   root.GameSync = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   const NOTICE = "Updated from another device";
+  const FALLBACK_POLL_MS = 25000;
+
+  function shouldFetchRevision(localRevision, pingRevision) {
+    const local = Number(localRevision);
+    const ping = Number(pingRevision);
+    if (!Number.isFinite(ping)) return false;
+    if (!Number.isFinite(local)) return true;
+    return ping > local;
+  }
+
+  function broadcastSocketUrl(baseUrl, anonKey) {
+    const base = String(baseUrl || "").replace(/\/$/, "").replace(/^http/i, "ws");
+    const root = /\/realtime\/v1/i.test(base) ? base : base + "/realtime/v1";
+    return root + "/websocket?apikey=" + encodeURIComponent(anonKey || "") + "&vsn=1.0.0";
+  }
+
+  function revisionFromFrame(frame) {
+    if (!Array.isArray(frame) || frame.length < 5) return null;
+    const eventName = frame[3];
+    const payload = frame[4] || {};
+    if (eventName === "broadcast" && payload && payload.event === "revision") {
+      const revision = payload.payload && payload.payload.revision;
+      return typeof revision === "number" ? revision : null;
+    }
+    if (eventName === "revision" && typeof payload.revision === "number") return payload.revision;
+    return null;
+  }
+
+  /**
+   * Browser subscription to a public Supabase Realtime Broadcast channel.
+   * The only message handled is a revision number. The caller then loads the
+   * document from the hub API.
+   */
+  function openBroadcast(options) {
+    const settings = options || {};
+    const topicName = "realtime:" + String(settings.topic || "").replace(/^realtime:/, "");
+    const Socket = settings.Socket || (typeof WebSocket !== "undefined" ? WebSocket : null);
+    const onRevision = typeof settings.onRevision === "function" ? settings.onRevision : function () {};
+    const onState = typeof settings.onState === "function" ? settings.onState : function () {};
+    if (!Socket) {
+      onState(false);
+      return function () {};
+    }
+    let closed = false;
+    let ref = 0;
+    const ws = new Socket(broadcastSocketUrl(settings.url, settings.anonKey));
+    function send(joinRef, event, topic, payload) {
+      ref += 1;
+      if (!ws || ws.readyState !== 1) return;
+      ws.send(JSON.stringify([joinRef, String(ref), topic, event, payload || {}]));
+    }
+    ws.onopen = function () {
+      send("1", "phx_join", topicName, {
+        config: {
+          broadcast: { ack: false, self: false },
+          presence: { enabled: false },
+          postgres_changes: [],
+          private: false,
+        },
+        access_token: settings.anonKey || "",
+      });
+    };
+    const heart = setInterval(function () {
+      if (closed) return;
+      send(null, "heartbeat", "phoenix", {});
+    }, 20000);
+    if (heart.unref) heart.unref();
+    ws.onmessage = function (event) {
+      if (!event || typeof event.data !== "string") return;
+      let frame;
+      try {
+        frame = JSON.parse(event.data);
+      } catch (e) {
+        return;
+      }
+      if (!Array.isArray(frame) || frame.length < 5) return;
+      const eventName = frame[3];
+      const payload = frame[4] || {};
+      if (eventName === "phx_reply" && payload.status === "ok" && frame[2] === topicName) {
+        onState(true);
+        return;
+      }
+      const revision = revisionFromFrame(frame);
+      if (revision != null) onRevision(revision);
+    };
+    ws.onerror = function () { onState(false); };
+    ws.onclose = function () { onState(false); };
+    return function () {
+      closed = true;
+      clearInterval(heart);
+      try { ws.close(); } catch (e) {}
+    };
+  }
 
   function revisionOf(doc) {
     const n = Number(doc && doc.revision);
@@ -443,10 +536,8 @@
     function connectSocket() {
       if (typeof options.subscribe !== "function") return;
       stopSocket();
-      stopSocket = options.subscribe(function (doc) {
-        socketOpen = true;
-        acceptRemote(doc);
-        if (queue.length && online()) flush();
+      stopSocket = options.subscribe(function (revision) {
+        if (shouldFetchRevision(revisionOf(acked), revision) && online()) pull();
       }, function (open) {
         socketOpen = !!open;
       }) || function () {};
@@ -475,9 +566,9 @@
         }
       }
       pollTimer = setInterval(function () {
-        if (!started || !visible()) return;
+        if (!started || !visible() || socketOpen) return;
         pull();
-      }, 1000);
+      }, FALLBACK_POLL_MS);
       reconnectTimer = setInterval(function () {
         if (started && !socketOpen) connectSocket();
       }, 3000);
@@ -520,6 +611,11 @@
 
   return {
     NOTICE: NOTICE,
+    FALLBACK_POLL_MS: FALLBACK_POLL_MS,
+    shouldFetchRevision: shouldFetchRevision,
+    broadcastSocketUrl: broadcastSocketUrl,
+    revisionFromFrame: revisionFromFrame,
+    openBroadcast: openBroadcast,
     revisionOf: revisionOf,
     hasOp: hasOp,
     latestTapWins: latestTapWins,

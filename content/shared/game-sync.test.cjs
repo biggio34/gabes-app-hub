@@ -258,3 +258,54 @@ describe("game sync document", () => {
     assert.equal(GameSync.missingSnapshot(GameManager.emptyDocument(), envelope.acked).active.gameId, "game-eagles");
   });
 });
+
+describe("game sync realtime ping", () => {
+  it("fetches only when the ping revision is newer", () => {
+    assert.equal(GameSync.shouldFetchRevision(4, 5), true);
+    assert.equal(GameSync.shouldFetchRevision(5, 5), false);
+    assert.equal(GameSync.shouldFetchRevision(6, 5), false);
+    assert.equal(GameSync.FALLBACK_POLL_MS >= 20000, true);
+    assert.equal(GameSync.FALLBACK_POLL_MS <= 30000, true);
+  });
+
+  it("subscribes for a revision number and ignores the rest of the broadcast", () => {
+    const sockets = [];
+    function Socket(url) {
+      this.url = url;
+      this.readyState = 1;
+      this.sent = [];
+      sockets.push(this);
+    }
+    Socket.prototype.send = function (raw) { this.sent.push(JSON.parse(raw)); };
+    Socket.prototype.close = function () { this.readyState = 3; if (this.onclose) this.onclose(); };
+    let revision = null;
+    let open = false;
+    const stop = GameSync.openBroadcast({
+      url: "https://example.supabase.co",
+      anonKey: "anon-public",
+      topic: "game-manager:club-mn-elks",
+      Socket: Socket,
+      onRevision: function (next) { revision = next; },
+      onState: function (state) { open = state; },
+    });
+    const sock = sockets[0];
+    assert.match(sock.url, /^wss:\/\/example\.supabase\.co\/realtime\/v1\/websocket\?apikey=anon-public/);
+    sock.onopen();
+    assert.equal(sock.sent[0][2], "realtime:game-manager:club-mn-elks");
+    assert.equal(sock.sent[0][3], "phx_join");
+    assert.equal(sock.sent[0][4].config.private, false);
+    sock.onmessage({
+      data: JSON.stringify(["1", "1", "realtime:game-manager:club-mn-elks", "phx_reply", { status: "ok", response: {} }]),
+    });
+    assert.equal(open, true);
+    sock.onmessage({
+      data: JSON.stringify([null, null, "realtime:game-manager:club-mn-elks", "broadcast", {
+        type: "broadcast",
+        event: "revision",
+        payload: { revision: 7, lineup: "secret" },
+      }]),
+    });
+    assert.equal(revision, 7);
+    stop();
+  });
+});

@@ -4,7 +4,7 @@ import { readyDb } from "@/lib/db/client";
 import { gameManagerState } from "@/lib/db/schema";
 import { getSupabase, isSupabaseConfigured } from "@/lib/db/supabase";
 import { isMissingSchemaError } from "@/lib/softball-write-helpers";
-import { publishGameDocument } from "@/lib/game-session-hub";
+import { broadcastGameRevision } from "@/lib/game-session-hub";
 
 const require = createRequire(import.meta.url);
 const GameManager = require("../../content/shared/game-manager.js") as {
@@ -123,7 +123,7 @@ async function writeSqlite(clubId: string, expectedRevision: number, incoming: u
       stored: "sqlite" as const,
     };
   });
-  if (!result.conflict) publishGameDocument(clubId, result.document);
+  if (!result.conflict) await broadcastGameRevision(clubId, result.revision);
   return result;
 }
 
@@ -147,7 +147,7 @@ async function writeSupabase(clubId: string, expectedRevision: number, incoming:
     throw new Error(updated.error.message);
   }
   if (updated.data) {
-    publishGameDocument(clubId, stamped);
+    await broadcastGameRevision(clubId, stamped.revision);
     return {
       conflict: false as const,
       document: stamped,
@@ -169,7 +169,7 @@ async function writeSupabase(clubId: string, expectedRevision: number, incoming:
       .select()
       .maybeSingle();
     if (!inserted.error && inserted.data) {
-      publishGameDocument(clubId, stamped);
+      await broadcastGameRevision(clubId, stamped.revision);
       return {
         conflict: false as const,
         document: stamped,
