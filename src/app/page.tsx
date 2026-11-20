@@ -3,7 +3,7 @@ import "./salon/orders/supply-theme.css";
 import "./sfg-hub.css";
 import { redirect } from "next/navigation";
 import { areaMeta, AREAS } from "@/lib/areas";
-import { canAccessArea, getSession, wristCoachAllowed } from "@/lib/auth";
+import { canAccessArea, gameManagerAllowed, getSession, wristCoachAllowed } from "@/lib/auth";
 import { hubApps } from "@/lib/catalog";
 import { labelsForUser } from "@/lib/clubs";
 import { SalonLogo } from "@/app/salon/orders/salon-logo";
@@ -90,9 +90,9 @@ export default async function HubHome() {
               {area === "softball" ? (
                 <p className="mb-3 text-sm text-slate-400">
                   Teams you add on People show in Roster, Lineup, Team
-                  Formation, Tryouts, and Practice Planner. Scorekeeper, Game
-                  Manager, and Cage Crush are on for every Softball login.
-                  Game Manager uses the games you save in Lineup Builder.
+                  Formation, Tryouts, and Practice Planner. Scorekeeper and
+                  Cage Crush are on for every Softball login. Game Manager is
+                  admin-only. It uses the games you save in Lineup Builder.
                   Wrist Coach is a separate checkbox — not every Softball login
                   gets it. Start with Team Roster — one People id per girl,
                   card plus season history, jersey number per year.
@@ -117,12 +117,17 @@ export default async function HubHome() {
               <div className="grid gap-4 md:grid-cols-2">
                 {apps
                   .filter((app) => {
-                    if (app.requiresFeature !== "wrist-coach") return true;
-                    return wristCoachAllowed({
-                      role: session.role,
-                      areas: stored?.areas ?? session.areas,
-                      features: stored?.features ?? session.features,
-                    });
+                    if (app.requiresFeature === "wrist-coach") {
+                      return wristCoachAllowed({
+                        role: session.role,
+                        areas: stored?.areas ?? session.areas,
+                        features: stored?.features ?? session.features,
+                      });
+                    }
+                    if (app.requiresFeature === "admin") {
+                      return gameManagerAllowed({ role: stored?.role ?? session.role });
+                    }
+                    return true;
                   })
                   .map((app) => {
                   const href = app.href || `/apps/${app.slug}`;

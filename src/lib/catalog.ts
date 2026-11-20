@@ -58,6 +58,7 @@ export const hubApps: HubApp[] = [
     description:
       "Dugout scoreboard for a Lineup Builder game. Innings, offense or defense, and who played the field. Stays on your phone.",
     area: "softball",
+    requiresFeature: "admin",
   },
   {
     slug: "scorekeeper",
