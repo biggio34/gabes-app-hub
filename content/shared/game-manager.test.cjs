@@ -34,13 +34,14 @@ function players() {
   ];
 }
 
-function start(side, game) {
+function start(side, game, innings) {
   return GameManager.createLiveGame(
     {
       side: side,
       game: game || sampleGame(),
       players: players(),
       teamName: "16U Fransen",
+      scheduledInnings: innings,
     },
     1000,
   );
@@ -184,20 +185,31 @@ describe("game manager half innings", () => {
 });
 
 describe("game manager defensive innings", () => {
-  it("counts the defensive lineup used when that half ends, once per player", () => {
+  it("credits whoever started the defensive half, not a mid-inning replacement", () => {
     let state = start("away");
     state = GameManager.recordRuns(state, 2, 1100);
+    assert.equal(state.half, "bottom");
     state = GameManager.setDefense(state, "P", "sub", 1150);
     assert.equal(state.defense.P, "sub");
     assert.equal(state.defense.C, "ava");
     state = GameManager.recordRuns(state, 1, 1200);
-    assert.equal(state.defensiveInnings.sub, 1);
-    assert.equal(state.defensiveInnings.mia || 0, 0);
+    assert.equal(state.defensiveInnings.mia, 1);
+    assert.equal(state.defensiveInnings.sub || 0, 0);
     assert.equal(state.defensiveInnings.ava, 1);
     assert.equal(state.defensiveInnings.lina, 1);
     const rows = GameManager.defensiveInningRows(state);
-    assert.equal(rows.find((row) => row.id === "sub").innings, 1);
-    assert.equal(rows.find((row) => row.id === "mia").innings, 0);
+    assert.equal(rows.find((row) => row.id === "mia").innings, 1);
+    assert.equal(rows.find((row) => row.id === "sub").innings, 0);
+  });
+
+  it("uses a lineup change made before the defensive half starts", () => {
+    let state = start("away");
+    state = GameManager.setDefense(state, "P", "sub", 1050);
+    state = GameManager.recordRuns(state, 0, 1100);
+    state = GameManager.recordRuns(state, 0, 1200);
+    assert.equal(state.defensiveInnings.sub, 1);
+    assert.equal(state.defensiveInnings.mia || 0, 0);
+    assert.equal(state.defensiveInnings.ava, 1);
   });
 
   it("swaps two fielders and benches a replaced player", () => {
@@ -240,6 +252,111 @@ describe("game manager defensive innings", () => {
     assert.equal(board.usTotal, 1);
     assert.equal(board.label, "Bottom 2");
     assert.equal(board.role, "offense");
+  });
+});
+
+describe("game length, skip bottom, and extras", () => {
+  it("defaults to 7 innings and lets the coach pick another length", () => {
+    assert.equal(start("home").scheduledInnings, 7);
+    assert.equal(start("away", null, 5).scheduledInnings, 5);
+    assert.equal(GameManager.clampScheduledInnings(undefined), 7);
+    assert.equal(GameManager.clampScheduledInnings(0), 1);
+    assert.equal(GameManager.clampScheduledInnings(40), 12);
+  });
+
+  it("skips the bottom and ends when the home team leads after the top of the last inning", () => {
+    let state = start("home", null, 2);
+    state = GameManager.recordRuns(state, 0, 1100);
+    state = GameManager.recordRuns(state, 2, 1200);
+    assert.equal(state.status, "live");
+    assert.equal(state.half, "top");
+    assert.equal(state.inningIndex, 1);
+    state = GameManager.recordRuns(state, 0, 1300);
+    assert.equal(state.status, "played");
+    assert.equal(state.endedReason, "home-lead");
+    assert.equal(state.finalUs, 2);
+    assert.equal(state.finalOpp, 0);
+    assert.equal(state.innings[1].bottom, "X");
+    assert.equal(GameManager.endNote(state), "Home led after the top of the 2nd. Bottom skipped.");
+    const board = GameManager.scoreboard(state);
+    assert.equal(board.label, "Final");
+    assert.equal(board.innings[1].us, "X");
+    assert.equal(board.innings[1].opp, 0);
+    assert.equal(board.usTotal, 2);
+    const games = [sampleGame(), { id: "later", name: "vs. Hawks", battingOrder: ["mia"] }];
+    assert.deepEqual(
+      GameManager.unplayedGames(games.map(GameManager.slimGame), { "game-eagles": state }).map((game) => game.id),
+      ["later"],
+    );
+  });
+
+  it("still plays the bottom when that inning is not the last one", () => {
+    let state = start("away", null, 3);
+    state = GameManager.recordRuns(state, 0, 1);
+    state = GameManager.recordRuns(state, 3, 2);
+    state = GameManager.recordRuns(state, 0, 3);
+    assert.equal(state.status, "live");
+    assert.equal(state.inningIndex, 1);
+    assert.equal(state.half, "bottom");
+    assert.equal(GameManager.scoreboard(state).oppTotal, 3);
+  });
+
+  it("plays the bottom of the last inning when the road team is ahead or tied", () => {
+    let ahead = start("away", null, 1);
+    ahead = GameManager.recordRuns(ahead, 2, 1);
+    assert.equal(ahead.status, "live");
+    assert.equal(ahead.half, "bottom");
+    let tied = start("home", null, 1);
+    tied = GameManager.recordRuns(tied, 0, 1);
+    assert.equal(tied.status, "live");
+    assert.equal(tied.half, "bottom");
+  });
+
+  it("ends after the last inning when the game is not tied, and goes to extras when it is", () => {
+    let done = start("away", null, 1);
+    done = GameManager.recordRuns(done, 1, 1);
+    done = GameManager.recordRuns(done, 0, 2);
+    assert.equal(done.status, "played");
+    assert.equal(done.endedReason, "final");
+    assert.equal(done.finalUs, 1);
+    assert.equal(done.finalOpp, 0);
+    assert.equal(GameManager.endNote(done), "");
+
+    let extra = start("home", null, 1);
+    extra = GameManager.recordRuns(extra, 1, 1);
+    extra = GameManager.recordRuns(extra, 1, 2);
+    assert.equal(extra.status, "live");
+    assert.equal(extra.inningIndex, 1);
+    assert.equal(extra.half, "top");
+    assert.equal(GameManager.isExtraHalf(extra), true);
+    assert.equal(GameManager.scoreboard(extra).extra, true);
+    assert.equal(GameManager.scoreboard(extra).usTotal, 1);
+    assert.equal(GameManager.scoreboard(extra).oppTotal, 1);
+  });
+
+  it("shows a tiebreaker runner in an extra half without changing the score", () => {
+    let state = start("away", null, 1);
+    state = GameManager.recordRuns(state, 0, 1);
+    state = GameManager.recordRuns(state, 0, 2);
+    assert.equal(GameManager.isExtraHalf(state), true);
+    assert.throws(() => GameManager.setTiebreaker(start("away", null, 7), true), /extra innings/);
+    const marked = GameManager.setTiebreaker(state, true, 3);
+    assert.equal(marked.tiebreaker, true);
+    assert.equal(GameManager.scoreboard(marked).usTotal, 0);
+    assert.equal(GameManager.scoreboard(marked).oppTotal, 0);
+    state = GameManager.recordRuns(marked, 1, 4);
+    assert.equal(state.innings[1].top, 1);
+    assert.equal(state.innings[1].topTiebreaker, true);
+    assert.equal(state.tiebreaker, false);
+    assert.equal(state.half, "bottom");
+    assert.equal(GameManager.isExtraHalf(state), true);
+    state = GameManager.setTiebreaker(state, true, 5);
+    assert.equal(state.tiebreaker, true);
+    state = GameManager.recordRuns(state, 0, 6);
+    assert.equal(state.status, "played");
+    assert.equal(state.finalUs, 1);
+    assert.equal(state.finalOpp, 0);
+    assert.equal(state.innings[1].bottomTiebreaker, true);
   });
 });
 
@@ -343,5 +460,8 @@ describe("game manager page", () => {
     assert.match(html, /id="confirm-end-game"/);
     assert.match(html, /Keep playing/);
     assert.match(html, /id="ended-summary"/);
+    assert.match(html, /id="inning-count"/);
+    assert.match(html, /id="tiebreaker"/);
+    assert.match(html, /Tiebreaker/);
   });
 });

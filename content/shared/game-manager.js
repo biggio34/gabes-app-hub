@@ -161,6 +161,49 @@
     return cloneDefense(fallback);
   }
 
+  function clampScheduledInnings(value) {
+    const n = parseInt(value, 10);
+    if (!Number.isFinite(n)) return 7;
+    return Math.max(1, Math.min(12, n));
+  }
+
+  function scheduledInningsOf(state) {
+    return clampScheduledInnings(state && state.scheduledInnings);
+  }
+
+  function isExtraHalf(state) {
+    if (!state || state.status !== "live") return false;
+    return state.inningIndex + 1 > scheduledInningsOf(state);
+  }
+
+  function totalsFromInnings(innings) {
+    let away = 0;
+    let home = 0;
+    (innings || []).forEach(function (inn) {
+      if (inn && typeof inn.top === "number") away += inn.top;
+      if (inn && typeof inn.bottom === "number") home += inn.bottom;
+    });
+    return { away: away, home: home };
+  }
+
+  function ordinal(n) {
+    const mod100 = n % 100;
+    const mod10 = n % 10;
+    let suffix = "th";
+    if (mod100 < 11 || mod100 > 13) {
+      if (mod10 === 1) suffix = "st";
+      else if (mod10 === 2) suffix = "nd";
+      else if (mod10 === 3) suffix = "rd";
+    }
+    return String(n) + suffix;
+  }
+
+  function endNote(state) {
+    if (!state || state.endedReason !== "home-lead") return "";
+    const n = (state.inningIndex || 0) + 1;
+    return "Home led after the top of the " + ordinal(n) + ". Bottom skipped.";
+  }
+
   function createLiveGame(input, now) {
     const side = input && (input.side === "home" || input.side === "away") ? input.side : "";
     if (!side) throw new Error("Pick home or away.");
@@ -174,6 +217,7 @@
     const plan = snapshot.inningDefenses.length
       ? snapshot.inningDefenses.map(cloneDefense)
       : [cloneDefense(snapshot.defensivePositions)];
+    const defense = defenseForInning(plan, 0, snapshot.defensivePositions);
     const stamp = now || Date.now();
     return {
       lineupGameId: snapshot.id,
@@ -182,9 +226,13 @@
       innings: [{ top: null, bottom: null }],
       inningIndex: 0,
       half: "top",
-      defense: defenseForInning(plan, 0, snapshot.defensivePositions),
+      defense: defense,
+      openingDefense: side === "home" ? cloneDefense(defense) : null,
       defensePlan: plan,
       defensiveInnings: {},
+      scheduledInnings: clampScheduledInnings(input && input.scheduledInnings),
+      tiebreaker: false,
+      endedReason: "",
       players: Array.isArray(input.players) ? input.players.map(slimPlayer).filter(Boolean) : [],
       lineupSnapshot: snapshot,
       gameName: snapshot.name,
@@ -206,51 +254,104 @@
     return next;
   }
 
+  function copyInning(inn) {
+    const src = inn || {};
+    return {
+      top: src.top == null ? null : src.top,
+      bottom: src.bottom == null ? null : src.bottom,
+      topTiebreaker: !!src.topTiebreaker,
+      bottomTiebreaker: !!src.bottomTiebreaker,
+    };
+  }
+
+  function finishPlayed(state, patch, now) {
+    const stamp = now || Date.now();
+    const next = Object.assign({}, state, patch, { status: "played", updatedAt: stamp, endedAt: stamp });
+    const board = scoreboard(next);
+    next.finalUs = board.usTotal;
+    next.finalOpp = board.oppTotal;
+    next.tiebreaker = false;
+    return next;
+  }
+
   function recordRuns(state, runs, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
     const scored = parseRuns(runs);
     if (scored == null) throw new Error("Enter a whole number of runs, 0 or more.");
-    const innings = state.innings.map(function (inn) {
-      return { top: inn.top, bottom: inn.bottom };
-    });
-    const current = Object.assign({}, innings[state.inningIndex]);
-    current[state.half] = scored;
-    innings[state.inningIndex] = current;
+    const innings = state.innings.map(copyInning);
+    const completedHalf = state.half;
+    const completedIndex = state.inningIndex;
+    const current = copyInning(innings[completedIndex]);
+    current[completedHalf] = scored;
+    if (state.tiebreaker) current[completedHalf + "Tiebreaker"] = true;
+    innings[completedIndex] = current;
 
     let defensiveInnings = Object.assign({}, state.defensiveInnings);
-    if (roleFor(state.side, state.half) === "defense") {
-      defensiveInnings = addDefensiveInning(defensiveInnings, state.defense);
+    if (roleFor(state.side, completedHalf) === "defense") {
+      const starters = state.openingDefense || state.defense;
+      defensiveInnings = addDefensiveInning(defensiveInnings, starters);
     }
 
-    let inningIndex = state.inningIndex;
-    let half = state.half;
+    const scheduled = scheduledInningsOf(state);
+    const inningNumber = completedIndex + 1;
+    const scores = totalsFromInnings(innings);
+    const stamp = now || Date.now();
+    const shared = {
+      innings: innings,
+      defensiveInnings: defensiveInnings,
+      defensePlan: (state.defensePlan || []).map(cloneDefense),
+      scheduledInnings: scheduled,
+      updatedAt: stamp,
+    };
+
+    if (completedHalf === "top" && inningNumber >= scheduled && scores.home > scores.away) {
+      current.bottom = "X";
+      innings[completedIndex] = current;
+      return finishPlayed(state, Object.assign({}, shared, {
+        inningIndex: completedIndex,
+        half: "top",
+        endedReason: "home-lead",
+      }), stamp);
+    }
+
+    if (completedHalf === "bottom" && inningNumber >= scheduled && scores.home !== scores.away) {
+      return finishPlayed(state, Object.assign({}, shared, {
+        inningIndex: completedIndex,
+        half: "bottom",
+        endedReason: "final",
+      }), stamp);
+    }
+
+    let inningIndex = completedIndex;
+    let half = completedHalf;
     let defense = cloneDefense(state.defense);
     if (half === "top") {
       half = "bottom";
     } else {
       half = "top";
       inningIndex += 1;
-      innings.push({ top: null, bottom: null });
+      innings.push({ top: null, bottom: null, topTiebreaker: false, bottomTiebreaker: false });
       defense = defenseForInning(state.defensePlan, inningIndex, state.defense);
     }
-
-    return {
-      lineupGameId: state.lineupGameId,
-      side: state.side,
+    const onDefense = roleFor(state.side, half) === "defense";
+    return Object.assign({}, state, shared, {
       status: "live",
-      innings: innings,
       inningIndex: inningIndex,
       half: half,
       defense: defense,
-      defensePlan: state.defensePlan.map(cloneDefense),
-      defensiveInnings: defensiveInnings,
-      players: state.players.slice(),
-      lineupSnapshot: state.lineupSnapshot,
-      gameName: state.gameName,
-      teamName: state.teamName,
-      startedAt: state.startedAt,
+      openingDefense: onDefense ? cloneDefense(defense) : null,
+      tiebreaker: false,
+      endedReason: "",
+    });
+  }
+
+  function setTiebreaker(state, on, now) {
+    if (!state || state.status !== "live") throw new Error("This game is not in progress.");
+    if (!isExtraHalf(state)) throw new Error("The tiebreaker is for extra innings.");
+    return Object.assign({}, state, {
+      tiebreaker: !!on,
       updatedAt: now || Date.now(),
-    };
+    });
   }
 
   function setDefense(state, position, playerId, now) {
@@ -315,6 +416,7 @@
         current: Boolean(state.status === "live" && i === state.inningIndex),
       });
     }
+    const scheduled = scheduledInningsOf(state);
     return {
       innings: rows,
       usTotal: usTotal,
@@ -322,6 +424,8 @@
       role: state && state.status === "live" ? roleFor(state.side, state.half) : "",
       label: state && state.status === "live" ? halfLabel(state.inningIndex, state.half) : "Final",
       side: state ? state.side : "",
+      extra: Boolean(state && state.status === "live" && state.inningIndex + 1 > scheduled),
+      scheduledInnings: scheduled,
     };
   }
 
@@ -333,6 +437,7 @@
       status: "played",
       finalUs: board.usTotal,
       finalOpp: board.oppTotal,
+      endedReason: state.endedReason || "manual",
       endedAt: stamp,
       updatedAt: stamp,
     });
@@ -473,9 +578,19 @@
       });
   }
 
+  function normalizeHalf(value) {
+    if (value === "X") return "X";
+    return parseRuns(value);
+  }
+
   function normalizeInning(raw) {
     const inn = raw && typeof raw === "object" ? raw : {};
-    return { top: parseRuns(inn.top), bottom: parseRuns(inn.bottom) };
+    return {
+      top: normalizeHalf(inn.top),
+      bottom: normalizeHalf(inn.bottom),
+      topTiebreaker: !!inn.topTiebreaker,
+      bottomTiebreaker: !!inn.bottomTiebreaker,
+    };
   }
 
   function normalizeSession(raw) {
@@ -506,8 +621,14 @@
       inningIndex: inningIndex,
       half: half,
       defense: cloneDefense(raw.defense),
+      openingDefense: raw.openingDefense ? cloneDefense(raw.openingDefense) : null,
       defensePlan: Array.isArray(raw.defensePlan) ? raw.defensePlan.map(cloneDefense) : [],
       defensiveInnings: defensiveInnings,
+      scheduledInnings: clampScheduledInnings(raw.scheduledInnings),
+      tiebreaker: !!raw.tiebreaker,
+      endedReason: raw.endedReason === "home-lead" || raw.endedReason === "final" || raw.endedReason === "manual"
+        ? raw.endedReason
+        : "",
       players: Array.isArray(raw.players) ? raw.players.map(slimPlayer).filter(Boolean) : [],
       lineupSnapshot: snapshot,
       gameName: String(raw.gameName || (snapshot && snapshot.name) || "Untitled Game"),
@@ -568,9 +689,13 @@
     halfLabel: halfLabel,
     opponentLabel: opponentLabel,
     defenseForInning: defenseForInning,
+    clampScheduledInnings: clampScheduledInnings,
+    isExtraHalf: isExtraHalf,
+    endNote: endNote,
     createLiveGame: createLiveGame,
     recordRuns: recordRuns,
     setDefense: setDefense,
+    setTiebreaker: setTiebreaker,
     scoreboard: scoreboard,
     endGame: endGame,
     unplayedGames: unplayedGames,

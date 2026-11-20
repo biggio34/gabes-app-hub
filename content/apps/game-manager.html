@@ -230,6 +230,57 @@
       font-weight: 900;
     }
 
+    .stepper {
+      display: grid;
+      grid-template-columns: 64px 1fr 64px;
+      gap: 8px;
+      align-items: center;
+      margin: 12px 0;
+    }
+
+    .stepper button {
+      min-height: 56px;
+      border-radius: 14px;
+      border: 2px solid var(--line);
+      background: #fff;
+      font-size: 1.8rem;
+      font-weight: 900;
+    }
+
+    .stepper p {
+      margin: 0;
+      text-align: center;
+      font-size: 1.35rem;
+      font-weight: 900;
+    }
+
+    .tiebreaker {
+      width: 100%;
+      min-height: 56px;
+      margin-top: 10px;
+      border-radius: 16px;
+      border: 3px solid var(--blue);
+      background: #fff;
+      color: var(--ink);
+      font-size: 1.1rem;
+      font-weight: 900;
+    }
+
+    .tiebreaker.on { background: var(--blue); color: #fff; }
+
+    .tie-note {
+      margin: 8px 0 0;
+      background: var(--gold);
+      color: var(--ink);
+      border-radius: 14px;
+      padding: 12px;
+      text-align: center;
+      font-size: 1.15rem;
+      font-weight: 900;
+    }
+
+    .inn.skip { color: var(--red); }
+
     .primary, .big {
       width: 100%;
       min-height: 68px;
@@ -333,6 +384,7 @@
     var sheet = "";
     var pickPos = "";
     var runDigits = "";
+    var plannedInnings = 7;
     var loadNote = "";
     var booting = true;
     var loadToken = 0;
@@ -497,6 +549,7 @@
     }
 
     function cell(value) {
+      if (value === "X") return "X";
       return typeof value === "number" ? String(value) : "";
     }
 
@@ -506,14 +559,16 @@
       var oppName = opp === "Opponent" ? "Opp" : opp;
       function line(pick) {
         return board.innings.map(function (inn) {
-          return '<div class="inn' + (inn.current ? " now" : "") + '">' + esc(pick(inn)) + "</div>";
+          var shown = cell(pick(inn));
+          var skip = shown === "X" ? " skip" : "";
+          return '<div class="inn' + (inn.current ? " now" : "") + skip + '">' + esc(shown) + "</div>";
         }).join("");
       }
       return ''
         + '<div class="board" id="scoreboard">'
         + '<div class="who"></div><div class="scroll"><div class="line">' + line(function (inn) { return inn.inning; }) + '</div></div><div class="run-h">R</div>'
-        + '<div class="who">Us</div><div class="scroll"><div class="line">' + line(function (inn) { return cell(inn.us); }) + '</div></div><div class="run">' + board.usTotal + "</div>"
-        + '<div class="who">' + esc(oppName) + '</div><div class="scroll"><div class="line">' + line(function (inn) { return cell(inn.opp); }) + '</div></div><div class="run">' + board.oppTotal + "</div>"
+        + '<div class="who">Us</div><div class="scroll"><div class="line">' + line(function (inn) { return inn.us; }) + '</div></div><div class="run">' + board.usTotal + "</div>"
+        + '<div class="who">' + esc(oppName) + '</div><div class="scroll"><div class="line">' + line(function (inn) { return inn.opp; }) + '</div></div><div class="run">' + board.oppTotal + "</div>"
         + "</div>";
     }
 
@@ -523,7 +578,17 @@
         return '<div id="half-indicator" class="banner final"><p class="half">Final</p><p class="role">' + board.usTotal + "–" + board.oppTotal + "</p></div>";
       }
       var role = board.role === "defense" ? "DEFENSE" : "OFFENSE";
+      if (board.extra) role = "EXTRA · " + role;
       return '<div id="half-indicator" class="banner ' + board.role + '"><p class="half">' + esc(board.label) + '</p><p class="role">' + role + "</p></div>";
+    }
+
+    function tiebreakerHtml(session) {
+      if (!GameManager.isExtraHalf(session)) return "";
+      var on = !!session.tiebreaker;
+      return '<button type="button" id="tiebreaker" class="tiebreaker' + (on ? " on" : "") + '" data-action="toggle-tiebreaker">'
+        + (on ? "Runner on second" : "Place runner on second")
+        + "</button>"
+        + (on ? '<p id="tiebreaker-indicator" class="tie-note">Tiebreaker · runner on 2nd</p>' : "");
     }
 
     function trackerHtml(state) {
@@ -648,10 +713,11 @@
         + headerHtml(session.gameName, teamName + " · Saved on this phone", "Games")
         + scoreboardHtml(session)
         + bannerHtml(session)
+        + tiebreakerHtml(session)
         + "</div>"
         + "<main>"
         + "<h2>Defensive lineup</h2>"
-        + '<p class="hint">Change it before you end a defensive half. The players on the field get that inning.</p>'
+        + '<p class="hint">Whoever starts a defensive half gets that inning. A swap during the half does not change the count.</p>'
         + defense
         + trackerHtml(session)
         + "</main>"
@@ -676,7 +742,9 @@
         + bannerHtml(session)
         + "</div>"
         + "<main>"
-        + '<p class="empty">Final ' + board.usTotal + "–" + board.oppTotal + ". Defensive innings are locked in.</p>"
+        + '<p class="empty" id="final-note">Final ' + board.usTotal + "–" + board.oppTotal + ". "
+        + esc(GameManager.endNote(session) || "Defensive innings are locked in.")
+        + "</p>"
         + trackerHtml(session)
         + "</main>"
         + "</div>";
@@ -685,8 +753,11 @@
     function sideSheet() {
       if (sheet !== "side") return "";
       return '<div class="sheet" id="side-sheet" data-screen="side"><div class="sheet-card">'
-        + "<h2>Are we home or away?</h2>"
-        + '<p class="hint">Away bats in the top. Home bats in the bottom.</p>'
+        + "<h2>Start game</h2>"
+        + '<p class="hint">Away bats in the top. Home bats in the bottom. If the home team leads after the top of the last inning, the bottom is skipped.</p>'
+        + '<div class="stepper"><button type="button" data-action="set-innings" data-delta="-1" aria-label="Fewer innings">−</button>'
+        + '<p id="inning-count">' + plannedInnings + (plannedInnings === 1 ? " inning" : " innings") + "</p>"
+        + '<button type="button" data-action="set-innings" data-delta="1" aria-label="More innings">+</button></div>'
         + '<button type="button" class="big" data-action="choose-side" data-side="away">We are AWAY</button>'
         + '<button type="button" class="big" data-action="choose-side" data-side="home">We are HOME</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
@@ -829,6 +900,7 @@
           game: game,
           players: bundle().players,
           teamName: teamName,
+          scheduledInnings: plannedInnings,
         });
         gameId = session.lineupGameId;
         view = "live";
@@ -861,9 +933,23 @@
         }
         sheet = "";
         runDigits = "";
+        if (live.status === "played") view = "played";
         remember(live);
         render();
         window.scrollTo(0, 0);
+        return;
+      }
+      if (action === "set-innings") {
+        var delta = parseInt(button.getAttribute("data-delta"), 10) || 0;
+        plannedInnings = GameManager.clampScheduledInnings(plannedInnings + delta);
+        render();
+        return;
+      }
+      if (action === "toggle-tiebreaker") {
+        var currentHalf = sessionFor(gameId);
+        currentHalf = GameManager.setTiebreaker(currentHalf, !currentHalf.tiebreaker);
+        remember(currentHalf);
+        render();
         return;
       }
       if (action === "pick-defense") {
