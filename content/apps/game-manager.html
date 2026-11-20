@@ -484,6 +484,7 @@
     var subSpot = 0;
     var pendingSub = null;
     var effectText = "";
+    var courtesyFor = "";
     var illegalReason = "";
     var loadNote = "";
     var booting = true;
@@ -731,14 +732,28 @@
         var tag = tagFor[index] ? '<span class="due">' + tagFor[index] + "</span>" : "";
         var role = row.role ? '<span class="role-tag">' + esc(row.role) + "</span>" : "";
         var sub = canSub ? '<button type="button" class="sub-btn" data-action="ask-sub" data-spot="' + index + '">Sub</button>' : "";
-        return '<div class="row"><span class="num">' + row.order + "</span><span>" + esc(row.label) + "</span>" + role + tag + sub + "</div>";
+        var leave = session.battingMode === "roster"
+          ? '<button type="button" class="sub-btn" data-action="ask-leave" data-player="' + esc(row.id) + '">Leaves</button>'
+          : "";
+        return '<div class="row"><span class="num">' + row.order + "</span><span>" + esc(row.label) + "</span>" + role + tag + sub + leave + "</div>";
       }).join("");
       var wrap = "";
       if (session.battingMode === "roster" && rowsIn.length > 9) {
         wrap = '<p class="hint" id="due-wrap">Due up wraps after ' + esc(rowsIn[rowsIn.length - 1].label)
           + ", then back to " + esc(rowsIn[0].label) + ". Not after the 9th hitter. Sitting players still bat.</p>";
       }
-      return '<h2 id="batting-order">Batting order</h2>' + wrap + swapButton(session) + rows;
+      var courtesy = session.courtesy
+        ? '<p class="hint" id="courtesy-note">Courtesy runner: ' + esc(playerName(session, session.courtesy.runnerId))
+          + " for " + esc(playerName(session, session.courtesy.forId)) + ". Not a sub.</p>"
+        : "";
+      var injury = session.battingMode === "roster"
+        ? '<button type="button" class="end-game" id="injury-out" data-action="toggle-injury">'
+          + (session.injuryOut ? "Injury spot is an automatic out: On" : "Injury spot is an automatic out: Off")
+          + "</button>"
+        : "";
+      return '<h2 id="batting-order">Batting order</h2>' + wrap + cardNote(session) + injury
+        + '<button type="button" class="end-game" id="courtesy-runner" data-action="ask-courtesy">Courtesy runner</button>'
+        + courtesy + swapButton(session) + rows;
     }
 
     function defenseEditorHtml(session) {
@@ -752,10 +767,36 @@
       var rosterNote = session.battingMode === "roster"
         ? " Sitting players still bat. A defensive swap does not change the batting order."
         : "";
+      var flexSub = session.battingMode === "dp-flex" && !session.flexLeft && !session.flexBatting
+        ? '<button type="button" class="end-game" id="sub-for-flex" data-action="ask-flex-sub">Sub for Flex</button>'
+        : "";
+      var flexBack = session.battingMode === "dp-flex" && session.flexLeft
+        ? '<button type="button" class="end-game" id="flex-return" data-action="flex-return">Flex re-enters</button>'
+        : "";
+      var injury = session.battingMode === "roster"
+        ? '<button type="button" class="end-game" id="injury-out" data-action="toggle-injury">'
+          + (session.injuryOut ? "Injury spot is an automatic out: On" : "Injury spot is an automatic out: Off")
+          + "</button>"
+        : "";
       return "<h2>Defensive lineup</h2>"
         + '<p class="hint">Tap a position to swap. Each out is 1/3 inning for the players on the field then.' + rosterNote + "</p>"
+        + cardNote(session)
+        + injury
         + swapButton(session)
+        + flexSub
+        + flexBack
         + defense;
+    }
+
+    function cardNote(session) {
+      if (!session || session.battingMode !== "dp-flex") return "";
+      if (session.flexBatting || session.flexLeft) return '<p class="hint" id="card-size">Lineup is 9.</p>';
+      return '<p class="hint" id="card-size">10 on the card. 9 bat.</p>';
+    }
+
+    function playerName(session, id) {
+      var player = (session.players || []).filter(function (item) { return item.id === id; })[0];
+      return GameManager.playerLabel(player || { id: id, name: "Player" });
     }
 
     function swapButton(session) {
@@ -846,7 +887,7 @@
         ? lineup.subs.map(function (row) { return esc(row.label); }).join(", ")
         : "No subs.";
       var out = lineup.out.length ? '<p class="hint">Out: ' + lineup.out.map(function (row) { return esc(row.label); }).join(", ") + "</p>" : "";
-      var flexLine = lineup.flexLabel ? '<p class="hint" id="flex-note">Flex: ' + esc(lineup.flexLabel) + ". Plays defense only, unless she bats in the DP's spot.</p>" : "";
+      var flexLine = lineup.flexLabel ? '<p class="hint" id="flex-note">Flex: ' + esc(lineup.flexLabel) + ". Defense only, unless she bats in the DP's spot or the DP takes her position.</p>" : "";
       return '<div class="wrap" data-screen="detail">'
         + headerHtml(lineup.name, teamName, "Games")
         + '<p class="format-badge" id="lineup-format">' + esc(lineup.formatLabel || "Bat the roster") + "</p>"
@@ -895,6 +936,8 @@
         + endSheet(session)
         + pickSheet(session)
         + subSheet(session)
+        + courtesySheet(session)
+        + flexSubSheet(session)
         + confirmSubSheet()
         + illegalSheet()
         + "</div>";
@@ -914,6 +957,38 @@
       return '<div class="sheet" id="sub-sheet"><div class="sheet-card"><h2>Sub this spot</h2>'
         + '<p class="hint">Next you will see what this does to the batting order and the defense.</p>'
         + (buttons || '<p class="empty">No one can enter this spot.</p>')
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
+    }
+
+    function courtesySheet(session) {
+      if (sheet !== "courtesy" && sheet !== "courtesy-runner") return "";
+      if (sheet === "courtesy") {
+        var batters = GameManager.liveBatters(session).map(function (row) {
+          return '<button type="button" class="pick" data-action="courtesy-for" data-player="' + esc(row.id) + '">'
+            + esc(row.order + " " + row.label) + "</button>";
+        }).join("");
+        return '<div class="sheet" id="courtesy-sheet"><div class="sheet-card"><h2>Courtesy runner for</h2>'
+          + '<p class="hint">This is not a sub.</p>' + batters
+          + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
+      }
+      var runners = (session.players || []).map(function (player) {
+        return '<button type="button" class="pick" data-action="courtesy-runner" data-player="' + esc(player.id) + '">'
+          + esc(GameManager.playerLabel(player)) + "</button>";
+      }).join("");
+      return '<div class="sheet" id="courtesy-sheet"><div class="sheet-card"><h2>Who runs?</h2>' + runners
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
+    }
+
+    function flexSubSheet(session) {
+      if (sheet !== "flex-sub") return "";
+      var buttons = (session.players || []).filter(function (player) {
+        return player.id !== session.flexId && player.id !== session.dpId;
+      }).map(function (player) {
+        return '<button type="button" class="pick" data-action="pick-flex-sub" data-player="' + esc(player.id) + '">'
+          + esc(GameManager.playerLabel(player)) + "</button>";
+      }).join("");
+      return '<div class="sheet" id="flex-sub-sheet"><div class="sheet-card"><h2>Sub for Flex</h2>'
+        + '<p class="hint">Defense only. She does not bat.</p>' + buttons
         + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
     }
 
@@ -1093,7 +1168,11 @@
       try {
         if (change.type === "bat") session = GameManager.applySub(session, change.spot, change.playerId, !!force);
         else if (change.type === "field") session = GameManager.setDefense(session, change.position, change.playerId || "");
-        else if (change.type === "flex") session = GameManager.swapDpFlex(session);
+        else if (change.type === "flex") session = GameManager.swapDpFlex(session, undefined, !!force);
+        else if (change.type === "leave") session = GameManager.leaveRosterPlayer(session, change.playerId);
+        else if (change.type === "courtesy") session = GameManager.setCourtesy(session, change.forId, change.runnerId);
+        else if (change.type === "flex-sub") session = GameManager.subForFlex(session, change.playerId, !!force);
+        else if (change.type === "flex-return") session = GameManager.reenterFlex(session, !!force);
         else return;
       } catch (e) {
         return;
@@ -1149,6 +1228,7 @@
         runDigits = "";
         pendingSub = null;
         effectText = "";
+        courtesyFor = "";
         render();
         return;
       }
@@ -1198,6 +1278,44 @@
       }
       if (action === "swap-dp-flex") {
         stageChange({ type: "flex" });
+        return;
+      }
+      if (action === "toggle-injury") {
+        var flipped = GameManager.setInjuryOut(sessionFor(gameId), !sessionFor(gameId).injuryOut);
+        remember(flipped);
+        render();
+        return;
+      }
+      if (action === "ask-leave") {
+        stageChange({ type: "leave", playerId: button.getAttribute("data-player") });
+        return;
+      }
+      if (action === "ask-courtesy") {
+        sheet = "courtesy";
+        render();
+        return;
+      }
+      if (action === "courtesy-for") {
+        courtesyFor = button.getAttribute("data-player");
+        sheet = "courtesy-runner";
+        render();
+        return;
+      }
+      if (action === "courtesy-runner") {
+        stageChange({ type: "courtesy", forId: courtesyFor, runnerId: button.getAttribute("data-player") });
+        return;
+      }
+      if (action === "ask-flex-sub") {
+        sheet = "flex-sub";
+        render();
+        return;
+      }
+      if (action === "pick-flex-sub") {
+        stageChange({ type: "flex-sub", playerId: button.getAttribute("data-player") });
+        return;
+      }
+      if (action === "flex-return") {
+        stageChange({ type: "flex-return" });
         return;
       }
       if (action === "confirm-half") {

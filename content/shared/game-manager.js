@@ -96,7 +96,7 @@
     const table = {
       roster: {
         label: "Bat the roster",
-        detail: "Everyone bats. Due up wraps after the last hitter, not after 9. Nine play defense, and sitting players still bat.",
+        detail: "Everyone bats. Due up wraps after the last hitter. Defensive swaps are free. Nobody is subbed out of the order.",
       },
       nine: {
         label: "Bat 9",
@@ -104,15 +104,15 @@
       },
       "dp-flex": {
         label: "DP / Flex",
-        detail: "Nine bat. The Flex is the 10th player and plays defense only, unless she bats in the DP's spot. That removes the DP from offense.",
+        detail: "Ten names, nine bat. The Flex plays defense only. The DP hits only unless she takes a position. Either starter may re-enter once.",
       },
       "one-ap": {
         label: "Extra hitter",
-        detail: "Ten bat. The extra hitter has her own spot and does not play the field. A starter may re-enter once, in her original spot.",
+        detail: "Ten bat, like Bat 9. The extra hitter and any fielder may trade defense and hitting-only. All 10 still bat.",
       },
       "two-ap": {
         label: "Two extra hitters",
-        detail: "Eleven bat. Each extra hitter has her own spot and does not play the field. A starter may re-enter once, in her original spot.",
+        detail: "Eleven bat, like Bat 9. Extra hitters and fielders may trade defense and hitting-only. All 11 still bat.",
       },
     };
     return Object.assign({ key: key }, table[key]);
@@ -181,20 +181,22 @@
     return state.spots.findIndex(function (spot) { return slotCurrent(spot) === id; });
   }
 
+  function flexStillOnCard(state) {
+    return !!(state && state.battingMode === "dp-flex" && !state.flexLeft && !state.flexBatting);
+  }
+
   function playerMayField(state, playerId) {
     const mode = normalizeMode(state && state.battingMode);
     if (mode === "roster" || !state || !state.spots || !state.spots.length) return true;
     const id = String(playerId || "");
     if (!id) return false;
-    if (mode === "one-ap" || mode === "two-ap") {
-      const spot = spotIndexOf(state, id);
-      if (spot >= 9) return false;
-      return spot >= 0;
-    }
+    if (mode === "one-ap" || mode === "two-ap") return spotIndexOf(state, id) >= 0;
     if (mode === "dp-flex") {
       const dpId = String(state.dpId || "");
       const flexId = String(state.flexId || "");
-      if (id === flexId) return true;
+      const flexNow = String(state.flexCurrentId || flexId);
+      if (id === flexId) return !state.flexLeft;
+      if (id === flexNow && flexNow !== flexId) return true;
       if (id === dpId) return !state.flexBatting;
       return inLineup(state, id);
     }
@@ -204,11 +206,11 @@
   function fieldBlockReason(state, playerId) {
     const mode = normalizeMode(state && state.battingMode);
     const id = String(playerId || "");
-    if ((mode === "one-ap" || mode === "two-ap") && spotIndexOf(state, id) >= 9) {
-      return "The extra hitter does not play the field.";
-    }
     if (mode === "dp-flex" && id === String(state.dpId || "") && state.flexBatting) {
-      return "The DP has left the offense. She can play defense again after she bats.";
+      return "The DP has left the offense. She can play defense again after she re-enters.";
+    }
+    if (mode === "dp-flex" && id === String(state.flexId || "") && state.flexLeft) {
+      return "The Flex has left the game. She may re-enter once on defense.";
     }
     return "That player is not in the game. Sub them into the batting order first.";
   }
@@ -223,8 +225,8 @@
     const spot = state.spots && state.spots[spotIndex];
     const incoming = String(playerId || "");
     if (!spot || !incoming) return { ok: false, illegal: false, reason: "Pick a player and a batting spot." };
-    if (state.battingMode === "dp-flex" && (incoming === state.flexId || incoming === state.dpId)) {
-      return { ok: false, illegal: false, reason: "Use the DP / Flex swap for those two." };
+    if (state.battingMode === "dp-flex" && incoming === String(state.flexId || "")) {
+      return { ok: false, illegal: false, reason: "A sub for the Flex is defense only." };
     }
     if (incoming === slotCurrent(spot)) return { ok: false, illegal: false, reason: "That player is already in this spot." };
     const departed = new Set((state.departed || []).map(String));
@@ -278,7 +280,7 @@
     });
   }
 
-  function swapDpFlex(state, now) {
+  function swapDpFlex(state, now, force) {
     if (!state || state.battingMode !== "dp-flex") throw new Error("This lineup is not DP / Flex.");
     const spots = state.spots.map(function (spot) { return Object.assign({}, spot); });
     const spot = spots[state.dpSpot];
@@ -291,10 +293,26 @@
     }
     if (!state.flexBatting) {
       spot.currentId = flexId;
-      return Object.assign({}, state, { spots: spots, flexBatting: true, updatedAt: now || Date.now() });
+      const defense = cloneDefense(state.defense);
+      FIELD_POSITIONS.forEach(function (pos) {
+        if (defense[pos] === dpId) defense[pos] = null;
+      });
+      return Object.assign({}, state, {
+        spots: spots,
+        defense: defense,
+        flexBatting: true,
+        updatedAt: now || Date.now(),
+      });
     }
+    if (spot.starterReturned && !force) throw new Error("The DP may re-enter only once.");
     spot.currentId = dpId;
-    return Object.assign({}, state, { spots: spots, flexBatting: false, updatedAt: now || Date.now() });
+    spot.starterReturned = true;
+    return Object.assign({}, state, {
+      spots: spots,
+      flexBatting: false,
+      dpReentered: true,
+      updatedAt: now || Date.now(),
+    });
   }
 
   function possessive(name) {
@@ -315,6 +333,10 @@
     if (change.type === "flex") return describeFlex(state);
     if (change.type === "field") return describeField(state, change.position, change.playerId);
     if (change.type === "bat") return describeBat(state, change.spot, change.playerId);
+    if (change.type === "leave") return describeLeave(state, change.playerId);
+    if (change.type === "courtesy") return describeCourtesy(state, change.forId, change.runnerId);
+    if (change.type === "flex-sub") return describeFlexSub(state, change.playerId);
+    if (change.type === "flex-return") return describeFlexReturn(state);
     return { ok: false, illegal: false, reason: "Unknown change.", text: "" };
   }
 
@@ -326,13 +348,16 @@
     const incomingName = lastName(state, playerId);
     const leavingName = possessive(lastName(state, leaving));
     const spotNo = spotIndex + 1;
+    const counts = " Pinch hitters and pinch runners count as this sub.";
     let text;
-    if (pos) {
-      text = incomingName + " enters at " + pos + " and takes " + leavingName + " #" + spotNo + " batting spot.";
-    } else if (isEhSpot(state, spotIndex)) {
-      text = incomingName + " takes " + leavingName + " #" + spotNo + " batting spot. Defense unchanged. The extra hitter does not play the field.";
+    if (state.battingMode === "dp-flex" && spotIndex === state.dpSpot) {
+      text = incomingName + " takes the DP's #" + spotNo + " batting spot for " + leavingName.replace(/'s$|'$/, "") + ".";
+      text += pos ? " She enters at " + pos + "." : " Defense unchanged.";
+      text += counts;
+    } else if (pos) {
+      text = incomingName + " enters at " + pos + " and takes " + leavingName + " #" + spotNo + " batting spot." + counts;
     } else {
-      text = incomingName + " takes " + leavingName + " #" + spotNo + " batting spot. Defense unchanged.";
+      text = incomingName + " takes " + leavingName + " #" + spotNo + " batting spot. Defense unchanged." + counts;
     }
     return { ok: choice.ok, illegal: !!choice.illegal, reason: choice.reason || "", text: text };
   }
@@ -355,10 +380,20 @@
     else if (leavingName) detail = incomingName + " enters at " + position + " for " + leavingName + ".";
     else detail = incomingName + " enters at " + position + ".";
     const mode = normalizeMode(state.battingMode);
+    const dpId = String(state.dpId || "");
+    const flexId = String(state.flexId || "");
     let text;
-    if (mode === "roster") text = "Defense-only swap, batting order unchanged (bat the roster). " + detail;
-    else if (mode === "dp-flex" && nextId && nextId === String(state.dpId || "") && !state.flexBatting) {
-      text = detail + " The DP is also playing defense. Batting order unchanged.";
+    if (mode === "roster") {
+      text = "Defense-only swap, batting order unchanged (bat the roster). " + detail + " No one is subbed out of the order.";
+    } else if (mode === "dp-flex" && nextId === dpId && current === flexId && flexStillOnCard(state)) {
+      text = incomingName + " plays " + position + " for the Flex. " + leavingName + " leaves the game. Lineup drops to 9. Batting order unchanged.";
+    } else if (mode === "dp-flex" && nextId === dpId && current && current !== flexId) {
+      const flexPos = currentPosition(state.defense, flexId);
+      text = incomingName + " plays " + position + " for " + leavingName + ". " + leavingName + " hits only. Batting order unchanged.";
+      text += flexPos ? " Flex stays at " + flexPos + "." : " Flex stays on defense.";
+    } else if (mode === "one-ap" || mode === "two-ap") {
+      const count = mode === "one-ap" ? "10" : "11";
+      text = detail + (leavingName ? " " + leavingName + " hits only." : "") + " Batting order unchanged. All " + count + " still bat.";
     } else text = "Defense-only swap, batting order unchanged. " + detail;
     return { ok: true, illegal: false, reason: "", text: text };
   }
@@ -376,18 +411,82 @@
     }
     const spotNo = (state.dpSpot >= 0 ? state.dpSpot : 0) + 1;
     if (!state.flexBatting) {
+      const dpPos = currentPosition(state.defense, dpId);
+      const flexPos = currentPosition(state.defense, flexId);
+      let text = "Flex bats for DP in spot " + spotNo + "; DP leaves offense. Lineup drops to 9.";
+      if (dpPos) text += " DP leaves " + dpPos + ".";
+      else if (flexPos) text += " " + lastName(state, flexId) + " stays at " + flexPos + ".";
+      else text += " Defense unchanged.";
+      return { ok: true, illegal: false, reason: "", text: text };
+    }
+    const illegal = !!(spot && spot.starterReturned);
+    return {
+      ok: !illegal,
+      illegal: illegal,
+      reason: illegal ? "The DP may re-enter only once." : "",
+      text: "DP re-enters in spot " + spotNo + ", her one re-entry. Flex returns to defense only. Lineup is 10.",
+    };
+  }
+
+  function describeLeave(state, playerId) {
+    if (!state || state.battingMode !== "roster") {
+      return { ok: false, illegal: false, reason: "Only bat the roster uses this.", text: "" };
+    }
+    const id = String(playerId || "");
+    const order = ((state.lineupSnapshot && state.lineupSnapshot.battingOrder) || []).map(String);
+    const found = order.indexOf(id);
+    const spotNo = found >= 0 ? found + 1 : 1;
+    const name = lastName(state, id);
+    const pos = currentPosition(state.defense, id);
+    let text = name + " leaves the game. ";
+    if (state.injuryOut) text += "Her #" + spotNo + " batting spot is an automatic out. ";
+    else text += "She stays in the batting order. Not an automatic out. ";
+    text += pos ? name + " leaves " + pos + "." : "Defense unchanged.";
+    return { ok: true, illegal: false, reason: "", text: text };
+  }
+
+  function describeCourtesy(state, forId, runnerId) {
+    const text = lastName(state, runnerId) + " is the courtesy runner for " + lastName(state, forId)
+      + ". Not a sub. Batting order unchanged. Defense unchanged. Re-entry unchanged.";
+    return { ok: !!(forId && runnerId), illegal: false, reason: forId && runnerId ? "" : "Pick a runner and who she runs for.", text: text };
+  }
+
+  function describeFlexSub(state, playerId) {
+    if (!state || state.battingMode !== "dp-flex") {
+      return { ok: false, illegal: false, reason: "This lineup is not DP / Flex.", text: "" };
+    }
+    const flexNow = String(state.flexCurrentId || state.flexId || "");
+    const pos = currentPosition(state.defense, flexNow);
+    if (!pos || state.flexLeft) return { ok: false, illegal: false, reason: "The Flex is not on defense.", text: "" };
+    const incoming = String(playerId || "");
+    if ((state.departed || []).map(String).indexOf(incoming) >= 0) {
       return {
-        ok: true,
-        illegal: false,
-        reason: "",
-        text: "Flex bats for DP in spot " + spotNo + "; DP leaves offense. Defense unchanged.",
+        ok: false,
+        illegal: true,
+        reason: "A removed substitute cannot re-enter.",
+        text: lastName(state, incoming) + " cannot return on defense for the Flex.",
       };
     }
     return {
       ok: true,
       illegal: false,
       reason: "",
-      text: "DP bats again in spot " + spotNo + ". Flex leaves the batting order. Defense unchanged.",
+      text: lastName(state, incoming) + " subs for the Flex at " + pos + ". Defense only. Batting order unchanged. "
+        + lastName(state, state.flexId) + " may re-enter once.",
+    };
+  }
+
+  function describeFlexReturn(state) {
+    if (!state || !state.flexLeft) {
+      return { ok: false, illegal: false, reason: "The Flex is already in the game.", text: "" };
+    }
+    const pos = state.flexPos || "P";
+    const illegal = !!state.flexReentered;
+    return {
+      ok: !illegal,
+      illegal: illegal,
+      reason: illegal ? "The Flex may re-enter only once." : "",
+      text: lastName(state, state.flexId) + " re-enters on defense at " + pos + ", her one re-entry. Lineup is 10 again. Batting order unchanged.",
     };
   }
 
@@ -397,7 +496,12 @@
     function label(id) { return playerLabel(byId.get(id) || { id: id, name: "Unknown" }); }
     if (!state || !state.spots || normalizeMode(state.battingMode) === "roster") {
       const view = lineupView(state && state.lineupSnapshot, players);
-      return view.batting;
+      const left = (state && state.rosterLeft) || {};
+      return view.batting.map(function (row) {
+        if (left[row.id] === "auto-out") return Object.assign({}, row, { role: "Auto out" });
+        if (left[row.id] === "stay") return Object.assign({}, row, { role: "Left game" });
+        return row;
+      });
     }
     return state.spots.map(function (spot, index) {
       const id = slotCurrent(spot);
@@ -571,6 +675,15 @@
       dpId: dpId,
       dpSpot: mode === "dp-flex" ? batterIds.indexOf(dpId) : -1,
       flexBatting: false,
+      flexOnCard: mode === "dp-flex",
+      flexLeft: false,
+      flexReentered: false,
+      dpReentered: false,
+      flexPos: "",
+      flexCurrentId: flexId,
+      injuryOut: false,
+      rosterLeft: {},
+      courtesy: null,
       departed: [],
       players: Array.isArray(input.players) ? input.players.map(slimPlayer).filter(Boolean) : [],
       lineupSnapshot: snapshot,
@@ -769,6 +882,28 @@
     if (FIELD_POSITIONS.indexOf(position) < 0) throw new Error("Unknown position.");
     const defense = cloneDefense(state.defense);
     const nextId = playerId ? String(playerId) : "";
+    const occupant = defense[position] ? String(defense[position]) : "";
+    const flexId = String(state.flexId || "");
+    if (
+      state.battingMode === "dp-flex" &&
+      nextId &&
+      nextId === String(state.dpId || "") &&
+      occupant === flexId &&
+      flexStillOnCard(state)
+    ) {
+      FIELD_POSITIONS.forEach(function (pos) {
+        if (defense[pos] === nextId) defense[pos] = null;
+      });
+      defense[position] = nextId;
+      return Object.assign({}, state, {
+        defense: defense,
+        flexOnCard: false,
+        flexLeft: true,
+        flexPos: position,
+        flexCurrentId: "",
+        updatedAt: now || Date.now(),
+      });
+    }
     if (nextId && state.spots && state.spots.length && !playerMayField(state, nextId)) {
       throw new Error(fieldBlockReason(state, nextId));
     }
@@ -789,6 +924,73 @@
     }
     return Object.assign({}, state, {
       defense: defense,
+      updatedAt: now || Date.now(),
+    });
+  }
+
+  function setInjuryOut(state, on, now) {
+    if (!state || state.battingMode !== "roster") throw new Error("Only bat the roster uses this setting.");
+    return Object.assign({}, state, { injuryOut: !!on, updatedAt: now || Date.now() });
+  }
+
+  function leaveRosterPlayer(state, playerId, now) {
+    if (!state || state.battingMode !== "roster") throw new Error("Only bat the roster uses this.");
+    const id = String(playerId || "");
+    const defense = cloneDefense(state.defense);
+    FIELD_POSITIONS.forEach(function (pos) {
+      if (defense[pos] === id) defense[pos] = null;
+    });
+    const left = Object.assign({}, state.rosterLeft);
+    left[id] = state.injuryOut ? "auto-out" : "stay";
+    return Object.assign({}, state, { defense: defense, rosterLeft: left, updatedAt: now || Date.now() });
+  }
+
+  function setCourtesy(state, forId, runnerId, now) {
+    const courtesy = forId && runnerId ? { forId: String(forId), runnerId: String(runnerId) } : null;
+    return Object.assign({}, state, { courtesy: courtesy, updatedAt: now || Date.now() });
+  }
+
+  function subForFlex(state, playerId, force, now) {
+    const effect = describeFlexSub(state, playerId);
+    if (!effect.ok && !(force && effect.illegal)) throw new Error(effect.reason || "That Flex sub is not allowed.");
+    const incoming = String(playerId);
+    const flexNow = String(state.flexCurrentId || state.flexId || "");
+    const pos = currentPosition(state.defense, flexNow);
+    const defense = cloneDefense(state.defense);
+    const leaving = defense[pos];
+    defense[pos] = incoming;
+    const departed = (state.departed || []).map(String);
+    if (leaving && leaving !== String(state.flexId || "") && departed.indexOf(leaving) < 0) departed.push(leaving);
+    return Object.assign({}, state, {
+      defense: defense,
+      departed: departed,
+      flexLeft: true,
+      flexOnCard: false,
+      flexPos: pos,
+      flexCurrentId: incoming,
+      updatedAt: now || Date.now(),
+    });
+  }
+
+  function reenterFlex(state, force, now) {
+    const effect = describeFlexReturn(state);
+    if (!effect.ok && !(force && effect.illegal)) throw new Error(effect.reason || "The Flex cannot re-enter.");
+    const defense = cloneDefense(state.defense);
+    const pos = state.flexPos && FIELD_POSITIONS.indexOf(state.flexPos) >= 0 ? state.flexPos : "P";
+    const occupant = defense[pos] ? String(defense[pos]) : "";
+    const flexNow = String(state.flexCurrentId || "");
+    const departed = (state.departed || []).map(String);
+    if (occupant && flexNow && occupant === flexNow && occupant !== String(state.flexId || "") && departed.indexOf(occupant) < 0) {
+      departed.push(occupant);
+    }
+    defense[pos] = String(state.flexId || "");
+    return Object.assign({}, state, {
+      defense: defense,
+      departed: departed,
+      flexLeft: false,
+      flexOnCard: true,
+      flexReentered: true,
+      flexCurrentId: String(state.flexId || ""),
       updatedAt: now || Date.now(),
     });
   }
@@ -1087,6 +1289,17 @@
       dpId: String(raw.dpId || ""),
       dpSpot: Number.isFinite(Number(raw.dpSpot)) ? Number(raw.dpSpot) : -1,
       flexBatting: !!raw.flexBatting,
+      flexOnCard: raw.flexOnCard !== false,
+      flexLeft: !!raw.flexLeft,
+      flexReentered: !!raw.flexReentered,
+      dpReentered: !!raw.dpReentered,
+      flexPos: typeof raw.flexPos === "string" ? raw.flexPos : "",
+      flexCurrentId: String(raw.flexCurrentId || raw.flexId || ""),
+      injuryOut: !!raw.injuryOut,
+      rosterLeft: raw.rosterLeft && typeof raw.rosterLeft === "object" ? raw.rosterLeft : {},
+      courtesy: raw.courtesy && raw.courtesy.forId && raw.courtesy.runnerId
+        ? { forId: String(raw.courtesy.forId), runnerId: String(raw.courtesy.runnerId) }
+        : null,
       departed: Array.isArray(raw.departed) ? raw.departed.map(String) : [],
       players: Array.isArray(raw.players) ? raw.players.map(slimPlayer).filter(Boolean) : [],
       lineupSnapshot: snapshot,
@@ -1154,6 +1367,11 @@
     createLiveGame: createLiveGame,
     recordRuns: recordRuns,
     setDefense: setDefense,
+    setInjuryOut: setInjuryOut,
+    leaveRosterPlayer: leaveRosterPlayer,
+    setCourtesy: setCourtesy,
+    subForFlex: subForFlex,
+    reenterFlex: reenterFlex,
     setTiebreaker: setTiebreaker,
     clampOuts: clampOuts,
     addOut: addOut,
