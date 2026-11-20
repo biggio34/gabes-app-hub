@@ -229,7 +229,8 @@
       defense: defense,
       openingDefense: side === "home" ? cloneDefense(defense) : null,
       defensePlan: plan,
-      defensiveInnings: {},
+      defensiveOuts: {},
+      outLog: [],
       scheduledInnings: clampScheduledInnings(input && input.scheduledInnings),
       tiebreaker: false,
       endedReason: "",
@@ -282,16 +283,66 @@
     return Math.min(3, n);
   }
 
+  function fieldersNow(defense) {
+    const ids = [];
+    const seen = new Set();
+    FIELD_POSITIONS.forEach(function (pos) {
+      const id = defense && defense[pos] ? String(defense[pos]) : "";
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    });
+    return ids;
+  }
+
+  function addCredit(counts, ids) {
+    const next = Object.assign({}, counts || {});
+    (ids || []).forEach(function (id) {
+      next[id] = (next[id] || 0) + 1;
+    });
+    return next;
+  }
+
+  function removeCredit(counts, ids) {
+    const next = Object.assign({}, counts || {});
+    (ids || []).forEach(function (id) {
+      const left = (next[id] || 0) - 1;
+      if (left > 0) next[id] = left;
+      else delete next[id];
+    });
+    return next;
+  }
+
+  function formatInnings(outs) {
+    const n = Math.max(0, Math.floor(Number(outs) || 0));
+    return Math.floor(n / 3) + "." + (n % 3);
+  }
+
   function addOut(state, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
-    const outs = Math.min(3, clampOuts(state.outs) + 1);
-    return Object.assign({}, state, { outs: outs, updatedAt: now || Date.now() });
+    const current = clampOuts(state.outs);
+    if (current >= 3) return Object.assign({}, state, { outs: 3, updatedAt: now || Date.now() });
+    const ids = roleFor(state.side, state.half) === "defense" ? fieldersNow(state.defense) : [];
+    return Object.assign({}, state, {
+      outs: current + 1,
+      defensiveOuts: addCredit(state.defensiveOuts, ids),
+      outLog: (state.outLog || []).concat([ids]),
+      updatedAt: now || Date.now(),
+    });
   }
 
   function undoOut(state, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
-    const outs = Math.max(0, clampOuts(state.outs) - 1);
-    return Object.assign({}, state, { outs: outs, updatedAt: now || Date.now() });
+    const current = clampOuts(state.outs);
+    if (current === 0) return Object.assign({}, state, { outs: 0, updatedAt: now || Date.now() });
+    const outLog = (state.outLog || []).slice();
+    const last = outLog.length ? outLog.pop() : [];
+    return Object.assign({}, state, {
+      outs: current - 1,
+      defensiveOuts: removeCredit(state.defensiveOuts, last),
+      outLog: outLog,
+      updatedAt: now || Date.now(),
+    });
   }
 
   function recordRuns(state, runs, now) {
@@ -306,19 +357,14 @@
     if (state.tiebreaker) current[completedHalf + "Tiebreaker"] = true;
     innings[completedIndex] = current;
 
-    let defensiveInnings = Object.assign({}, state.defensiveInnings);
-    if (roleFor(state.side, completedHalf) === "defense") {
-      const starters = state.openingDefense || state.defense;
-      defensiveInnings = addDefensiveInning(defensiveInnings, starters);
-    }
-
     const scheduled = scheduledInningsOf(state);
     const inningNumber = completedIndex + 1;
     const scores = totalsFromInnings(innings);
     const stamp = now || Date.now();
     const shared = {
       innings: innings,
-      defensiveInnings: defensiveInnings,
+      defensiveOuts: Object.assign({}, state.defensiveOuts),
+      outLog: [],
       defensePlan: (state.defensePlan || []).map(cloneDefense),
       scheduledInnings: scheduled,
       updatedAt: stamp,
@@ -459,6 +505,8 @@
       finalUs: board.usTotal,
       finalOpp: board.oppTotal,
       endedReason: state.endedReason || "manual",
+      outLog: [],
+      outs: 0,
       endedAt: stamp,
       updatedAt: stamp,
     });
@@ -581,21 +629,22 @@
       if (slim) byId.set(slim.id, slim);
     });
     const ids = new Set(byId.keys());
-    Object.keys((state && state.defensiveInnings) || {}).forEach(function (id) {
+    Object.keys((state && state.defensiveOuts) || {}).forEach(function (id) {
       ids.add(String(id));
     });
     return Array.from(ids)
       .map(function (id) {
-        const count = state.defensiveInnings && state.defensiveInnings[id] ? state.defensiveInnings[id] : 0;
+        const outs = state.defensiveOuts && state.defensiveOuts[id] ? state.defensiveOuts[id] : 0;
         return {
           id: id,
           label: playerLabel(byId.get(id) || { id: id, name: "Unknown" }),
-          innings: count,
+          outs: outs,
+          innings: formatInnings(outs),
           position: currentPosition(state.defense, id),
         };
       })
       .sort(function (a, b) {
-        return b.innings - a.innings || a.label.localeCompare(b.label);
+        return b.outs - a.outs || a.label.localeCompare(b.label);
       });
   }
 
@@ -625,12 +674,17 @@
     if (inningIndex > 30) inningIndex = 30;
     const innings = Array.isArray(raw.innings) ? raw.innings.map(normalizeInning) : [];
     while (innings.length <= inningIndex) innings.push({ top: null, bottom: null });
-    const defensiveInnings = {};
-    const counts = raw.defensiveInnings && typeof raw.defensiveInnings === "object" ? raw.defensiveInnings : {};
+    const defensiveOuts = {};
+    const counts = raw.defensiveOuts && typeof raw.defensiveOuts === "object" ? raw.defensiveOuts : {};
     Object.keys(counts).forEach(function (id) {
-      const n = counts[id];
-      if (typeof n === "number" && Number.isFinite(n) && n > 0) defensiveInnings[String(id)] = Math.floor(n);
+      const n = Math.floor(Number(counts[id]));
+      if (Number.isFinite(n) && n > 0) defensiveOuts[String(id)] = n;
     });
+    const outLog = Array.isArray(raw.outLog)
+      ? raw.outLog.map(function (ids) {
+        return Array.isArray(ids) ? ids.map(String).filter(Boolean) : [];
+      })
+      : [];
     const snapshot = slimGame(raw.lineupSnapshot || { id: raw.lineupGameId, name: raw.gameName });
     const finalUs = parseRuns(raw.finalUs);
     const finalOpp = parseRuns(raw.finalOpp);
@@ -644,7 +698,8 @@
       defense: cloneDefense(raw.defense),
       openingDefense: raw.openingDefense ? cloneDefense(raw.openingDefense) : null,
       defensePlan: Array.isArray(raw.defensePlan) ? raw.defensePlan.map(cloneDefense) : [],
-      defensiveInnings: defensiveInnings,
+      defensiveOuts: defensiveOuts,
+      outLog: outLog,
       scheduledInnings: clampScheduledInnings(raw.scheduledInnings),
       tiebreaker: !!raw.tiebreaker,
       endedReason: raw.endedReason === "home-lead" || raw.endedReason === "final" || raw.endedReason === "manual"
@@ -721,6 +776,7 @@
     clampOuts: clampOuts,
     addOut: addOut,
     undoOut: undoOut,
+    formatInnings: formatInnings,
     scoreboard: scoreboard,
     endGame: endGame,
     unplayedGames: unplayedGames,

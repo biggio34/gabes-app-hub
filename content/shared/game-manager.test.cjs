@@ -125,11 +125,14 @@ describe("game manager half innings", () => {
     assert.equal(board.innings[0].opp, null);
     assert.equal(board.usTotal, 2);
     assert.equal(board.oppTotal, 0);
-    assert.deepEqual(state.defensiveInnings, {});
+    assert.deepEqual(state.defensiveOuts, {});
   });
 
-  it("gives opponent runs and defensive innings to the home team in the top", () => {
+  it("gives opponent runs and defensive outs to the home team in the top", () => {
     let state = start("home");
+    state = GameManager.addOut(state, 1);
+    state = GameManager.addOut(state, 2);
+    state = GameManager.addOut(state, 3);
     state = GameManager.recordRuns(state, 3, 1100);
     const board = GameManager.scoreboard(state);
     assert.equal(board.role, "offense");
@@ -137,16 +140,17 @@ describe("game manager half innings", () => {
     assert.equal(board.innings[0].opp, 3);
     assert.equal(board.oppTotal, 3);
     assert.equal(board.usTotal, 0);
-    assert.equal(state.defensiveInnings.mia, 1);
-    assert.equal(state.defensiveInnings.ava, 1);
-    assert.equal(state.defensiveInnings.lina, 1);
+    assert.equal(state.defensiveOuts.mia, 3);
+    assert.equal(state.defensiveOuts.ava, 3);
+    assert.equal(state.defensiveOuts.lina, 3);
+    assert.equal(GameManager.formatInnings(state.defensiveOuts.mia), "1.0");
     state = GameManager.recordRuns(state, 4, 1200);
     const next = GameManager.scoreboard(state);
     assert.equal(next.usTotal, 4);
     assert.equal(next.oppTotal, 3);
     assert.equal(next.label, "Top 2");
     assert.equal(next.role, "defense");
-    assert.equal(state.defensiveInnings.mia, 1);
+    assert.equal(state.defensiveOuts.mia, 3);
   });
 
   it("accepts zero runs and rejects blank, negative, and partial numbers", () => {
@@ -168,8 +172,8 @@ describe("game manager half innings", () => {
     assert.equal(state.half, "top");
     assert.equal(GameManager.scoreboard(state).role, "offense");
     assert.equal(state.defense.P, "jo");
-    assert.equal(state.defensiveInnings.mia, 1);
-    assert.equal(state.defensiveInnings.jo || 0, 0);
+    assert.equal(state.defensiveOuts.mia || 0, 0);
+    assert.equal(state.defensiveOuts.jo || 0, 0);
   });
 
   it("keeps the current defense when the next planned inning is empty", () => {
@@ -185,31 +189,66 @@ describe("game manager half innings", () => {
 });
 
 describe("game manager defensive innings", () => {
-  it("credits whoever started the defensive half, not a mid-inning replacement", () => {
+  it("credits each defensive out, and a mid-inning swap gets only the outs after it", () => {
     let state = start("away");
-    state = GameManager.recordRuns(state, 2, 1100);
+    state = GameManager.recordRuns(state, 0, 1000);
     assert.equal(state.half, "bottom");
-    state = GameManager.setDefense(state, "P", "sub", 1150);
-    assert.equal(state.defense.P, "sub");
-    assert.equal(state.defense.C, "ava");
-    state = GameManager.recordRuns(state, 1, 1200);
-    assert.equal(state.defensiveInnings.mia, 1);
-    assert.equal(state.defensiveInnings.sub || 0, 0);
-    assert.equal(state.defensiveInnings.ava, 1);
-    assert.equal(state.defensiveInnings.lina, 1);
+    state = GameManager.addOut(state, 1);
+    state = GameManager.addOut(state, 2);
+    state = GameManager.setDefense(state, "P", "sub", 3);
+    state = GameManager.addOut(state, 4);
+    assert.equal(state.outs, 3);
+    assert.equal(state.defensiveOuts.mia, 2);
+    assert.equal(state.defensiveOuts.sub, 1);
+    assert.equal(state.defensiveOuts.ava, 3);
+    assert.equal(GameManager.formatInnings(state.defensiveOuts.mia), "0.2");
+    assert.equal(GameManager.formatInnings(state.defensiveOuts.sub), "0.1");
+    assert.equal(GameManager.formatInnings(state.defensiveOuts.ava), "1.0");
     const rows = GameManager.defensiveInningRows(state);
-    assert.equal(rows.find((row) => row.id === "mia").innings, 1);
-    assert.equal(rows.find((row) => row.id === "sub").innings, 0);
+    assert.equal(rows.find((row) => row.id === "mia").innings, "0.2");
+    assert.equal(rows.find((row) => row.id === "sub").innings, "0.1");
+    state = GameManager.undoOut(state, 5);
+    assert.equal(state.outs, 2);
+    assert.equal(state.defensiveOuts.sub || 0, 0);
+    assert.equal(state.defensiveOuts.mia, 2);
+    assert.equal(state.defensiveOuts.ava, 2);
   });
 
   it("uses a lineup change made before the defensive half starts", () => {
     let state = start("away");
     state = GameManager.setDefense(state, "P", "sub", 1050);
     state = GameManager.recordRuns(state, 0, 1100);
+    state = GameManager.addOut(state, 1);
+    state = GameManager.addOut(state, 2);
+    state = GameManager.addOut(state, 3);
     state = GameManager.recordRuns(state, 0, 1200);
-    assert.equal(state.defensiveInnings.sub, 1);
-    assert.equal(state.defensiveInnings.mia || 0, 0);
-    assert.equal(state.defensiveInnings.ava, 1);
+    assert.equal(state.defensiveOuts.sub, 3);
+    assert.equal(state.defensiveOuts.mia || 0, 0);
+    assert.equal(state.defensiveOuts.ava, 3);
+    assert.equal(GameManager.formatInnings(state.defensiveOuts.sub), "1.0");
+  });
+
+  it("credits only the outs recorded when a defensive half ends early", () => {
+    let state = start("home");
+    state = GameManager.addOut(state, 1);
+    state = GameManager.recordRuns(state, 0, 2);
+    assert.equal(state.half, "bottom");
+    assert.equal(state.outs, 0);
+    assert.equal(state.defensiveOuts.mia, 1);
+    assert.equal(GameManager.formatInnings(state.defensiveOuts.mia), "0.1");
+    state = GameManager.recordRuns(state, 0, 3);
+    assert.equal(state.half, "top");
+    state = GameManager.addOut(state, 4);
+    state = GameManager.addOut(state, 5);
+    state = GameManager.endGame(state, 6);
+    assert.equal(state.status, "played");
+    assert.equal(state.defensiveOuts.jo, 2);
+    assert.equal(GameManager.formatInnings(state.defensiveOuts.jo), "0.2");
+    assert.equal(state.defensiveOuts.mia, 1);
+    assert.equal(GameManager.formatInnings(0), "0.0");
+    assert.equal(GameManager.formatInnings(14), "4.2");
+    assert.equal(GameManager.formatInnings(10), "3.1");
+    assert.equal(GameManager.formatInnings(15), "5.0");
   });
 
   it("swaps two fielders and benches a replaced player", () => {
@@ -229,7 +268,7 @@ describe("game manager defensive innings", () => {
     assert.equal(GameManager.scoreboard(state).role, "defense");
     state = GameManager.endGame(state, 2000);
     assert.equal(state.status, "played");
-    assert.deepEqual(state.defensiveInnings, {});
+    assert.deepEqual(state.defensiveOuts, {});
     assert.equal(state.finalUs, 0);
     assert.equal(state.finalOpp, 0);
     assert.throws(() => GameManager.recordRuns(state, 1, 2100), /not in progress/);
@@ -237,16 +276,23 @@ describe("game manager defensive innings", () => {
 
   it("adds another inning only to the players on the field for that half", () => {
     let state = start("home");
+    state = GameManager.addOut(state, 1);
+    state = GameManager.addOut(state, 2);
+    state = GameManager.addOut(state, 3);
     state = GameManager.recordRuns(state, 0, 1100);
     state = GameManager.recordRuns(state, 1, 1200);
     assert.equal(state.half, "top");
     assert.equal(state.inningIndex, 1);
     assert.equal(state.defense.P, "jo");
+    state = GameManager.addOut(state, 4);
+    state = GameManager.addOut(state, 5);
+    state = GameManager.addOut(state, 6);
     state = GameManager.recordRuns(state, 2, 1300);
-    assert.equal(state.defensiveInnings.mia, 1);
-    assert.equal(state.defensiveInnings.jo, 1);
-    assert.equal(state.defensiveInnings.ava, 2);
-    assert.equal(state.defensiveInnings.lina, 2);
+    assert.equal(state.defensiveOuts.mia, 3);
+    assert.equal(state.defensiveOuts.jo, 3);
+    assert.equal(state.defensiveOuts.ava, 6);
+    assert.equal(state.defensiveOuts.lina, 6);
+    assert.equal(GameManager.formatInnings(state.defensiveOuts.ava), "2.0");
     const board = GameManager.scoreboard(state);
     assert.equal(board.oppTotal, 2);
     assert.equal(board.usTotal, 1);
@@ -420,18 +466,23 @@ describe("game manager saved games", () => {
     const games = [sampleGame(), { id: "later", name: "vs. Hawks", battingOrder: ["mia"] }];
     let state = start("away");
     state = GameManager.recordRuns(state, 4, 1100);
+    state = GameManager.addOut(state, 1);
+    state = GameManager.addOut(state, 2);
+    state = GameManager.addOut(state, 3);
     state = GameManager.recordRuns(state, 1, 1200);
     state = GameManager.recordRuns(state, 2, 1300);
+    state = GameManager.addOut(state, 4);
     assert.equal(GameManager.scoreboard(state).role, "defense");
     assert.equal(GameManager.scoreboard(state).label, "Bottom 2");
-    const inningsSoFar = Object.assign({}, state.defensiveInnings);
+    const outsSoFar = Object.assign({}, state.defensiveOuts);
     state = GameManager.endGame(state, 1400);
     assert.equal(state.status, "played");
     assert.equal(state.finalUs, 6);
     assert.equal(state.finalOpp, 1);
-    assert.deepEqual(state.defensiveInnings, inningsSoFar);
-    assert.equal(state.defensiveInnings.mia, 1);
-    assert.equal(state.defensiveInnings.jo || 0, 0);
+    assert.deepEqual(state.defensiveOuts, outsSoFar);
+    assert.equal(state.defensiveOuts.mia, 3);
+    assert.equal(state.defensiveOuts.jo, 1);
+    assert.equal(GameManager.formatInnings(state.defensiveOuts.jo), "0.1");
     const board = GameManager.scoreboard(state);
     assert.equal(board.label, "Final");
     assert.equal(board.usTotal, 6);
