@@ -596,14 +596,21 @@ describe("lineup formats", () => {
     const view = GameManager.lineupView(game, players());
     assert.equal(view.formatLabel, "Bat the roster");
     assert.equal(view.batting.length, 12);
-    let state = GameManager.createLiveGame({ side: "away", game: game, players: players() }, 1);
+    assert.deepEqual(GameManager.dueSlots(12, 11), [11, 0, 1]);
+    assert.deepEqual(GameManager.dueSlots(12, 8), [8, 9, 10]);
+    let state = GameManager.createLiveGame({ side: "home", game: game, players: players() }, 1);
     assert.equal(state.battingMode, "roster");
-    state = GameManager.recordRuns(state, 0, 2);
+    const before = GameManager.liveBatters(state).map((row) => row.id).join(",");
+    const effect = GameManager.describeChange(state, { type: "field", position: "P", playerId: "blake" });
+    assert.match(effect.text, /Defense-only swap, batting order unchanged \(bat the roster\)/);
+    assert.match(effect.text, /enters at P/);
     state = GameManager.setDefense(state, "P", "blake", 3);
+    assert.equal(GameManager.liveBatters(state).map((row) => row.id).join(","), before);
+    assert.equal(state.defense.P, "blake");
     state = GameManager.addOut(state, 4);
     assert.equal(state.defensiveOuts.blake, 1);
     assert.equal(state.defensiveOuts.mia || 0, 0);
-    assert.equal(GameManager.liveBatters(state).length, 12);
+    assert.equal(GameManager.liveBatters(state).some((row) => row.id === "sage"), true);
   });
 
   it("bats 9, puts a sub in the starter's spot, and warns on a second re-entry", () => {
@@ -612,17 +619,25 @@ describe("lineup formats", () => {
     assert.equal(view.formatLabel, "Bat 9");
     assert.equal(view.batting.length, 9);
     assert.ok(view.subs.some((row) => row.id === "sub"));
-    let state = GameManager.createLiveGame({ side: "away", game: game, players: players() }, 1);
+    let state = GameManager.createLiveGame({ side: "home", game: game, players: players() }, 1);
+    const effect = GameManager.describeChange(state, { type: "bat", spot: 0, playerId: "sub" });
+    assert.match(effect.text, /Brooks enters at P and takes Hill's #1 batting spot/);
     state = GameManager.applySub(state, 0, "sub", false, 2);
     assert.equal(GameManager.liveBatters(state)[0].id, "sub");
-    assert.match(GameManager.liveBatters(state)[0].label, /Nia Brooks/);
-    state = GameManager.applySub(state, 0, "mia", false, 3);
+    assert.equal(state.defense.P, "sub");
+    state = GameManager.addOut(state, 3);
+    assert.equal(state.defensiveOuts.sub, 1);
+    assert.equal(state.defensiveOuts.mia || 0, 0);
+    state = GameManager.applySub(state, 0, "mia", false, 4);
     assert.equal(GameManager.liveBatters(state)[0].id, "mia");
-    state = GameManager.applySub(state, 0, "jo", false, 4);
+    assert.equal(state.defense.P, "mia");
+    state = GameManager.applySub(state, 0, "jo", false, 5);
     const again = GameManager.subChoice(state, 0, "mia");
     assert.equal(again.illegal, true);
-    assert.match(again.reason, /only once/);
-    assert.throws(() => GameManager.applySub(state, 0, "sub", false, 5), /cannot re-enter/);
+    assert.match(again.reason, /original batting spot/);
+    const wrongSpot = GameManager.subChoice(state, 1, "mia");
+    assert.equal(wrongSpot.illegal, true);
+    assert.throws(() => GameManager.applySub(state, 0, "sub", false, 6), /cannot re-enter/);
   });
 
   it("plays DP / Flex with 9 batters, a fielding Flex, and a role swap", () => {
@@ -635,20 +650,31 @@ describe("lineup formats", () => {
     assert.equal(view.batting.some((row) => row.id === "blake"), false);
     assert.equal(view.batting[0].role, "DP");
     let state = GameManager.createLiveGame({ side: "home", game: game, players: players() }, 1);
-    state = GameManager.addOut(state, 2);
-    assert.equal(state.defensiveOuts.blake, 1);
-    assert.equal(state.defensiveOuts.mia || 0, 0);
-    assert.equal(GameManager.playerMayField(state, "mia"), false);
-    assert.throws(() => GameManager.setDefense(state, "SS", "mia", 3), /only after swapping/);
-    state = GameManager.swapDpFlex(state, 3);
-    assert.equal(GameManager.liveBatters(state).find((row) => row.role === "Flex").id, "blake");
-    assert.equal(state.defense.P, "mia");
-    assert.equal(GameManager.playerMayField(state, "mia"), true);
-    assert.equal(GameManager.playerMayField(state, "blake"), false);
-    state = GameManager.addOut(state, 4);
+    assert.equal(state.dpSpot, 0);
+    const flexEffect = GameManager.describeChange(state, { type: "flex" });
+    assert.equal(flexEffect.ok, true);
+    assert.match(flexEffect.text, /Flex bats for DP in spot 1; DP leaves offense/);
+    assert.match(flexEffect.text, /Defense unchanged/);
+    const dpField = GameManager.describeChange(state, { type: "field", position: "SS", playerId: "mia" });
+    assert.match(dpField.text, /The DP is also playing defense/);
+    assert.match(dpField.text, /Batting order unchanged/);
+    state = GameManager.setDefense(state, "SS", "mia", 2);
+    state = GameManager.addOut(state, 3);
     assert.equal(state.defensiveOuts.blake, 1);
     assert.equal(state.defensiveOuts.mia, 1);
-    assert.equal(GameManager.formatInnings(state.defensiveOuts.mia), "0.1");
+    const defenseBefore = Object.assign({}, state.defense);
+    state = GameManager.swapDpFlex(state, 4);
+    assert.equal(GameManager.liveBatters(state).find((row) => row.role === "Flex").id, "blake");
+    assert.equal(state.defense.P, defenseBefore.P);
+    assert.equal(state.defense.SS, "mia");
+    assert.equal(GameManager.subChoice(state, 0, "mia").illegal, false);
+    state = GameManager.swapDpFlex(state, 5);
+    assert.equal(GameManager.liveBatters(state)[0].id, "mia");
+    assert.equal(state.spots[0].starterReturned, false);
+    state = GameManager.addOut(state, 6);
+    assert.equal(state.defensiveOuts.blake, 2);
+    assert.equal(state.defensiveOuts.mia, 2);
+    assert.equal(GameManager.formatInnings(state.defensiveOuts.mia), "0.2");
     const stored = GameManager.gamesFromLineupRecord({
       games: [game],
       removedGameIds: [],
@@ -664,11 +690,25 @@ describe("lineup formats", () => {
     assert.equal(view.batting.length, 10);
     assert.equal(view.batting[9].role, "EH");
     assert.equal(view.batting[9].id, "blake");
-    let state = GameManager.createLiveGame({ side: "away", game: game, players: players() }, 1);
-    state = GameManager.applySub(state, 0, "sub", false, 2);
-    assert.equal(GameManager.liveBatters(state)[0].id, "sub");
+    let state = GameManager.createLiveGame({ side: "home", game: game, players: players() }, 1);
+    assert.equal(GameManager.playerMayField(state, "blake"), false);
+    assert.throws(() => GameManager.setDefense(state, "SS", "blake", 2), /does not play the field/);
+    const ehEffect = GameManager.describeChange(state, { type: "bat", spot: 9, playerId: "sub" });
+    assert.match(ehEffect.text, /Defense unchanged/);
+    assert.match(ehEffect.text, /does not play the field/);
+    const fieldBefore = state.defense.P;
+    state = GameManager.applySub(state, 9, "sub", false, 3);
+    assert.equal(GameManager.liveBatters(state)[9].id, "sub");
     assert.equal(GameManager.liveBatters(state)[9].role, "EH");
-    assert.equal(GameManager.liveBatters(state)[9].id, "blake");
+    assert.equal(state.defense.P, fieldBefore);
+    const both = GameManager.describeChange(state, { type: "bat", spot: 0, playerId: "jo" });
+    assert.match(both.text, /Park enters at P and takes Hill's #1 batting spot/);
+    state = GameManager.applySub(state, 0, "jo", false, 4);
+    assert.equal(state.defense.P, "jo");
+    state = GameManager.addOut(state, 5);
+    assert.equal(state.defensiveOuts.jo, 1);
+    assert.equal(state.defensiveOuts.blake || 0, 0);
+    assert.equal(state.defensiveOuts.sub || 0, 0);
   });
 
   it("bats two extra hitters and warns before an illegal re-entry", () => {
@@ -679,8 +719,14 @@ describe("lineup formats", () => {
     assert.equal(view.batting.length, 11);
     assert.equal(view.batting[9].role, "EH");
     assert.equal(view.batting[10].role, "EH");
-    let state = GameManager.createLiveGame({ side: "away", game: game, players: players() }, 1);
+    let state = GameManager.createLiveGame({ side: "home", game: game, players: players() }, 1);
+    assert.equal(GameManager.playerMayField(state, "remy"), false);
+    const effect = GameManager.describeChange(state, { type: "bat", spot: 10, playerId: "sage" });
+    assert.match(effect.text, /Defense unchanged/);
+    assert.match(effect.text, /does not play the field/);
+    const fieldBefore = state.defense.P;
     state = GameManager.applySub(state, 10, "sage", false, 2);
+    assert.equal(state.defense.P, fieldBefore);
     assert.equal(GameManager.liveBatters(state)[10].id, "sage");
     assert.equal(GameManager.liveBatters(state)[10].role, "EH");
     state = GameManager.applySub(state, 10, "remy", false, 3);
@@ -727,5 +773,8 @@ describe("game manager page", () => {
     assert.match(html, /id="illegal-sheet"/);
     assert.match(html, /Illegal re-entry/);
     assert.match(html, /playerMayField/);
+    assert.match(html, /id="sub-effect"/);
+    assert.match(html, /id="confirm-sub"/);
+    assert.match(html, /id="due-wrap"/);
   });
 });

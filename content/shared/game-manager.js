@@ -96,23 +96,23 @@
     const table = {
       roster: {
         label: "Bat the roster",
-        detail: "Everyone bats, in order. Nine play defense at a time. Defensive subs are free.",
+        detail: "Everyone bats. Due up wraps after the last hitter, not after 9. Nine play defense, and sitting players still bat.",
       },
       nine: {
         label: "Bat 9",
-        detail: "Nine bat. The rest are subs. A starter may re-enter once, in the original spot.",
+        detail: "Nine bat. A starter may leave and re-enter once, only in her original batting spot.",
       },
       "dp-flex": {
         label: "DP / Flex",
-        detail: "Nine bat, including the DP. The Flex plays defense and does not bat unless they swap.",
+        detail: "Nine bat. The Flex is the 10th player and plays defense only, unless she bats in the DP's spot. That removes the DP from offense.",
       },
       "one-ap": {
         label: "Extra hitter",
-        detail: "Ten bat, including one extra hitter. Nine play defense. A starter may re-enter once.",
+        detail: "Ten bat. The extra hitter has her own spot and does not play the field. A starter may re-enter once, in her original spot.",
       },
       "two-ap": {
         label: "Two extra hitters",
-        detail: "Eleven bat, including two extra hitters. Nine play defense. A starter may re-enter once.",
+        detail: "Eleven bat. Each extra hitter has her own spot and does not play the field. A starter may re-enter once, in her original spot.",
       },
     };
     return Object.assign({ key: key }, table[key]);
@@ -159,24 +159,58 @@
     });
   }
 
+  function dueSlots(length, dueIndex) {
+    const n = Math.max(0, Math.floor(Number(length) || 0));
+    if (!n) return [];
+    let start = Math.floor(Number(dueIndex) || 0) % n;
+    if (start < 0) start += n;
+    const slots = [];
+    const shown = Math.min(3, n);
+    for (let i = 0; i < shown; i += 1) slots.push((start + i) % n);
+    return slots;
+  }
+
+  function isEhSpot(state, index) {
+    const mode = normalizeMode(state && state.battingMode);
+    return (mode === "one-ap" || mode === "two-ap") && index >= 9;
+  }
+
+  function spotIndexOf(state, playerId) {
+    const id = String(playerId || "");
+    if (!id || !state || !state.spots) return -1;
+    return state.spots.findIndex(function (spot) { return slotCurrent(spot) === id; });
+  }
+
   function playerMayField(state, playerId) {
     const mode = normalizeMode(state && state.battingMode);
     if (mode === "roster" || !state || !state.spots || !state.spots.length) return true;
     const id = String(playerId || "");
     if (!id) return false;
+    if (mode === "one-ap" || mode === "two-ap") {
+      const spot = spotIndexOf(state, id);
+      if (spot >= 9) return false;
+      return spot >= 0;
+    }
     if (mode === "dp-flex") {
       const dpId = String(state.dpId || "");
       const flexId = String(state.flexId || "");
-      if (!state.flexBatting) {
-        if (id === dpId) return false;
-        if (id === flexId) return true;
-        return inLineup(state, id);
-      }
-      if (id === flexId) return false;
-      if (id === dpId) return true;
+      if (id === flexId) return true;
+      if (id === dpId) return !state.flexBatting;
       return inLineup(state, id);
     }
     return inLineup(state, id);
+  }
+
+  function fieldBlockReason(state, playerId) {
+    const mode = normalizeMode(state && state.battingMode);
+    const id = String(playerId || "");
+    if ((mode === "one-ap" || mode === "two-ap") && spotIndexOf(state, id) >= 9) {
+      return "The extra hitter does not play the field.";
+    }
+    if (mode === "dp-flex" && id === String(state.dpId || "") && state.flexBatting) {
+      return "The DP has left the offense. She can play defense again after she bats.";
+    }
+    return "That player is not in the game. Sub them into the batting order first.";
   }
 
   function inLineup(state, playerId) {
@@ -222,18 +256,24 @@
     const spot = spots[spotIndex];
     const incoming = String(playerId);
     const leaving = slotCurrent(spot);
+    const flexId = String(state.flexId || "");
     const departed = (state.departed || []).map(String);
-    if (leaving && leaving !== spot.starterId && departed.indexOf(leaving) < 0) departed.push(leaving);
+    if (leaving && leaving !== spot.starterId && leaving !== flexId && departed.indexOf(leaving) < 0) departed.push(leaving);
     if (incoming === spot.starterId) spot.starterReturned = true;
     spot.currentId = incoming;
     const defense = cloneDefense(state.defense);
     FIELD_POSITIONS.forEach(function (pos) {
       if (defense[pos] === leaving) defense[pos] = incoming;
     });
+    let flexBatting = !!state.flexBatting;
+    if (normalizeMode(state.battingMode) === "dp-flex" && spotIndex === state.dpSpot && incoming !== flexId) {
+      flexBatting = false;
+    }
     return Object.assign({}, state, {
       spots: spots,
       departed: departed,
       defense: defense,
+      flexBatting: flexBatting,
       updatedAt: now || Date.now(),
     });
   }
@@ -243,25 +283,112 @@
     const spots = state.spots.map(function (spot) { return Object.assign({}, spot); });
     const spot = spots[state.dpSpot];
     if (!spot) throw new Error("The DP spot is missing.");
-    const defense = cloneDefense(state.defense);
     const flexId = String(state.flexId || "");
     const dpId = String(state.dpId || "");
+    const current = slotCurrent(spot);
+    if (current && current !== dpId && current !== flexId) {
+      throw new Error("A sub is in the DP spot. Re-enter the DP in that spot.");
+    }
     if (!state.flexBatting) {
-      const flexPos = currentPosition(defense, flexId);
       spot.currentId = flexId;
-      if (flexPos) {
-        FIELD_POSITIONS.forEach(function (pos) {
-          if (defense[pos] === dpId) defense[pos] = null;
-        });
-        defense[flexPos] = dpId;
-      }
-      return Object.assign({}, state, { spots: spots, defense: defense, flexBatting: true, updatedAt: now || Date.now() });
+      return Object.assign({}, state, { spots: spots, flexBatting: true, updatedAt: now || Date.now() });
     }
     spot.currentId = dpId;
-    FIELD_POSITIONS.forEach(function (pos) {
-      if (defense[pos] === dpId) defense[pos] = flexId;
-    });
-    return Object.assign({}, state, { spots: spots, defense: defense, flexBatting: false, updatedAt: now || Date.now() });
+    return Object.assign({}, state, { spots: spots, flexBatting: false, updatedAt: now || Date.now() });
+  }
+
+  function possessive(name) {
+    if (/s$/i.test(name)) return name + "'";
+    return name + "'s";
+  }
+
+  function lastName(state, playerId) {
+    const id = String(playerId || "");
+    const player = ((state && state.players) || []).find(function (item) { return item && item.id === id; });
+    const label = playerLabel(player || { id: id, name: id || "Player" }).replace(/^#\d+\s+/, "");
+    const parts = label.split(/\s+/).filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : "Player";
+  }
+
+  function describeChange(state, change) {
+    if (!state || !change) return { ok: false, illegal: false, reason: "Nothing to change.", text: "" };
+    if (change.type === "flex") return describeFlex(state);
+    if (change.type === "field") return describeField(state, change.position, change.playerId);
+    if (change.type === "bat") return describeBat(state, change.spot, change.playerId);
+    return { ok: false, illegal: false, reason: "Unknown change.", text: "" };
+  }
+
+  function describeBat(state, spotIndex, playerId) {
+    const choice = subChoice(state, spotIndex, playerId);
+    const spot = state.spots && state.spots[spotIndex];
+    const leaving = spot ? slotCurrent(spot) : "";
+    const pos = leaving ? currentPosition(state.defense, leaving) : "";
+    const incomingName = lastName(state, playerId);
+    const leavingName = possessive(lastName(state, leaving));
+    const spotNo = spotIndex + 1;
+    let text;
+    if (pos) {
+      text = incomingName + " enters at " + pos + " and takes " + leavingName + " #" + spotNo + " batting spot.";
+    } else if (isEhSpot(state, spotIndex)) {
+      text = incomingName + " takes " + leavingName + " #" + spotNo + " batting spot. Defense unchanged. The extra hitter does not play the field.";
+    } else {
+      text = incomingName + " takes " + leavingName + " #" + spotNo + " batting spot. Defense unchanged.";
+    }
+    return { ok: choice.ok, illegal: !!choice.illegal, reason: choice.reason || "", text: text };
+  }
+
+  function describeField(state, position, playerId) {
+    const nextId = playerId ? String(playerId) : "";
+    const current = state.defense && state.defense[position] ? String(state.defense[position]) : "";
+    if (nextId && nextId === current) return { ok: false, illegal: false, reason: "That player is already here.", text: "" };
+    if (nextId && !playerMayField(state, nextId)) {
+      return { ok: false, illegal: false, reason: fieldBlockReason(state, nextId), text: "" };
+    }
+    if (FIELD_POSITIONS.indexOf(position) < 0) return { ok: false, illegal: false, reason: "Unknown position.", text: "" };
+    const incomingName = nextId ? lastName(state, nextId) : "";
+    const leavingName = current ? lastName(state, current) : "";
+    const from = nextId ? currentPosition(state.defense, nextId) : "";
+    let detail;
+    if (!nextId) detail = leavingName + " leaves " + position + ".";
+    else if (from && from !== position && leavingName) detail = incomingName + " moves from " + from + " to " + position + ". " + leavingName + " moves to " + from + ".";
+    else if (from && from !== position) detail = incomingName + " moves from " + from + " to " + position + ".";
+    else if (leavingName) detail = incomingName + " enters at " + position + " for " + leavingName + ".";
+    else detail = incomingName + " enters at " + position + ".";
+    const mode = normalizeMode(state.battingMode);
+    let text;
+    if (mode === "roster") text = "Defense-only swap, batting order unchanged (bat the roster). " + detail;
+    else if (mode === "dp-flex" && nextId && nextId === String(state.dpId || "") && !state.flexBatting) {
+      text = detail + " The DP is also playing defense. Batting order unchanged.";
+    } else text = "Defense-only swap, batting order unchanged. " + detail;
+    return { ok: true, illegal: false, reason: "", text: text };
+  }
+
+  function describeFlex(state) {
+    if (!state || state.battingMode !== "dp-flex") {
+      return { ok: false, illegal: false, reason: "This lineup is not DP / Flex.", text: "" };
+    }
+    const spot = state.spots && state.spots[state.dpSpot];
+    const current = spot ? slotCurrent(spot) : "";
+    const flexId = String(state.flexId || "");
+    const dpId = String(state.dpId || "");
+    if (current && current !== dpId && current !== flexId) {
+      return { ok: false, illegal: false, reason: "A sub is in the DP spot. Re-enter the DP in that spot.", text: "" };
+    }
+    const spotNo = (state.dpSpot >= 0 ? state.dpSpot : 0) + 1;
+    if (!state.flexBatting) {
+      return {
+        ok: true,
+        illegal: false,
+        reason: "",
+        text: "Flex bats for DP in spot " + spotNo + "; DP leaves offense. Defense unchanged.",
+      };
+    }
+    return {
+      ok: true,
+      illegal: false,
+      reason: "",
+      text: "DP bats again in spot " + spotNo + ". Flex leaves the batting order. Defense unchanged.",
+    };
   }
 
   function liveBatters(state) {
@@ -643,13 +770,7 @@
     const defense = cloneDefense(state.defense);
     const nextId = playerId ? String(playerId) : "";
     if (nextId && state.spots && state.spots.length && !playerMayField(state, nextId)) {
-      if (state.battingMode === "dp-flex" && nextId === String(state.dpId || "") && !state.flexBatting) {
-        throw new Error("The DP plays defense only after swapping with the Flex.");
-      }
-      if (state.battingMode === "dp-flex" && nextId === String(state.flexId || "") && state.flexBatting) {
-        throw new Error("The Flex is batting and stays off defense until they swap back.");
-      }
-      throw new Error("That player is not in the game. Sub them into the batting order first.");
+      throw new Error(fieldBlockReason(state, nextId));
     }
     if (!nextId) {
       defense[position] = null;
@@ -1048,10 +1169,12 @@
     formatInfo: formatInfo,
     normalizeMode: normalizeMode,
     liveBatters: liveBatters,
+    dueSlots: dueSlots,
     subChoice: subChoice,
     applySub: applySub,
     swapDpFlex: swapDpFlex,
     playerMayField: playerMayField,
+    describeChange: describeChange,
     defensiveInningRows: defensiveInningRows,
     normalizeSession: normalizeSession,
     emptyStore: emptyStore,
