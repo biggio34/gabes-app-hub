@@ -596,6 +596,7 @@ describe("game manager page", () => {
     assert.match(html, /On deck/);
     assert.match(html, /In the hole/);
     assert.match(html, /id="batting-order"/);
+    assert.match(html, /onDefense[\s\S]*defenseEditorHtml\(session\) \+ trackerHtml\(session, true\)[\s\S]*: battingOrderHtml\(session\)/);
     assert.match(html, /\+1 Out/);
     assert.match(html, /id="undo-out"/);
     assert.match(html, /id="confirm-half-sheet"/);

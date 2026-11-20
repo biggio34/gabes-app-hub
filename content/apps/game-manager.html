@@ -797,8 +797,9 @@
         + tiebreakerHtml(session)
         + "</div>"
         + "<main>"
-        + (onDefense ? defenseEditorHtml(session) : battingOrderHtml(session))
-        + trackerHtml(session, true)
+        + (onDefense
+          ? defenseEditorHtml(session) + trackerHtml(session, true)
+          : battingOrderHtml(session))
         + "</main>"
         + '<div class="dock">'
         + '<button type="button" class="primary" id="add-out" data-action="add-out">+1 Out</button>'
