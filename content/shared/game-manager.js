@@ -275,15 +275,46 @@
       spots: spots,
       departed: departed,
       defense: defense,
+      lastFieldPos: rememberFieldPositions(state, defense),
       flexBatting: flexBatting,
       updatedAt: now || Date.now(),
     });
   }
 
+  function liveDpIndex(state) {
+    const spots = (state && state.spots) || [];
+    const dpId = String((state && state.dpId) || "");
+    const byStarter = spots.findIndex(function (spot) { return spot && spot.starterId === dpId; });
+    if (byStarter >= 0) return byStarter;
+    const stored = Number(state && state.dpSpot);
+    if (Number.isFinite(stored) && stored >= 0 && spots[stored]) return stored;
+    return 0;
+  }
+
+  function sanitizeLastFieldPos(raw) {
+    const last = {};
+    if (!raw || typeof raw !== "object") return last;
+    Object.keys(raw).forEach(function (id) {
+      const pos = raw[id];
+      if (FIELD_POSITIONS.indexOf(pos) >= 0) last[String(id)] = pos;
+    });
+    return last;
+  }
+
+  function rememberFieldPositions(state, defense) {
+    const last = Object.assign({}, state && state.lastFieldPos);
+    const source = defense || (state && state.defense) || {};
+    FIELD_POSITIONS.forEach(function (pos) {
+      const id = source[pos] ? String(source[pos]) : "";
+      if (id) last[id] = pos;
+    });
+    return last;
+  }
+
   function swapDpFlex(state, now, force) {
     if (!state || state.battingMode !== "dp-flex") throw new Error("This lineup is not DP / Flex.");
     const spots = state.spots.map(function (spot) { return Object.assign({}, spot); });
-    const spot = spots[state.dpSpot];
+    const spot = spots[liveDpIndex(state)];
     if (!spot) throw new Error("The DP spot is missing.");
     const flexId = String(state.flexId || "");
     const dpId = String(state.dpId || "");
@@ -300,7 +331,9 @@
       return Object.assign({}, state, {
         spots: spots,
         defense: defense,
+        lastFieldPos: rememberFieldPositions(state, defense),
         flexBatting: true,
+        dpSpot: liveDpIndex({ spots: spots, dpId: dpId, dpSpot: state.dpSpot }),
         updatedAt: now || Date.now(),
       });
     }
@@ -347,7 +380,8 @@
     const pos = leaving ? currentPosition(state.defense, leaving) : "";
     const incomingName = lastName(state, playerId);
     const leavingName = possessive(lastName(state, leaving));
-    const spotNo = spotIndex + 1;
+    const leavingIndex = (state.spots || []).findIndex(function (item) { return slotCurrent(item) === leaving; });
+    const spotNo = leavingIndex >= 0 ? leavingIndex + 1 : spotIndex + 1;
     const counts = " Pinch hitters and pinch runners count as this sub.";
     let text;
     if (state.battingMode === "dp-flex" && spotIndex === state.dpSpot) {
@@ -402,14 +436,15 @@
     if (!state || state.battingMode !== "dp-flex") {
       return { ok: false, illegal: false, reason: "This lineup is not DP / Flex.", text: "" };
     }
-    const spot = state.spots && state.spots[state.dpSpot];
+    const dpIndex = liveDpIndex(state);
+    const spot = state.spots && state.spots[dpIndex];
     const current = spot ? slotCurrent(spot) : "";
     const flexId = String(state.flexId || "");
     const dpId = String(state.dpId || "");
     if (current && current !== dpId && current !== flexId) {
       return { ok: false, illegal: false, reason: "A sub is in the DP spot. Re-enter the DP in that spot.", text: "" };
     }
-    const spotNo = (state.dpSpot >= 0 ? state.dpSpot : 0) + 1;
+    const spotNo = dpIndex + 1;
     if (!state.flexBatting) {
       const dpPos = currentPosition(state.defense, dpId);
       const flexPos = currentPosition(state.defense, flexId);
@@ -661,6 +696,7 @@
       inningIndex: 0,
       half: "top",
       defense: defense,
+      lastFieldPos: rememberFieldPositions(null, defense),
       openingDefense: side === "home" ? cloneDefense(defense) : null,
       defensePlan: plan,
       defensiveOuts: {},
@@ -777,6 +813,7 @@
       outs: current + 1,
       defensiveOuts: addCredit(state.defensiveOuts, ids),
       outLog: (state.outLog || []).concat([ids]),
+      lastFieldPos: rememberFieldPositions(state, state.defense),
       updatedAt: now || Date.now(),
     });
   }
@@ -897,6 +934,7 @@
       defense[position] = nextId;
       return Object.assign({}, state, {
         defense: defense,
+        lastFieldPos: rememberFieldPositions(state, defense),
         flexOnCard: false,
         flexLeft: true,
         flexPos: position,
@@ -924,6 +962,7 @@
     }
     return Object.assign({}, state, {
       defense: defense,
+      lastFieldPos: rememberFieldPositions(state, defense),
       updatedAt: now || Date.now(),
     });
   }
@@ -942,7 +981,12 @@
     });
     const left = Object.assign({}, state.rosterLeft);
     left[id] = state.injuryOut ? "auto-out" : "stay";
-    return Object.assign({}, state, { defense: defense, rosterLeft: left, updatedAt: now || Date.now() });
+    return Object.assign({}, state, {
+      defense: defense,
+      lastFieldPos: rememberFieldPositions(state, defense),
+      rosterLeft: left,
+      updatedAt: now || Date.now(),
+    });
   }
 
   function setCourtesy(state, forId, runnerId, now) {
@@ -1211,7 +1255,7 @@
           label: playerLabel(byId.get(id) || { id: id, name: "Unknown" }),
           outs: outs,
           innings: formatInnings(outs),
-          position: currentPosition(state.defense, id),
+          position: currentPosition(state.defense, id) || ((state.lastFieldPos && state.lastFieldPos[id]) || ""),
         };
       })
       .sort(function (a, b) {
@@ -1270,6 +1314,7 @@
       openingDefense: raw.openingDefense ? cloneDefense(raw.openingDefense) : null,
       defensePlan: Array.isArray(raw.defensePlan) ? raw.defensePlan.map(cloneDefense) : [],
       defensiveOuts: defensiveOuts,
+      lastFieldPos: sanitizeLastFieldPos(raw.lastFieldPos),
       outLog: outLog,
       scheduledInnings: clampScheduledInnings(raw.scheduledInnings),
       tiebreaker: !!raw.tiebreaker,

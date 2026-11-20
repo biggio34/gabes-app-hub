@@ -812,6 +812,52 @@ describe("lineup formats", () => {
   });
 });
 
+describe("live spot and last position", () => {
+  it("names the DP's live batting spot, even if the stored index is stale", () => {
+    const nine = ["mia", "ava", "lina", "noa", "sky", "rory", "quinn", "elle", "jules"];
+    const early = {
+      id: "dp-early",
+      name: "vs. Lions",
+      battingMode: "dp-flex",
+      battingOrder: nine.concat(["blake"]),
+      defensivePositions: Object.assign(GameManager.emptyDefense(), { P: "blake", DP: "mia" }),
+      inningDefenses: [],
+      unavailableIds: [],
+    };
+    let state = GameManager.createLiveGame({ side: "away", game: early, players: players() }, 1);
+    state = Object.assign({}, state, { dpSpot: 5 });
+    const text = GameManager.describeChange(state, { type: "flex" }).text;
+    assert.match(text, /Flex bats for DP in spot 1;/);
+    state = GameManager.swapDpFlex(state, 2);
+    assert.equal(GameManager.liveBatters(state)[0].id, "blake");
+    assert.equal(GameManager.liveBatters(state)[5].id, "rory");
+    const lateOrder = ["ava", "lina", "noa", "sky", "rory", "mia", "quinn", "elle", "jules", "blake"];
+    const late = Object.assign({}, early, { id: "dp-late", battingOrder: lateOrder });
+    const lateState = GameManager.createLiveGame({ side: "away", game: late, players: players() }, 1);
+    assert.match(GameManager.describeChange(lateState, { type: "flex" }).text, /spot 6/);
+  });
+
+  it("names the replaced player's live batting spot", () => {
+    const game = Object.assign({}, sampleGame(), { battingMode: "nine" });
+    const state = GameManager.createLiveGame({ side: "away", game: game, players: players() }, 1);
+    const first = GameManager.describeChange(state, { type: "bat", spot: 0, playerId: "sub" }).text;
+    assert.match(first, /takes Hill's #1 batting spot/);
+    const third = GameManager.describeChange(state, { type: "bat", spot: 2, playerId: "jo" }).text;
+    assert.match(third, /takes Ortiz's #3 batting spot/);
+  });
+
+  it("keeps the last field position after a player leaves the field", () => {
+    const game = Object.assign({}, sampleGame(), { battingMode: "nine" });
+    let state = GameManager.createLiveGame({ side: "home", game: game, players: players() }, 1);
+    state = GameManager.addOut(state, 2);
+    state = GameManager.applySub(state, 0, "sub", false, 3);
+    assert.equal(state.defense.P, "sub");
+    const row = GameManager.defensiveInningRows(state).find((item) => item.id === "mia");
+    assert.equal(row.innings, "0.1");
+    assert.equal(row.position, "P");
+  });
+});
+
 describe("game manager page", () => {
   it("reads lineup data and keeps the dugout game on the phone", () => {
     const html = fs.readFileSync(path.join(__dirname, "../apps/game-manager.html"), "utf8");
