@@ -762,6 +762,7 @@
         + '<button type="button" class="end-game" data-action="ask-runs">End half inning</button>'
         + '<button type="button" class="end-game" id="end-game" data-action="ask-end">End Game</button>'
         + "</div>"
+        + confirmHalfSheet(session)
         + runSheet(session)
         + endSheet(session)
         + pickSheet(session)
@@ -798,6 +799,18 @@
         + '<button type="button" class="big" data-action="choose-side" data-side="away">We are AWAY</button>'
         + '<button type="button" class="big" data-action="choose-side" data-side="home">We are HOME</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
+        + "</div></div>";
+    }
+
+    function confirmHalfSheet(session) {
+      if (sheet !== "confirm-half") return "";
+      var prompt = GameManager.thirdOutPrompt(session);
+      var title = prompt ? prompt.title : "End this half?";
+      return '<div class="sheet" id="confirm-half-sheet"><div class="sheet-card">'
+        + "<h2 id=\"confirm-half-title\">" + esc(title) + "</h2>"
+        + '<p class="hint">Three outs. Confirm to enter the runs for this half.</p>'
+        + '<button type="button" class="big" id="confirm-half" data-action="confirm-half">Confirm</button>'
+        + '<button type="button" class="big plain" id="cancel-third-out" data-action="cancel-third-out">Cancel</button>'
         + "</div></div>";
     }
 
@@ -896,6 +909,13 @@
       if (!button) return;
       var action = button.getAttribute("data-action");
       if (action === "back") {
+        if (sheet === "confirm-half") {
+          var backed = GameManager.undoOut(sessionFor(gameId));
+          sheet = "";
+          remember(backed);
+          render();
+          return;
+        }
         if (sheet) {
           sheet = "";
           runDigits = "";
@@ -948,12 +968,23 @@
         return;
       }
       if (action === "add-out") {
+        var beforeOuts = GameManager.clampOuts(sessionFor(gameId).outs);
         var withOut = GameManager.addOut(sessionFor(gameId));
-        if (withOut.outs === 3) {
-          sheet = "runs";
-          runDigits = "";
-        }
+        if (beforeOuts < 3 && withOut.outs === 3) sheet = "confirm-half";
         remember(withOut);
+        render();
+        return;
+      }
+      if (action === "confirm-half") {
+        sheet = "runs";
+        runDigits = "";
+        render();
+        return;
+      }
+      if (action === "cancel-third-out") {
+        var undone = GameManager.undoOut(sessionFor(gameId));
+        sheet = "";
+        remember(undone);
         render();
         return;
       }

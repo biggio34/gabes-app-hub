@@ -440,6 +440,30 @@ describe("outs", () => {
     assert.equal(state.half, "top");
   });
 
+  it("asks to confirm the half on the third out, and cancel takes that out back", () => {
+    let state = start("away");
+    state = GameManager.addOut(state, 1);
+    state = GameManager.addOut(state, 2);
+    assert.equal(GameManager.thirdOutPrompt(state), null);
+    state = GameManager.addOut(state, 3);
+    assert.deepEqual(GameManager.thirdOutPrompt(state), { title: "End Top 1?", label: "Top 1" });
+    const cancelled = GameManager.undoOut(state, 4);
+    assert.equal(cancelled.outs, 2);
+    assert.equal(GameManager.thirdOutPrompt(cancelled), null);
+    assert.equal(cancelled.half, "top");
+    let bottom = GameManager.recordRuns(start("away"), 0, 5);
+    bottom = GameManager.addOut(bottom, 6);
+    bottom = GameManager.addOut(bottom, 7);
+    bottom = GameManager.addOut(bottom, 8);
+    assert.equal(GameManager.thirdOutPrompt(bottom).title, "End Bottom 1?");
+    const confirmed = bottom;
+    assert.equal(confirmed.outs, 3);
+    const advanced = GameManager.recordRuns(confirmed, 1, 9);
+    assert.equal(advanced.half, "top");
+    assert.equal(advanced.inningIndex, 1);
+    assert.equal(advanced.outs, 0);
+  });
+
   it("keeps the out count on the phone after a refresh", () => {
     let state = start("away");
     state = GameManager.addOut(state, 2);
@@ -570,6 +594,9 @@ describe("game manager page", () => {
     assert.match(html, /id="outs"/);
     assert.match(html, /\+1 Out/);
     assert.match(html, /id="undo-out"/);
+    assert.match(html, /id="confirm-half-sheet"/);
+    assert.match(html, /data-action="confirm-half"/);
+    assert.match(html, /data-action="cancel-third-out"/);
     assert.match(html, /id="tiebreaker"/);
     assert.match(html, /Tiebreaker/);
   });

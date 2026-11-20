@@ -331,6 +331,12 @@
     });
   }
 
+  function thirdOutPrompt(state) {
+    if (!state || state.status !== "live" || clampOuts(state.outs) !== 3) return null;
+    const label = halfLabel(state.inningIndex, state.half);
+    return { title: "End " + label + "?", label: label };
+  }
+
   function undoOut(state, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
     const current = clampOuts(state.outs);
@@ -776,6 +782,7 @@
     clampOuts: clampOuts,
     addOut: addOut,
     undoOut: undoOut,
+    thirdOutPrompt: thirdOutPrompt,
     formatInnings: formatInnings,
     scoreboard: scoreboard,
     endGame: endGame,
