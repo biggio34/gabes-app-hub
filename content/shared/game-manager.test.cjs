@@ -574,6 +574,90 @@ describe("game manager saved games", () => {
   });
 });
 
+describe("scoreboard away-home row order", () => {
+  it("puts Us on top when we are the away team", () => {
+    let state = start("away");
+    state = GameManager.recordRuns(state, 2, 1100);
+    assert.equal(
+      GameManager.liveScoreMeta(state),
+      "In progress · Bottom 1 · Defense · Us 2, Eagles 0",
+    );
+    state = GameManager.recordRuns(state, 1, 1200);
+    const open = GameManager.scoreboardRows(state);
+    assert.deepEqual(open.map((row) => row.side), ["away", "home"]);
+    assert.deepEqual(open.map((row) => row.team), ["us", "opp"]);
+    assert.deepEqual(open.map((row) => row.label), ["Us", "Eagles"]);
+    assert.deepEqual(open[0].cells, [2, null]);
+    assert.deepEqual(open[1].cells, [1, null]);
+    assert.equal(open[0].total, 2);
+    assert.equal(open[1].total, 1);
+    assert.equal(GameManager.scoreLine(state), "Us 2, Eagles 1");
+    assert.equal(GameManager.liveScoreMeta(state), "In progress · Top 2 · Offense · Us 2, Eagles 1");
+    const done = GameManager.endGame(state, 1300);
+    const rows = GameManager.scoreboardRows(done);
+    assert.deepEqual(rows.map((row) => row.label), ["Us", "Eagles"]);
+    assert.deepEqual(rows[0].cells, [2]);
+    assert.deepEqual(rows[1].cells, [1]);
+    assert.equal(GameManager.finalScoreMeta(done), "Final Us 2, Eagles 1");
+  });
+
+  it("puts the opponent on top when we are the home team", () => {
+    let state = start("home");
+    state = GameManager.recordRuns(state, 3, 1100);
+    assert.equal(
+      GameManager.liveScoreMeta(state),
+      "In progress · Bottom 1 · Offense · Eagles 3, Us 0",
+    );
+    state = GameManager.recordRuns(state, 5, 1200);
+    const open = GameManager.scoreboardRows(state);
+    assert.deepEqual(open.map((row) => row.side), ["away", "home"]);
+    assert.deepEqual(open.map((row) => row.team), ["opp", "us"]);
+    assert.deepEqual(open.map((row) => row.label), ["Eagles", "Us"]);
+    assert.deepEqual(open[0].cells, [3, null]);
+    assert.deepEqual(open[1].cells, [5, null]);
+    assert.equal(open[0].total, 3);
+    assert.equal(open[1].total, 5);
+    assert.equal(GameManager.scoreLine(state), "Eagles 3, Us 5");
+    assert.equal(GameManager.liveScoreMeta(state), "In progress · Top 2 · Defense · Eagles 3, Us 5");
+    const done = GameManager.endGame(state, 1300);
+    const rows = GameManager.scoreboardRows(done);
+    assert.deepEqual(rows.map((row) => row.side), ["away", "home"]);
+    assert.deepEqual(rows[0].cells, [3]);
+    assert.deepEqual(rows[1].cells, [5]);
+    assert.equal(GameManager.finalScoreMeta(done), "Final Eagles 3, Us 5");
+  });
+
+  it("shortens a nameless opponent to Opp in the away-home score line", () => {
+    let state = start("home");
+    state = Object.assign({}, state, { gameName: "Saturday Game" });
+    state = GameManager.recordRuns(state, 3, 1100);
+    state = GameManager.recordRuns(state, 5, 1200);
+    assert.equal(GameManager.scoreboardRows(state)[0].label, "Opp");
+    assert.equal(GameManager.scoreboardRows(state)[1].label, "Us");
+    assert.equal(GameManager.scoreLine(state), "Opp 3, Us 5");
+  });
+
+  it("shows the skipped bottom X on our row at the bottom of a home game", () => {
+    let state = start("home", null, 2);
+    state = GameManager.recordRuns(state, 0, 1100);
+    state = GameManager.recordRuns(state, 2, 1200);
+    state = GameManager.recordRuns(state, 0, 1300);
+    assert.equal(state.status, "played");
+    assert.equal(state.endedReason, "home-lead");
+    const rows = GameManager.scoreboardRows(state);
+    assert.deepEqual(rows.map((row) => row.side), ["away", "home"]);
+    assert.equal(rows[0].label, "Eagles");
+    assert.deepEqual(rows[0].cells, [0, 0]);
+    assert.equal(rows[0].total, 0);
+    assert.equal(rows[1].label, "Us");
+    assert.equal(rows[1].team, "us");
+    assert.deepEqual(rows[1].cells, [2, "X"]);
+    assert.equal(rows[1].total, 2);
+    assert.equal(GameManager.scoreLine(state), "Eagles 0, Us 2");
+    assert.equal(GameManager.finalScoreMeta(state), "Final Eagles 0, Us 2");
+  });
+});
+
 describe("lineup formats", () => {
   const nine = ["mia", "ava", "lina", "noa", "sky", "rory", "quinn", "elle", "jules"];
   const rest = ["blake", "remy", "sage"];
@@ -897,5 +981,12 @@ describe("game manager page", () => {
     assert.match(html, /id="sub-effect"/);
     assert.match(html, /id="confirm-sub"/);
     assert.match(html, /id="due-wrap"/);
+    assert.match(html, /GameManager\.scoreboardRows\(/);
+    assert.match(html, /GameManager\.scoreLine\(/);
+    assert.match(html, /GameManager\.liveScoreMeta\(/);
+    assert.match(html, /GameManager\.finalScoreMeta\(/);
+    assert.equal(html.includes('class="who">Us'), false);
+    assert.equal(html.includes('usTotal + "–"'), false);
+    assert.equal(html.includes("finalUs"), false);
   });
 });

@@ -656,27 +656,32 @@
 
     function scoreboardHtml(state) {
       var board = GameManager.scoreboard(state);
-      var opp = GameManager.opponentLabel(state.gameName);
-      var oppName = opp === "Opponent" ? "Opp" : opp;
-      function line(pick) {
-        return board.innings.map(function (inn) {
-          var shown = cell(pick(inn));
+      var rows = GameManager.scoreboardRows(state);
+      function cells(values) {
+        return board.innings.map(function (inn, index) {
+          var shown = cell(values[index]);
           var skip = shown === "X" ? " skip" : "";
           return '<div class="inn' + (inn.current ? " now" : "") + skip + '">' + esc(shown) + "</div>";
         }).join("");
       }
+      function teamLine(row) {
+        return '<div class="who">' + esc(row.label) + "</div>"
+          + '<div class="scroll"><div class="line">' + cells(row.cells) + "</div></div>"
+          + '<div class="run">' + row.total + "</div>";
+      }
+      var numbers = board.innings.map(function (inn) { return inn.inning; });
       return ''
         + '<div class="board" id="scoreboard">'
-        + '<div class="who"></div><div class="scroll"><div class="line">' + line(function (inn) { return inn.inning; }) + '</div></div><div class="run-h">R</div>'
-        + '<div class="who">Us</div><div class="scroll"><div class="line">' + line(function (inn) { return inn.us; }) + '</div></div><div class="run">' + board.usTotal + "</div>"
-        + '<div class="who">' + esc(oppName) + '</div><div class="scroll"><div class="line">' + line(function (inn) { return inn.opp; }) + '</div></div><div class="run">' + board.oppTotal + "</div>"
+        + '<div class="who"></div><div class="scroll"><div class="line">' + cells(numbers) + '</div></div><div class="run-h">R</div>'
+        + teamLine(rows[0])
+        + teamLine(rows[1])
         + "</div>";
     }
 
     function bannerHtml(state) {
       var board = GameManager.scoreboard(state);
       if (state.status !== "live") {
-        return '<div id="half-indicator" class="banner final"><p class="half">Final</p><p class="role">' + board.usTotal + "–" + board.oppTotal + "</p></div>";
+        return '<div id="half-indicator" class="banner final"><p class="half">Final</p><p class="role">' + esc(GameManager.scoreLine(state)) + "</p></div>";
       }
       var role = board.role === "defense" ? "DEFENSE" : "OFFENSE";
       if (board.extra) role = "EXTRA · " + role;
@@ -806,11 +811,7 @@
     }
 
     function listMeta(game, session) {
-      if (session && session.status === "live") {
-        var board = GameManager.scoreboard(session);
-        var role = board.role === "defense" ? "Defense" : "Offense";
-        return "In progress · " + board.label + " · " + role + " · " + board.usTotal + "–" + board.oppTotal;
-      }
+      if (session && session.status === "live") return GameManager.liveScoreMeta(session);
       var count = (game.battingOrder || []).length;
       if (!count) return "No batting order yet";
       return count === 1 ? "1 batter" : count + " batters";
@@ -854,7 +855,7 @@
           var session = row.session;
           return '<button type="button" class="game-btn" data-action="open-played" data-game="' + esc(session.lineupGameId) + '">'
             + "<strong>" + esc((game && game.name) || session.gameName || "Game") + "</strong>"
-            + "<span>Final " + (session.finalUs || 0) + "–" + (session.finalOpp || 0) + "</span></button>";
+            + "<span>" + esc(GameManager.finalScoreMeta(session)) + "</span></button>";
         }).join("")
         : "";
       return '<div class="wrap" data-screen="list">'
@@ -1016,7 +1017,6 @@
     function renderPlayed() {
       var session = namedSession(sessionFor(gameId));
       if (!session) return renderList();
-      var board = GameManager.scoreboard(session);
       var format = GameManager.formatInfo(session.battingMode);
       return '<div class="wrap" id="ended-summary" data-screen="played">'
         + '<div class="topbar">'
@@ -1025,7 +1025,7 @@
         + bannerHtml(session)
         + "</div>"
         + "<main>"
-        + '<p class="empty" id="final-note">Final ' + board.usTotal + "–" + board.oppTotal + ". "
+        + '<p class="empty" id="final-note">' + esc(GameManager.finalScoreMeta(session)) + ". "
         + esc(GameManager.endNote(session) || "Defensive innings are locked in.")
         + "</p>"
         + trackerHtml(session, false)
@@ -1082,11 +1082,9 @@
 
     function endSheet(session) {
       if (sheet !== "end") return "";
-      var board = GameManager.scoreboard(session);
-      var opp = GameManager.opponentLabel(session.gameName);
       return '<div class="sheet" id="end-sheet"><div class="sheet-card">'
         + "<h2>End this game?</h2>"
-        + "<p>Us " + board.usTotal + ", " + esc(opp) + " " + board.oppTotal + ". The score and defensive innings so far will be saved. This game leaves the not-yet-played list.</p>"
+        + "<p>" + esc(GameManager.scoreLine(session)) + ". The score and defensive innings so far will be saved. This game leaves the not-yet-played list.</p>"
         + '<button type="button" class="big" id="confirm-end-game" data-action="confirm-end">End game</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Keep playing</button>'
         + "</div></div>";

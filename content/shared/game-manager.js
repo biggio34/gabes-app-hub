@@ -1088,6 +1088,46 @@
     };
   }
 
+  function displayOpponent(gameName) {
+    const name = opponentLabel(gameName);
+    return name === "Opponent" ? "Opp" : name;
+  }
+
+  function scoreboardRows(state) {
+    const board = scoreboard(state);
+    const home = Boolean(state && state.side === "home");
+    const us = {
+      team: "us",
+      side: home ? "home" : "away",
+      label: "Us",
+      cells: board.innings.map(function (inn) { return inn.us; }),
+      total: board.usTotal,
+    };
+    const opp = {
+      team: "opp",
+      side: home ? "away" : "home",
+      label: displayOpponent(state && state.gameName),
+      cells: board.innings.map(function (inn) { return inn.opp; }),
+      total: board.oppTotal,
+    };
+    return home ? [opp, us] : [us, opp];
+  }
+
+  function scoreLine(state) {
+    const rows = scoreboardRows(state);
+    return rows[0].label + " " + rows[0].total + ", " + rows[1].label + " " + rows[1].total;
+  }
+
+  function liveScoreMeta(state) {
+    const board = scoreboard(state);
+    const role = board.role === "defense" ? "Defense" : "Offense";
+    return "In progress · " + board.label + " · " + role + " · " + scoreLine(state);
+  }
+
+  function finalScoreMeta(state) {
+    return "Final " + scoreLine(state);
+  }
+
   function endGame(state, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
     const board = scoreboard(Object.assign({}, state, { status: "played" }));
@@ -1424,6 +1464,10 @@
     thirdOutPrompt: thirdOutPrompt,
     formatInnings: formatInnings,
     scoreboard: scoreboard,
+    scoreboardRows: scoreboardRows,
+    scoreLine: scoreLine,
+    liveScoreMeta: liveScoreMeta,
+    finalScoreMeta: finalScoreMeta,
     endGame: endGame,
     unplayedGames: unplayedGames,
     playedEntries: playedEntries,
