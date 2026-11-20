@@ -1,8 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { gameManagerAllowed } from "./areas.ts";
 import { hubApps, rewriteAppHtml } from "./catalog.ts";
 
 describe("hub apps", () => {
+  it("gives Game Manager to admins and not to a Softball login", () => {
+    const app = hubApps.find((item) => item.slug === "game-manager");
+    assert.ok(app);
+    assert.equal(app?.area, "softball");
+    assert.equal(app?.file, "game-manager.html");
+    assert.equal(app?.requiresFeature, "admin");
+    const lineup = hubApps.findIndex((item) => item.slug === "lineup");
+    const manager = hubApps.findIndex((item) => item.slug === "game-manager");
+    assert.equal(manager, lineup + 1);
+    assert.equal(gameManagerAllowed({ role: "owner" }), true);
+    assert.equal(gameManagerAllowed({ role: "member" }), false);
+  });
+
   it("gives Scorekeeper to every Softball login", () => {
     const app = hubApps.find((item) => item.slug === "scorekeeper");
     assert.ok(app);

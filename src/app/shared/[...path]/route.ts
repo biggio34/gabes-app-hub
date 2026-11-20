@@ -1,7 +1,8 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { gameManagerAllowed, getSession } from "@/lib/auth";
+import { findUserById } from "@/lib/users";
 
 const types: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
@@ -21,6 +22,13 @@ export async function GET(
   const relative = parts.join("/");
   if (relative.includes("..")) {
     return new NextResponse("Not found", { status: 404 });
+  }
+
+  if (relative === "game-manager.js") {
+    const stored = await findUserById(session.id);
+    if (!gameManagerAllowed({ role: stored?.role ?? session.role })) {
+      return new NextResponse("You do not have access to Game Manager.", { status: 403 });
+    }
   }
 
   const filePath = path.join(process.cwd(), "content/shared", relative);

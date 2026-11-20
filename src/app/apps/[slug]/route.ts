@@ -1,7 +1,7 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
-import { canAccessArea, getSession, wristCoachAllowed } from "@/lib/auth";
+import { canAccessArea, gameManagerAllowed, getSession, wristCoachAllowed } from "@/lib/auth";
 import { findUserById } from "@/lib/users";
 import { hubApps, rewriteAppHtml } from "@/lib/catalog";
 import { softballContext } from "@/lib/softball";
@@ -33,6 +33,12 @@ export async function GET(
       })
     ) {
       return new NextResponse("You do not have access to Wrist Coach.", { status: 403 });
+    }
+  }
+  if (app.requiresFeature === "admin") {
+    const stored = await findUserById(session.id);
+    if (!gameManagerAllowed({ role: stored?.role ?? session.role })) {
+      return new NextResponse("You do not have access to Game Manager.", { status: 403 });
     }
   }
 

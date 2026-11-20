@@ -70,3 +70,8 @@ export function wristCoachAllowed(user: {
   if (user.role === "owner") return true;
   return user.areas.includes("softball") && (user.features ?? []).includes(WRIST_COACH_FEATURE);
 }
+
+/** Game Manager is the owner account only. A Softball login is not enough. */
+export function gameManagerAllowed(user: { role: string }) {
+  return user.role === "owner";
+}

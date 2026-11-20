@@ -3,7 +3,7 @@ import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
 import type { NextResponse } from "next/server";
 import type { Area, HubFeature, Role } from "./areas";
-import { wristCoachAllowed } from "./areas";
+import { gameManagerAllowed, wristCoachAllowed } from "./areas";
 import { SESSION_COOKIE, SESSION_SECRET } from "./session-cookie";
 
 export { SESSION_COOKIE };
@@ -92,7 +92,7 @@ export function canAccessArea(user: SessionUser, area: Area) {
   return user.role === "owner" || user.areas.includes(area);
 }
 
-export { wristCoachAllowed };
+export { gameManagerAllowed, wristCoachAllowed };
 
 export function canUseWristCoach(user: SessionUser) {
   return wristCoachAllowed(user);
