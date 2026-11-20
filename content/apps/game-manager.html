@@ -142,6 +142,23 @@
     .track:last-child { border-radius: 0 0 16px 16px; }
     .track:only-child { border-radius: 16px; }
 
+    #ended-summary .track {
+      min-height: 36px;
+      padding: 2px 10px;
+    }
+
+    #ended-summary .track b { font-size: 1.2rem; }
+
+    #ended-summary .empty { padding: 10px 12px; }
+
+    #ended-summary .board .who,
+    #ended-summary .board .run,
+    #ended-summary .board .run-h,
+    #ended-summary .inn { min-height: 32px; }
+
+    #ended-summary .banner { padding: 8px 14px; }
+    #ended-summary .banner .half { font-size: 1.35rem; }
+
     .track b, .run {
       margin-left: auto;
       font-size: 1.7rem;
@@ -193,11 +210,32 @@
     }
     .inn.now { background: var(--gold); }
 
-    .due {
+    .due, .role-tag {
       margin-left: auto;
       font-size: 0.95rem;
       font-weight: 900;
       color: var(--red);
+      flex: none;
+    }
+
+    .format-badge {
+      display: inline-block;
+      margin: 8px 0 0;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #1a1208;
+      color: #fff;
+      font-weight: 900;
+    }
+
+    .sub-btn {
+      min-height: 44px;
+      min-width: 64px;
+      margin-left: 8px;
+      border-radius: 12px;
+      border: 2px solid var(--line);
+      background: #fff;
+      font-weight: 900;
       flex: none;
     }
 
@@ -407,6 +445,15 @@
       line-height: 1.2;
     }
 
+    [data-screen="detail"] .mini {
+      padding: 3px 1px;
+      font-size: 0.88rem;
+      line-height: 1.15;
+    }
+
+    [data-screen="detail"] h2 { margin: 8px 0 4px; }
+    [data-screen="detail"] .empty { padding: 8px 10px; }
+
     .empty {
       border: 2px dashed var(--line);
       border-radius: 16px;
@@ -433,6 +480,9 @@
     var pickPos = "";
     var runDigits = "";
     var plannedInnings = 7;
+    var subSpot = 0;
+    var pendingSub = null;
+    var illegalReason = "";
     var loadNote = "";
     var booting = true;
     var loadToken = 0;
@@ -648,8 +698,9 @@
         + (on ? '<p id="tiebreaker-indicator" class="tie-note">Tiebreaker · runner on 2nd</p>' : "");
     }
 
-    function trackerRows(state) {
+    function trackerRows(state, playedOnly) {
       var rows = GameManager.defensiveInningRows(namedSession(state));
+      if (playedOnly) rows = rows.filter(function (row) { return row.outs > 0; });
       if (!rows.length) return '<p class="empty">No defensive innings yet.</p>';
       return rows.map(function (row) {
         return '<div class="track"><span>' + esc(row.label) + "</span>"
@@ -659,7 +710,7 @@
     }
 
     function trackerHtml(state, folded) {
-      var body = trackerRows(state);
+      var body = trackerRows(state, !folded);
       if (folded) {
         return '<details id="defensive-innings" class="innings-fold"><summary>Defensive innings</summary>' + body + "</details>";
       }
@@ -667,14 +718,17 @@
     }
 
     function battingOrderHtml(session) {
-      var view = GameManager.lineupView(session.lineupSnapshot || { battingOrder: [], name: session.gameName }, session.players);
-      if (!view.batting.length) return "<h2>Batting order</h2>" + '<p class="empty">No batting order in this lineup.</p>';
+      var rowsIn = GameManager.liveBatters(session);
+      if (!rowsIn.length) return '<h2 id="batting-order">Batting order</h2><p class="empty">No batting order in this lineup.</p>';
       var tags = ["Due up", "On deck", "In the hole"];
-      var rows = view.batting.map(function (row, index) {
+      var canSub = session.battingMode && session.battingMode !== "roster";
+      var rows = rowsIn.map(function (row, index) {
         var tag = index < tags.length ? '<span class="due">' + tags[index] + "</span>" : "";
-        return '<div class="row"><span class="num">' + row.order + "</span><span>" + esc(row.label) + "</span>" + tag + "</div>";
+        var role = row.role ? '<span class="role-tag">' + esc(row.role) + "</span>" : "";
+        var sub = canSub ? '<button type="button" class="sub-btn" data-action="ask-sub" data-spot="' + index + '">Sub</button>' : "";
+        return '<div class="row"><span class="num">' + row.order + "</span><span>" + esc(row.label) + "</span>" + role + tag + sub + "</div>";
       }).join("");
-      return '<h2 id="batting-order">Batting order</h2>' + rows;
+      return '<h2 id="batting-order">Batting order</h2>' + swapButton(session) + rows;
     }
 
     function defenseEditorHtml(session) {
@@ -687,7 +741,14 @@
       }).join("");
       return "<h2>Defensive lineup</h2>"
         + '<p class="hint">Tap a position to swap. Each out is 1/3 inning for the players on the field then.</p>'
+        + swapButton(session)
         + defense;
+    }
+
+    function swapButton(session) {
+      if (!session || session.battingMode !== "dp-flex") return "";
+      return '<button type="button" class="end-game" id="swap-dp-flex" data-action="swap-dp-flex">'
+        + (session.flexBatting ? "DP bats again" : "Flex bats for DP") + "</button>";
     }
 
     function listMeta(game, session) {
@@ -756,7 +817,8 @@
       if (!rows.length) return '<p class="hint">' + esc(emptyText) + "</p>";
       return rows.map(function (row) {
         var tag = row.order ? String(row.order) : (row.pos || "");
-        return '<div class="mini"><span class="pos">' + esc(tag) + "</span><span>" + esc(row.label) + "</span></div>";
+        var role = row.role ? '<span class="role-tag">' + esc(row.role) + "</span>" : "";
+        return '<div class="mini"><span class="pos">' + esc(tag) + "</span><span>" + esc(row.label) + "</span>" + role + "</div>";
       }).join("");
     }
 
@@ -764,18 +826,25 @@
       var game = findGame(gameId);
       if (!game) return renderList();
       var lineup = GameManager.lineupView(game, bundle().players);
+      var field = (lineup.defense || []).filter(function (row) {
+        return GameManager.FIELD_POSITIONS.indexOf(row.pos) >= 0;
+      });
       var subs = lineup.subs.length
         ? lineup.subs.map(function (row) { return esc(row.label); }).join(", ")
         : "No subs.";
       var out = lineup.out.length ? '<p class="hint">Out: ' + lineup.out.map(function (row) { return esc(row.label); }).join(", ") + "</p>" : "";
+      var flexLine = lineup.flexLabel ? '<p class="hint" id="flex-note">Flex: ' + esc(lineup.flexLabel) + ". Plays defense and does not bat unless swapped with the DP.</p>" : "";
       return '<div class="wrap" data-screen="detail">'
         + headerHtml(lineup.name, teamName, "Games")
+        + '<p class="format-badge" id="lineup-format">' + esc(lineup.formatLabel || "Bat the roster") + "</p>"
+        + '<p class="hint">' + esc(lineup.formatDetail || "") + "</p>"
         + "<main>"
         + '<div class="lineup-grid">'
         + '<section class="panel"><h2>Batting order</h2>' + miniList(lineup.batting, "No batting order yet.") + "</section>"
-        + '<section class="panel"><h2>Defense</h2>' + miniList(lineup.defense, "No defensive lineup yet.") + "</section>"
+        + '<section class="panel"><h2>Defense</h2>' + miniList(field, "No defensive lineup yet.") + "</section>"
         + "</div>"
         + '<h2>Subs</h2><p class="empty">' + subs + "</p>"
+        + flexLine
         + out
         + '<p class="hint">Defense is inning 1 from Lineup Builder. You can change it after the game starts.</p>'
         + "</main>"
@@ -788,9 +857,10 @@
       var session = namedSession(sessionFor(gameId));
       if (!session || session.status !== "live") return renderList();
       var onDefense = GameManager.roleFor(session.side, session.half) === "defense";
+      var format = GameManager.formatInfo(session.battingMode);
       return '<div class="wrap" data-screen="live">'
         + '<div class="topbar">'
-        + headerHtml(session.gameName, teamName + " · Saved on this phone", "Games")
+        + headerHtml(session.gameName, format.label + " · " + teamName, "Games")
         + scoreboardHtml(session)
         + bannerHtml(session)
         + outsHtml(session)
@@ -811,16 +881,45 @@
         + runSheet(session)
         + endSheet(session)
         + pickSheet(session)
+        + subSheet(session)
+        + illegalSheet()
         + "</div>";
+    }
+
+    function subSheet(session) {
+      if (sheet !== "sub") return "";
+      var options = (session.players || []).filter(function (player) {
+        return GameManager.subChoice(session, subSpot, player.id).ok || GameManager.subChoice(session, subSpot, player.id).illegal;
+      });
+      var buttons = options.map(function (player) {
+        var choice = GameManager.subChoice(session, subSpot, player.id);
+        var note = choice.illegal ? " · Illegal" : choice.kind === "reenter" ? " · Re-enter" : "";
+        return '<button type="button" class="pick" data-action="pick-sub" data-player="' + esc(player.id) + '">'
+          + esc(GameManager.playerLabel(player) + note) + "</button>";
+      }).join("");
+      return '<div class="sheet" id="sub-sheet"><div class="sheet-card"><h2>Sub this spot</h2>'
+        + (buttons || '<p class="empty">No one can enter this spot.</p>')
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
+    }
+
+    function illegalSheet() {
+      if (sheet !== "illegal") return "";
+      return '<div class="sheet" id="illegal-sheet"><div class="sheet-card">'
+        + "<h2>Illegal re-entry</h2>"
+        + "<p>" + esc(illegalReason || "That player cannot legally come back.") + "</p>"
+        + '<button type="button" class="big" id="force-sub" data-action="force-sub">Enter anyway</button>'
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
+        + "</div></div>";
     }
 
     function renderPlayed() {
       var session = namedSession(sessionFor(gameId));
       if (!session) return renderList();
       var board = GameManager.scoreboard(session);
+      var format = GameManager.formatInfo(session.battingMode);
       return '<div class="wrap" id="ended-summary" data-screen="played">'
         + '<div class="topbar">'
-        + headerHtml(session.gameName, "Played · saved on this phone", "Games")
+        + headerHtml(session.gameName, "Final · " + format.label, "Games")
         + scoreboardHtml(session)
         + bannerHtml(session)
         + "</div>"
@@ -895,7 +994,9 @@
     function pickSheet(session) {
       if (sheet !== "pick") return "";
       var current = session.defense && session.defense[pickPos] ? String(session.defense[pickPos]) : "";
-      var options = (session.players || []).slice().sort(function (a, b) {
+      var options = (session.players || []).filter(function (player) {
+        return GameManager.playerMayField(session, player.id);
+      }).sort(function (a, b) {
         return GameManager.playerLabel(a).localeCompare(GameManager.playerLabel(b));
       });
       var buttons = '<button type="button" class="pick" data-action="assign" data-player="">Empty</button>'
@@ -1017,6 +1118,41 @@
         var withOut = GameManager.addOut(sessionFor(gameId));
         if (beforeOuts < 3 && withOut.outs === 3) sheet = "confirm-half";
         remember(withOut);
+        render();
+        return;
+      }
+      if (action === "ask-sub") {
+        subSpot = parseInt(button.getAttribute("data-spot"), 10) || 0;
+        sheet = "sub";
+        render();
+        return;
+      }
+      if (action === "pick-sub") {
+        var incoming = button.getAttribute("data-player");
+        var choice = GameManager.subChoice(sessionFor(gameId), subSpot, incoming);
+        if (!choice.ok && choice.illegal) {
+          pendingSub = { spot: subSpot, playerId: incoming };
+          illegalReason = choice.reason;
+          sheet = "illegal";
+          render();
+          return;
+        }
+        if (!choice.ok) return;
+        remember(GameManager.applySub(sessionFor(gameId), subSpot, incoming, false));
+        sheet = "";
+        render();
+        return;
+      }
+      if (action === "force-sub") {
+        if (!pendingSub) return;
+        remember(GameManager.applySub(sessionFor(gameId), pendingSub.spot, pendingSub.playerId, true));
+        pendingSub = null;
+        sheet = "";
+        render();
+        return;
+      }
+      if (action === "swap-dp-flex") {
+        remember(GameManager.swapDpFlex(sessionFor(gameId)));
         render();
         return;
       }

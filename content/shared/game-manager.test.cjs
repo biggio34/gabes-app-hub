@@ -574,6 +574,123 @@ describe("game manager saved games", () => {
   });
 });
 
+describe("lineup formats", () => {
+  const nine = ["mia", "ava", "lina", "noa", "sky", "rory", "quinn", "elle", "jules"];
+  const rest = ["blake", "remy", "sage"];
+
+  function card(mode, order, defense) {
+    return {
+      id: "fmt-" + mode,
+      name: "vs. Format",
+      battingMode: mode,
+      battingOrder: order,
+      defensivePositions: Object.assign(GameManager.emptyDefense(), defense || {}),
+      inningDefenses: [Object.assign(GameManager.emptyDefense(), defense || {})],
+      unavailableIds: [],
+    };
+  }
+
+  it("bats the whole roster and allows a free defensive sub", () => {
+    const order = nine.concat(rest);
+    const game = card("roster", order, { P: "mia", C: "ava", SS: "lina" });
+    const view = GameManager.lineupView(game, players());
+    assert.equal(view.formatLabel, "Bat the roster");
+    assert.equal(view.batting.length, 12);
+    let state = GameManager.createLiveGame({ side: "away", game: game, players: players() }, 1);
+    assert.equal(state.battingMode, "roster");
+    state = GameManager.recordRuns(state, 0, 2);
+    state = GameManager.setDefense(state, "P", "blake", 3);
+    state = GameManager.addOut(state, 4);
+    assert.equal(state.defensiveOuts.blake, 1);
+    assert.equal(state.defensiveOuts.mia || 0, 0);
+    assert.equal(GameManager.liveBatters(state).length, 12);
+  });
+
+  it("bats 9, puts a sub in the starter's spot, and warns on a second re-entry", () => {
+    const game = card("nine", nine, { P: "mia", C: "ava" });
+    const view = GameManager.lineupView(game, players());
+    assert.equal(view.formatLabel, "Bat 9");
+    assert.equal(view.batting.length, 9);
+    assert.ok(view.subs.some((row) => row.id === "sub"));
+    let state = GameManager.createLiveGame({ side: "away", game: game, players: players() }, 1);
+    state = GameManager.applySub(state, 0, "sub", false, 2);
+    assert.equal(GameManager.liveBatters(state)[0].id, "sub");
+    assert.match(GameManager.liveBatters(state)[0].label, /Nia Brooks/);
+    state = GameManager.applySub(state, 0, "mia", false, 3);
+    assert.equal(GameManager.liveBatters(state)[0].id, "mia");
+    state = GameManager.applySub(state, 0, "jo", false, 4);
+    const again = GameManager.subChoice(state, 0, "mia");
+    assert.equal(again.illegal, true);
+    assert.match(again.reason, /only once/);
+    assert.throws(() => GameManager.applySub(state, 0, "sub", false, 5), /cannot re-enter/);
+  });
+
+  it("plays DP / Flex with 9 batters, a fielding Flex, and a role swap", () => {
+    const order = nine.concat(["blake"]);
+    const game = card("dp-flex", order, { P: "blake", C: "ava", DP: "mia" });
+    const view = GameManager.lineupView(game, players());
+    assert.equal(view.formatLabel, "DP / Flex");
+    assert.equal(view.batting.length, 9);
+    assert.equal(view.flexId, "blake");
+    assert.equal(view.batting.some((row) => row.id === "blake"), false);
+    assert.equal(view.batting[0].role, "DP");
+    let state = GameManager.createLiveGame({ side: "home", game: game, players: players() }, 1);
+    state = GameManager.addOut(state, 2);
+    assert.equal(state.defensiveOuts.blake, 1);
+    assert.equal(state.defensiveOuts.mia || 0, 0);
+    assert.equal(GameManager.playerMayField(state, "mia"), false);
+    assert.throws(() => GameManager.setDefense(state, "SS", "mia", 3), /only after swapping/);
+    state = GameManager.swapDpFlex(state, 3);
+    assert.equal(GameManager.liveBatters(state).find((row) => row.role === "Flex").id, "blake");
+    assert.equal(state.defense.P, "mia");
+    assert.equal(GameManager.playerMayField(state, "mia"), true);
+    assert.equal(GameManager.playerMayField(state, "blake"), false);
+    state = GameManager.addOut(state, 4);
+    assert.equal(state.defensiveOuts.blake, 1);
+    assert.equal(state.defensiveOuts.mia, 1);
+    assert.equal(GameManager.formatInnings(state.defensiveOuts.mia), "0.1");
+    const stored = GameManager.gamesFromLineupRecord({
+      games: [game],
+      removedGameIds: [],
+    });
+    assert.equal(stored[0].battingMode, "dp-flex");
+  });
+
+  it("bats an extra hitter in the 10th spot", () => {
+    const order = nine.concat(["blake"]);
+    const game = card("one-ap", order, { P: "mia" });
+    const view = GameManager.lineupView(game, players());
+    assert.equal(view.formatLabel, "Extra hitter");
+    assert.equal(view.batting.length, 10);
+    assert.equal(view.batting[9].role, "EH");
+    assert.equal(view.batting[9].id, "blake");
+    let state = GameManager.createLiveGame({ side: "away", game: game, players: players() }, 1);
+    state = GameManager.applySub(state, 0, "sub", false, 2);
+    assert.equal(GameManager.liveBatters(state)[0].id, "sub");
+    assert.equal(GameManager.liveBatters(state)[9].role, "EH");
+    assert.equal(GameManager.liveBatters(state)[9].id, "blake");
+  });
+
+  it("bats two extra hitters and warns before an illegal re-entry", () => {
+    const order = nine.concat(["blake", "remy"]);
+    const game = card("two-ap", order, { P: "mia" });
+    const view = GameManager.lineupView(game, players());
+    assert.equal(view.formatLabel, "Two extra hitters");
+    assert.equal(view.batting.length, 11);
+    assert.equal(view.batting[9].role, "EH");
+    assert.equal(view.batting[10].role, "EH");
+    let state = GameManager.createLiveGame({ side: "away", game: game, players: players() }, 1);
+    state = GameManager.applySub(state, 10, "sage", false, 2);
+    assert.equal(GameManager.liveBatters(state)[10].id, "sage");
+    assert.equal(GameManager.liveBatters(state)[10].role, "EH");
+    state = GameManager.applySub(state, 10, "remy", false, 3);
+    state = GameManager.applySub(state, 10, "jo", false, 4);
+    const again = GameManager.subChoice(state, 10, "remy");
+    assert.equal(again.illegal, true);
+    assert.match(again.reason, /only once/);
+  });
+});
+
 describe("game manager page", () => {
   it("reads lineup data and keeps the dugout game on the phone", () => {
     const html = fs.readFileSync(path.join(__dirname, "../apps/game-manager.html"), "utf8");
@@ -604,5 +721,11 @@ describe("game manager page", () => {
     assert.match(html, /data-action="cancel-third-out"/);
     assert.match(html, /id="tiebreaker"/);
     assert.match(html, /Tiebreaker/);
+    assert.match(html, /id="lineup-format"/);
+    assert.match(html, /data-action="ask-sub"/);
+    assert.match(html, /data-action="swap-dp-flex"/);
+    assert.match(html, /id="illegal-sheet"/);
+    assert.match(html, /Illegal re-entry/);
+    assert.match(html, /playerMayField/);
   });
 });
