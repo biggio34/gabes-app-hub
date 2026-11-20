@@ -592,6 +592,10 @@ describe("game manager page", () => {
     assert.match(html, /id="ended-summary"/);
     assert.match(html, /id="inning-count"/);
     assert.match(html, /id="outs"/);
+    assert.match(html, /Due up/);
+    assert.match(html, /On deck/);
+    assert.match(html, /In the hole/);
+    assert.match(html, /id="batting-order"/);
     assert.match(html, /\+1 Out/);
     assert.match(html, /id="undo-out"/);
     assert.match(html, /id="confirm-half-sheet"/);
