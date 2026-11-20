@@ -52,6 +52,14 @@ export const hubApps: HubApp[] = [
     area: "softball",
   },
   {
+    slug: "game-manager",
+    file: "game-manager.html",
+    title: "Game Manager",
+    description:
+      "Dugout scoreboard for a Lineup Builder game. Innings, offense or defense, and who played the field. Stays on your phone.",
+    area: "softball",
+  },
+  {
     slug: "scorekeeper",
     file: "scorekeeper.html",
     title: "Scorekeeper",
@@ -131,6 +139,8 @@ export const pathRewrites: Record<string, string> = {
   "/minnesota-elks-practice-planner": "/apps/practice-planner",
   "/elks-lineup/": "/apps/lineup",
   "/elks-lineup": "/apps/lineup",
+  "/game-manager/": "/apps/game-manager",
+  "/game-manager": "/apps/game-manager",
   "/scorekeeper/": "/apps/scorekeeper",
   "/scorekeeper": "/apps/scorekeeper",
   "/mn-elks-team-formation/": "/apps/team-formation",

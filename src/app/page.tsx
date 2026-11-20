@@ -90,11 +90,12 @@ export default async function HubHome() {
               {area === "softball" ? (
                 <p className="mb-3 text-sm text-slate-400">
                   Teams you add on People show in Roster, Lineup, Team
-                  Formation, Tryouts, and Practice Planner. Scorekeeper and
-                  Cage Crush are on for every Softball login. Wrist Coach is a
-                  separate checkbox — not every Softball login gets it. Start
-                  with Team Roster — one People id per girl, card plus season
-                  history, jersey number per year.
+                  Formation, Tryouts, and Practice Planner. Scorekeeper, Game
+                  Manager, and Cage Crush are on for every Softball login.
+                  Game Manager uses the games you save in Lineup Builder.
+                  Wrist Coach is a separate checkbox — not every Softball login
+                  gets it. Start with Team Roster — one People id per girl,
+                  card plus season history, jersey number per year.
                 </p>
               ) : null}
               {area === "luna-haus" && showCheckIn ? (

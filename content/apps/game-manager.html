@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#fff4d6">
+  <title>Game Manager</title>
+  <style>
+    :root {
+      --ink: #1a1208;
+      --paper: #fff4d6;
+      --card: #fffdf8;
+      --line: #1a1208;
+      --red: #9f1239;
+      --gold: #f5d90a;
+      --blue: #0b3a82;
+      --muted: #4a4034;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { margin: 0; min-height: 100%; }
+
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      font-size: 18px;
+      line-height: 1.3;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button, select { font: inherit; color: inherit; touch-action: manipulation; }
+    button { cursor: pointer; }
+    button:active { transform: scale(0.98); }
+
+    .wrap {
+      width: min(480px, 100%);
+      margin: 0 auto;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      padding: max(8px, env(safe-area-inset-top)) 14px 0;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: var(--paper);
+      padding-bottom: 8px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 52px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      line-height: 1.15;
+    }
+
+    header p, .hint, .note {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+      font-weight: 700;
+    }
+
+    .grow { flex: 1; min-width: 0; }
+
+    .ghost, .team-select {
+      min-height: 48px;
+      border: 2px solid var(--line);
+      background: var(--card);
+      border-radius: 14px;
+      font-weight: 800;
+      padding: 8px 12px;
+    }
+
+    .team-select { width: 100%; margin: 8px 0 12px; }
+
+    h2 {
+      margin: 16px 0 8px;
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .game-btn, .row, .pos-btn, .track, .pick {
+      width: 100%;
+      border: 2px solid var(--line);
+      background: var(--card);
+      border-radius: 16px;
+      text-align: left;
+    }
+
+    .game-btn {
+      display: block;
+      min-height: 76px;
+      padding: 14px 16px;
+      margin: 0 0 10px;
+    }
+
+    .game-btn strong { display: block; font-size: 1.2rem; }
+    .game-btn span { display: block; margin-top: 4px; font-weight: 700; color: var(--muted); }
+    .game-btn.live { background: var(--gold); }
+    .game-btn.live span { color: var(--ink); }
+
+    .row, .pos-btn, .track, .pick {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 56px;
+      padding: 8px 12px;
+      margin: 0 0 8px;
+      font-weight: 800;
+    }
+
+    .num, .pos {
+      width: 2.7rem;
+      flex: none;
+      font-weight: 900;
+    }
+
+    .track {
+      border-left-width: 2px;
+      border-right-width: 2px;
+      border-top-width: 0;
+      border-radius: 0;
+      margin: 0;
+    }
+
+    .track:first-child { border-top-width: 2px; border-radius: 16px 16px 0 0; }
+    .track:last-child { border-radius: 0 0 16px 16px; }
+    .track:only-child { border-radius: 16px; }
+
+    .track b, .run {
+      margin-left: auto;
+      font-size: 1.7rem;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      min-width: 1.6rem;
+      text-align: right;
+    }
+
+    .spot { margin-left: auto; font-weight: 900; }
+
+    .board {
+      display: grid;
+      grid-template-columns: 5.4rem minmax(0, 1fr) 3rem;
+      border: 2px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .who, .run, .run-h {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      font-weight: 900;
+      border-top: 2px solid var(--line);
+      padding: 4px;
+      text-align: center;
+    }
+
+    .board .who:nth-child(-n + 3),
+    .board .scroll:nth-child(-n + 3),
+    .board .run-h { border-top: 0; }
+
+    .run, .run-h { border-left: 2px solid var(--line); background: #fff8dc; }
+    .run { font-size: 1.55rem; }
+
+    .scroll { overflow-x: auto; border-top: 2px solid var(--line); }
+    .line { display: flex; min-width: max-content; min-height: 42px; }
+    .inn {
+      min-width: 2.35rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      font-size: 1.15rem;
+    }
+    .inn.now { background: var(--gold); }
+
+    .banner {
+      margin-top: 10px;
+      border-radius: 16px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .banner p { margin: 0; font-weight: 900; }
+    .banner .half { font-size: 1.7rem; }
+    .banner .role { font-size: 1.2rem; letter-spacing: 0.04em; }
+    .banner.offense { background: var(--gold); color: var(--ink); }
+    .banner.defense { background: var(--blue); color: #fff; }
+    .banner.final { background: var(--ink); color: #fff; }
+
+    .dock {
+      position: sticky;
+      bottom: 0;
+      z-index: 4;
+      margin-top: auto;
+      padding: 8px 0 calc(10px + env(safe-area-inset-bottom));
+      background: var(--paper);
+    }
+
+    .primary, .big {
+      width: 100%;
+      min-height: 68px;
+      border-radius: 16px;
+      border: 2px solid var(--red);
+      background: var(--red);
+      color: #fff;
+      font-size: 1.25rem;
+      font-weight: 900;
+    }
+
+    .big.plain {
+      background: #fff;
+      color: var(--ink);
+      border-color: var(--line);
+      margin-top: 10px;
+    }
+
+    .sheet {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      background: rgba(26, 18, 8, 0.55);
+      display: flex;
+      align-items: flex-end;
+      padding: 12px;
+    }
+
+    .sheet-card {
+      width: min(480px, 100%);
+      margin: 0 auto;
+      background: var(--card);
+      border-radius: 22px;
+      padding: 18px 16px calc(16px + env(safe-area-inset-bottom));
+      max-height: min(92dvh, 760px);
+      overflow: auto;
+      border: 2px solid var(--line);
+    }
+
+    .sheet-card h2 { margin: 0 0 6px; font-size: 1.45rem; letter-spacing: 0; text-transform: none; }
+    .run-num { margin: 8px 0; text-align: center; font-size: 4.2rem; font-weight: 900; line-height: 0.95; }
+    .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .pad button {
+      min-height: 64px;
+      border-radius: 14px;
+      border: 2px solid var(--line);
+      background: #fff;
+      font-size: 1.7rem;
+      font-weight: 900;
+    }
+
+    .lineup-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 2px solid var(--line);
+      border-radius: 16px;
+      padding: 8px;
+    }
+
+    .panel h2 { margin: 2px 2px 6px; }
+
+    .mini {
+      display: flex;
+      gap: 6px;
+      align-items: baseline;
+      padding: 7px 2px;
+      border-top: 2px solid #eadfc8;
+      font-weight: 800;
+      font-size: 0.98rem;
+      line-height: 1.2;
+    }
+
+    .empty {
+      border: 2px dashed var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      background: var(--card);
+      font-weight: 700;
+    }
+
+    .warn { color: var(--red); font-weight: 800; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="../shared/elks-data.js"></script>
+  <script src="../shared/game-manager.js"></script>
+  <script>
+    var STORAGE_KEY = (window.GameManager && GameManager.STORAGE_KEY) || "mn-elks-game-manager-v1";
+    var store = null;
+    var teamId = "";
+    var teamName = "Us";
+    var view = "list";
+    var gameId = "";
+    var sheet = "";
+    var pickPos = "";
+    var runDigits = "";
+    var loadNote = "";
+    var booting = true;
+    var loadToken = 0;
+
+    function esc(value) {
+      return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+      });
+    }
+
+    function currentTeam() {
+      var hub = window.HUB_SOFTBALL || {};
+      var raw = hub.teamId || "";
+      var name = hub.teamName || "Team";
+      var club = hub.clubName || "";
+      if (window.ElksData && ElksData.currentHubTeam) {
+        var team = ElksData.currentHubTeam();
+        raw = team.id || raw;
+        name = team.name || name;
+        club = team.clubName || club;
+      }
+      var id = raw;
+      if (window.ElksData && ElksData.canonicalTeamId) id = ElksData.canonicalTeamId(raw) || raw;
+      return { id: id || "team", rawId: raw, name: name, clubName: club };
+    }
+
+    function teamLabel(team) {
+      return [team.clubName, team.name].filter(Boolean).join(" ") || "Us";
+    }
+
+    function pinRealTeam() {
+      var team = currentTeam();
+      if (team.id && team.id !== "all" && team.id !== "unassigned" && team.id !== "team") return team;
+      var teams = teamChoices().filter(function (item) {
+        return item && item.id && item.id !== "all" && item.id !== "unassigned";
+      });
+      if (!teams.length) return team;
+      if (window.ElksData && ElksData.setCurrentHubTeam) ElksData.setCurrentHubTeam(teams[0].id);
+      team = currentTeam();
+      if (!team.id || team.id === "all" || team.id === "unassigned" || team.id === "team") {
+        return {
+          id: teams[0].id,
+          rawId: teams[0].id,
+          name: teams[0].name || "Team",
+          clubName: teams[0].clubName || "",
+        };
+      }
+      return team;
+    }
+
+    function teamChoices() {
+      var hub = window.HUB_SOFTBALL || {};
+      return Array.isArray(hub.teams) ? hub.teams : [];
+    }
+
+    function loadStore() {
+      try {
+        return GameManager.normalizeStore(JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"));
+      } catch (e) {
+        return GameManager.emptyStore();
+      }
+    }
+
+    function saveStore() {
+      store.updatedAt = Date.now();
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+      } catch (e) {}
+    }
+
+    function bundle() {
+      if (!store.teams[teamId]) {
+        store.teams[teamId] = { teamName: teamName, games: [], players: [], sessions: {} };
+      }
+      store.teams[teamId].teamName = teamName || store.teams[teamId].teamName;
+      return store.teams[teamId];
+    }
+
+    function sessionFor(id) {
+      var found = bundle().sessions[id];
+      return found || null;
+    }
+
+    function findGame(id) {
+      var games = bundle().games || [];
+      for (var i = 0; i < games.length; i += 1) {
+        if (games[i] && games[i].id === id) return games[i];
+      }
+      var session = sessionFor(id);
+      return (session && session.lineupSnapshot) || null;
+    }
+
+    function gamesForList() {
+      var pack = bundle();
+      var games = (pack.games || []).slice();
+      var ids = {};
+      games.forEach(function (game) { if (game && game.id) ids[game.id] = true; });
+      Object.keys(pack.sessions || {}).forEach(function (id) {
+        var session = pack.sessions[id];
+        if (session && session.status === "live" && !ids[id]) {
+          games.push(session.lineupSnapshot || { id: id, name: session.gameName || "Game", battingOrder: [] });
+        }
+      });
+      return games;
+    }
+
+    function readLegacyLineup(id) {
+      try {
+        var key = id ? "mn-elks-lineup-v1:" + id : "mn-elks-lineup-v1";
+        var saved = localStorage.getItem(key);
+        if (!saved && id === "team-16u-fransen") saved = localStorage.getItem("mn-elks-lineup-v1");
+        return saved ? JSON.parse(saved) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function rosterFrom(state, games) {
+      var rawPlayers = state && Array.isArray(state.players) ? state.players : [];
+      var list = [];
+      if (window.ElksData && ElksData.playersForTeam && ElksData.toLineupPlayer) {
+        try {
+          list = ElksData.playersForTeam(state, teamId).map(function (player) {
+            return GameManager.slimPlayer(ElksData.toLineupPlayer(player));
+          }).filter(Boolean);
+        } catch (e) {
+          list = [];
+        }
+      }
+      if (!list.length) list = GameManager.playersOnTeam(rawPlayers, teamId);
+      var have = {};
+      list.forEach(function (player) { have[player.id] = true; });
+      var needed = {};
+      (games || []).forEach(function (game) {
+        (game.battingOrder || []).forEach(function (id) { needed[String(id)] = true; });
+        (game.unavailableIds || []).forEach(function (id) { needed[String(id)] = true; });
+        (game.inningDefenses || []).forEach(function (row) {
+          Object.keys(row || {}).forEach(function (pos) {
+            if (row[pos]) needed[String(row[pos])] = true;
+          });
+        });
+        Object.keys(game.defensivePositions || {}).forEach(function (pos) {
+          if (game.defensivePositions[pos]) needed[String(game.defensivePositions[pos])] = true;
+        });
+      });
+      rawPlayers.forEach(function (player) {
+        var slim = GameManager.slimPlayer(player);
+        if (!slim || have[slim.id] || !needed[slim.id]) return;
+        list.push(slim);
+        have[slim.id] = true;
+      });
+      return list;
+    }
+
+    function namedSession(session) {
+      if (!session) return session;
+      var byId = {};
+      (session.players || []).forEach(function (player) { byId[player.id] = player; });
+      (bundle().players || []).forEach(function (player) { byId[player.id] = player; });
+      var players = Object.keys(byId).map(function (id) { return byId[id]; });
+      return Object.assign({}, session, { players: players });
+    }
+
+    function cell(value) {
+      return typeof value === "number" ? String(value) : "";
+    }
+
+    function scoreboardHtml(state) {
+      var board = GameManager.scoreboard(state);
+      var opp = GameManager.opponentLabel(state.gameName);
+      var oppName = opp === "Opponent" ? "Opp" : opp;
+      function line(pick) {
+        return board.innings.map(function (inn) {
+          return '<div class="inn' + (inn.current ? " now" : "") + '">' + esc(pick(inn)) + "</div>";
+        }).join("");
+      }
+      return ''
+        + '<div class="board" id="scoreboard">'
+        + '<div class="who"></div><div class="scroll"><div class="line">' + line(function (inn) { return inn.inning; }) + '</div></div><div class="run-h">R</div>'
+        + '<div class="who">Us</div><div class="scroll"><div class="line">' + line(function (inn) { return cell(inn.us); }) + '</div></div><div class="run">' + board.usTotal + "</div>"
+        + '<div class="who">' + esc(oppName) + '</div><div class="scroll"><div class="line">' + line(function (inn) { return cell(inn.opp); }) + '</div></div><div class="run">' + board.oppTotal + "</div>"
+        + "</div>";
+    }
+
+    function bannerHtml(state) {
+      var board = GameManager.scoreboard(state);
+      if (state.status !== "live") {
+        return '<div id="half-indicator" class="banner final"><p class="half">Final</p><p class="role">' + board.usTotal + "–" + board.oppTotal + "</p></div>";
+      }
+      var role = board.role === "defense" ? "DEFENSE" : "OFFENSE";
+      return '<div id="half-indicator" class="banner ' + board.role + '"><p class="half">' + esc(board.label) + '</p><p class="role">' + role + "</p></div>";
+    }
+
+    function trackerHtml(state) {
+      var rows = GameManager.defensiveInningRows(namedSession(state));
+      if (!rows.length) {
+        return '<section id="defensive-innings"><h2>Defensive innings</h2><p class="empty">No defensive innings yet.</p></section>';
+      }
+      var body = rows.map(function (row) {
+        return '<div class="track"><span>' + esc(row.label) + "</span>"
+          + (row.position ? '<span class="spot">' + esc(row.position) + "</span>" : "")
+          + "<b>" + row.innings + "</b></div>";
+      }).join("");
+      return '<section id="defensive-innings"><h2>Defensive innings</h2>' + body + "</section>";
+    }
+
+    function listMeta(game, session) {
+      if (session && session.status === "live") {
+        var board = GameManager.scoreboard(session);
+        var role = board.role === "defense" ? "Defense" : "Offense";
+        return "In progress · " + board.label + " · " + role + " · " + board.usTotal + "–" + board.oppTotal;
+      }
+      var count = (game.battingOrder || []).length;
+      if (!count) return "No batting order yet";
+      return count === 1 ? "1 batter" : count + " batters";
+    }
+
+    function headerHtml(title, sub, backLabel, endButton) {
+      return "<header>"
+        + '<button type="button" class="ghost" data-action="back">' + esc(backLabel) + "</button>"
+        + '<div class="grow"><h1>' + esc(title) + "</h1>" + (sub ? "<p>" + esc(sub) + "</p>" : "") + "</div>"
+        + (endButton ? '<button type="button" class="ghost" data-action="ask-end">End</button>' : "")
+        + "</header>";
+    }
+
+    function teamSelectHtml() {
+      var teams = teamChoices();
+      if (teams.length < 2) return "";
+      var current = currentTeam();
+      var options = teams.map(function (team) {
+        var selected = team.id === current.rawId || team.id === current.id ? " selected" : "";
+        var label = (team.clubName ? team.clubName + " · " : "") + team.name;
+        return '<option value="' + esc(team.id) + '"' + selected + ">" + esc(label) + "</option>";
+      }).join("");
+      return '<label class="hint" for="team-select">Team</label><select id="team-select" class="team-select">' + options + "</select>";
+    }
+
+    function renderList() {
+      var pack = bundle();
+      var waiting = GameManager.unplayedGames(gamesForList(), pack.sessions);
+      var played = GameManager.playedEntries(pack.games, pack.sessions);
+      var games = waiting.length
+        ? waiting.map(function (game) {
+          var session = pack.sessions[game.id];
+          var live = session && session.status === "live";
+          return '<button type="button" class="game-btn' + (live ? " live" : "") + '" data-action="open-game" data-game="' + esc(game.id) + '">'
+            + "<strong>" + esc(game.name || "Untitled Game") + "</strong>"
+            + "<span>" + esc(listMeta(game, session)) + "</span></button>";
+        }).join("")
+        : '<p class="empty">No games waiting. Build one in Lineup Builder, then come back.</p>';
+      var playedHtml = played.length
+        ? "<h2>Played</h2>" + played.map(function (row) {
+          var game = row.game;
+          var session = row.session;
+          return '<button type="button" class="game-btn" data-action="open-played" data-game="' + esc(session.lineupGameId) + '">'
+            + "<strong>" + esc((game && game.name) || session.gameName || "Game") + "</strong>"
+            + "<span>Final " + (session.finalUs || 0) + "–" + (session.finalOpp || 0) + "</span></button>";
+        }).join("")
+        : "";
+      return '<div class="wrap" data-screen="list">'
+        + headerHtml("Game Manager", "Not played yet", "Hub", false)
+        + teamSelectHtml()
+        + (loadNote ? '<p class="note">' + esc(loadNote) + "</p>" : "")
+        + (booting && !(pack.games || []).length ? '<p class="empty">Loading lineups…</p>' : games)
+        + playedHtml
+        + '<p class="hint">The score stays on this phone if the signal drops.</p>'
+        + "</div>";
+    }
+
+    function miniList(rows, emptyText) {
+      if (!rows.length) return '<p class="hint">' + esc(emptyText) + "</p>";
+      return rows.map(function (row) {
+        var tag = row.order ? String(row.order) : (row.pos || "");
+        return '<div class="mini"><span class="pos">' + esc(tag) + "</span><span>" + esc(row.label) + "</span></div>";
+      }).join("");
+    }
+
+    function renderDetail() {
+      var game = findGame(gameId);
+      if (!game) return renderList();
+      var lineup = GameManager.lineupView(game, bundle().players);
+      var subs = lineup.subs.length
+        ? lineup.subs.map(function (row) { return esc(row.label); }).join(", ")
+        : "No subs.";
+      var out = lineup.out.length ? '<p class="hint">Out: ' + lineup.out.map(function (row) { return esc(row.label); }).join(", ") + "</p>" : "";
+      return '<div class="wrap" data-screen="detail">'
+        + headerHtml(lineup.name, teamName, "Games", false)
+        + "<main>"
+        + '<div class="lineup-grid">'
+        + '<section class="panel"><h2>Batting order</h2>' + miniList(lineup.batting, "No batting order yet.") + "</section>"
+        + '<section class="panel"><h2>Defense</h2>' + miniList(lineup.defense, "No defensive lineup yet.") + "</section>"
+        + "</div>"
+        + '<h2>Subs</h2><p class="empty">' + subs + "</p>"
+        + out
+        + '<p class="hint">Defense is inning 1 from Lineup Builder. You can change it after the game starts.</p>'
+        + "</main>"
+        + '<div class="dock"><button type="button" class="primary" id="start-game" data-action="ask-side">Start Game</button></div>'
+        + sideSheet()
+        + "</div>";
+    }
+
+    function renderLive() {
+      var session = namedSession(sessionFor(gameId));
+      if (!session || session.status !== "live") return renderList();
+      var rows = GameManager.defenseRows(session.defense, session.players).filter(function (row) {
+        return GameManager.FIELD_POSITIONS.indexOf(row.pos) >= 0;
+      });
+      var defense = rows.map(function (row) {
+        return '<button type="button" class="pos-btn" data-action="pick-defense" data-pos="' + esc(row.pos) + '">'
+          + '<span class="pos">' + esc(row.pos) + "</span><span>" + esc(row.label) + "</span></button>";
+      }).join("");
+      return '<div class="wrap" data-screen="live">'
+        + '<div class="topbar">'
+        + headerHtml(session.gameName, teamName + " · Saved on this phone", "Games", true)
+        + scoreboardHtml(session)
+        + bannerHtml(session)
+        + "</div>"
+        + "<main>"
+        + "<h2>Defensive lineup</h2>"
+        + '<p class="hint">Change it before you end a defensive half. The players on the field get that inning.</p>'
+        + defense
+        + trackerHtml(session)
+        + "</main>"
+        + '<div class="dock"><button type="button" class="primary" data-action="ask-runs">End half inning</button></div>'
+        + runSheet(session)
+        + endSheet(session)
+        + pickSheet(session)
+        + "</div>";
+    }
+
+    function renderPlayed() {
+      var session = namedSession(sessionFor(gameId));
+      if (!session) return renderList();
+      return '<div class="wrap" data-screen="played">'
+        + '<div class="topbar">'
+        + headerHtml(session.gameName, "Played · saved on this phone", "Games", false)
+        + scoreboardHtml(session)
+        + bannerHtml(session)
+        + "</div>"
+        + "<main>" + trackerHtml(session) + "</main>"
+        + "</div>";
+    }
+
+    function sideSheet() {
+      if (sheet !== "side") return "";
+      return '<div class="sheet" id="side-sheet" data-screen="side"><div class="sheet-card">'
+        + "<h2>Are we home or away?</h2>"
+        + '<p class="hint">Away bats in the top. Home bats in the bottom.</p>'
+        + '<button type="button" class="big" data-action="choose-side" data-side="away">We are AWAY</button>'
+        + '<button type="button" class="big" data-action="choose-side" data-side="home">We are HOME</button>'
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
+        + "</div></div>";
+    }
+
+    function runSheet(session) {
+      if (sheet !== "runs") return "";
+      var board = GameManager.scoreboard(session);
+      var who = board.role === "offense" ? "Runs we scored" : "Runs they scored";
+      var shown = runDigits === "" ? "–" : runDigits;
+      var enter = runDigits === ""
+        ? '<button type="button" class="big" disabled>Enter the runs</button>'
+        : '<button type="button" class="big" data-action="commit-runs">Add ' + esc(runDigits) + " runs</button>";
+      var keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "Del"].map(function (key) {
+        return '<button type="button" data-action="run-key" data-key="' + esc(key) + '">' + esc(key) + "</button>";
+      }).join("");
+      return '<div class="sheet" id="run-sheet"><div class="sheet-card">'
+        + "<h2>" + esc(board.label) + "</h2>"
+        + '<p class="hint">' + esc(who) + "</p>"
+        + '<p class="run-num" id="run-digits">' + esc(shown) + "</p>"
+        + '<div class="pad">' + keys + "</div>"
+        + enter
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
+        + "</div></div>";
+    }
+
+    function endSheet(session) {
+      if (sheet !== "end") return "";
+      var board = GameManager.scoreboard(session);
+      var opp = GameManager.opponentLabel(session.gameName);
+      return '<div class="sheet" id="end-sheet"><div class="sheet-card">'
+        + "<h2>Mark this game played?</h2>"
+        + "<p>It leaves the not-yet-played list. Final: Us " + board.usTotal + ", " + esc(opp) + " " + board.oppTotal + ".</p>"
+        + '<button type="button" class="big" data-action="confirm-end">Mark played</button>'
+        + '<button type="button" class="big plain" data-action="close-sheet">Keep playing</button>'
+        + "</div></div>";
+    }
+
+    function pickSheet(session) {
+      if (sheet !== "pick") return "";
+      var current = session.defense && session.defense[pickPos] ? String(session.defense[pickPos]) : "";
+      var options = (session.players || []).slice().sort(function (a, b) {
+        return GameManager.playerLabel(a).localeCompare(GameManager.playerLabel(b));
+      });
+      var buttons = '<button type="button" class="pick" data-action="assign" data-player="">Empty</button>'
+        + options.map(function (player) {
+          var here = GameManager.defenseRows(session.defense, session.players).filter(function (row) {
+            return row.id === player.id && GameManager.FIELD_POSITIONS.indexOf(row.pos) >= 0;
+          })[0];
+          var extra = here ? " · " + here.pos : "";
+          var mark = player.id === current ? " · this spot" : "";
+          return '<button type="button" class="pick" data-action="assign" data-player="' + esc(player.id) + '">'
+            + esc(GameManager.playerLabel(player) + extra + mark) + "</button>";
+        }).join("");
+      return '<div class="sheet" id="defense-picker"><div class="sheet-card">'
+        + "<h2>" + esc(pickPos) + "</h2>"
+        + '<p class="hint">Who is playing here?</p>'
+        + buttons
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
+        + "</div></div>";
+    }
+
+    function render() {
+      var root = document.getElementById("root");
+      if (!window.GameManager) {
+        root.innerHTML = '<div class="wrap"><p class="empty">Game Manager could not load.</p></div>';
+        return;
+      }
+      var html = view === "detail" ? renderDetail() : view === "live" ? renderLive() : view === "played" ? renderPlayed() : renderList();
+      root.innerHTML = html;
+    }
+
+    function openGame(id) {
+      gameId = id;
+      sheet = "";
+      var session = sessionFor(id);
+      if (session && session.status === "live") {
+        view = "live";
+        store.active = { teamId: teamId, gameId: id };
+        saveStore();
+      } else if (session && session.status === "played") {
+        view = "played";
+      } else {
+        view = "detail";
+      }
+      render();
+      window.scrollTo(0, 0);
+    }
+
+    function remember(session) {
+      bundle().sessions[session.lineupGameId] = session;
+      store.active = session.status === "live" ? { teamId: teamId, gameId: session.lineupGameId } : null;
+      saveStore();
+    }
+
+    function onClick(event) {
+      var button = event.target.closest("[data-action]");
+      if (!button) return;
+      var action = button.getAttribute("data-action");
+      if (action === "back") {
+        if (sheet) {
+          sheet = "";
+          runDigits = "";
+          render();
+          return;
+        }
+        if (view === "list") {
+          window.location.href = "/";
+          return;
+        }
+        if (view === "live") store.active = null;
+        view = "list";
+        sheet = "";
+        saveStore();
+        render();
+        window.scrollTo(0, 0);
+        return;
+      }
+      if (action === "open-game" || action === "open-played") {
+        openGame(button.getAttribute("data-game"));
+        return;
+      }
+      if (action === "ask-side") {
+        sheet = "side";
+        render();
+        return;
+      }
+      if (action === "close-sheet") {
+        sheet = "";
+        runDigits = "";
+        render();
+        return;
+      }
+      if (action === "choose-side") {
+        var game = findGame(gameId);
+        if (!game) return;
+        var session = GameManager.createLiveGame({
+          side: button.getAttribute("data-side"),
+          game: game,
+          players: bundle().players,
+          teamName: teamName,
+        });
+        gameId = session.lineupGameId;
+        view = "live";
+        sheet = "";
+        remember(session);
+        render();
+        window.scrollTo(0, 0);
+        return;
+      }
+      if (action === "ask-runs") {
+        sheet = "runs";
+        runDigits = "";
+        render();
+        return;
+      }
+      if (action === "run-key") {
+        var key = button.getAttribute("data-key");
+        if (key === "C") runDigits = "";
+        else if (key === "Del" || key === "⌫") runDigits = runDigits.slice(0, -1);
+        else if (runDigits.length < 2) runDigits += key;
+        render();
+        return;
+      }
+      if (action === "commit-runs") {
+        var live = sessionFor(gameId);
+        try {
+          live = GameManager.recordRuns(live, runDigits);
+        } catch (e) {
+          return;
+        }
+        sheet = "";
+        runDigits = "";
+        remember(live);
+        render();
+        window.scrollTo(0, 0);
+        return;
+      }
+      if (action === "pick-defense") {
+        pickPos = button.getAttribute("data-pos");
+        sheet = "pick";
+        render();
+        return;
+      }
+      if (action === "assign") {
+        var current = sessionFor(gameId);
+        current = GameManager.setDefense(current, pickPos, button.getAttribute("data-player") || "");
+        sheet = "";
+        remember(current);
+        render();
+        return;
+      }
+      if (action === "ask-end") {
+        sheet = "end";
+        render();
+        return;
+      }
+      if (action === "confirm-end") {
+        var ending = GameManager.endGame(sessionFor(gameId));
+        view = "list";
+        sheet = "";
+        store.active = null;
+        bundle().sessions[ending.lineupGameId] = ending;
+        saveStore();
+        render();
+        window.scrollTo(0, 0);
+      }
+    }
+
+    function onChange(event) {
+      if (!event.target || event.target.id !== "team-select") return;
+      if (window.ElksData && ElksData.setCurrentHubTeam) ElksData.setCurrentHubTeam(event.target.value);
+      var team = currentTeam();
+      teamId = team.id;
+      teamName = teamLabel(team);
+      view = "list";
+      sheet = "";
+      gameId = "";
+      render();
+      loadLineups();
+    }
+
+    async function loadLineups() {
+      var token = ++loadToken;
+      var requested = teamId;
+      var remote = null;
+      var failed = false;
+      try {
+        var response = await fetch("/api/softball/state", { cache: "no-store" });
+        if (!response.ok) failed = true;
+        else {
+          var data = await response.json();
+          if (!data || !data.state) failed = true;
+          else remote = data.state;
+        }
+      } catch (e) {
+        failed = true;
+      }
+      if (token !== loadToken || requested !== teamId) return;
+      booting = false;
+      var pack = bundle();
+      if (remote) {
+        var record = GameManager.selectLineupRecord(remote.lineups, teamId);
+        var games = GameManager.gamesFromLineupRecord(record);
+        if (!games.length) games = GameManager.gamesFromLineupRecord(readLegacyLineup(teamId));
+        pack.games = games;
+        pack.players = rosterFrom(remote, games);
+        pack.teamName = teamName;
+        loadNote = "";
+        saveStore();
+      } else if (failed) {
+        if (!(pack.games || []).length) {
+          var legacy = GameManager.gamesFromLineupRecord(readLegacyLineup(teamId));
+          if (legacy.length) {
+            pack.games = legacy;
+            saveStore();
+          }
+        }
+        loadNote = (pack.games || []).length
+          ? "Offline. Showing lineups saved on this phone."
+          : "No signal. Open this page once while online, then it keeps working.";
+      }
+      if (store.active && store.active.teamId === teamId && view === "list") {
+        var active = pack.sessions[store.active.gameId];
+        if (active && active.status === "live") {
+          gameId = active.lineupGameId;
+          view = "live";
+        }
+      }
+      render();
+    }
+
+    function cacheShell() {
+      if (!("caches" in window)) return;
+      caches.open("game-manager-shell-v1").then(function (cache) {
+        return cache.addAll(["/apps/game-manager", "/shared/game-manager.js", "/shared/elks-data.js"]);
+      }).catch(function () {});
+    }
+
+    function registerSw() {
+      if (!("serviceWorker" in navigator)) return;
+      navigator.serviceWorker.register("/game-manager-sw.js").catch(function () {});
+    }
+
+    function boot() {
+      if (!window.GameManager) {
+        render();
+        return;
+      }
+      store = loadStore();
+      var team = pinRealTeam();
+      teamId = team.id;
+      teamName = teamLabel(team);
+      if (store.active && store.active.teamId === teamId) {
+        var active = bundle().sessions[store.active.gameId];
+        if (active && active.status === "live") {
+          gameId = active.lineupGameId;
+          view = "live";
+        }
+      }
+      render();
+      loadLineups();
+      cacheShell();
+      registerSw();
+    }
+
+    document.addEventListener("click", onClick);
+    document.addEventListener("change", onChange);
+    window.addEventListener("pagehide", function () {
+      if (store) saveStore();
+    });
+    boot();
+  </script>
+</body>
+</html>

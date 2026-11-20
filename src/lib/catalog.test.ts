@@ -3,6 +3,17 @@ import { describe, it } from "node:test";
 import { hubApps, rewriteAppHtml } from "./catalog.ts";
 
 describe("hub apps", () => {
+  it("gives Game Manager to every Softball login", () => {
+    const app = hubApps.find((item) => item.slug === "game-manager");
+    assert.ok(app);
+    assert.equal(app?.area, "softball");
+    assert.equal(app?.file, "game-manager.html");
+    assert.equal(app?.requiresFeature, undefined);
+    const lineup = hubApps.findIndex((item) => item.slug === "lineup");
+    const manager = hubApps.findIndex((item) => item.slug === "game-manager");
+    assert.equal(manager, lineup + 1);
+  });
+
   it("gives Scorekeeper to every Softball login", () => {
     const app = hubApps.find((item) => item.slug === "scorekeeper");
     assert.ok(app);
