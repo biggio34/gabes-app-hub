@@ -24,7 +24,7 @@ export async function GET(
     return new NextResponse("Not found", { status: 404 });
   }
 
-  if (relative === "game-manager.js") {
+  if (relative === "game-manager.js" || relative === "game-sync.js") {
     const stored = await findUserById(session.id);
     if (!gameManagerAllowed({ role: stored?.role ?? session.role })) {
       return new NextResponse("You do not have access to Game Manager.", { status: 403 });

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { canAccessArea, gameManagerAllowed, getSession, wristCoachAllowed } from "@/lib/auth";
 import { findUserById } from "@/lib/users";
 import { hubApps, rewriteAppHtml } from "@/lib/catalog";
+import { DEFAULT_SUPABASE_URL } from "@/lib/db/supabase";
 import { softballContext } from "@/lib/softball";
 
 export async function GET(
@@ -58,9 +59,18 @@ export async function GET(
       userId: session.id,
       userName: session.name,
     }).replaceAll("<", "\\u003c");
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+    const realtime =
+      slug === "game-manager" && anonKey
+        ? `<script>window.HUB_GAME_SYNC=${JSON.stringify({
+            url: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL,
+            anonKey,
+            clubId: softball.clubId,
+          }).replaceAll("<", "\\u003c")};</script>`
+        : "";
     html = html.replace(
       "<head>",
-      `<head><script>window.HUB_SOFTBALL=${boot};</script>`,
+      `<head><script>window.HUB_SOFTBALL=${boot};</script>${realtime}`,
     );
   }
   return new NextResponse(html, {

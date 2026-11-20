@@ -464,15 +464,37 @@
     }
 
     .warn { color: var(--red); font-weight: 800; }
+
+    .sync {
+      margin: 4px 0 0;
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .sync.saving { color: var(--blue); }
+    .sync.offline { color: var(--red); }
+
+    .sync-notice {
+      margin: 6px 0 0;
+      padding: 6px 8px;
+      border-radius: 10px;
+      background: var(--gold);
+      font-weight: 900;
+    }
   </style>
 </head>
 <body>
   <div id="root"></div>
   <script src="../shared/elks-data.js"></script>
   <script src="../shared/game-manager.js"></script>
+  <script src="../shared/game-sync.js"></script>
   <script>
     var STORAGE_KEY = (window.GameManager && GameManager.STORAGE_KEY) || "mn-elks-game-manager-v1";
-    var store = null;
+    var sync = null;
+    var lineupCache = { teams: {} };
+    var applyingLocal = false;
     var teamId = "";
     var teamName = "Us";
     var view = "list";
@@ -541,27 +563,53 @@
       return Array.isArray(hub.teams) ? hub.teams : [];
     }
 
-    function loadStore() {
-      try {
-        return GameManager.normalizeStore(JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"));
-      } catch (e) {
-        return GameManager.emptyStore();
-      }
+    function doc() {
+      return sync ? sync.display() : GameManager.emptyDocument();
     }
 
-    function saveStore() {
-      store.updatedAt = Date.now();
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-      } catch (e) {}
+    function cachePack() {
+      if (!lineupCache.teams) lineupCache.teams = {};
+      if (!lineupCache.teams[teamId]) {
+        lineupCache.teams[teamId] = { teamName: teamName, games: [], players: [] };
+      }
+      lineupCache.teams[teamId].teamName = teamName || lineupCache.teams[teamId].teamName;
+      return lineupCache.teams[teamId];
+    }
+
+    function saveCache() {
+      if (sync) sync.setCache(lineupCache);
     }
 
     function bundle() {
-      if (!store.teams[teamId]) {
-        store.teams[teamId] = { teamName: teamName, games: [], players: [], sessions: {} };
+      var cache = cachePack();
+      var live = (doc().teams && doc().teams[teamId]) || { sessions: {} };
+      return {
+        teamName: cache.teamName,
+        games: cache.games,
+        players: cache.players,
+        sessions: live.sessions || {},
+      };
+    }
+
+    function syncChip() {
+      if (!sync) return "";
+      var kind = sync.status();
+      var note = sync.notice();
+      return '<p id="sync-status" class="sync ' + esc(kind) + '">' + esc(sync.statusLabel()) + "</p>"
+        + (note ? '<p id="sync-notice" class="sync-notice">' + esc(note) + "</p>" : "");
+    }
+
+    function tap(op) {
+      applyingLocal = true;
+      try {
+        return sync.run(Object.assign({ teamId: teamId, teamName: teamName, gameId: gameId }, op));
+      } finally {
+        applyingLocal = false;
       }
-      store.teams[teamId].teamName = teamName || store.teams[teamId].teamName;
-      return store.teams[teamId];
+    }
+
+    function dryRun(op) {
+      GameManager.applyGameOp(doc(), Object.assign({ teamId: teamId, teamName: teamName, gameId: gameId }, op));
     }
 
     function sessionFor(id) {
@@ -820,7 +868,7 @@
     function headerHtml(title, sub, backLabel) {
       return "<header>"
         + '<button type="button" class="ghost" data-action="back">' + esc(backLabel) + "</button>"
-        + '<div class="grow"><h1>' + esc(title) + "</h1>" + (sub ? "<p>" + esc(sub) + "</p>" : "") + "</div>"
+        + '<div class="grow"><h1>' + esc(title) + "</h1>" + (sub ? "<p>" + esc(sub) + "</p>" : "") + syncChip() + "</div>"
         + "</header>";
     }
 
@@ -864,7 +912,7 @@
         + (loadNote ? '<p class="note">' + esc(loadNote) + "</p>" : "")
         + (booting && !(pack.games || []).length ? '<p class="empty">Loading lineups…</p>' : games)
         + playedHtml
-        + '<p class="hint">The score stays on this phone if the signal drops.</p>'
+        + '<p class="hint">The game syncs to your other devices. If the signal drops, it stays on this phone and catches up.</p>'
         + "</div>";
     }
 
@@ -1132,8 +1180,7 @@
       var session = sessionFor(id);
       if (session && session.status === "live") {
         view = "live";
-        store.active = { teamId: teamId, gameId: id };
-        saveStore();
+        tap({ type: "set-active", gameId: id });
       } else if (session && session.status === "played") {
         view = "played";
       } else {
@@ -1141,12 +1188,6 @@
       }
       render();
       window.scrollTo(0, 0);
-    }
-
-    function remember(session) {
-      bundle().sessions[session.lineupGameId] = session;
-      store.active = session.status === "live" ? { teamId: teamId, gameId: session.lineupGameId } : null;
-      saveStore();
     }
 
     function stageChange(change) {
@@ -1162,23 +1203,24 @@
     function applyPending(force) {
       if (!pendingSub) return;
       var change = pendingSub;
-      var session = sessionFor(gameId);
+      var op = null;
+      if (change.type === "bat") op = { type: "sub", spot: change.spot, playerId: change.playerId, force: !!force };
+      else if (change.type === "field") op = { type: "set-defense", position: change.position, playerId: change.playerId || "" };
+      else if (change.type === "flex") op = { type: "swap-dp-flex", force: !!force };
+      else if (change.type === "leave") op = { type: "leave", playerId: change.playerId };
+      else if (change.type === "courtesy") op = { type: "courtesy", forId: change.forId, runnerId: change.runnerId };
+      else if (change.type === "flex-sub") op = { type: "flex-sub", playerId: change.playerId, force: !!force };
+      else if (change.type === "flex-return") op = { type: "flex-return", force: !!force };
+      else return;
       try {
-        if (change.type === "bat") session = GameManager.applySub(session, change.spot, change.playerId, !!force);
-        else if (change.type === "field") session = GameManager.setDefense(session, change.position, change.playerId || "");
-        else if (change.type === "flex") session = GameManager.swapDpFlex(session, undefined, !!force);
-        else if (change.type === "leave") session = GameManager.leaveRosterPlayer(session, change.playerId);
-        else if (change.type === "courtesy") session = GameManager.setCourtesy(session, change.forId, change.runnerId);
-        else if (change.type === "flex-sub") session = GameManager.subForFlex(session, change.playerId, !!force);
-        else if (change.type === "flex-return") session = GameManager.reenterFlex(session, !!force);
-        else return;
+        dryRun(op);
       } catch (e) {
         return;
       }
       pendingSub = null;
       effectText = "";
       sheet = "";
-      remember(session);
+      tap(op);
       render();
     }
 
@@ -1188,9 +1230,8 @@
       var action = button.getAttribute("data-action");
       if (action === "back") {
         if (sheet === "confirm-half") {
-          var backed = GameManager.undoOut(sessionFor(gameId));
           sheet = "";
-          remember(backed);
+          tap({ type: "undo-out" });
           render();
           return;
         }
@@ -1204,10 +1245,9 @@
           window.location.href = "/";
           return;
         }
-        if (view === "live") store.active = null;
+        if (view === "live") tap({ type: "set-active", gameId: "" });
         view = "list";
         sheet = "";
-        saveStore();
         render();
         window.scrollTo(0, 0);
         return;
@@ -1233,26 +1273,27 @@
       if (action === "choose-side") {
         var game = findGame(gameId);
         if (!game) return;
-        var session = GameManager.createLiveGame({
+        var input = {
           side: button.getAttribute("data-side"),
           game: game,
           players: bundle().players,
           teamName: teamName,
           scheduledInnings: plannedInnings,
-        });
+        };
+        var session = GameManager.createLiveGame(input);
         gameId = session.lineupGameId;
         view = "live";
         sheet = "";
-        remember(session);
+        tap({ type: "start", input: input, gameId: session.lineupGameId });
         render();
         window.scrollTo(0, 0);
         return;
       }
       if (action === "add-out") {
         var beforeOuts = GameManager.clampOuts(sessionFor(gameId).outs);
-        var withOut = GameManager.addOut(sessionFor(gameId));
-        if (beforeOuts < 3 && withOut.outs === 3) sheet = "confirm-half";
-        remember(withOut);
+        tap({ type: "add-out" });
+        var withOut = sessionFor(gameId);
+        if (beforeOuts < 3 && withOut && GameManager.clampOuts(withOut.outs) === 3) sheet = "confirm-half";
         render();
         return;
       }
@@ -1279,8 +1320,9 @@
         return;
       }
       if (action === "toggle-injury") {
-        var flipped = GameManager.setInjuryOut(sessionFor(gameId), !sessionFor(gameId).injuryOut);
-        remember(flipped);
+        var injuryOn = !sessionFor(gameId).injuryOut;
+        try { dryRun({ type: "injury", on: injuryOn }); } catch (e) { return; }
+        tap({ type: "injury", on: injuryOn });
         render();
         return;
       }
@@ -1323,16 +1365,15 @@
         return;
       }
       if (action === "cancel-third-out") {
-        var undone = GameManager.undoOut(sessionFor(gameId));
         sheet = "";
-        remember(undone);
+        tap({ type: "undo-out" });
         render();
         return;
       }
       if (action === "undo-out") {
-        var fewer = GameManager.undoOut(sessionFor(gameId));
-        if (sheet === "runs" && fewer.outs < 3) sheet = "";
-        remember(fewer);
+        tap({ type: "undo-out" });
+        var fewer = sessionFor(gameId);
+        if (sheet === "runs" && fewer && GameManager.clampOuts(fewer.outs) < 3) sheet = "";
         render();
         return;
       }
@@ -1351,16 +1392,16 @@
         return;
       }
       if (action === "commit-runs") {
-        var live = sessionFor(gameId);
         try {
-          live = GameManager.recordRuns(live, runDigits);
+          dryRun({ type: "record-runs", runs: runDigits });
         } catch (e) {
           return;
         }
+        tap({ type: "record-runs", runs: runDigits });
+        var live = sessionFor(gameId);
         sheet = "";
         runDigits = "";
-        if (live.status === "played") view = "played";
-        remember(live);
+        if (live && live.status === "played") view = "played";
         render();
         window.scrollTo(0, 0);
         return;
@@ -1372,9 +1413,9 @@
         return;
       }
       if (action === "toggle-tiebreaker") {
-        var currentHalf = sessionFor(gameId);
-        currentHalf = GameManager.setTiebreaker(currentHalf, !currentHalf.tiebreaker);
-        remember(currentHalf);
+        var tieOn = !sessionFor(gameId).tiebreaker;
+        try { dryRun({ type: "tiebreaker", on: tieOn }); } catch (e) { return; }
+        tap({ type: "tiebreaker", on: tieOn });
         render();
         return;
       }
@@ -1394,12 +1435,10 @@
         return;
       }
       if (action === "confirm-end") {
-        var ending = GameManager.endGame(sessionFor(gameId));
+        try { dryRun({ type: "end" }); } catch (e) { return; }
         view = "played";
         sheet = "";
-        store.active = null;
-        bundle().sessions[ending.lineupGameId] = ending;
-        saveStore();
+        tap({ type: "end" });
         render();
         window.scrollTo(0, 0);
       }
@@ -1436,7 +1475,7 @@
       }
       if (token !== loadToken || requested !== teamId) return;
       booting = false;
-      var pack = bundle();
+      var pack = cachePack();
       if (remote) {
         var record = GameManager.selectLineupRecord(remote.lineups, teamId);
         var games = GameManager.gamesFromLineupRecord(record);
@@ -1445,21 +1484,22 @@
         pack.players = rosterFrom(remote, games);
         pack.teamName = teamName;
         loadNote = "";
-        saveStore();
+        saveCache();
       } else if (failed) {
         if (!(pack.games || []).length) {
           var legacy = GameManager.gamesFromLineupRecord(readLegacyLineup(teamId));
           if (legacy.length) {
             pack.games = legacy;
-            saveStore();
+            saveCache();
           }
         }
         loadNote = (pack.games || []).length
           ? "Offline. Showing lineups saved on this phone."
           : "No signal. Open this page once while online, then it keeps working.";
       }
-      if (store.active && store.active.teamId === teamId && view === "list") {
-        var active = pack.sessions[store.active.gameId];
+      var activeDoc = doc();
+      if (activeDoc.active && activeDoc.active.teamId === teamId && view === "list") {
+        var active = (activeDoc.teams[teamId] && activeDoc.teams[teamId].sessions[activeDoc.active.gameId]) || null;
         if (active && active.status === "live") {
           gameId = active.lineupGameId;
           view = "live";
@@ -1471,7 +1511,7 @@
     function cacheShell() {
       if (!("caches" in window)) return;
       caches.open("game-manager-shell-v1").then(function (cache) {
-        return cache.addAll(["/apps/game-manager", "/shared/game-manager.js", "/shared/elks-data.js"]);
+        return cache.addAll(["/apps/game-manager", "/shared/game-manager.js", "/shared/game-sync.js", "/shared/elks-data.js"]);
       }).catch(function () {});
     }
 
@@ -1480,23 +1520,88 @@
       navigator.serviceWorker.register("/game-manager-sw.js").catch(function () {});
     }
 
+    function followRemote() {
+      if (applyingLocal) return;
+      if (view === "live" || view === "played") {
+        var session = sessionFor(gameId);
+        if (!session) {
+          view = "list";
+          sheet = "";
+        } else if (view === "live" && session.status === "played") {
+          view = "played";
+          sheet = "";
+        }
+      }
+      render();
+    }
+
     function boot() {
-      if (!window.GameManager) {
+      if (!window.GameManager || !window.GameSync) {
         render();
         return;
       }
-      store = loadStore();
+      sync = GameSync.connect({
+        storage: window.localStorage,
+        storageKey: STORAGE_KEY,
+        normalize: GameManager.normalizeDocument,
+        applyOp: GameManager.applyGameOp,
+        legacyEnvelope: GameManager.envelopeFromLegacy,
+        bindWindow: true,
+        load: async function () {
+          var response = await fetch("/api/softball/game-sessions", { cache: "no-store" });
+          if (!response.ok) throw new Error("Could not load Game Manager.");
+          var data = await response.json();
+          return { document: data.document };
+        },
+        save: async function (expectedRevision, document) {
+          var response = await fetch("/api/softball/game-sessions", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ expectedRevision: expectedRevision, document: document }),
+          });
+          var data = await response.json().catch(function () { return {}; });
+          if (response.status === 409) return { conflict: true, document: data.document };
+          if (!response.ok) throw new Error(data.error || "Could not save Game Manager.");
+          return { document: data.document };
+        },
+        subscribe: function (onRevision, onState) {
+          var cfg = window.HUB_GAME_SYNC || {};
+          if (cfg.anonKey && cfg.url && cfg.clubId && window.GameSync && GameSync.openBroadcast) {
+            return GameSync.openBroadcast({
+              url: cfg.url,
+              anonKey: cfg.anonKey,
+              topic: "game-manager:" + cfg.clubId,
+              onRevision: onRevision,
+              onState: onState,
+            });
+          }
+          var source = new EventSource("/api/softball/game-sessions/stream");
+          source.addEventListener("revision", function (event) {
+            try {
+              var payload = JSON.parse(event.data);
+              if (payload && typeof payload.revision === "number") onRevision(payload.revision);
+            } catch (e) {}
+          });
+          source.onopen = function () { if (onState) onState(true); };
+          source.onerror = function () { if (onState) onState(false); };
+          return function () { source.close(); };
+        },
+      });
+      lineupCache = sync.getCache() || { teams: {} };
+      sync.onChange(followRemote);
       var team = pinRealTeam();
       teamId = team.id;
       teamName = teamLabel(team);
-      if (store.active && store.active.teamId === teamId) {
-        var active = bundle().sessions[store.active.gameId];
+      var activeDoc = doc();
+      if (activeDoc.active && activeDoc.active.teamId === teamId) {
+        var active = (activeDoc.teams[teamId] && activeDoc.teams[teamId].sessions[activeDoc.active.gameId]) || null;
         if (active && active.status === "live") {
           gameId = active.lineupGameId;
           view = "live";
         }
       }
       render();
+      sync.start();
       loadLineups();
       cacheShell();
       registerSw();
@@ -1505,7 +1610,7 @@
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
     window.addEventListener("pagehide", function () {
-      if (store) saveStore();
+      if (sync) sync.persist();
     });
     boot();
   </script>

@@ -56,7 +56,7 @@ export const hubApps: HubApp[] = [
     file: "game-manager.html",
     title: "Game Manager",
     description:
-      "Dugout scoreboard for a Lineup Builder game. Innings, offense or defense, and who played the field. Stays on your phone.",
+      "Dugout scoreboard for a Lineup Builder game. The live game syncs across devices and stays on the phone if the signal drops.",
     area: "softball",
     requiresFeature: "admin",
   },

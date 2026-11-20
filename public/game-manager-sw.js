@@ -1,5 +1,5 @@
-const CACHE = "game-manager-shell-v1";
-const SHELL = ["/apps/game-manager", "/shared/game-manager.js", "/shared/elks-data.js"];
+const CACHE = "game-manager-shell-v2";
+const SHELL = ["/apps/game-manager", "/shared/game-manager.js", "/shared/game-sync.js", "/shared/elks-data.js"];
 
 self.addEventListener("install", function (event) {
   event.waitUntil(self.skipWaiting());
