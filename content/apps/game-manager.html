@@ -219,6 +219,17 @@
       background: var(--paper);
     }
 
+    .end-game {
+      width: 100%;
+      min-height: 56px;
+      margin-top: 8px;
+      border-radius: 16px;
+      border: 2px solid var(--line);
+      background: #fff;
+      font-size: 1.15rem;
+      font-weight: 900;
+    }
+
     .primary, .big {
       width: 100%;
       min-height: 68px;
@@ -539,11 +550,10 @@
       return count === 1 ? "1 batter" : count + " batters";
     }
 
-    function headerHtml(title, sub, backLabel, endButton) {
+    function headerHtml(title, sub, backLabel) {
       return "<header>"
         + '<button type="button" class="ghost" data-action="back">' + esc(backLabel) + "</button>"
         + '<div class="grow"><h1>' + esc(title) + "</h1>" + (sub ? "<p>" + esc(sub) + "</p>" : "") + "</div>"
-        + (endButton ? '<button type="button" class="ghost" data-action="ask-end">End</button>' : "")
         + "</header>";
     }
 
@@ -582,7 +592,7 @@
         }).join("")
         : "";
       return '<div class="wrap" data-screen="list">'
-        + headerHtml("Game Manager", "Not played yet", "Hub", false)
+        + headerHtml("Game Manager", "Not played yet", "Hub")
         + teamSelectHtml()
         + (loadNote ? '<p class="note">' + esc(loadNote) + "</p>" : "")
         + (booting && !(pack.games || []).length ? '<p class="empty">Loading lineups…</p>' : games)
@@ -608,7 +618,7 @@
         : "No subs.";
       var out = lineup.out.length ? '<p class="hint">Out: ' + lineup.out.map(function (row) { return esc(row.label); }).join(", ") + "</p>" : "";
       return '<div class="wrap" data-screen="detail">'
-        + headerHtml(lineup.name, teamName, "Games", false)
+        + headerHtml(lineup.name, teamName, "Games")
         + "<main>"
         + '<div class="lineup-grid">'
         + '<section class="panel"><h2>Batting order</h2>' + miniList(lineup.batting, "No batting order yet.") + "</section>"
@@ -635,7 +645,7 @@
       }).join("");
       return '<div class="wrap" data-screen="live">'
         + '<div class="topbar">'
-        + headerHtml(session.gameName, teamName + " · Saved on this phone", "Games", true)
+        + headerHtml(session.gameName, teamName + " · Saved on this phone", "Games")
         + scoreboardHtml(session)
         + bannerHtml(session)
         + "</div>"
@@ -645,7 +655,10 @@
         + defense
         + trackerHtml(session)
         + "</main>"
-        + '<div class="dock"><button type="button" class="primary" data-action="ask-runs">End half inning</button></div>'
+        + '<div class="dock">'
+        + '<button type="button" class="primary" data-action="ask-runs">End half inning</button>'
+        + '<button type="button" class="end-game" id="end-game" data-action="ask-end">End Game</button>'
+        + "</div>"
         + runSheet(session)
         + endSheet(session)
         + pickSheet(session)
@@ -655,13 +668,17 @@
     function renderPlayed() {
       var session = namedSession(sessionFor(gameId));
       if (!session) return renderList();
-      return '<div class="wrap" data-screen="played">'
+      var board = GameManager.scoreboard(session);
+      return '<div class="wrap" id="ended-summary" data-screen="played">'
         + '<div class="topbar">'
-        + headerHtml(session.gameName, "Played · saved on this phone", "Games", false)
+        + headerHtml(session.gameName, "Played · saved on this phone", "Games")
         + scoreboardHtml(session)
         + bannerHtml(session)
         + "</div>"
-        + "<main>" + trackerHtml(session) + "</main>"
+        + "<main>"
+        + '<p class="empty">Final ' + board.usTotal + "–" + board.oppTotal + ". Defensive innings are locked in.</p>"
+        + trackerHtml(session)
+        + "</main>"
         + "</div>";
     }
 
@@ -702,9 +719,9 @@
       var board = GameManager.scoreboard(session);
       var opp = GameManager.opponentLabel(session.gameName);
       return '<div class="sheet" id="end-sheet"><div class="sheet-card">'
-        + "<h2>Mark this game played?</h2>"
-        + "<p>It leaves the not-yet-played list. Final: Us " + board.usTotal + ", " + esc(opp) + " " + board.oppTotal + ".</p>"
-        + '<button type="button" class="big" data-action="confirm-end">Mark played</button>'
+        + "<h2>End this game?</h2>"
+        + "<p>Us " + board.usTotal + ", " + esc(opp) + " " + board.oppTotal + ". The score and defensive innings so far will be saved. This game leaves the not-yet-played list.</p>"
+        + '<button type="button" class="big" id="confirm-end-game" data-action="confirm-end">End game</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Keep playing</button>'
         + "</div></div>";
     }
@@ -870,7 +887,7 @@
       }
       if (action === "confirm-end") {
         var ending = GameManager.endGame(sessionFor(gameId));
-        view = "list";
+        view = "played";
         sheet = "";
         store.active = null;
         bundle().sessions[ending.lineupGameId] = ending;

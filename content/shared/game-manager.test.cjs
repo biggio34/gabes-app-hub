@@ -244,6 +244,37 @@ describe("game manager defensive innings", () => {
 });
 
 describe("game manager saved games", () => {
+  it("ends at any point and locks the score and defensive innings so far", () => {
+    const games = [sampleGame(), { id: "later", name: "vs. Hawks", battingOrder: ["mia"] }];
+    let state = start("away");
+    state = GameManager.recordRuns(state, 4, 1100);
+    state = GameManager.recordRuns(state, 1, 1200);
+    state = GameManager.recordRuns(state, 2, 1300);
+    assert.equal(GameManager.scoreboard(state).role, "defense");
+    assert.equal(GameManager.scoreboard(state).label, "Bottom 2");
+    const inningsSoFar = Object.assign({}, state.defensiveInnings);
+    state = GameManager.endGame(state, 1400);
+    assert.equal(state.status, "played");
+    assert.equal(state.finalUs, 6);
+    assert.equal(state.finalOpp, 1);
+    assert.deepEqual(state.defensiveInnings, inningsSoFar);
+    assert.equal(state.defensiveInnings.mia, 1);
+    assert.equal(state.defensiveInnings.jo || 0, 0);
+    const board = GameManager.scoreboard(state);
+    assert.equal(board.label, "Final");
+    assert.equal(board.usTotal, 6);
+    assert.equal(board.oppTotal, 1);
+    assert.equal(board.innings.length, 2);
+    assert.equal(board.innings[1].us, 2);
+    assert.equal(board.innings[1].opp, null);
+    assert.deepEqual(
+      GameManager.unplayedGames(games.map(GameManager.slimGame), { "game-eagles": state }).map((game) => game.id),
+      ["later"],
+    );
+    assert.throws(() => GameManager.recordRuns(state, 1, 1500), /not in progress/);
+    assert.throws(() => GameManager.setDefense(state, "P", "sub", 1500), /not in progress/);
+  });
+
   it("drops a played game from the not-yet-played list and keeps the final score", () => {
     const games = [sampleGame(), { id: "later", name: "vs. Hawks", battingOrder: ["mia"] }];
     let state = start("away");
@@ -306,5 +337,11 @@ describe("game manager page", () => {
     assert.equal(html.includes("ElksData.load"), false);
     assert.match(html, new RegExp(GameManager.STORAGE_KEY));
     assert.match(html, /game-manager\.js/);
+    assert.match(html, /id="end-game"/);
+    assert.match(html, />End Game</);
+    assert.match(html, /data-action="ask-end"/);
+    assert.match(html, /id="confirm-end-game"/);
+    assert.match(html, /Keep playing/);
+    assert.match(html, /id="ended-summary"/);
   });
 });
