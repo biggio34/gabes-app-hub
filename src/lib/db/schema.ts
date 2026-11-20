@@ -62,6 +62,13 @@ export const softballState = sqliteTable("softball_state", {
   updatedAt: text("updated_at").notNull(),
 });
 
+export const gameManagerState = sqliteTable("game_manager_state", {
+  clubId: text("club_id").primaryKey(),
+  payload: text("payload").notNull(),
+  revision: integer("revision").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const players = sqliteTable("players", {
   id: text("id").primaryKey(),
   clubId: text("club_id").notNull(),

@@ -1,8 +1,8 @@
 /**
  * Dugout game state for Game Manager.
  * Pure helpers: half innings, home/away offense and defense, runs, and
- * defensive innings. The page stores the result on the phone.
- * This file does not read or write Lineup Builder data.
+ * defensive innings. Live state is synced by GameSync; this file does not
+ * read or write Lineup Builder data.
  */
 (function (root, factory) {
   const api = factory();
@@ -1398,6 +1398,166 @@
     };
   }
 
+  function emptyDocument() {
+    return { revision: 0, updatedAt: 0, appliedOpIds: [], active: null, teams: {} };
+  }
+
+  function documentRevision(doc) {
+    const n = Number(doc && doc.revision);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.floor(n);
+  }
+
+  function cloneDocument(doc) {
+    return normalizeDocument(JSON.parse(JSON.stringify(doc || emptyDocument())));
+  }
+
+  function normalizeDocument(raw) {
+    const doc = emptyDocument();
+    if (!raw || typeof raw !== "object") return doc;
+    doc.revision = documentRevision(raw);
+    doc.updatedAt = Number(raw.updatedAt) || 0;
+    doc.appliedOpIds = Array.isArray(raw.appliedOpIds)
+      ? raw.appliedOpIds.map(String).filter(Boolean).slice(-200)
+      : [];
+    if (raw.active && raw.active.teamId && raw.active.gameId) {
+      doc.active = { teamId: String(raw.active.teamId), gameId: String(raw.active.gameId) };
+    }
+    const teams = raw.teams && typeof raw.teams === "object" ? raw.teams : {};
+    Object.keys(teams).forEach(function (teamId) {
+      const bundle = teams[teamId] || {};
+      const sessions = {};
+      const rawSessions = bundle.sessions && typeof bundle.sessions === "object" ? bundle.sessions : {};
+      Object.keys(rawSessions).forEach(function (id) {
+        const session = normalizeSession(rawSessions[id]);
+        if (session) sessions[session.lineupGameId] = session;
+      });
+      doc.teams[String(teamId)] = {
+        teamName: String(bundle.teamName || ""),
+        sessions: sessions,
+      };
+    });
+    return doc;
+  }
+
+  function stampDocument(doc, revision, opId, now) {
+    const next = cloneDocument(doc);
+    const rev = Number(revision);
+    next.revision = Number.isFinite(rev) && rev > 0 ? Math.floor(rev) : 0;
+    next.updatedAt = now || Date.now();
+    if (opId && next.appliedOpIds.indexOf(String(opId)) < 0) next.appliedOpIds.push(String(opId));
+    next.appliedOpIds = next.appliedOpIds.slice(-200);
+    return next;
+  }
+
+  function ensureTeam(doc, teamId, teamName) {
+    const id = String(teamId || "");
+    if (!id) throw new Error("Missing team.");
+    if (!doc.teams[id]) doc.teams[id] = { teamName: "", sessions: {} };
+    if (teamName) doc.teams[id].teamName = String(teamName);
+    return doc.teams[id];
+  }
+
+  function documentFromStore(store) {
+    const doc = emptyDocument();
+    const source = store || emptyStore();
+    doc.updatedAt = Number(source.updatedAt) || 0;
+    doc.active = source.active || null;
+    Object.keys(source.teams || {}).forEach(function (teamId) {
+      const bundle = source.teams[teamId] || {};
+      doc.teams[teamId] = {
+        teamName: bundle.teamName || "",
+        sessions: bundle.sessions || {},
+      };
+    });
+    return normalizeDocument(doc);
+  }
+
+  function cacheFromStore(store) {
+    const teams = {};
+    Object.keys((store && store.teams) || {}).forEach(function (teamId) {
+      const bundle = store.teams[teamId] || {};
+      teams[teamId] = {
+        teamName: bundle.teamName || "",
+        games: bundle.games || [],
+        players: bundle.players || [],
+      };
+    });
+    return { teams: teams };
+  }
+
+  function envelopeFromLegacy(raw) {
+    if (!raw || typeof raw !== "object" || raw.acked || raw.version === 2) return null;
+    if (!raw.teams && !raw.active) return null;
+    const store = normalizeStore(raw);
+    return {
+      acked: documentFromStore(store),
+      queue: [],
+      localOpIds: [],
+      cache: cacheFromStore(store),
+    };
+  }
+
+  function applyGameOp(doc, op, now) {
+    if (!op || typeof op !== "object" || !op.type) throw new Error("Missing change.");
+    const next = cloneDocument(doc);
+    const stamp = now || Date.now();
+    if (op.type === "set-active") {
+      const gameId = op.gameId ? String(op.gameId) : "";
+      next.active = gameId && op.teamId ? { teamId: String(op.teamId), gameId: gameId } : null;
+      next.updatedAt = stamp;
+      return next;
+    }
+    if (op.type === "adopt") {
+      const incoming = normalizeDocument(op.snapshot || {});
+      Object.keys(incoming.teams).forEach(function (teamId) {
+        const src = incoming.teams[teamId];
+        const dst = ensureTeam(next, teamId, src.teamName);
+        Object.keys(src.sessions).forEach(function (gid) {
+          if (!dst.sessions[gid]) dst.sessions[gid] = src.sessions[gid];
+        });
+      });
+      if (!next.active && incoming.active) next.active = incoming.active;
+      next.updatedAt = stamp;
+      return next;
+    }
+    const team = ensureTeam(next, op.teamId, op.teamName);
+    function put(session) {
+      team.sessions[session.lineupGameId] = session;
+      next.updatedAt = session.updatedAt || stamp;
+    }
+    if (op.type === "start") {
+      const session = createLiveGame(op.input, stamp);
+      put(session);
+      next.active = { teamId: String(op.teamId), gameId: session.lineupGameId };
+      return next;
+    }
+    const gameId = String(op.gameId || "");
+    const current = team.sessions[gameId];
+    if (op.type === "add-out") put(addOut(current, stamp));
+    else if (op.type === "undo-out") put(undoOut(current, stamp));
+    else if (op.type === "record-runs") put(recordRuns(current, op.runs, stamp));
+    else if (op.type === "set-defense") put(setDefense(current, op.position, op.playerId || "", stamp));
+    else if (op.type === "injury") put(setInjuryOut(current, !!op.on, stamp));
+    else if (op.type === "leave") put(leaveRosterPlayer(current, op.playerId, stamp));
+    else if (op.type === "courtesy") put(setCourtesy(current, op.forId, op.runnerId, stamp));
+    else if (op.type === "flex-sub") put(subForFlex(current, op.playerId, !!op.force, stamp));
+    else if (op.type === "flex-return") put(reenterFlex(current, !!op.force, stamp));
+    else if (op.type === "tiebreaker") put(setTiebreaker(current, !!op.on, stamp));
+    else if (op.type === "sub") put(applySub(current, op.spot, op.playerId, !!op.force, stamp));
+    else if (op.type === "swap-dp-flex") put(swapDpFlex(current, stamp, !!op.force));
+    else if (op.type === "end") {
+      const ended = endGame(current, stamp);
+      put(ended);
+      if (next.active && next.active.gameId === ended.lineupGameId && next.active.teamId === String(op.teamId)) {
+        next.active = null;
+      }
+    } else {
+      throw new Error("Unknown Game Manager change.");
+    }
+    return next;
+  }
+
   function emptyStore() {
     return { version: 1, updatedAt: 0, active: null, teams: {} };
   }
@@ -1486,5 +1646,11 @@
     normalizeSession: normalizeSession,
     emptyStore: emptyStore,
     normalizeStore: normalizeStore,
+    emptyDocument: emptyDocument,
+    normalizeDocument: normalizeDocument,
+    stampDocument: stampDocument,
+    documentFromStore: documentFromStore,
+    envelopeFromLegacy: envelopeFromLegacy,
+    applyGameOp: applyGameOp,
   };
 });

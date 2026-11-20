@@ -54,6 +54,12 @@ const SCHEMA_SQL = [
     payload TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS game_manager_state (
+    club_id TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS players (
     id TEXT PRIMARY KEY,
     club_id TEXT NOT NULL,
