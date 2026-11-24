@@ -1371,7 +1371,21 @@
         }
 
         function plannerToday() {
-            if (window.ElksData && ElksData.localCalendarDate) return ElksData.localCalendarDate(new Date());
+            if (window.ElksData && ElksData.localCalendarDate) {
+                return ElksData.localCalendarDate(new Date(), 'America/Chicago');
+            }
+            try {
+                const parts = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: 'America/Chicago',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                }).formatToParts(new Date());
+                const y = (parts.find((p) => p.type === 'year') || {}).value;
+                const m = (parts.find((p) => p.type === 'month') || {}).value;
+                const d = (parts.find((p) => p.type === 'day') || {}).value;
+                if (y && m && d) return y + '-' + m + '-' + d;
+            } catch (e) {}
             const now = new Date();
             const y = now.getFullYear();
             const m = String(now.getMonth() + 1).padStart(2, '0');

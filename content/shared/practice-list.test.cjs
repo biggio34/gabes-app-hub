@@ -75,6 +75,30 @@ describe("practice list window", () => {
     assert.equal(ElksData.practiceWindowBucket(tonight, chicagoEvening.toISOString().slice(0, 10)), "past");
   });
 
+  it("resolves 8:26 PM CST to the Central calendar day and keeps that practice upcoming", () => {
+    // 2026-11-24 02:26 UTC is 8:26 PM CST on 2026-11-23. UTC has already flipped.
+    const instant = new Date("2026-11-24T02:26:00Z");
+    assert.equal(instant.toISOString().slice(0, 10), "2026-11-24");
+    assert.equal(ElksData.PRACTICE_TIME_ZONE, "America/Chicago");
+    const chicagoToday = ElksData.localCalendarDate(instant, "America/Chicago");
+    assert.equal(chicagoToday, "2026-11-23");
+    assert.equal(ElksData.practiceToday(instant), "2026-11-23");
+
+    const tonight = practice({ id: "tonight", date: "2026-11-23", time: "20:26" });
+    assert.equal(ElksData.practiceWindowBucket(tonight, chicagoToday), "upcoming");
+    assert.equal(ElksData.practiceWindowBucket(tonight, "2026-11-24"), "past");
+  });
+
+  it("falls back to local calendar getters when the time zone cannot be applied", () => {
+    const evening = new Date(2026, 10, 24, 20, 30, 0);
+    const local = [
+      evening.getFullYear(),
+      String(evening.getMonth() + 1).padStart(2, "0"),
+      String(evening.getDate()).padStart(2, "0"),
+    ].join("-");
+    assert.equal(ElksData.localCalendarDate(evening, "Not/AZone"), local);
+  });
+
   it("classifies yesterday, today, day +10, day +11, and undated", () => {
     assert.equal(ElksData.practiceWindowBucket(practice({ id: "y", date: "2026-11-23" }), today), "past");
     assert.equal(ElksData.practiceWindowBucket(practice({ id: "t", date: "2026-11-24" }), today), "upcoming");
@@ -162,7 +186,7 @@ describe("practice planner sections", () => {
     assert.match(html, /Later practices/);
     assert.match(html, /partitionPractices/);
     assert.match(html, /practiceWindowBucket/);
-    assert.match(html, /localCalendarDate/);
+    assert.match(html, /localCalendarDate\(new Date\(\), 'America\/Chicago'\)/);
     assert.match(html, /duplicatePractice\(\$\{index\}, event\)/);
     assert.match(html, /renderPracticeCard\(entry\.practice, entry\.index, bucket\)/);
     assert.doesNotMatch(html, /toISOString\(\)\.slice\(0,\s*10\)/);

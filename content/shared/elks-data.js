@@ -2080,18 +2080,38 @@
     }
   }
 
-  // Inclusive window shown under Upcoming: today through today + 10 local days.
+  // Inclusive window shown under Upcoming: today through today + 10 days.
   const PRACTICE_WINDOW_DAYS = 10;
+  const PRACTICE_TIME_ZONE = 'America/Chicago';
 
-  // Local calendar day, never UTC. `toISOString().slice(0, 10)` rolls forward
-  // on an evening in the US, and `new Date('YYYY-MM-DD')` is UTC midnight,
-  // which is still the previous evening in Central Time.
-  function localCalendarDate(date) {
+  // Calendar day in an IANA zone. Practice Planner passes America/Chicago so
+  // "today" matches the Central Time clock. Date-only strings are never parsed
+  // with `new Date('YYYY-MM-DD')` (UTC midnight, previous evening in the US).
+  // If Intl cannot apply the zone, fall back to the runtime's local getters.
+  function localCalendarDate(date, timeZone) {
     const dt = date instanceof Date && !isNaN(date.getTime()) ? date : new Date();
+    if (timeZone) {
+      try {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: timeZone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).formatToParts(dt);
+        const y = (parts.find(function (p) { return p.type === 'year'; }) || {}).value;
+        const m = (parts.find(function (p) { return p.type === 'month'; }) || {}).value;
+        const d = (parts.find(function (p) { return p.type === 'day'; }) || {}).value;
+        if (y && m && d) return y + '-' + m + '-' + d;
+      } catch (e) {}
+    }
     const y = dt.getFullYear();
     const m = String(dt.getMonth() + 1).padStart(2, '0');
     const d = String(dt.getDate()).padStart(2, '0');
     return y + '-' + m + '-' + d;
+  }
+
+  function practiceToday(date) {
+    return localCalendarDate(date || new Date(), PRACTICE_TIME_ZONE);
   }
 
   function practiceDateValue(practice) {
@@ -2127,7 +2147,7 @@
   }
 
   function practiceWindowBucket(practice, today) {
-    const start = practiceDateValue({ date: today }) || localCalendarDate(new Date());
+    const start = practiceDateValue({ date: today }) || practiceToday();
     const date = practiceDateValue(practice);
     if (!date) return 'later';
     if (date < start) return 'past';
@@ -2173,7 +2193,7 @@
   }
 
   function partitionPractices(list, today) {
-    const start = practiceDateValue({ date: today }) || localCalendarDate(new Date());
+    const start = practiceDateValue({ date: today }) || practiceToday();
     const groups = {
       today: start,
       through: addCalendarDays(start, PRACTICE_WINDOW_DAYS),
@@ -2460,7 +2480,9 @@
     clonePracticeAsUpcoming,
     upcomingPracticeDate,
     PRACTICE_WINDOW_DAYS,
+    PRACTICE_TIME_ZONE,
     localCalendarDate,
+    practiceToday,
     addCalendarDays,
     practiceWindowBucket,
     comparePracticesChronologically,
