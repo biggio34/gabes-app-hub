@@ -2080,6 +2080,116 @@
     }
   }
 
+  // Inclusive window shown under Upcoming: today through today + 10 local days.
+  const PRACTICE_WINDOW_DAYS = 10;
+
+  // Local calendar day, never UTC. `toISOString().slice(0, 10)` rolls forward
+  // on an evening in the US, and `new Date('YYYY-MM-DD')` is UTC midnight,
+  // which is still the previous evening in Central Time.
+  function localCalendarDate(date) {
+    const dt = date instanceof Date && !isNaN(date.getTime()) ? date : new Date();
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
+  }
+
+  function practiceDateValue(practice) {
+    const raw = practice && practice.date != null ? String(practice.date).trim() : '';
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    if (!match) return '';
+    const y = Number(match[1]);
+    const m = Number(match[2]);
+    const d = Number(match[3]);
+    const dt = new Date(y, m - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return '';
+    return raw;
+  }
+
+  function addCalendarDays(isoDate, days) {
+    const raw = practiceDateValue({ date: isoDate });
+    if (!raw) return '';
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    const dt = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    const delta = Number(days);
+    dt.setDate(dt.getDate() + (Number.isFinite(delta) ? delta : 0));
+    return localCalendarDate(dt);
+  }
+
+  function practiceStartMinutes(practice) {
+    const raw = practice && practice.time != null ? String(practice.time).trim() : '';
+    const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(raw);
+    if (!match) return null;
+    const h = Number(match[1]);
+    const m = Number(match[2]);
+    if (h > 23 || m > 59) return null;
+    return h * 60 + m;
+  }
+
+  function practiceWindowBucket(practice, today) {
+    const start = practiceDateValue({ date: today }) || localCalendarDate(new Date());
+    const date = practiceDateValue(practice);
+    if (!date) return 'later';
+    if (date < start) return 'past';
+    const end = addCalendarDays(start, PRACTICE_WINDOW_DAYS);
+    if (date > end) return 'later';
+    return 'upcoming';
+  }
+
+  function comparePracticesChronologically(a, b) {
+    const da = practiceDateValue(a);
+    const db = practiceDateValue(b);
+    if (da !== db) {
+      if (!da) return 1;
+      if (!db) return -1;
+      return da < db ? -1 : 1;
+    }
+    const ta = practiceStartMinutes(a);
+    const tb = practiceStartMinutes(b);
+    if (ta == null && tb == null) return 0;
+    if (ta == null) return 1;
+    if (tb == null) return -1;
+    if (ta !== tb) return ta - tb;
+    return 0;
+  }
+
+  function entryPractice(item) {
+    if (
+      item &&
+      typeof item === 'object' &&
+      item.practice &&
+      typeof item.practice === 'object' &&
+      typeof item.index === 'number'
+    ) {
+      return item.practice;
+    }
+    return item;
+  }
+
+  function sortPracticesChronologically(list) {
+    return (Array.isArray(list) ? list.slice() : []).sort(function (a, b) {
+      return comparePracticesChronologically(entryPractice(a), entryPractice(b));
+    });
+  }
+
+  function partitionPractices(list, today) {
+    const start = practiceDateValue({ date: today }) || localCalendarDate(new Date());
+    const groups = {
+      today: start,
+      through: addCalendarDays(start, PRACTICE_WINDOW_DAYS),
+      past: [],
+      upcoming: [],
+      later: [],
+    };
+    (Array.isArray(list) ? list : []).forEach(function (item) {
+      groups[practiceWindowBucket(entryPractice(item), start)].push(item);
+    });
+    groups.past = sortPracticesChronologically(groups.past);
+    groups.upcoming = sortPracticesChronologically(groups.upcoming);
+    groups.later = sortPracticesChronologically(groups.later);
+    return groups;
+  }
+
   function clonePractice(practice, opts) {
     const src = practice || {};
     const options = opts || {};
@@ -2349,6 +2459,13 @@
     clonePractice,
     clonePracticeAsUpcoming,
     upcomingPracticeDate,
+    PRACTICE_WINDOW_DAYS,
+    localCalendarDate,
+    addCalendarDays,
+    practiceWindowBucket,
+    comparePracticesChronologically,
+    sortPracticesChronologically,
+    partitionPractices,
     laneSlotSum,
     splitSegmentIntoStations,
     mergeStationsToSingle,

@@ -150,7 +150,7 @@
                 </button>
             </div>
 
-            <div id="practices-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div id="practices-list" class="flex flex-col gap-6">
                 <!-- Populated by JavaScript -->
             </div>
         </div>
@@ -507,6 +507,9 @@
         let practices = [];
         let drills = [];
         let templates = [];
+        let practiceSectionOpen = { past: false, upcoming: true, later: false };
+        let practiceRevealId = null;
+        let practiceScrollId = null;
 
         function applyPlannerHub() {
             if (window.ElksData && window.ElksData.applySelectedHubTeam) {
@@ -1034,8 +1037,10 @@
             stampPracticeTeam(copy);
             practices.push(copy);
             savePractices();
+            notePracticePlacement(copy);
             renderPractices();
-            editPractice(practices.length - 1);
+            const copyIndex = practices.findIndex((item) => item && item.id === copy.id);
+            editPractice(copyIndex === -1 ? practices.length - 1 : copyIndex);
             document.getElementById('modal-title').textContent = 'Upcoming copy — tweak and save';
         }
 
@@ -1365,18 +1370,244 @@
             }
         }
 
+        function plannerToday() {
+            if (window.ElksData && ElksData.localCalendarDate) return ElksData.localCalendarDate(new Date());
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            return y + '-' + m + '-' + d;
+        }
+
+        function practiceListBucket(practice) {
+            if (window.ElksData && ElksData.practiceWindowBucket) {
+                return ElksData.practiceWindowBucket(practice, plannerToday());
+            }
+            return 'upcoming';
+        }
+
+        function sortedTeamPractices() {
+            const entries = practicesForTeam();
+            if (window.ElksData && ElksData.sortPracticesChronologically) {
+                return ElksData.sortPracticesChronologically(entries);
+            }
+            return entries;
+        }
+
+        function partitionVisiblePractices(entries) {
+            if (window.ElksData && ElksData.partitionPractices) {
+                return ElksData.partitionPractices(entries, plannerToday());
+            }
+            return {
+                today: plannerToday(),
+                through: plannerToday(),
+                past: [],
+                upcoming: entries.slice(),
+                later: [],
+            };
+        }
+
+        function notePracticePlacement(practice) {
+            const bucket = practiceListBucket(practice);
+            practiceSectionOpen[bucket] = true;
+            if (practice && practice.id) {
+                practiceRevealId = practice.id;
+                practiceScrollId = practice.id;
+            }
+        }
+
+        function togglePracticeSection(bucket) {
+            if (!practiceSectionOpen || !Object.prototype.hasOwnProperty.call(practiceSectionOpen, bucket)) return;
+            practiceSectionOpen[bucket] = !practiceSectionOpen[bucket];
+            renderPractices();
+        }
+
+        function openPracticeSection(bucket) {
+            if (!practiceSectionOpen || !Object.prototype.hasOwnProperty.call(practiceSectionOpen, bucket)) return;
+            practiceSectionOpen[bucket] = true;
+            renderPractices();
+            const section = document.getElementById('practice-section-' + bucket);
+            if (section && section.scrollIntoView) {
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        function upcomingWindowHint(groups) {
+            const start = (groups && groups.today) || plannerToday();
+            const end = (groups && groups.through) || start;
+            const startLabel = formatPracticeDate(start) || start;
+            const endLabel = formatPracticeDate(end) || end;
+            return 'Next 10 days · ' + startLabel + ' – ' + endLabel;
+        }
+
+        function renderPracticeCard(practice, index, bucket) {
+            const div = document.createElement('div');
+            const revealed = practiceRevealId && practice.id && practice.id === practiceRevealId;
+            div.className = 'practice-card bg-slate-900 border border-slate-700 rounded-3xl p-5 cursor-pointer' + (revealed ? ' ring-2 ring-red-500' : '');
+            div.dataset.practiceId = practice.id || '';
+            div.dataset.practiceIndex = String(index);
+            div.dataset.practiceBucket = bucket;
+
+            let dateTimeHTML = '';
+
+            if (practice.date) {
+                const formattedDate = formatPracticeDate(practice.date);
+
+                let timePart = '';
+                if (practice.time) {
+                    timePart = ` • ${formatPracticeTime(practice.date, practice.time)}`;
+                }
+
+                dateTimeHTML = `
+                    <div class="font-semibold">${formattedDate}</div>
+                    <div class="text-red-400 text-sm">${practice.duration} min${timePart}</div>
+                `;
+            } else {
+                let timePart = '';
+                if (practice.time) {
+                    timePart = ` • ${formatPracticeTime(null, practice.time)}`;
+                }
+                dateTimeHTML = `
+                    <div class="font-semibold text-slate-300">Date not set</div>
+                    <div class="text-red-400 text-sm">${practice.duration} min${timePart}</div>
+                `;
+            }
+
+            const stationBlocks = practiceStationCount(practice);
+            const stationNote = stationBlocks
+                ? ` · ${stationBlocks} station block${stationBlocks === 1 ? '' : 's'}`
+                : '';
+
+            div.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        ${dateTimeHTML}
+                    </div>
+                    <div class="text-xs px-2 py-1 bg-slate-800 rounded-xl text-slate-400">
+                        ${practice.segments ? practice.segments.length : 0} segments${stationNote}
+                    </div>
+                </div>
+                <div class="mt-3 font-medium">${escapeHtml(practice.focus || 'Practice')}</div>
+                <div class="text-xs text-red-400/90 mt-1">
+                    <i class="fa-solid fa-users mr-1"></i>${escapeHtml(practiceTeamLabel(practice.teamId) || 'Team not set')}
+                </div>
+                ${practice.location ? `<div class="text-xs text-slate-400 mt-1">${escapeHtml(practice.location)}</div>` : ''}
+                <div class="mt-4 flex justify-end">
+                    <button type="button" class="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300"
+                            onclick="duplicatePractice(${index}, event)">
+                        <i class="fa-solid fa-copy mr-1"></i>Duplicate
+                    </button>
+                </div>
+            `;
+
+            div.onclick = () => editPractice(index);
+            return div;
+        }
+
+        function renderUpcomingEmpty(pastCount, laterCount) {
+            const wrap = document.createElement('div');
+            wrap.className = 'col-span-full bg-slate-900 border border-slate-700 rounded-3xl p-8 text-center';
+            const bits = [];
+            if (laterCount) bits.push(laterCount + ' later ' + (laterCount === 1 ? 'practice' : 'practices'));
+            if (pastCount) bits.push(pastCount + ' previous ' + (pastCount === 1 ? 'practice' : 'practices'));
+            const verb = bits.length === 1 && (laterCount + pastCount) === 1 ? 'is' : 'are';
+            const where = bits.length === 1 ? 'the other section' : 'the other sections';
+            wrap.innerHTML = `
+                <i class="fa-solid fa-calendar text-4xl text-slate-600 mb-3"></i>
+                <p class="text-slate-300">No practices in the next 10 days.</p>
+                <p class="text-sm text-slate-400 mt-1">${bits.join(' and ')} ${verb} tucked in ${where}.</p>
+            `;
+            const actions = document.createElement('div');
+            actions.className = 'mt-4 flex flex-wrap items-center justify-center gap-2';
+            if (laterCount) {
+                const laterBtn = document.createElement('button');
+                laterBtn.type = 'button';
+                laterBtn.className = 'px-4 py-2 bg-red-700 hover:bg-red-600 rounded-2xl text-sm font-semibold';
+                laterBtn.textContent = 'Show later practices';
+                laterBtn.onclick = function () { openPracticeSection('later'); };
+                actions.appendChild(laterBtn);
+            }
+            if (pastCount) {
+                const pastBtn = document.createElement('button');
+                pastBtn.type = 'button';
+                pastBtn.className = 'px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold text-slate-200';
+                pastBtn.textContent = 'Show previous practices';
+                pastBtn.onclick = function () { openPracticeSection('past'); };
+                actions.appendChild(pastBtn);
+            }
+            wrap.appendChild(actions);
+            return wrap;
+        }
+
+        function renderPracticeSection(parent, bucket, label, hint, entries, pastCount, laterCount) {
+            const open = !!practiceSectionOpen[bucket];
+            const section = document.createElement('section');
+            section.id = 'practice-section-' + bucket;
+            section.dataset.practiceSection = bucket;
+            section.dataset.open = open ? 'true' : 'false';
+            section.dataset.count = String(entries.length);
+
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'w-full flex items-center justify-between gap-3 py-1 text-left group';
+            button.setAttribute('aria-expanded', open ? 'true' : 'false');
+            button.setAttribute('aria-controls', 'practice-section-body-' + bucket);
+            button.onclick = function () { togglePracticeSection(bucket); };
+
+            const left = document.createElement('span');
+            left.className = 'flex items-baseline gap-2 min-w-0';
+            const title = document.createElement('span');
+            title.className = 'text-[11px] font-semibold tracking-[0.16em] uppercase text-slate-400 group-hover:text-slate-200';
+            title.textContent = label;
+            const count = document.createElement('span');
+            count.className = 'text-[11px] font-semibold tabular-nums text-slate-500';
+            count.dataset.practiceCount = String(entries.length);
+            count.textContent = String(entries.length);
+            left.appendChild(title);
+            left.appendChild(count);
+
+            const icon = document.createElement('i');
+            icon.className = 'fa-solid ' + (open ? 'fa-chevron-down' : 'fa-chevron-up') + ' text-[11px] text-slate-500';
+            icon.setAttribute('aria-hidden', 'true');
+            button.appendChild(left);
+            button.appendChild(icon);
+            section.appendChild(button);
+
+            if (open) {
+                if (hint) {
+                    const hintEl = document.createElement('p');
+                    hintEl.className = 'text-xs text-slate-500 mt-0.5';
+                    hintEl.textContent = hint;
+                    section.appendChild(hintEl);
+                }
+                const grid = document.createElement('div');
+                grid.id = 'practice-section-body-' + bucket;
+                grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-3';
+                if (!entries.length && bucket === 'upcoming') {
+                    grid.appendChild(renderUpcomingEmpty(pastCount, laterCount));
+                } else {
+                    entries.forEach(function (entry) {
+                        grid.appendChild(renderPracticeCard(entry.practice, entry.index, bucket));
+                    });
+                }
+                section.appendChild(grid);
+            }
+
+            parent.appendChild(section);
+        }
+
         function renderPractices() {
             const container = document.getElementById('practices-list');
             container.innerHTML = '';
-            const visible = practicesForTeam();
+            const entries = practicesForTeam();
 
-            if (visible.length === 0) {
+            if (entries.length === 0) {
                 const filterLabel = practiceTeamLabel(plannerRealTeamFilter());
                 const emptyCopy = filterLabel
                     ? `No practices for ${escapeHtml(filterLabel)} yet. Create one for this team.`
                     : 'No practices yet. Create your first one!';
                 container.innerHTML = `
-                    <div class="col-span-full bg-slate-900 border border-slate-700 rounded-3xl p-8 text-center">
+                    <div class="bg-slate-900 border border-slate-700 rounded-3xl p-8 text-center">
                         <i class="fa-solid fa-calendar text-4xl text-slate-600 mb-3"></i>
                         <p class="text-slate-400">${emptyCopy}</p>
                     </div>
@@ -1384,65 +1615,31 @@
                 return;
             }
 
-            visible.forEach(({ practice, index }) => {
-                const div = document.createElement('div');
-                div.className = 'practice-card bg-slate-900 border border-slate-700 rounded-3xl p-5 cursor-pointer';
+            const groups = partitionVisiblePractices(entries);
+            if (groups.past.length) {
+                renderPracticeSection(container, 'past', 'Previous practices', '', groups.past, groups.past.length, groups.later.length);
+            }
+            renderPracticeSection(
+                container,
+                'upcoming',
+                'Upcoming practices',
+                upcomingWindowHint(groups),
+                groups.upcoming,
+                groups.past.length,
+                groups.later.length
+            );
+            if (groups.later.length) {
+                renderPracticeSection(container, 'later', 'Later practices', 'More than 10 days out, then practices with no date.', groups.later, groups.past.length, groups.later.length);
+            }
 
-                let dateTimeHTML = '';
-
-                if (practice.date) {
-                    const formattedDate = formatPracticeDate(practice.date);
-
-                    let timePart = '';
-                    if (practice.time) {
-                        timePart = ` • ${formatPracticeTime(practice.date, practice.time)}`;
-                    }
-
-                    dateTimeHTML = `
-                        <div class="font-semibold">${formattedDate}</div>
-                        <div class="text-red-400 text-sm">${practice.duration} min${timePart}</div>
-                    `;
-                } else {
-                    // No date set — just show duration + current zone for the time
-                    let timePart = '';
-                    if (practice.time) {
-                        timePart = ` • ${formatPracticeTime(null, practice.time)}`;
-                    }
-                    dateTimeHTML = `
-                        <div class="text-red-400 text-sm">${practice.duration} min${timePart}</div>
-                    `;
+            if (practiceScrollId) {
+                const scrollId = practiceScrollId;
+                practiceScrollId = null;
+                const card = container.querySelector('[data-practice-id="' + (window.CSS && CSS.escape ? CSS.escape(scrollId) : scrollId) + '"]');
+                if (card && card.scrollIntoView) {
+                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
-
-                const stationBlocks = practiceStationCount(practice);
-                const stationNote = stationBlocks
-                    ? ` · ${stationBlocks} station block${stationBlocks === 1 ? '' : 's'}`
-                    : '';
-
-                div.innerHTML = `
-                    <div class="flex justify-between items-start">
-                        <div>
-                            ${dateTimeHTML}
-                        </div>
-                        <div class="text-xs px-2 py-1 bg-slate-800 rounded-xl text-slate-400">
-                            ${practice.segments ? practice.segments.length : 0} segments${stationNote}
-                        </div>
-                    </div>
-                    <div class="mt-3 font-medium">${escapeHtml(practice.focus || 'Practice')}</div>
-                    <div class="text-xs text-red-400/90 mt-1">
-                        <i class="fa-solid fa-users mr-1"></i>${escapeHtml(practiceTeamLabel(practice.teamId) || 'Team not set')}
-                    </div>
-                    ${practice.location ? `<div class="text-xs text-slate-400 mt-1">${escapeHtml(practice.location)}</div>` : ''}
-                    <div class="mt-4 flex justify-end">
-                        <button type="button" class="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300"
-                                onclick="duplicatePractice(${index}, event)">
-                            <i class="fa-solid fa-copy mr-1"></i>Duplicate
-                        </button>
-                    </div>
-                `;
-                
-                div.onclick = () => editPractice(index);
-                container.appendChild(div);
-            });
+            }
         }
 
         function renderDrills() {
@@ -1602,7 +1799,7 @@
             const drill = drills.find(d => d.id === drillId);
             if (!drill) return;
 
-            const visible = practicesForTeam();
+            const visible = sortedTeamPractices();
             if (visible.length === 0) {
                 // No practices yet — create a new one with this drill
                 const newPractice = stampPracticeTeam({
@@ -1631,7 +1828,7 @@
             // Build a simple numbered list for the user
             let message = `Add "${drill.name}" to which practice?\n\n`;
             visible.forEach(({ practice: p }, i) => {
-                const dateStr = p.date ? new Date(p.date).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : 'No date';
+                const dateStr = p.date ? (formatPracticeDate(p.date) || 'No date') : 'No date';
                 const focus = p.focus || 'Untitled Practice';
                 const teamBit = practiceTeamLabel(p.teamId);
                 message += `${i + 1}. ${dateStr} — ${focus} (${p.duration} min)${teamBit ? ' · ' + teamBit : ''}\n`;
@@ -2257,6 +2454,7 @@
             }
 
             savePractices();
+            notePracticePlacement(practiceData);
             closePracticeModal();
             renderPractices();
         }
