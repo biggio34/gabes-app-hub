@@ -86,42 +86,458 @@
             border-color: #b91c1c;
             color: #fecaca;
         }
+
+        body.practice-editor-open {
+            overflow: hidden;
+        }
+
+        #practice-details-toggle,
+        #practice-modal-footer-mobile,
+        #mobile-add-drill-btn,
+        .mobile-label,
+        .desktop-drag-hint {
+            display: none;
+        }
+
+        #mobile-drill-sheet {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 55;
+        }
+
+        #mobile-drill-sheet.open {
+            display: block;
+        }
+
+        #mobile-drill-sheet .mobile-drill-panel {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            top: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            max-width: 100%;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-bottom: 0;
+            border-radius: 1.5rem 1.5rem 0 0;
+        }
+
+        @media (min-width: 768px) {
+            .mobile-only,
+            #mobile-drill-sheet,
+            #mobile-drill-sheet.open {
+                display: none !important;
+            }
+
+            .desktop-drag-hint {
+                display: inline;
+            }
+        }
+
+        @media (max-width: 767px) {
+            .planner-shell {
+                padding: 1.25rem 1rem !important;
+            }
+
+            .planner-header {
+                flex-wrap: wrap;
+                gap: 0.5rem 0.75rem;
+            }
+
+            .planner-title {
+                font-size: 1.5rem !important;
+                line-height: 1.15;
+            }
+
+            .planner-mark {
+                width: 2.5rem !important;
+                height: 2.5rem !important;
+            }
+
+            .planner-mark i {
+                font-size: 1.25rem !important;
+            }
+
+            .planner-subtitle,
+            .planner-avatar {
+                display: none !important;
+            }
+
+            .planner-clock,
+            .planner-age {
+                font-size: 0.75rem !important;
+            }
+
+            #hub-team-picker {
+                max-width: 11.5rem;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                font-size: 0.75rem;
+            }
+
+            .planner-nav {
+                width: 100% !important;
+                max-width: 100%;
+                overflow-x: auto;
+            }
+
+            .planner-nav .nav-button {
+                padding-left: 0.8rem !important;
+                padding-right: 0.8rem !important;
+                white-space: nowrap;
+            }
+
+            .desktop-only {
+                display: none !important;
+            }
+
+            #practice-modal {
+                padding: 0 !important;
+                align-items: stretch !important;
+            }
+
+            #practice-modal-panel {
+                height: 100dvh;
+                max-height: 100dvh !important;
+                border-radius: 0 !important;
+                border-width: 0 !important;
+                max-width: 100%;
+            }
+
+            #practice-modal-header,
+            .editor-sheet > div > .sheet-header {
+                padding: 0.75rem 1rem !important;
+            }
+
+            .editor-body {
+                overflow-x: hidden !important;
+                overflow-y: auto !important;
+                padding: 0.75rem !important;
+                -webkit-overflow-scrolling: touch;
+                overscroll-behavior: contain;
+            }
+
+            .editor-columns {
+                flex-direction: column !important;
+            }
+
+            .plan-column {
+                width: 100% !important;
+            }
+
+            #practice-details-toggle {
+                display: flex;
+            }
+
+            .mobile-label {
+                display: block;
+            }
+
+            #practice-details-panel.is-collapsed {
+                display: none !important;
+            }
+
+            #practice-details-grid {
+                grid-template-columns: minmax(0, 1fr) !important;
+            }
+
+            #practice-duration {
+                width: 100% !important;
+            }
+
+            #mobile-add-drill-btn {
+                display: inline-flex !important;
+            }
+
+            .header-custom-btn {
+                min-height: 44px;
+                padding-top: 0.5rem !important;
+                padding-bottom: 0.5rem !important;
+            }
+
+            #practice-modal-footer-desktop {
+                display: none !important;
+            }
+
+            #practice-modal-footer-mobile {
+                display: block !important;
+                padding: 0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
+            }
+
+            .m-input {
+                font-size: 16px !important;
+                line-height: 1.35;
+                padding: 0.65rem 0.75rem !important;
+                min-height: 44px;
+            }
+
+            textarea.m-input {
+                min-height: 7rem;
+            }
+
+            .m-line-input {
+                font-size: 16px !important;
+                min-height: 40px;
+                padding-top: 0.4rem;
+                padding-bottom: 0.4rem;
+            }
+
+            .sheet-close {
+                width: 44px;
+                height: 44px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                margin-right: -0.25rem;
+            }
+
+            .editor-sheet {
+                align-items: flex-end !important;
+                padding: 0 !important;
+            }
+
+            .editor-sheet > div {
+                max-height: 100dvh;
+                border-radius: 1.25rem 1.25rem 0 0;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+            }
+
+            .editor-sheet .sheet-body {
+                overflow-y: auto;
+                padding: 1rem !important;
+            }
+
+            .editor-sheet .sheet-footer {
+                flex-direction: column-reverse;
+                padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom)) !important;
+            }
+
+            .editor-sheet .sheet-footer > button {
+                width: 100%;
+                min-height: 48px;
+            }
+
+            .editor-sheet .sheet-grid {
+                grid-template-columns: minmax(0, 1fr) !important;
+            }
+
+            .segment-row {
+                flex-wrap: wrap;
+                gap: 0.5rem !important;
+            }
+
+            .segment-reorder {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                flex-shrink: 0;
+            }
+
+            .segment-grip {
+                display: none !important;
+            }
+
+            .segment-main {
+                flex: 1 1 calc(100% - 3.5rem);
+                min-width: 0;
+            }
+
+            .segment-actions {
+                flex-direction: row !important;
+                width: 100%;
+                justify-content: flex-end;
+                gap: 0.5rem;
+                margin-top: 0.25rem;
+            }
+
+            .segment-meta {
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 0.5rem !important;
+            }
+
+            .segment-minutes {
+                width: 100% !important;
+            }
+
+            .segment-name {
+                order: 3;
+                flex: 1 1 100% !important;
+                min-width: 0 !important;
+                width: 100% !important;
+            }
+
+            .segment-time {
+                order: 1;
+            }
+
+            .segment-cat {
+                order: 2;
+                margin-left: auto;
+            }
+
+            .segment-wide-btn {
+                width: 100%;
+                justify-content: center;
+                min-height: 44px;
+                font-size: 14px !important;
+                padding-top: 0.6rem !important;
+                padding-bottom: 0.6rem !important;
+            }
+
+            .notes-preview {
+                min-height: 44px !important;
+                font-size: 14px !important;
+                padding: 0.65rem 0.75rem !important;
+            }
+
+            .seg-icon-btn {
+                width: 44px;
+                height: 44px;
+                border-radius: 12px;
+                background: #1e293b;
+                border: 1px solid #334155;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+
+            .reorder-btn {
+                width: 44px;
+                height: 36px;
+                border-radius: 12px;
+                background: #1e293b;
+                color: #e2e8f0;
+                border: 1px solid #334155;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .reorder-btn:disabled {
+                opacity: 0.35;
+            }
+
+            .lane-grid {
+                grid-template-columns: minmax(0, 1fr) !important;
+            }
+
+            .lane-card {
+                padding: 12px;
+            }
+
+            .pos-chip {
+                font-size: 13px;
+                padding: 8px 12px;
+                min-height: 36px;
+            }
+
+            .lane-player {
+                min-height: 36px;
+                font-size: 14px !important;
+                gap: 8px;
+            }
+
+            .lane-player input {
+                width: 18px;
+                height: 18px;
+            }
+
+            .lane-players {
+                max-height: 11rem !important;
+            }
+
+            .lane-actions button {
+                flex: 1;
+                min-height: 44px;
+                font-size: 14px !important;
+                padding: 0.5rem 0.75rem !important;
+            }
+
+            .slot-row {
+                display: grid !important;
+                grid-template-columns: auto minmax(0, 1fr) auto;
+                align-items: center;
+                gap: 8px;
+                margin-top: 8px;
+            }
+
+            .slot-name {
+                order: -1;
+                grid-column: 1 / -1;
+                width: 100% !important;
+            }
+
+            .slot-duration {
+                width: 100% !important;
+            }
+
+            #practice-modal input,
+            #practice-modal select,
+            #practice-modal textarea,
+            #mobile-drill-sheet input,
+            .editor-sheet input,
+            .editor-sheet select,
+            .editor-sheet textarea {
+                max-width: 100%;
+            }
+
+            #practice-modal button,
+            #mobile-drill-sheet button,
+            .editor-sheet button {
+                touch-action: manipulation;
+            }
+        }
+
+        @media (min-width: 768px) {
+            .segment-reorder {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-200">
-    <div class="max-w-7xl mx-auto px-6 py-8">
+    <div class="planner-shell max-w-7xl mx-auto px-6 py-8">
         <!-- Header -->
-        <div class="flex items-center justify-between mb-8">
-            <div class="flex items-center gap-x-4">
-                <a class='flex items-center gap-x-1.5 text-sm font-medium text-slate-400 hover:text-red-400 transition-colors' href='/' id='back-to-hub'>
+        <div class="planner-header flex items-center justify-between mb-8">
+            <div class="flex items-center gap-x-4 min-w-0">
+                <a class='flex items-center gap-x-1.5 text-sm font-medium text-slate-400 hover:text-red-400 transition-colors shrink-0' href='/' id='back-to-hub'>
                     <i class="fa-solid fa-arrow-left"></i>
                     <span class="hidden sm:inline">Hub</span>
                 </a>
-                <div class="w-12 h-12 bg-red-700 rounded-2xl flex items-center justify-center">
+                <div class="planner-mark w-12 h-12 bg-red-700 rounded-2xl flex items-center justify-center shrink-0">
                     <i class="fa-solid fa-baseball-ball text-white text-3xl"></i>
                 </div>
-                <div>
-                    <h1 id="planner-title" class="title-font text-4xl font-semibold tracking-tighter">Practice Planner</h1>
+                <div class="min-w-0">
+                    <h1 id="planner-title" class="planner-title title-font text-4xl font-semibold tracking-tighter">Practice Planner</h1>
                     <div id="hub-team-picker" class="text-red-400 text-sm -mt-1"></div>
                 </div>
             </div>
             
-            <div class="flex items-center gap-x-4">
+            <div class="flex items-center gap-x-4 shrink-0">
                 <div class="text-right">
                     <div class="flex items-baseline justify-end gap-x-2">
-                        <div class="text-sm font-medium">16U</div>
-                        <div id="current-central-time" class="text-sm font-semibold tabular-nums text-red-400"></div>
+                        <div class="planner-age text-sm font-medium">16U</div>
+                        <div id="current-central-time" class="planner-clock text-sm font-semibold tabular-nums text-red-400"></div>
                     </div>
-                    <div id="planner-subtitle" class="text-xs text-slate-400">MN Elks - Fransen • Central Time</div>
+                    <div id="planner-subtitle" class="planner-subtitle text-xs text-slate-400">MN Elks - Fransen • Central Time</div>
                 </div>
-                <div class="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center">
+                <div class="planner-avatar w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center">
                     <i class="fa-solid fa-user text-slate-400"></i>
                 </div>
             </div>
         </div>
 
         <!-- Navigation -->
-        <div class="flex bg-slate-900 rounded-3xl p-1 mb-8 border border-slate-800 w-fit">
+        <div class="planner-nav flex bg-slate-900 rounded-3xl p-1 mb-8 border border-slate-800 w-fit">
             <button onclick="switchView('practices')" id="nav-practices"
                     class="nav-button active px-6 py-2.5 rounded-[20px] text-sm font-semibold flex items-center gap-x-2">
                 <i class="fa-solid fa-calendar"></i>
@@ -141,7 +557,7 @@
 
         <!-- Practices View -->
         <div id="view-practices">
-            <div class="flex items-center justify-between mb-6">
+            <div class="flex flex-wrap items-center justify-between mb-6 gap-3">
                 <h2 class="text-2xl font-semibold tracking-tight">My Practices</h2>
                 <button onclick="createNewPractice()"
                         class="flex items-center gap-x-2 px-5 py-2.5 bg-red-700 hover:bg-red-600 active:bg-red-800 transition-colors rounded-2xl text-sm font-semibold">
@@ -157,7 +573,7 @@
 
         <!-- Drill Library View -->
         <div id="view-drills" class="hidden">
-            <div class="flex items-center justify-between mb-6">
+            <div class="flex flex-wrap items-center justify-between mb-6 gap-3">
                 <div>
                     <h2 class="text-2xl font-semibold tracking-tight">Drill Library</h2>
                     <p class="text-xs text-slate-400" id="drill-count"></p>
@@ -183,7 +599,7 @@
 
         <!-- Templates View -->
         <div id="view-templates" class="hidden">
-            <div class="flex items-center justify-between mb-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-2">
                 <h2 class="text-2xl font-semibold tracking-tight">Practice Templates</h2>
                 <div class="text-xs text-slate-400">Reusable practice structures (no date/time/location)</div>
             </div>
@@ -199,31 +615,31 @@
 
 
     <!-- Add Custom Block Modal -->
-    <div id="custom-block-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+    <div id="custom-block-modal" class="editor-sheet hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md">
-            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+            <div class="sheet-header flex items-center justify-between px-6 py-4 border-b border-slate-700">
                 <h3 class="text-xl font-semibold">Add Custom Block</h3>
-                <button onclick="closeCustomBlockModal()" class="text-slate-400 hover:text-white">
+                <button onclick="closeCustomBlockModal()" class="sheet-close text-slate-400 hover:text-white" aria-label="Close">
                     <i class="fa-solid fa-times text-xl"></i>
                 </button>
             </div>
 
-            <div class="p-6 space-y-4">
+            <div class="sheet-body p-6 space-y-4">
                 <div>
                     <label class="section-header block mb-1.5">Block Name / Title</label>
                     <input type="text" id="custom-block-name" placeholder="e.g. Team huddle, Water break, Live scrimmage" 
-                           class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                           class="m-input w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="sheet-grid grid grid-cols-2 gap-4">
                     <div>
                         <label class="section-header block mb-1.5">Duration (minutes)</label>
-                        <input type="number" id="custom-block-duration" value="10" 
-                               class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                        <input type="number" id="custom-block-duration" value="10" inputmode="numeric"
+                               class="m-input w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
                     </div>
                     <div>
                         <label class="section-header block mb-1.5">Category (if saving as drill)</label>
-                        <select id="custom-block-category" class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                        <select id="custom-block-category" class="m-input w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
                             <option value="Custom">Custom</option>
                             <option value="Warm-up">Warm-up</option>
                             <option value="Hitting">Hitting</option>
@@ -242,16 +658,16 @@
                 <div>
                     <label class="section-header block mb-1.5">Notes / What to do during this time</label>
                     <textarea id="custom-block-description" rows="3" placeholder="Free text description of the activity..." 
-                              class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5 resize-y"></textarea>
+                              class="m-input w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5 resize-y"></textarea>
                 </div>
 
-                <div class="flex items-center gap-2 pt-2">
-                    <input type="checkbox" id="custom-block-save-as-drill" class="w-4 h-4 accent-red-600">
+                <div class="flex items-center gap-3 pt-2">
+                    <input type="checkbox" id="custom-block-save-as-drill" class="w-5 h-5 accent-red-600 shrink-0">
                     <label for="custom-block-save-as-drill" class="text-sm">Save this as a reusable drill in my library</label>
                 </div>
             </div>
 
-            <div class="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
+            <div class="sheet-footer px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
                 <button onclick="closeCustomBlockModal()" 
                         class="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold">Cancel</button>
                 <button onclick="saveCustomBlock()" 
@@ -261,32 +677,32 @@
     </div>
 
     <!-- Edit Segment Modal -->
-    <div id="edit-segment-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+    <div id="edit-segment-modal" class="editor-sheet hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md">
-            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700">
-                <h3 class="text-xl font-semibold" id="edit-segment-title">Edit Segment</h3>
-                <button onclick="closeEditSegmentModal()" class="text-slate-400 hover:text-white">
+            <div class="sheet-header flex items-center justify-between px-6 py-4 border-b border-slate-700">
+                <h3 class="text-xl font-semibold min-w-0 truncate" id="edit-segment-title">Edit Segment</h3>
+                <button onclick="closeEditSegmentModal()" class="sheet-close text-slate-400 hover:text-white shrink-0" aria-label="Close">
                     <i class="fa-solid fa-times text-xl"></i>
                 </button>
             </div>
 
-            <div class="p-6 space-y-4">
+            <div class="sheet-body p-6 space-y-4">
                 <div>
                     <label class="section-header block mb-1.5">Name</label>
                     <input type="text" id="edit-segment-name" 
-                           class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                           class="m-input w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
                 </div>
 
                 <div>
                     <label class="section-header block mb-1.5">Duration (minutes)</label>
-                    <input type="number" id="edit-segment-duration" 
-                           class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                    <input type="number" id="edit-segment-duration" inputmode="numeric"
+                           class="m-input w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
                 </div>
 
                 <div>
                     <label class="section-header block mb-1.5">Description / Notes</label>
                     <textarea id="edit-segment-description" rows="5" placeholder="Description or coaching notes for this segment..."
-                              class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5 resize-y"></textarea>
+                              class="m-input w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5 resize-y"></textarea>
                 </div>
 
                 <div id="edit-segment-category-display" class="hidden text-xs text-slate-400">
@@ -294,7 +710,7 @@
                 </div>
             </div>
 
-            <div class="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
+            <div class="sheet-footer px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
                 <button onclick="closeEditSegmentModal()" 
                         class="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold">Cancel</button>
                 <button onclick="saveEditedSegment()" 
@@ -304,26 +720,26 @@
     </div>
 
     <!-- Add New Drill Modal -->
-    <div id="add-drill-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+    <div id="add-drill-modal" class="editor-sheet hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md">
-            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+            <div class="sheet-header flex items-center justify-between px-6 py-4 border-b border-slate-700">
                 <h3 class="text-xl font-semibold">Add New Drill</h3>
-                <button onclick="closeAddDrillModal()" class="text-slate-400 hover:text-white">
+                <button onclick="closeAddDrillModal()" class="sheet-close text-slate-400 hover:text-white" aria-label="Close">
                     <i class="fa-solid fa-times text-xl"></i>
                 </button>
             </div>
 
-            <div class="p-6 space-y-4">
+            <div class="sheet-body p-6 space-y-4">
                 <div>
                     <label class="section-header block mb-1.5">Drill Name</label>
                     <input type="text" id="new-drill-name" placeholder="e.g. Gap to Gap BP" 
-                           class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                           class="m-input w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="sheet-grid grid grid-cols-2 gap-4">
                     <div>
                         <label class="section-header block mb-1.5">Category</label>
-                        <select id="new-drill-category" class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                        <select id="new-drill-category" class="m-input w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
                             <option value="Warm-up">Warm-up</option>
                             <option value="Hitting">Hitting</option>
                             <option value="Short Game">Short Game</option>
@@ -338,19 +754,19 @@
                     </div>
                     <div>
                         <label class="section-header block mb-1.5">Default Duration (min)</label>
-                        <input type="number" id="new-drill-duration" value="10" 
-                               class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
+                        <input type="number" id="new-drill-duration" value="10" inputmode="numeric"
+                               class="m-input w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5">
                     </div>
                 </div>
 
                 <div>
                     <label class="section-header block mb-1.5">Description / Coaching Points</label>
                     <textarea id="new-drill-description" rows="3" placeholder="Key teaching points or focus for this drill..."
-                              class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5 resize-y"></textarea>
+                              class="m-input w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5 resize-y"></textarea>
                 </div>
             </div>
 
-            <div class="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
+            <div class="sheet-footer px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
                 <button onclick="closeAddDrillModal()" 
                         class="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold">Cancel</button>
                 <button onclick="saveNewDrill()" 
@@ -361,97 +777,118 @@
 
     <!-- Create/Edit Practice Modal -->
     <div id="practice-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div class="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-6xl max-h-[92vh] flex flex-col">
-            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700">
-                <h3 id="modal-title" class="text-xl font-semibold">New Practice</h3>
-                <button onclick="closePracticeModal()" class="text-slate-400 hover:text-white">
+        <div id="practice-modal-panel" class="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-6xl max-h-[92vh] flex flex-col min-w-0">
+            <div id="practice-modal-header" class="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-700 shrink-0">
+                <h3 id="modal-title" class="text-xl font-semibold truncate min-w-0">New Practice</h3>
+                <button onclick="closePracticeModal()" class="sheet-close text-slate-400 hover:text-white shrink-0" aria-label="Close">
                     <i class="fa-solid fa-times text-xl"></i>
                 </button>
             </div>
 
-            <div class="p-6 flex flex-col flex-1 overflow-hidden">
+            <div class="editor-body p-6 flex flex-col flex-1 min-h-0 overflow-hidden">
+                <button type="button" id="practice-details-toggle" onclick="togglePracticeDetails()"
+                        class="w-full text-left bg-slate-950 border border-slate-700 rounded-2xl px-3 py-3 mb-3 items-center gap-3"
+                        aria-controls="practice-details-panel" aria-expanded="true">
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Practice Details</span>
+                        <span id="practice-details-summary" class="block text-sm text-slate-100 mt-0.5 leading-snug">No date · 90 min · No focus</span>
+                    </span>
+                    <span id="practice-details-toggle-label" class="text-xs font-semibold text-red-300 shrink-0">Hide</span>
+                    <i id="practice-details-chevron" class="fa-solid fa-chevron-up text-slate-400 shrink-0"></i>
+                </button>
+
                 <!-- Top: Practice Details (compact) -->
-                <div class="mb-4">
-                    <div class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Practice Details</div>
-                    <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+                <div id="practice-details-panel" class="mb-4">
+                    <div class="desktop-only text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Practice Details</div>
+                    <div id="practice-details-grid" class="grid grid-cols-2 md:grid-cols-6 gap-3">
                         <div>
                             <label class="section-header block mb-0.5 text-xs">Date <span class="text-slate-500">(opt)</span></label>
-                            <input type="date" id="practice-date" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm">
+                            <input type="date" id="practice-date" class="m-input w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm">
                         </div>
-                        <div class="md:col-span-2">
+                        <div class="md:col-span-2 min-w-0">
                             <label class="section-header block mb-0.5 text-xs">Start Time <span class="text-slate-500">(Central Time)</span></label>
-                            <div class="flex items-center gap-x-1.5">
-                                <select id="practice-time-hour" class="bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-sm text-center w-16"></select>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <select id="practice-time-hour" class="m-input bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-sm text-center w-16"></select>
                                 <span class="text-slate-400 text-sm">:</span>
-                                <input id="practice-time-minute" type="text" maxlength="2" class="bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-sm text-center w-14" placeholder="00">
-                                <select id="practice-time-ampm" class="bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-sm">
+                                <input id="practice-time-minute" type="text" maxlength="2" inputmode="numeric" class="m-input bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-sm text-center w-14" placeholder="00">
+                                <select id="practice-time-ampm" class="m-input bg-slate-950 border border-slate-700 rounded-xl px-2 py-1.5 text-sm">
                                     <option value="AM">AM</option>
                                     <option value="PM">PM</option>
                                 </select>
-                                <span id="time-zone-indicator" class="text-xs font-medium text-red-400 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg"></span>
+                                <span id="time-zone-indicator" class="text-xs font-medium text-red-400 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg shrink-0"></span>
                             </div>
                             <!-- Hidden 24h value kept for data model / save / exports (never shown to user) -->
                             <input type="hidden" id="practice-time">
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <label class="section-header block mb-0.5 text-xs">Duration <span class="text-red-400">*</span></label>
-                            <input type="number" id="practice-duration" value="90" class="w-20 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-center">
+                            <input type="number" id="practice-duration" value="90" inputmode="numeric" class="m-input w-20 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-center">
                         </div>
-                        <div class="md:col-span-1">
+                        <div class="md:col-span-1 min-w-0">
                             <label class="section-header block mb-0.5 text-xs">Focus</label>
                             <input type="text" id="practice-focus" placeholder="Hitting + Defense" 
-                                   class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm">
+                                   class="m-input w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm">
                         </div>
-                        <div class="md:col-span-1">
+                        <div class="md:col-span-1 min-w-0">
                             <label class="section-header block mb-0.5 text-xs">Location</label>
                             <input type="text" id="practice-location" placeholder="Elks Field" 
-                                   class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm">
+                                   class="m-input w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm">
                         </div>
                     </div>
                     <div class="mt-3" id="practice-team-wrap">
                         <label class="section-header block mb-0.5 text-xs" for="practice-team">Team</label>
                         <select id="practice-team"
-                                class="w-full md:max-w-md bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm"></select>
+                                class="m-input w-full md:max-w-md bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-sm"></select>
                         <p id="practice-team-readonly" class="hidden text-sm text-slate-200 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 md:max-w-md"></p>
                         <p id="practice-team-hint" class="hidden text-[11px] text-slate-500 mt-1">You can move this practice to another team you are assigned to.</p>
                     </div>
                 </div>
 
-                <!-- Main two-column area -->
-                <div class="flex flex-1 min-h-0 gap-4">
+                <!-- Main two-column area. On phones the plan is full width; drills open in a sheet. -->
+                <div class="editor-columns flex flex-1 min-h-0 gap-4">
                     <!-- Left: Practice Plan / Drills in plan -->
-                    <div class="w-3/5 flex flex-col min-w-0">
-                        <div class="flex items-center justify-between mb-1">
-                            <label class="section-header">Practice Plan (drag to reorder)</label>
-                            <button onclick="showCustomBlockModal()" 
-                                    class="text-xs px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-xl flex items-center gap-x-1">
-                                <i class="fa-solid fa-plus text-xs"></i>
-                                <span>Custom</span>
-                            </button>
+                    <div class="plan-column w-3/5 flex flex-col min-w-0">
+                        <div class="flex flex-wrap items-center justify-between mb-1 gap-2">
+                            <label class="section-header min-w-0">Practice Plan <span class="desktop-drag-hint">(drag to reorder)</span></label>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <button type="button" id="mobile-add-drill-btn" onclick="openMobileDrillSheet()"
+                                        class="text-sm px-3 py-2 bg-red-700 hover:bg-red-600 rounded-xl font-semibold items-center gap-x-1.5">
+                                    <i class="fa-solid fa-plus text-xs"></i>
+                                    <span>Add Drill</span>
+                                </button>
+                                <button type="button" onclick="showCustomBlockModal()" 
+                                        class="header-custom-btn text-xs px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-xl flex items-center gap-x-1">
+                                    <i class="fa-solid fa-plus text-xs"></i>
+                                    <span>Custom</span>
+                                </button>
+                            </div>
                         </div>
-                        <p class="text-[11px] text-slate-500 mb-1">A block can stay one drill, or split into parallel stations by player and/or position. Only girls on this practice's team are listed. Untagged girls on that team land in Everyone else.</p>
-                        <div id="lane-target-banner" class="hidden mb-2 text-xs bg-red-950/60 border border-red-800 text-red-200 rounded-xl px-3 py-1.5 flex items-center justify-between gap-2"></div>
+                        <p class="text-[11px] text-slate-500 mb-1">
+                            <span class="mobile-only">Split a block into parallel stations by player or position. Untagged girls land in Everyone else.</span>
+                            <span class="desktop-only">A block can stay one drill, or split into parallel stations by player and/or position. Only girls on this practice's team are listed. Untagged girls on that team land in Everyone else.</span>
+                        </p>
+                        <div id="lane-target-banner" class="hidden mb-2 text-xs bg-red-950/60 border border-red-800 text-red-200 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2"></div>
 
                         <!-- Timeline -->
-                        <div class="mb-2">
-                            <div class="flex justify-between text-xs mb-1">
+                        <div class="mb-2 min-w-0">
+                            <div class="flex justify-between text-xs mb-1 gap-2">
                                 <span class="text-slate-400">Timeline</span>
                                 <span id="timeline-summary" class="font-medium"></span>
                             </div>
-                            <div id="timeline-bar" class="h-5 bg-slate-800 rounded-lg overflow-hidden flex border border-slate-700">
+                            <div id="timeline-bar" class="h-5 bg-slate-800 rounded-lg overflow-hidden flex border border-slate-700 min-w-0">
                                 <!-- JS populated -->
                             </div>
                             <div id="timeline-warning" class="text-xs text-red-400 mt-0.5 hidden"></div>
                         </div>
 
                         <!-- Draggable segments list -->
-                        <div id="segments-container" class="flex-1 overflow-auto border border-slate-700 rounded-2xl p-2 space-y-1 text-sm">
+                        <div id="segments-container" class="md:flex-1 md:overflow-auto md:min-h-0 border border-slate-700 rounded-2xl p-2 space-y-2 md:space-y-1 text-sm min-w-0">
                             <!-- Populated by renderSegments() -->
                         </div>
                     </div>
 
-                    <!-- Right: Available Drills list -->
-                    <div class="w-2/5 flex flex-col min-w-0 border-l border-slate-700 pl-4">
+                    <!-- Right: Available Drills list (desktop) -->
+                    <div id="practice-drill-pane" class="desktop-only w-2/5 flex flex-col min-w-0 border-l border-slate-700 pl-4">
                         <div class="flex items-center justify-between mb-1">
                             <label class="section-header">Drills (click to add)</label>
                         </div>
@@ -465,14 +902,14 @@
                 </div>
             </div>
 
-            <div class="px-6 py-4 border-t border-slate-700 flex justify-between items-center gap-3">
+            <div id="practice-modal-footer-desktop" class="px-6 py-4 border-t border-slate-700 flex justify-between items-center gap-3 shrink-0">
                 <div class="flex gap-2">
                     <button onclick="downloadPracticeText()" id="download-txt-btn"
                             class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
                         <i class="fa-solid fa-download"></i>
                         <span>Download .txt</span>
                     </button>
-                    <button onclick="copyPracticeText()" id="copy-text-btn"
+                    <button onclick="copyPracticeText()" id="copy-text-btn" data-copy-practice
                             class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
                         <i class="fa-solid fa-copy"></i>
                         <span>Copy to Clipboard</span>
@@ -494,6 +931,67 @@
                     <button onclick="savePractice()" 
                             class="px-5 py-2 bg-red-700 hover:bg-red-600 rounded-2xl text-sm font-semibold">Save Practice</button>
                 </div>
+            </div>
+            <div id="practice-modal-footer-mobile" class="border-t border-slate-700 shrink-0">
+                <div class="flex items-center gap-2">
+                    <div class="relative shrink-0">
+                        <button type="button" id="mobile-export-toggle" onclick="toggleMobileExportMenu()" aria-expanded="false" aria-haspopup="true" data-copy-practice
+                                class="min-h-11 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+                            <i class="fa-solid fa-ellipsis"></i>
+                            <span>Actions</span>
+                        </button>
+                        <div id="mobile-export-menu" class="hidden absolute bottom-full left-0 mb-2 w-56 max-w-[70vw] bg-slate-800 border border-slate-600 rounded-2xl shadow-xl overflow-hidden z-20">
+                            <button type="button" onclick="downloadPracticeText(); closeMobileExportMenu()" class="w-full text-left px-4 py-3 text-sm hover:bg-slate-700 flex items-center gap-2">
+                                <i class="fa-solid fa-download w-4 text-slate-300"></i>
+                                <span>Download .txt</span>
+                            </button>
+                            <button type="button" onclick="copyPracticeTextFromMenu()" class="w-full text-left px-4 py-3 text-sm hover:bg-slate-700 flex items-center gap-2">
+                                <i class="fa-solid fa-copy w-4 text-slate-300"></i>
+                                <span>Copy to Clipboard</span>
+                            </button>
+                            <button type="button" onclick="downloadPracticePDF(); closeMobileExportMenu()" class="w-full text-left px-4 py-3 text-sm hover:bg-slate-700 flex items-center gap-2">
+                                <i class="fa-solid fa-file-pdf w-4 text-slate-300"></i>
+                                <span>Download PDF</span>
+                            </button>
+                            <button type="button" onclick="saveCurrentAsTemplate(); closeMobileExportMenu()" class="w-full text-left px-4 py-3 text-sm hover:bg-slate-700 flex items-center gap-2 border-t border-slate-700">
+                                <i class="fa-solid fa-bookmark w-4 text-slate-300"></i>
+                                <span>Save as Template</span>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" onclick="closePracticeModal()"
+                            class="flex-1 min-h-11 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-2xl text-sm font-semibold">Cancel</button>
+                    <button type="button" onclick="savePractice()"
+                            class="flex-1 min-h-11 px-3 py-2 bg-red-700 hover:bg-red-600 rounded-2xl text-sm font-semibold">Save Practice</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="mobile-drill-sheet" aria-hidden="true">
+        <button type="button" class="absolute inset-0 bg-black/60" onclick="closeMobileDrillSheet()" aria-label="Close add drill"></button>
+        <div class="mobile-drill-panel">
+            <div class="flex justify-center pt-2 shrink-0">
+                <div class="h-1.5 w-10 rounded-full bg-slate-600"></div>
+            </div>
+            <div class="flex items-start justify-between gap-3 px-4 py-2 shrink-0">
+                <div class="min-w-0">
+                    <h3 id="mobile-drill-sheet-title" class="text-lg font-semibold truncate">Add Drill</h3>
+                    <p id="mobile-drill-sheet-note" class="text-xs text-slate-400">Tap a drill to add it to the practice plan.</p>
+                </div>
+                <button type="button" class="shrink-0 min-h-11 px-3 rounded-xl bg-slate-800 text-sm font-semibold" onclick="closeMobileDrillSheet()">Done</button>
+            </div>
+            <div class="px-4 pb-2 shrink-0">
+                <button type="button" id="mobile-clear-lane" class="hidden mb-2 text-xs px-3 py-2 rounded-xl bg-red-950 border border-red-800 text-red-200" onclick="clearLaneTarget()">Add to the whole plan instead</button>
+                <input type="search" id="mobile-drill-search" placeholder="Search drills..."
+                       oninput="filterPracticeDrills(event)"
+                       class="m-input w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-base">
+            </div>
+            <div id="mobile-drill-list" class="flex-1 overflow-y-auto px-4 pb-3 space-y-2 min-h-0"></div>
+            <div class="shrink-0 border-t border-slate-700 p-3" style="padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));">
+                <button type="button" class="w-full min-h-11 rounded-2xl bg-slate-800 text-sm font-semibold" onclick="openCustomBlockFromMobile()">
+                    <i class="fa-solid fa-plus mr-1"></i> Custom Block
+                </button>
             </div>
         </div>
     </div>
@@ -773,6 +1271,131 @@
         let plannerRosterCache = [];
         let pendingLaneAdd = null;
 
+        function isMobileEditorViewport() {
+            return window.matchMedia('(max-width: 767px)').matches;
+        }
+
+        function setPracticeDetailsCollapsed(collapsed) {
+            const panel = document.getElementById('practice-details-panel');
+            const toggle = document.getElementById('practice-details-toggle');
+            const chevron = document.getElementById('practice-details-chevron');
+            const label = document.getElementById('practice-details-toggle-label');
+            if (panel) panel.classList.toggle('is-collapsed', !!collapsed);
+            if (toggle) toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            if (chevron) {
+                chevron.classList.toggle('fa-chevron-down', !!collapsed);
+                chevron.classList.toggle('fa-chevron-up', !collapsed);
+            }
+            if (label) label.textContent = collapsed ? 'Edit' : 'Hide';
+        }
+
+        function togglePracticeDetails() {
+            const panel = document.getElementById('practice-details-panel');
+            const collapsed = panel && panel.classList.contains('is-collapsed');
+            setPracticeDetailsCollapsed(!collapsed);
+        }
+
+        function updatePracticeDetailsSummary() {
+            const el = document.getElementById('practice-details-summary');
+            if (!el) return;
+            const dateVal = document.getElementById('practice-date')?.value || '';
+            const timeVal = document.getElementById('practice-time')?.value || '';
+            const duration = document.getElementById('practice-duration')?.value || '';
+            const focus = (document.getElementById('practice-focus')?.value || '').trim();
+            const parts = [];
+            parts.push(dateVal ? formatPracticeDate(dateVal) : 'No date');
+            if (timeVal) parts.push(formatPracticeTime(dateVal, timeVal));
+            if (duration) parts.push(duration + ' min');
+            parts.push(focus || 'No focus');
+            el.textContent = parts.join(' · ');
+        }
+
+        function bindPracticeDetailSummary() {
+            ['practice-date', 'practice-duration', 'practice-focus', 'practice-location'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (!el || el.dataset.summaryBound) return;
+                el.dataset.summaryBound = '1';
+                el.addEventListener('input', updatePracticeDetailsSummary);
+                el.addEventListener('change', updatePracticeDetailsSummary);
+            });
+        }
+
+        function openPracticeModal(mode) {
+            closeMobileDrillSheet();
+            closeMobileExportMenu();
+            const modal = document.getElementById('practice-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.classList.add('practice-editor-open');
+            setPracticeDetailsCollapsed(mode === 'edit' && isMobileEditorViewport());
+            updatePracticeDetailsSummary();
+        }
+
+        function closeMobileExportMenu() {
+            const menu = document.getElementById('mobile-export-menu');
+            const toggle = document.getElementById('mobile-export-toggle');
+            if (menu) menu.classList.add('hidden');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleMobileExportMenu() {
+            const menu = document.getElementById('mobile-export-menu');
+            const toggle = document.getElementById('mobile-export-toggle');
+            if (!menu) return;
+            const willOpen = menu.classList.contains('hidden');
+            menu.classList.toggle('hidden', !willOpen);
+            if (toggle) toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        }
+
+        function openMobileDrillSheet() {
+            if (!isMobileEditorViewport()) return;
+            closeMobileExportMenu();
+            const sheet = document.getElementById('mobile-drill-sheet');
+            if (!sheet) return;
+            const search = document.getElementById('mobile-drill-search');
+            if (search) search.value = '';
+            sheet.classList.add('open');
+            sheet.setAttribute('aria-hidden', 'false');
+            updateMobileDrillSheetContext();
+            renderPracticeDrillsList();
+        }
+
+        function closeMobileDrillSheet() {
+            const sheet = document.getElementById('mobile-drill-sheet');
+            if (!sheet) return;
+            sheet.classList.remove('open');
+            sheet.setAttribute('aria-hidden', 'true');
+        }
+
+        function updateMobileDrillSheetContext() {
+            const title = document.getElementById('mobile-drill-sheet-title');
+            const note = document.getElementById('mobile-drill-sheet-note');
+            const clearBtn = document.getElementById('mobile-clear-lane');
+            if (!title) return;
+            if (pendingLaneAdd) {
+                const seg = segments[pendingLaneAdd.segIndex];
+                const lane = seg && seg.lanes && seg.lanes[pendingLaneAdd.laneIndex];
+                const name = (lane && lane.name) || 'this station';
+                title.textContent = 'Add to ' + name;
+                if (note) note.textContent = 'Tap a drill to drop it into this station.';
+                if (clearBtn) clearBtn.classList.remove('hidden');
+            } else {
+                title.textContent = 'Add Drill';
+                if (note) note.textContent = 'Tap a drill to add it to the practice plan.';
+                if (clearBtn) clearBtn.classList.add('hidden');
+            }
+        }
+
+        function openCustomBlockFromMobile() {
+            closeMobileDrillSheet();
+            showCustomBlockModal();
+        }
+
+        function copyPracticeTextFromMenu() {
+            copyPracticeText();
+            closeMobileExportMenu();
+        }
+
         function practiceBuilderTeamId() {
             return selectedPracticeTeamId();
         }
@@ -869,25 +1492,27 @@
 
         function updateLaneTargetBanner() {
             const banner = document.getElementById('lane-target-banner');
-            if (!banner) return;
-            if (!pendingLaneAdd) {
-                banner.classList.add('hidden');
-                banner.innerHTML = '';
-                return;
+            if (banner) {
+                if (!pendingLaneAdd) {
+                    banner.classList.add('hidden');
+                    banner.innerHTML = '';
+                } else {
+                    const seg = segments[pendingLaneAdd.segIndex];
+                    const lane = seg && seg.lanes && seg.lanes[pendingLaneAdd.laneIndex];
+                    if (!lane) {
+                        pendingLaneAdd = null;
+                        banner.classList.add('hidden');
+                        banner.innerHTML = '';
+                    } else {
+                        banner.classList.remove('hidden');
+                        banner.innerHTML = `
+                            <span class="min-w-0">Next drill you tap goes into <strong>${escapeHtml(lane.name || 'this station')}</strong>.</span>
+                            <button type="button" class="text-xs px-3 py-2 bg-slate-900 rounded-lg shrink-0" onclick="clearLaneTarget()">Cancel</button>
+                        `;
+                    }
+                }
             }
-            const seg = segments[pendingLaneAdd.segIndex];
-            const lane = seg && seg.lanes && seg.lanes[pendingLaneAdd.laneIndex];
-            if (!lane) {
-                pendingLaneAdd = null;
-                banner.classList.add('hidden');
-                banner.innerHTML = '';
-                return;
-            }
-            banner.classList.remove('hidden');
-            banner.innerHTML = `
-                <span>Next drill you click goes into <strong>${escapeHtml(lane.name || 'this station')}</strong>.</span>
-                <button type="button" class="text-xs px-2 py-0.5 bg-slate-900 rounded-lg" onclick="clearLaneTarget()">Cancel</button>
-            `;
+            if (typeof updateMobileDrillSheetContext === 'function') updateMobileDrillSheetContext();
         }
 
         function clearLaneTarget() {
@@ -900,6 +1525,10 @@
             pendingLaneAdd = { segIndex: segIndex, laneIndex: laneIndex };
             updateLaneTargetBanner();
             renderSegments();
+            if (isMobileEditorViewport()) {
+                openMobileDrillSheet();
+                return;
+            }
             const search = document.getElementById('practice-drill-search');
             if (search) search.focus();
         }
@@ -1222,6 +1851,7 @@
                 normalizeMinute();
                 const t24 = time12To24(hourEl.value, minEl.value, ampmEl.value);
                 hidden.value = t24;
+                if (typeof updatePracticeDetailsSummary === 'function') updatePracticeDetailsSummary();
             }
 
             hourEl.onchange = syncToHidden;
@@ -1779,8 +2409,6 @@
             // Switch to practices view first (so underlying content is visible when modal closes),
             // then open the editor modal on top of it.
             switchView('practices');
-            document.getElementById('practice-modal').classList.remove('hidden');
-            document.getElementById('practice-modal').classList.add('flex');
 
             // Setup the 12-hour AM/PM time picker
             setupCustomTimePicker();
@@ -1800,6 +2428,7 @@
             renderTimeline();
             renderPracticeDrillsList();
             updateLaneTargetBanner();
+            openPracticeModal('new');
         }
 
         function deleteTemplate(index) {
@@ -2029,8 +2658,6 @@
             fillPracticeTeamField(defaultPracticeTeamId());
 
             document.getElementById('segments-container').innerHTML = '';
-            document.getElementById('practice-modal').classList.remove('hidden');
-            document.getElementById('practice-modal').classList.add('flex');
 
             // Setup the 12-hour AM/PM time picker (populates selects + loads from hidden 24h value)
             setupCustomTimePicker();
@@ -2047,9 +2674,11 @@
             };
 
             updateTimeZoneIndicator();
+            renderSegments();
             renderTimeline();
             renderPracticeDrillsList();
             updateLaneTargetBanner();
+            openPracticeModal('new');
         }
 
         function editPractice(index) {
@@ -2067,8 +2696,6 @@
             fillPracticeTeamField(currentPractice.teamId);
 
             renderSegments();
-            document.getElementById('practice-modal').classList.remove('hidden');
-            document.getElementById('practice-modal').classList.add('flex');
 
             // Setup the 12-hour AM/PM time picker (populates selects + loads from hidden 24h value)
             setupCustomTimePicker();
@@ -2089,6 +2716,7 @@
             renderTimeline();
             renderPracticeDrillsList();
             updateLaneTargetBanner();
+            openPracticeModal('edit');
         }
 
         // addSegment kept for potential internal/quick use, but main "Custom" now uses the modal for better input experience
@@ -2101,6 +2729,57 @@
             });
             renderSegments();
             renderTimeline();
+        }
+
+        function relocatePendingLane(fromIndex, toIndex) {
+            if (!pendingLaneAdd || fromIndex === toIndex) return;
+            if (pendingLaneAdd.segIndex === fromIndex) pendingLaneAdd.segIndex = toIndex;
+            else if (fromIndex < pendingLaneAdd.segIndex && toIndex >= pendingLaneAdd.segIndex) pendingLaneAdd.segIndex -= 1;
+            else if (fromIndex > pendingLaneAdd.segIndex && toIndex <= pendingLaneAdd.segIndex) pendingLaneAdd.segIndex += 1;
+        }
+
+        function moveSegment(index, direction) {
+            const toIndex = index + direction;
+            if (toIndex < 0 || toIndex >= segments.length) return;
+            const moved = segments.splice(index, 1)[0];
+            segments.splice(toIndex, 0, moved);
+            relocatePendingLane(index, toIndex);
+            renderSegments();
+            renderTimeline();
+        }
+
+        function segmentReorderHtml(i) {
+            const upDisabled = i === 0 ? 'disabled' : '';
+            const downDisabled = i === segments.length - 1 ? 'disabled' : '';
+            return `
+                <div class="segment-reorder">
+                    <button type="button" class="reorder-btn" aria-label="Move up" ${upDisabled} onclick="moveSegment(${i}, -1); event.stopImmediatePropagation();">
+                        <i class="fa-solid fa-chevron-up"></i>
+                    </button>
+                    <button type="button" class="reorder-btn" aria-label="Move down" ${downDisabled} onclick="moveSegment(${i}, 1); event.stopImmediatePropagation();">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+                <div class="segment-grip cursor-grab text-slate-500 pt-1 select-none shrink-0">
+                    <i class="fa-solid fa-grip-vertical"></i>
+                </div>`;
+        }
+
+        function segmentActionsHtml(i, split) {
+            const merge = split ? `
+                <button type="button" class="seg-icon-btn text-slate-400 hover:text-amber-400" title="Back to one station" aria-label="Back to one station" onclick="mergeSegmentStations(${i}); event.stopImmediatePropagation();">
+                    <i class="fa-solid fa-compress"></i>
+                </button>` : '';
+            return `
+                <div class="segment-actions flex flex-col gap-1 mt-1 shrink-0">
+                    ${merge}
+                    <button type="button" class="seg-icon-btn text-slate-400 hover:text-blue-400" title="Edit" aria-label="Edit segment" onclick="editSegment(${i}); event.stopImmediatePropagation();">
+                        <i class="fa-solid fa-edit"></i>
+                    </button>
+                    <button type="button" class="seg-icon-btn text-slate-400 hover:text-red-400" title="Remove" aria-label="Remove segment" onclick="removeSegment(${i}); renderTimeline(); event.stopImmediatePropagation();">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>`;
         }
 
         function attachSegmentDrag(div, i, isOver) {
@@ -2126,14 +2805,10 @@
                 e.preventDefault();
                 const fromIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
                 const toIndex = parseInt(div.dataset.index, 10);
-                if (fromIndex !== toIndex) {
+                if (fromIndex !== toIndex && !isNaN(fromIndex) && !isNaN(toIndex)) {
                     const moved = segments.splice(fromIndex, 1)[0];
                     segments.splice(toIndex, 0, moved);
-                    if (pendingLaneAdd) {
-                        if (pendingLaneAdd.segIndex === fromIndex) pendingLaneAdd.segIndex = toIndex;
-                        else if (fromIndex < pendingLaneAdd.segIndex && toIndex >= pendingLaneAdd.segIndex) pendingLaneAdd.segIndex -= 1;
-                        else if (fromIndex > pendingLaneAdd.segIndex && toIndex <= pendingLaneAdd.segIndex) pendingLaneAdd.segIndex += 1;
-                    }
+                    relocatePendingLane(fromIndex, toIndex);
                     renderSegments();
                     renderTimeline();
                 }
@@ -2160,7 +2835,7 @@
             const playerBoxes = isElse ? '' : (plannerRosterCache.length ? plannerRosterCache.map(function (player) {
                 const checked = (lane.playerIds || []).indexOf(player.id) >= 0 ? 'checked' : '';
                 const pid = String(player.id).replace(/'/g, '');
-                return `<label class="flex items-center gap-1.5 text-[11px] text-slate-300">
+                return `<label class="lane-player flex items-center gap-1.5 text-[11px] text-slate-300">
                     <input type="checkbox" ${checked} onchange="toggleLanePlayer(${segIndex}, ${laneIndex}, '${pid}')">
                     <span class="truncate">${escapeHtml(playerDisplayName(player))}${player.position ? ' · ' + escapeHtml(player.position) : ''}</span>
                 </label>`;
@@ -2171,26 +2846,26 @@
                 const s0 = slotCum;
                 const s1 = slotCum + (parseInt(slot.duration, 10) || 0);
                 slotCum = s1;
-                return `<div class="flex items-center gap-1 mt-1">
-                    <span class="text-[10px] font-mono text-slate-500 w-14 shrink-0">${s0}–${s1}</span>
+                return `<div class="slot-row flex items-center gap-1 mt-1">
+                    <span class="slot-time text-[10px] font-mono text-slate-500 shrink-0">${s0}–${s1}</span>
                     <input type="text" value="${escapeHtml(slot.name)}" placeholder="Drill name"
-                           class="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-lg px-2 py-0.5 text-xs"
+                           class="slot-name m-input flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-lg px-2 py-0.5 text-xs"
                            onchange="updateSlotField(${segIndex}, ${laneIndex}, ${si}, 'name', this.value)">
-                    <input type="number" value="${slot.duration || 0}"
-                           class="w-12 bg-slate-950 border border-slate-700 rounded-lg px-1 py-0.5 text-xs text-center"
+                    <input type="number" inputmode="numeric" value="${slot.duration || 0}"
+                           class="slot-duration m-input w-16 bg-slate-950 border border-slate-700 rounded-lg px-1 py-0.5 text-xs text-center"
                            onchange="updateSlotField(${segIndex}, ${laneIndex}, ${si}, 'duration', this.value)">
-                    <button type="button" class="text-slate-500 hover:text-red-400" title="Remove drill" onclick="removeSlotFromLane(${segIndex}, ${laneIndex}, ${si})">
+                    <button type="button" class="slot-remove seg-icon-btn text-slate-500 hover:text-red-400" title="Remove drill" aria-label="Remove drill" onclick="removeSlotFromLane(${segIndex}, ${laneIndex}, ${si})">
                         <i class="fa-solid fa-times text-xs"></i>
                     </button>
                 </div>`;
             }).join('') || `<div class="text-[11px] text-slate-500 mt-1 italic">No drills in this station yet</div>`;
 
-            const removeBtn = isElse ? '' : `<button type="button" class="text-slate-500 hover:text-red-400" title="Remove station" onclick="removeStationFromSegment(${segIndex}, ${laneIndex})"><i class="fa-solid fa-trash text-xs"></i></button>`;
+            const removeBtn = isElse ? '' : `<button type="button" class="seg-icon-btn text-slate-500 hover:text-red-400" title="Remove station" aria-label="Remove station" onclick="removeStationFromSegment(${segIndex}, ${laneIndex})"><i class="fa-solid fa-trash text-xs"></i></button>`;
 
             return `<div class="lane-card ${isElse ? 'everyone-else' : ''} ${targeting ? 'lane-target' : ''}">
                 <div class="flex items-start gap-1">
                     <input type="text" value="${escapeHtml(lane.name || '')}" placeholder="Station name"
-                           class="flex-1 min-w-0 bg-transparent border-b border-slate-700 focus:border-red-500 pb-0.5 text-xs font-semibold"
+                           class="m-line-input flex-1 min-w-0 bg-transparent border-b border-slate-700 focus:border-red-500 pb-0.5 text-xs font-semibold"
                            onchange="updateLaneName(${segIndex}, ${laneIndex}, this.value)" ${isElse ? 'readonly' : ''}>
                     ${removeBtn}
                 </div>
@@ -2198,11 +2873,11 @@
                 ${isElse ? `<div class="text-[10px] text-slate-500 mt-1">Girls not named and not matching a position land here so nobody vanishes.</div>` : `
                 <div class="text-[10px] text-slate-500 mt-1">Named players beat matching positions.</div>
                 <div class="flex flex-wrap gap-1 mt-1">${posChips}</div>
-                <div class="mt-1 max-h-24 overflow-auto space-y-0.5 pr-1">${playerBoxes}</div>`}
+                <div class="lane-players mt-1 max-h-24 overflow-auto space-y-0.5 pr-1">${playerBoxes}</div>`}
                 <div class="mt-2 border-t border-slate-800 pt-1">
                     ${slotsHtml}
                     ${timeWarn}
-                    <div class="flex gap-1 mt-1">
+                    <div class="lane-actions flex gap-1 mt-1">
                         <button type="button" class="text-[10px] px-2 py-0.5 rounded-lg ${targeting ? 'bg-red-800 text-white' : 'bg-slate-800 text-slate-300'}" onclick="setLaneTarget(${segIndex}, ${laneIndex})">+ Drill</button>
                         <button type="button" class="text-[10px] px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300" onclick="addCustomSlotToLane(${segIndex}, ${laneIndex})">+ Custom</button>
                     </div>
@@ -2218,6 +2893,13 @@
             const practiceDuration = parseInt(document.getElementById('practice-duration')?.value) || 0;
             let cumulative = 0;
 
+            if (!segments.length) {
+                const empty = document.createElement('div');
+                empty.className = 'mobile-only text-sm text-slate-400 text-center py-8 px-3';
+                empty.textContent = 'No drills yet. Tap Add Drill or Custom to build the plan.';
+                container.appendChild(empty);
+            }
+
             segments.forEach((segment, i) => {
                 const startTime = cumulative;
                 const endTime = cumulative + (segment.duration || 0);
@@ -2225,8 +2907,8 @@
                 const split = isSplitSegment(segment);
 
                 const div = document.createElement('div');
-                div.className = `bg-slate-950 border rounded-2xl p-3 ${isOver ? 'border-red-500 bg-red-950/20' : 'border-slate-700'}`;
-                div.draggable = true;
+                div.className = `bg-slate-950 border rounded-2xl p-3 min-w-0 max-w-full ${isOver ? 'border-red-500 bg-red-950/20' : 'border-slate-700'}`;
+                div.draggable = !isMobileEditorViewport();
                 div.dataset.index = i;
                 attachSegmentDrag(div, i, isOver);
 
@@ -2234,7 +2916,7 @@
                 const endMin = Math.floor(endTime);
                 let categoryBadge = '';
                 if (segment.category) {
-                    categoryBadge = `<span class="text-[10px] px-2 py-0.5 bg-red-900/50 text-red-300 rounded-full ml-2">${escapeHtml(segment.category)}</span>`;
+                    categoryBadge = `<span class="segment-cat text-[10px] px-2 py-0.5 bg-red-900/50 text-red-300 rounded-full ml-2">${escapeHtml(segment.category)}</span>`;
                 }
                 const descPreview = segment.description
                     ? (segment.description.length > 60 ? escapeHtml(segment.description.substring(0, 57) + '...') : escapeHtml(segment.description))
@@ -2247,87 +2929,68 @@
                         return renderLaneCardHTML(segment, i, lane, li, assignment);
                     }).join('');
                     div.innerHTML = `
-                        <div class="flex gap-3 items-start w-full">
-                            <div class="cursor-grab text-slate-500 pt-1 select-none">
-                                <i class="fa-solid fa-grip-vertical"></i>
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center flex-wrap gap-x-2">
-                                    <span class="text-xs font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">${startMin}–${endMin} min</span>
+                        <div class="segment-row flex gap-3 items-start w-full min-w-0">
+                            ${segmentReorderHtml(i)}
+                            <div class="segment-main flex-1 min-w-0">
+                                <div class="flex items-center flex-wrap gap-x-2 gap-y-1">
+                                    <span class="segment-time text-xs font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">${startMin}–${endMin} min</span>
                                     <input type="text" placeholder="Block name (e.g. Stations)"
                                            value="${escapeHtml(segment.name || '')}"
-                                           class="flex-1 bg-transparent border-b border-slate-600 focus:border-red-500 pb-1 text-sm font-medium min-w-[120px]"
+                                           class="segment-name m-line-input flex-1 bg-transparent border-b border-slate-600 focus:border-red-500 pb-1 text-sm font-medium min-w-[120px]"
                                            onchange="updateSegment(${i}, 'name', this.value); renderTimeline();">
-                                    <span class="text-[10px] px-2 py-0.5 bg-red-900/40 text-red-200 rounded-full">Parallel stations</span>
+                                    <span class="segment-cat text-[10px] px-2 py-0.5 bg-red-900/40 text-red-200 rounded-full">Parallel stations</span>
                                 </div>
-                                <div class="flex gap-3 mt-2 items-center">
-                                    <div class="w-20">
-                                        <input type="number" value="${segment.duration || 0}"
-                                               class="w-full bg-slate-900 border border-slate-600 rounded-xl px-2 py-1 text-sm"
+                                <div class="segment-meta flex gap-3 mt-2 items-center">
+                                    <div class="segment-minutes w-20">
+                                        <label class="mobile-label text-[10px] uppercase tracking-wide text-slate-500 mb-1">Minutes</label>
+                                        <input type="number" inputmode="numeric" value="${segment.duration || 0}"
+                                               class="m-input w-full bg-slate-900 border border-slate-600 rounded-xl px-2 py-1 text-sm"
                                                onchange="updateSegment(${i}, 'duration', this.value); renderSegments(); renderTimeline();">
                                     </div>
                                     <div class="text-[11px] text-slate-400">minutes, all stations at once</div>
                                 </div>
                                 <div class="lane-grid mt-3">${lanesHtml}</div>
                                 <div class="mt-2">
-                                    <button type="button" class="text-xs px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-xl" onclick="addStationToSegment(${i})">
+                                    <button type="button" class="segment-wide-btn text-xs px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-xl inline-flex items-center" onclick="addStationToSegment(${i})">
                                         <i class="fa-solid fa-plus text-xs mr-1"></i>Add station
                                     </button>
                                 </div>
                             </div>
-                            <div class="flex flex-col gap-1 mt-1">
-                                <button onclick="mergeSegmentStations(${i}); event.stopImmediatePropagation();" class="text-slate-400 hover:text-amber-400" title="Back to one station">
-                                    <i class="fa-solid fa-compress"></i>
-                                </button>
-                                <button onclick="editSegment(${i}); event.stopImmediatePropagation();" class="text-slate-400 hover:text-blue-400" title="Edit block">
-                                    <i class="fa-solid fa-edit"></i>
-                                </button>
-                                <button onclick="removeSegment(${i}); renderTimeline(); event.stopImmediatePropagation();" class="text-slate-400 hover:text-red-400" title="Remove">
-                                    <i class="fa-solid fa-trash"></i>
-                                </button>
-                            </div>
+                            ${segmentActionsHtml(i, true)}
                         </div>
                     `;
                 } else {
                     div.innerHTML = `
-                    <div class="flex gap-3 items-start w-full">
-                        <div class="cursor-grab text-slate-500 pt-1 select-none">
-                            <i class="fa-solid fa-grip-vertical"></i>
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center flex-wrap gap-x-2">
-                                <span class="text-xs font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">${startMin}–${endMin} min</span>
+                    <div class="segment-row flex gap-3 items-start w-full min-w-0">
+                        ${segmentReorderHtml(i)}
+                        <div class="segment-main flex-1 min-w-0">
+                            <div class="flex items-center flex-wrap gap-x-2 gap-y-1">
+                                <span class="segment-time text-xs font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">${startMin}–${endMin} min</span>
                                 <input type="text" placeholder="Segment name"
                                        value="${escapeHtml(segment.name || '')}"
-                                       class="flex-1 bg-transparent border-b border-slate-600 focus:border-red-500 pb-1 text-sm font-medium min-w-[120px]"
+                                       class="segment-name m-line-input flex-1 bg-transparent border-b border-slate-600 focus:border-red-500 pb-1 text-sm font-medium min-w-[120px]"
                                        onchange="updateSegment(${i}, 'name', this.value); renderTimeline();">
                                 ${categoryBadge}
                             </div>
 
-                            <div class="flex gap-3 mt-2">
-                                <div class="w-20">
-                                    <input type="number" value="${segment.duration || 0}"
-                                           class="w-full bg-slate-900 border border-slate-600 rounded-xl px-2 py-1 text-sm"
+                            <div class="segment-meta flex gap-3 mt-2">
+                                <div class="segment-minutes w-20">
+                                    <label class="mobile-label text-[10px] uppercase tracking-wide text-slate-500 mb-1">Minutes</label>
+                                    <input type="number" inputmode="numeric" value="${segment.duration || 0}"
+                                           class="m-input w-full bg-slate-900 border border-slate-600 rounded-xl px-2 py-1 text-sm"
                                            onchange="updateSegment(${i}, 'duration', this.value); renderSegments(); renderTimeline();">
                                 </div>
-                                <div class="flex-1 text-xs text-slate-300 bg-slate-900 border border-slate-600 rounded-xl px-3 py-1 min-h-[28px] flex items-center overflow-hidden" title="${escapedDesc}">
+                                <button type="button" class="notes-preview flex-1 min-w-0 text-left font-normal text-xs text-slate-300 bg-slate-900 border border-slate-600 rounded-xl px-3 py-1 min-h-[28px] flex items-center overflow-hidden" title="${escapedDesc}" onclick="editSegment(${i}); event.stopImmediatePropagation();">
                                     ${descPreview}
-                                </div>
+                                </button>
                             </div>
                             <div class="mt-2">
-                                <button type="button" class="text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300" onclick="splitSegmentStations(${i})">
+                                <button type="button" class="segment-wide-btn text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 inline-flex items-center" onclick="splitSegmentStations(${i})">
                                     <i class="fa-solid fa-table-columns mr-1"></i>Split into stations
                                 </button>
                             </div>
                         </div>
-                        <div class="flex flex-col gap-1 mt-1">
-                            <button onclick="editSegment(${i}); event.stopImmediatePropagation();" class="text-slate-400 hover:text-blue-400" title="Edit segment">
-                                <i class="fa-solid fa-edit"></i>
-                            </button>
-                            <button onclick="removeSegment(${i}); renderTimeline(); event.stopImmediatePropagation();" class="text-slate-400 hover:text-red-400" title="Remove">
-                                <i class="fa-solid fa-trash"></i>
-                            </button>
-                        </div>
+                        ${segmentActionsHtml(i, false)}
                     </div>
                 `;
                 }
@@ -2507,6 +3170,9 @@
 
         function closePracticeModal() {
             pendingLaneAdd = null;
+            closeMobileDrillSheet();
+            closeMobileExportMenu();
+            document.body.classList.remove('practice-editor-open');
             document.getElementById('practice-modal').classList.remove('flex');
             document.getElementById('practice-modal').classList.add('hidden');
         }
@@ -2612,34 +3278,41 @@
             URL.revokeObjectURL(url);
         }
 
+        function flashCopyButton(btn) {
+            if (!btn) return;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-check"></i> <span>Copied!</span>`;
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+            }, 2000);
+        }
+
         function copyPracticeText() {
             const text = generatePracticeText();
-            const copyBtnEl = document.getElementById('copy-text-btn');
+            const buttons = Array.from(document.querySelectorAll('[data-copy-practice]'));
+            const done = () => buttons.forEach(flashCopyButton);
 
-            navigator.clipboard.writeText(text).then(() => {
-                if (copyBtnEl) {
-                    const originalText = copyBtnEl.innerHTML;
-                    copyBtnEl.innerHTML = `<i class="fa-solid fa-check"></i> <span>Copied!</span>`;
-                    setTimeout(() => {
-                        if (copyBtnEl) copyBtnEl.innerHTML = originalText;
-                    }, 2000);
-                }
-            }).catch(() => {
-                // Fallback for older browsers or permissions
-                const textarea = document.createElement('textarea');
-                textarea.value = text;
-                document.body.appendChild(textarea);
-                textarea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textarea);
-                if (copyBtnEl) {
-                    const originalText = copyBtnEl.innerHTML;
-                    copyBtnEl.innerHTML = `<i class="fa-solid fa-check"></i> <span>Copied!</span>`;
-                    setTimeout(() => {
-                        if (copyBtnEl) copyBtnEl.innerHTML = originalText;
-                    }, 2000);
-                }
-            });
+            const clipboard = navigator.clipboard;
+            if (clipboard && clipboard.writeText) {
+                clipboard.writeText(text).then(done).catch(() => {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    done();
+                });
+                return;
+            }
+
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            done();
         }
 
         function downloadPracticePDF() {
@@ -3039,58 +3712,77 @@
             renderTimeline();
         }
 
-        // === Right sidebar drills list for practice editor ===
-        function renderPracticeDrillsList(drillList = null) {
-            const container = document.getElementById('practice-drill-list');
-            if (!container) return;
+        function drillsMatchingQuery(q) {
+            const query = (q || '').toLowerCase().trim();
+            if (!query) return drills;
+            return drills.filter(d =>
+                d.name.toLowerCase().includes(query) ||
+                d.category.toLowerCase().includes(query) ||
+                (d.description && d.description.toLowerCase().includes(query))
+            );
+        }
+
+        function paintDrillChoices(container, list, touch) {
             container.innerHTML = '';
-
-            const list = drillList || drills;
-
-            if (list.length === 0) {
-                container.innerHTML = `<div class="text-slate-400 text-center py-4 text-xs">No drills found.</div>`;
+            if (!list.length) {
+                container.innerHTML = `<div class="text-slate-400 text-center py-6 ${touch ? 'text-sm' : 'text-xs'}">No drills found.</div>`;
                 return;
             }
-
             list.forEach(drill => {
                 const div = document.createElement('div');
-                div.className = 'bg-slate-950 border border-slate-700 hover:border-red-600 rounded-xl p-2 cursor-pointer flex justify-between items-center text-xs';
-                
+                div.setAttribute('role', 'button');
+                div.tabIndex = 0;
+                div.className = touch
+                    ? 'bg-slate-950 border border-slate-700 active:bg-red-950 rounded-2xl px-3 py-3 min-h-[56px] flex justify-between items-center gap-3 cursor-pointer'
+                    : 'bg-slate-950 border border-slate-700 hover:border-red-600 rounded-xl p-2 cursor-pointer flex justify-between items-center text-xs';
                 div.innerHTML = `
                     <div class="min-w-0">
-                        <div class="font-medium truncate">${drill.name}</div>
-                        <div class="text-red-400">${drill.category} • ${drill.duration} min</div>
+                        <div class="${touch ? 'text-base' : ''} font-medium truncate">${escapeHtml(drill.name)}</div>
+                        <div class="text-red-400 ${touch ? 'text-sm mt-0.5' : ''}">${escapeHtml(drill.category)} • ${drill.duration} min</div>
                     </div>
-                    <i class="fa-solid fa-plus text-red-400 ml-2 flex-shrink-0"></i>
+                    <i class="fa-solid fa-plus text-red-400 ml-2 flex-shrink-0 ${touch ? 'text-lg' : ''}"></i>
                 `;
-
-                div.onclick = () => {
+                const choose = () => {
                     addDrillAsSegment(drill);
-                    // optional: give quick feedback
                     const orig = div.style.backgroundColor;
                     div.style.backgroundColor = '#450a0a';
                     setTimeout(() => {
                         div.style.backgroundColor = orig || '';
                     }, 300);
                 };
-
+                div.onclick = choose;
+                div.onkeydown = (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        choose();
+                    }
+                };
                 container.appendChild(div);
             });
         }
 
-        function filterPracticeDrills() {
-            const input = document.getElementById('practice-drill-search');
-            if (!input) return;
-            const q = input.value.toLowerCase().trim();
-            let filtered = drills;
-            if (q) {
-                filtered = drills.filter(d =>
-                    d.name.toLowerCase().includes(q) ||
-                    d.category.toLowerCase().includes(q) ||
-                    (d.description && d.description.toLowerCase().includes(q))
-                );
+        // === Right sidebar drills list for practice editor ===
+        function renderPracticeDrillsList(drillList = null) {
+            const desktop = document.getElementById('practice-drill-list');
+            const mobile = document.getElementById('mobile-drill-list');
+            if (desktop) {
+                const list = drillList || drillsMatchingQuery(document.getElementById('practice-drill-search')?.value);
+                paintDrillChoices(desktop, list, false);
             }
-            renderPracticeDrillsList(filtered);
+            if (mobile) {
+                paintDrillChoices(mobile, drillsMatchingQuery(document.getElementById('mobile-drill-search')?.value), true);
+            }
+        }
+
+        function filterPracticeDrills(event) {
+            const target = event && event.target;
+            if (target && target.id === 'mobile-drill-search') {
+                const mobile = document.getElementById('mobile-drill-list');
+                if (mobile) paintDrillChoices(mobile, drillsMatchingQuery(target.value), true);
+                return;
+            }
+            const input = document.getElementById('practice-drill-search');
+            renderPracticeDrillsList(drillsMatchingQuery(input ? input.value : ''));
         }
 
         async function init() {
@@ -3126,6 +3818,24 @@
             updateClock();
             setInterval(updateClock, 30000); // update every 30s
             
+            bindPracticeDetailSummary();
+            const mobileEditorQuery = window.matchMedia('(max-width: 767px)');
+            const onEditorViewportChange = () => {
+                const modal = document.getElementById('practice-modal');
+                if (!modal || modal.classList.contains('hidden')) return;
+                if (!isMobileEditorViewport()) closeMobileDrillSheet();
+                renderSegments();
+            };
+            if (mobileEditorQuery.addEventListener) mobileEditorQuery.addEventListener('change', onEditorViewportChange);
+            document.addEventListener('click', (event) => {
+                const menu = document.getElementById('mobile-export-menu');
+                const toggle = document.getElementById('mobile-export-toggle');
+                if (!menu || menu.classList.contains('hidden')) return;
+                if (toggle && (event.target === toggle || toggle.contains(event.target))) return;
+                if (menu.contains(event.target)) return;
+                closeMobileExportMenu();
+            });
+
             // Show practices view by default
             switchView('practices');
             
