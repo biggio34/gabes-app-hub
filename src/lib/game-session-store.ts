@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { eq } from "drizzle-orm";
 import { readyDb } from "@/lib/db/client";
 import { gameManagerState } from "@/lib/db/schema";
-import { getSupabase, isSupabaseConfigured } from "@/lib/db/supabase";
+import { DEFAULT_SUPABASE_URL, getSupabase, isSupabaseConfigured } from "@/lib/db/supabase";
 import { isMissingSchemaError } from "@/lib/softball-write-helpers";
 import { broadcastGameRevision } from "@/lib/game-session-hub";
 
@@ -21,7 +21,33 @@ type GameDocument = {
   teams: Record<string, unknown>;
 };
 
-const SETUP_HINT = "Run supabase/game-sessions.sql in the Supabase SQL editor so Game Manager can sync.";
+function anonKey() {
+  return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+}
+
+function withRealtime<T extends object>(clubId: string, result: T) {
+  const key = anonKey();
+  if (!key) return result;
+  return Object.assign({}, result, {
+    realtime: {
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL,
+      anonKey: key,
+      clubId,
+    },
+  });
+}
+
+function syncOffResult() {
+  return {
+    document: GameManager.emptyDocument(),
+    revision: 0,
+    updatedAt: null as string | null,
+    stored: "supabase" as const,
+    sync: "off" as const,
+    live: "none" as const,
+    conflict: false as const,
+  };
+}
 
 function emptyResult(stored: "supabase" | "sqlite") {
   return {
@@ -29,6 +55,8 @@ function emptyResult(stored: "supabase" | "sqlite") {
     revision: 0,
     updatedAt: null as string | null,
     stored,
+    sync: "on" as const,
+    live: stored === "supabase" ? "broadcast" as const : "sse" as const,
   };
 }
 
@@ -39,23 +67,26 @@ function stampIncoming(incoming: unknown, revision: number) {
 
 export async function readGameDocument(clubId: string) {
   if (isSupabaseConfigured()) {
+    if (!anonKey()) return syncOffResult();
     const supabase = getSupabase();
-    if (!supabase) return emptyResult("supabase");
+    if (!supabase) return syncOffResult();
     const result = await supabase.from("hub_game_manager").select("*").eq("club_id", clubId).maybeSingle();
     if (result.error) {
-      if (isMissingSchemaError(result.error.message)) return emptyResult("supabase");
+      if (isMissingSchemaError(result.error.message)) return syncOffResult();
       throw new Error(result.error.message);
     }
     const row = result.data as { payload?: unknown; revision?: number; updated_at?: string } | null;
-    if (!row) return emptyResult("supabase");
+    if (!row) return withRealtime(clubId, emptyResult("supabase"));
     const document = GameManager.normalizeDocument(row.payload);
     document.revision = Number(row.revision) || document.revision;
-    return {
+    return withRealtime(clubId, {
       document,
       revision: document.revision,
       updatedAt: row.updated_at ?? null,
       stored: "supabase" as const,
-    };
+      sync: "on" as const,
+      live: "broadcast" as const,
+    });
   }
 
   const db = await readyDb();
@@ -69,6 +100,8 @@ export async function readGameDocument(clubId: string) {
     revision: row.revision,
     updatedAt: row.updatedAt,
     stored: "sqlite" as const,
+    sync: "on" as const,
+    live: "sse" as const,
   };
 }
 
@@ -76,7 +109,10 @@ export async function writeGameDocument(clubId: string, expectedRevision: number
   if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
     throw new Error("Missing revision.");
   }
-  if (isSupabaseConfigured()) return writeSupabase(clubId, expectedRevision, incoming);
+  if (isSupabaseConfigured()) {
+    if (!anonKey()) return syncOffResult();
+    return writeSupabase(clubId, expectedRevision, incoming);
+  }
   return writeSqlite(clubId, expectedRevision, incoming);
 }
 
@@ -98,6 +134,8 @@ async function writeSqlite(clubId: string, expectedRevision: number, incoming: u
         revision: currentRevision,
         updatedAt: row?.updatedAt ?? null,
         stored: "sqlite" as const,
+        sync: "on" as const,
+        live: "sse" as const,
       };
     }
     const stamped = stampIncoming(incoming, expectedRevision + 1);
@@ -121,6 +159,8 @@ async function writeSqlite(clubId: string, expectedRevision: number, incoming: u
       revision: stamped.revision,
       updatedAt: now,
       stored: "sqlite" as const,
+      sync: "on" as const,
+      live: "sse" as const,
     };
   });
   if (!result.conflict) await broadcastGameRevision(clubId, result.revision);
@@ -143,7 +183,8 @@ async function writeSupabase(clubId: string, expectedRevision: number, incoming:
     .eq("revision", expectedRevision)
     .select()
     .maybeSingle();
-  if (updated.error && !isMissingSchemaError(updated.error.message)) {
+  if (updated.error) {
+    if (isMissingSchemaError(updated.error.message)) return syncOffResult();
     throw new Error(updated.error.message);
   }
   if (updated.data) {
@@ -154,6 +195,8 @@ async function writeSupabase(clubId: string, expectedRevision: number, incoming:
       revision: stamped.revision,
       updatedAt: now,
       stored: "supabase" as const,
+      sync: "on" as const,
+      live: "broadcast" as const,
     };
   }
 
@@ -176,19 +219,22 @@ async function writeSupabase(clubId: string, expectedRevision: number, incoming:
         revision: stamped.revision,
         updatedAt: now,
         stored: "supabase" as const,
+        sync: "on" as const,
+        live: "broadcast" as const,
       };
     }
-    if (inserted.error && isMissingSchemaError(inserted.error.message)) {
-      throw new Error(SETUP_HINT);
-    }
+    if (inserted.error && isMissingSchemaError(inserted.error.message)) return syncOffResult();
   }
 
   const current = await readGameDocument(clubId);
+  if (current.sync === "off") return syncOffResult();
   return {
     conflict: true as const,
     document: current.document,
     revision: current.revision,
     updatedAt: current.updatedAt,
     stored: "supabase" as const,
+    sync: "on" as const,
+    live: "broadcast" as const,
   };
 }

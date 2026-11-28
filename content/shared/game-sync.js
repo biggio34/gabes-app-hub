@@ -314,6 +314,8 @@
     let reconnectTimer = null;
     let opCounter = 0;
     let migrating = false;
+    let localOnly = false;
+    let armed = false;
     const listeners = [];
 
     function online() {
@@ -406,8 +408,40 @@
       }
     }
 
+    function syncOff(remote) {
+      return !!(remote && remote.sync === "off");
+    }
+
+    function enterLocal() {
+      localOnly = true;
+      status = "local";
+      if (pollTimer) clearInterval(pollTimer);
+      if (reconnectTimer) clearInterval(reconnectTimer);
+      pollTimer = null;
+      reconnectTimer = null;
+      armed = false;
+      stopSocket();
+      stopSocket = function () {};
+      socketOpen = false;
+      persist();
+      emit("status");
+    }
+
+    function armLiveSync() {
+      if (armed || localOnly || !started) return;
+      armed = true;
+      connectSocket();
+      pollTimer = setInterval(function () {
+        if (!started || localOnly || !visible() || socketOpen) return;
+        pull();
+      }, FALLBACK_POLL_MS);
+      reconnectTimer = setInterval(function () {
+        if (started && !localOnly && !socketOpen) connectSocket();
+      }, 3000);
+    }
+
     async function flush() {
-      if (flushing) return;
+      if (flushing || localOnly) return;
       flushing = true;
       blocked = false;
       let paused = false;
@@ -474,6 +508,10 @@
             emit("status");
             return;
           }
+          if (saved && saved.sync === "off") {
+            enterLocal();
+            return;
+          }
           if (saved && saved.conflict) {
             sawConflict = true;
             notice = NOTICE;
@@ -510,15 +548,16 @@
       if (localOpIds.length > 200) localOpIds = localOpIds.slice(-200);
       blocked = false;
       notice = "";
-      status = online() ? "saving" : "offline";
+      status = localOnly ? "local" : (online() ? "saving" : "offline");
       persist();
       emit("local");
-      if (online()) flush();
+      if (!localOnly && online()) flush();
       return next;
     }
 
     async function pull() {
       if (!online()) {
+        if (localOnly) return;
         status = "offline";
         emit("status");
         return;
@@ -527,9 +566,19 @@
       try {
         remote = await options.load();
       } catch (e) {
+        if (localOnly) return;
         status = "offline";
         emit("status");
         return;
+      }
+      if (syncOff(remote)) {
+        enterLocal();
+        return;
+      }
+      const wasLocal = localOnly;
+      if (wasLocal) {
+        localOnly = false;
+        armed = false;
       }
       const localBefore = acked;
       if (remote && remote.document) acceptRemote(remote.document);
@@ -540,6 +589,7 @@
         persist();
         emit("status");
       }
+      if (wasLocal) armLiveSync();
     }
 
     function connectSocket() {
@@ -555,16 +605,19 @@
     function start() {
       if (started) return;
       started = true;
-      pull();
-      connectSocket();
       if (typeof window !== "undefined" && options.bindWindow !== false) {
         window.addEventListener("focus", pull);
         window.addEventListener("online", function () {
+          if (localOnly) {
+            pull();
+            return;
+          }
           status = "saving";
           flush();
           pull();
         });
         window.addEventListener("offline", function () {
+          if (localOnly) return;
           status = "offline";
           emit("status");
         });
@@ -574,13 +627,10 @@
           });
         }
       }
-      pollTimer = setInterval(function () {
-        if (!started || !visible() || socketOpen) return;
-        pull();
-      }, FALLBACK_POLL_MS);
-      reconnectTimer = setInterval(function () {
-        if (started && !socketOpen) connectSocket();
-      }, 3000);
+      pull().then(function () {
+        if (!started || localOnly) return;
+        armLiveSync();
+      });
     }
 
     function stop() {
@@ -592,6 +642,7 @@
     }
 
     function statusLabel() {
+      if (localOnly || status === "local") return "Sync off";
       if (status === "offline") return "Offline, will sync";
       if (status === "saving" || queue.length) return "Saving";
       return "Saved";

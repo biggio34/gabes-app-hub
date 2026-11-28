@@ -198,15 +198,23 @@
 
     .banner {
       margin-top: 8px;
-      min-height: 40px;
-      padding: 4px 10px;
+      height: 64px;
+      padding: 0 8px;
       border-radius: 12px;
       display: flex;
       align-items: center;
       gap: 8px;
+      overflow: visible;
+      white-space: nowrap;
+    }
+    .banner .half { font-size: 1.05rem; font-weight: 600; max-width: 46%; overflow: hidden; text-overflow: ellipsis; }
+    .banner .pill {
+      height: 22px;
+      padding: 0 8px;
+      font-size: 0.68rem;
     }
     .banner p { margin: 0; font-weight: 500; }
-    .banner .half { font-size: 0.95rem; }
+    .banner .half { font-size: 1.125rem; font-weight: 600; }
     .banner .role { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; }
     .banner.offense { background: rgba(185, 28, 28, 0.2); color: var(--accent-ink); }
     .banner.defense { background: rgba(185, 28, 28, 0.08); color: var(--ink); border: 1px solid rgba(185, 28, 28, 0.35); }
@@ -286,20 +294,36 @@
       border-radius: 12px; border: 1px solid var(--line); background: var(--card);
       text-align: left; font-weight: 500; line-height: 1.3;
     }
-    .diamond-live { width: 96px; height: 96px; position: relative; flex: none; }
-    .diamond-live .base { position: absolute; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; }
+    .diamond-live { width: 56px; height: 56px; position: relative; flex: none; }
+    .diamond-live .infield {
+      position: absolute; left: 14px; top: 14px; width: 28px; height: 28px;
+      border: 1.5px solid rgba(255,255,255,0.3); transform: rotate(45deg); pointer-events: none;
+    }
+    .diamond-live .base {
+      position: absolute; width: 44px; height: 44px; padding: 0; margin: 0;
+      border: 0; background: transparent; transform: none; box-shadow: none;
+    }
     .diamond-live .base::after {
-      content: ""; position: absolute; left: 13px; top: 13px; width: 18px; height: 18px;
-      border: 1px solid #cbd5e1; background: #0b1220; transform: rotate(45deg);
+      content: ""; position: absolute; left: 14px; top: 14px; width: 16px; height: 16px; box-sizing: border-box;
+      border: 1.5px solid rgba(255,255,255,0.55); background: transparent; transform: rotate(45deg);
     }
+    .diamond-live .base.on,
+    .diamond-live .base.on:hover { background: transparent; border-color: transparent; transform: none; }
     .diamond-live .base.on::after { background: var(--accent); border-color: var(--accent); }
-    .diamond-live .b2 { top: 0; left: 26px; }
-    .diamond-live .b3 { top: 36px; left: 0; }
-    .diamond-live .b1 { top: 36px; left: 52px; }
+    .diamond-live .b2 { top: 0; left: 6px; }
+    .diamond-live .b3 { top: 16px; left: -4px; }
+    .diamond-live .b1 { top: 16px; left: 16px; }
     .diamond-live .plate {
-      position: absolute; left: 40px; bottom: 2px; width: 16px; height: 10px;
-      background: #cbd5e1; clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
+      position: absolute; left: 23px; bottom: 0; width: 10px; height: 8px; pointer-events: none;
+      background: rgba(255,255,255,0.7); clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
     }
+    .atbat-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; min-height: 56px; }
+    .atbat-copy { flex: 1; min-width: 0; }
+    .atbat-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .atbat-line strong { flex: 1; min-width: 0; font-size: 1rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .atbat-line .count-chip { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+    .atbat-sub { margin: 0; color: var(--muted); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tag { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); }
     .dock .end-half, .dock .menu-link, .dock.solo .primary { grid-column: 1 / -1; }
     .dock.solo { grid-template-columns: 1fr; }
     .primary {
@@ -369,6 +393,7 @@
     .form-error { margin: 8px 0 0; color: #fecaca; font-weight: 500; font-size: 0.9rem; }
     .sync { margin: 2px 0 0; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
     .sync.saving, .sync.offline { color: var(--accent-ink); }
+    .sync.local { color: var(--muted); text-transform: none; letter-spacing: 0; font-size: 0.78rem; }
     .sync-notice { margin: 6px 0 0; padding: 6px 8px; border-radius: 10px; background: var(--soft); color: var(--accent-ink); font-weight: 500; }
     .text-input {
       width: 100%; min-height: 44px; margin: 8px 0; border-radius: 12px;
@@ -392,11 +417,11 @@
     .count-row .quiet { min-width: 0; padding: 0 10px; flex: 0 1 auto; }
     .count { margin: 0; font-size: 1.4rem; min-width: 2.2rem; }
     .diamond { width: 78px; height: 68px; position: relative; margin-left: auto; flex: none; }
-    .base { position: absolute; width: 16px; height: 16px; padding: 0; border: 1px solid #cbd5e1; background: #0b1220; transform: rotate(45deg); }
-    .base.on { background: var(--accent); border-color: var(--accent); }
-    .b2 { top: 4px; left: 31px; }
-    .b3 { top: 32px; left: 8px; }
-    .b1 { top: 32px; left: 54px; }
+    .diamond .base { position: absolute; width: 16px; height: 16px; padding: 0; border: 1px solid #cbd5e1; background: #0b1220; transform: rotate(45deg); }
+    .diamond .base.on { background: var(--accent); border-color: var(--accent); }
+    .diamond .b2 { top: 4px; left: 31px; }
+    .diamond .b3 { top: 32px; left: 8px; }
+    .diamond .b1 { top: 32px; left: 54px; }
     .undo-toast { margin: 0 0 6px; padding: 8px 10px; border-radius: 10px; background: #1e293b; color: var(--accent-ink); font-weight: 600; }
     .quiet.end-half { width: 100%; }
 
@@ -410,6 +435,7 @@
   <script>
     var STORAGE_KEY = (window.GameManager && GameManager.STORAGE_KEY) || "mn-elks-game-manager-v1";
     var sync = null;
+    var syncLive = "sse";
     var lineupCache = { teams: {} };
     var applyingLocal = false;
     var teamId = "";
@@ -428,6 +454,9 @@
     var selectedId = "";
     var plannedSide = "away";
     var errorText = "";
+    var runnerOutPick = false;
+    var baseHoldTimer = 0;
+    var baseHeld = false;
     var oppDraft = "";
     var dpDraft = "";
     var flexDraft = "";
@@ -733,37 +762,54 @@
       if (state.status !== "live") {
         return '<div id="half-indicator" class="banner final"><p class="half">' + esc(finalLine(state)) + "</p></div>";
       }
-      var word = state.half === "bottom" ? "Bottom" : "Top";
+      var arrow = state.half === "bottom" ? "▼" : "▲";
+      var word = state.half === "bottom" ? "Bot" : "Top";
       var num = (state.inningIndex || 0) + 1;
-      var role = board.role === "defense" ? "Defense" : "Offense";
-      var extra = board.extra ? " · Extra" : "";
-      return '<div id="half-indicator" class="banner ' + board.role + '"><p class="half">' + esc(word) + ' <span class="half-num num-face">' + num + ordinalSuffix(num) + "</span>" + esc(extra) + '</p><p class="role">' + role + "</p>" + outsHtml(state) + diamondHtml(state) + "</div>";
+      var role = board.role === "defense" ? "DEFENSE" : "OFFENSE";
+      var extra = board.extra ? '<span class="pill">EXTRA</span>' : "";
+      return '<div id="half-indicator" class="banner ' + board.role + '"><p class="half">' + arrow + " " + esc(word) + " " + num + ordinalSuffix(num) + "</p>" + extra + '<span class="pill">' + role + "</span>" + outsHtml(state) + diamondHtml(state) + "</div>";
     }
 
     function diamondHtml(session) {
       var bases = (session && session.bases) || [false, false, false];
       if (session && GameManager.tiebreakerActive(session)) bases = [!!bases[0], true, !!bases[2]];
       return '<div class="diamond-live" aria-label="Bases">'
+        + '<i class="infield"></i>'
         + '<button type="button" class="base b2' + (bases[1] ? " on" : "") + '" data-action="base" data-base="1" aria-label="Second base"></button>'
         + '<button type="button" class="base b3' + (bases[2] ? " on" : "") + '" data-action="base" data-base="2" aria-label="Third base"></button>'
         + '<button type="button" class="base b1' + (bases[0] ? " on" : "") + '" data-action="base" data-base="0" aria-label="First base"></button>'
         + '<i class="plate"></i></div>';
     }
 
+    function pitchingLabel(session) {
+      var id = session && session.defense && session.defense.P;
+      var player = ((session && session.players) || []).filter(function (item) { return item.id === id; })[0];
+      if (!player) return "Pitching";
+      var number = player.number != null && String(player.number).trim() !== "" ? "#" + String(player.number).trim() + " " : "";
+      var first = String(player.name || "Pitcher").split(/[\s/]+/).filter(Boolean)[0] || "Pitcher";
+      return "Pitching " + number + first;
+    }
+
+    function firstName(label) {
+      var text = String(label || "").replace(/^#\d+\s*/, "");
+      return text.split(/\s+/)[0] || text;
+    }
+
     function atBatStrip(session) {
       var onDefense = GameManager.roleFor(session.side, session.half) === "defense";
-      if (onDefense) {
-        var defenseText = GameManager.tiebreakerActive(session) ? "Their runner on 2nd" : "In the field";
-        return '<button type="button" class="atbat" id="at-bat" data-action="jump-order">' + esc(defenseText) + "</button>";
-      }
       var rows = GameManager.liveBatters(session);
+      if (onDefense) {
+        var extra = GameManager.tiebreakerActive(session) ? " · Their runner on 2nd" : "";
+        return '<div class="atbat-row" id="at-bat"><div class="atbat-copy"><p class="atbat-line"><strong>' + esc(pitchingLabel(session) + extra) + "</strong></p></div></div>";
+      }
       var due = rows.length ? GameManager.effectiveBatterIndex(session) % rows.length : 0;
       var batter = rows[due];
       var deck = rows.length ? rows[(due + 1) % rows.length] : null;
       var count = (session.balls || 0) + "-" + (session.strikes || 0);
-      var text = "At bat: " + (batter ? batter.label : "—") + " · " + count
-        + (deck ? " · On deck " + deck.label : "");
-      return '<div class="atbat-row"><button type="button" class="atbat" id="at-bat" data-action="jump-order">' + esc(text) + "</button>"
+      return '<div class="atbat-row" id="at-bat"><div class="atbat-copy">'
+        + '<p class="atbat-line"><span class="tag">AB</span><strong>' + esc(batter ? batter.label : "—") + '</strong><span class="count-chip num-face">' + esc(count) + "</span></p>"
+        + '<p class="atbat-sub">On deck ' + esc(deck ? "#" + (deck.label.match(/#(\d+)/) || ["", ""])[1] + " " + firstName(deck.label) : "—") + "</p>"
+        + "</div>"
         + '<button type="button" class="quiet" data-action="ball">Ball</button>'
         + '<button type="button" class="quiet" data-action="strike">Strike</button></div>';
     }
@@ -778,6 +824,7 @@
     }
 
     function tiebreakerHtml(session) {
+      if (GameManager.roleFor(session.side, session.half) !== "offense") return "";
       if (!GameManager.tiebreakerActive(session) && !session.tiebreaker) return "";
       var runner = GameManager.itbRunner(session);
       var text = runner && runner.id
@@ -808,7 +855,7 @@
       var body = trackerRows(state, !folded);
       if (!body || body.indexOf("No defensive") >= 0) return "";
       if (folded) {
-        return '<details id="defensive-innings" class="innings-fold"><summary>Defensive innings</summary>' + body + "</details>";
+        return '<details id="defensive-innings" class="innings-fold"><summary>Innings by player ▸</summary>' + body + "</details>";
       }
       return '<section id="defensive-innings"><h2>Defensive innings</h2>' + body + "</section>";
     }
@@ -1047,7 +1094,7 @@
           ? defenseEditorHtml(session) + trackerHtml(session, true)
           : battingOrderHtml(session))
         + "</main>"
-        + (session.undoNote ? '<p class="snack" id="undo-toast">' + esc(session.undoNote) + "</p>" : "")
+        + ((session.undoNote || /^Out/.test(session.lastAction || "")) ? '<p class="snack" id="undo-toast">' + esc(session.undoNote || session.lastAction) + (/^Out/.test(session.lastAction || "") && session.outs > 0 && session.outs < 3 ? ' <button type="button" data-action="double-play">Double play</button>' : "") + "</p>" : "")
         + '<div class="dock">'
         + '<button type="button" class="quiet" id="undo-out" data-action="undo"' + (!(session.history && session.history.length) ? " disabled" : "") + ">Undo</button>"
         + '<button type="button" class="primary" id="add-out" data-action="add-out" aria-label="+1 Out">OUT</button>'
@@ -1304,7 +1351,8 @@
         + '<button type="button" class="pick" id="courtesy-runner" data-action="ask-courtesy">Courtesy runner</button>'
         + '<button type="button" class="pick" data-action="next-batter">Next Batter</button>'
         + '<button type="button" class="pick" data-action="reach-base">Reached base</button>'
-        + '<button type="button" class="pick" data-action="foul">Foul</button>'
+        + '<button type="button" class="pick" data-action="foul">Foul (2 strikes stays 2)</button>'
+        + '<button type="button" class="pick" data-action="runner-out">Runner out</button>'
         + '<button type="button" class="pick" data-action="time-limit">Time limit: finish this inning</button>'
         + '<div class="segment" role="group" aria-label="Courtesy pool">'
         + '<button type="button" data-action="set-pool" data-pool="standard" aria-pressed="' + (session.courtesyPool !== "jo" ? "true" : "false") + '">Standard</button>'
@@ -1757,8 +1805,18 @@
         return;
       }
       if (action === "base") {
-        var bases = (sessionFor(gameId).bases || [false, false, false]).slice();
+        if (baseHeld) { baseHeld = false; return; }
         var spot = parseInt(button.getAttribute("data-base"), 10) || 0;
+        if (runnerOutPick) {
+          runnerOutPick = false;
+          errorText = "";
+          tap({ type: "add-out", runner: true, base: spot });
+          var afterPick = sessionFor(gameId);
+          sheet = afterPick && GameManager.clampOuts(afterPick.outs) === 3 ? "confirm-half" : "";
+          render();
+          return;
+        }
+        var bases = (sessionFor(gameId).bases || [false, false, false]).slice();
         bases[spot] = !bases[spot];
         tap({ type: "count", bases: bases });
         render();
@@ -1773,6 +1831,29 @@
         else if (preset === "ten") table = [{ after: 5, lead: 10 }];
         else if (preset === "custom") table = [{ after: 4, lead: 8 }];
         tap({ type: "set-rule", runRule: table });
+        render();
+        return;
+      }
+      if (action === "runner-out") {
+        var occupied = ((sessionFor(gameId) || {}).bases || []).some(Boolean);
+        sheet = "";
+        if (occupied) {
+          runnerOutPick = true;
+          errorText = "Tap the base she was out at.";
+          render();
+          return;
+        }
+        runnerOutPick = false;
+        tap({ type: "add-out", runner: true });
+        var afterRunner = sessionFor(gameId);
+        sheet = afterRunner && GameManager.clampOuts(afterRunner.outs) === 3 ? "confirm-half" : "";
+        render();
+        return;
+      }
+      if (action === "double-play") {
+        tap({ type: "add-out", runner: true });
+        var afterDp = sessionFor(gameId);
+        if (afterDp && GameManager.clampOuts(afterDp.outs) === 3) sheet = "confirm-half";
         render();
         return;
       }
@@ -2017,7 +2098,15 @@
           var response = await fetch("/api/softball/game-sessions", { cache: "no-store" });
           if (!response.ok) throw new Error("Could not load Game Manager.");
           var data = await response.json();
-          return { document: data.document };
+          if (data.sync === "off") {
+            syncLive = "none";
+            return { sync: "off", document: data.document };
+          }
+          syncLive = data.live || ((window.HUB_GAME_SYNC && window.HUB_GAME_SYNC.anonKey) ? "broadcast" : "sse");
+          if (data.realtime && data.realtime.anonKey && data.realtime.url && data.realtime.clubId) {
+            window.HUB_GAME_SYNC = data.realtime;
+          }
+          return { sync: "on", document: data.document };
         },
         save: async function (expectedRevision, document) {
           var response = await fetch("/api/softball/game-sessions", {
@@ -2026,6 +2115,7 @@
             body: JSON.stringify({ expectedRevision: expectedRevision, document: document }),
           });
           var data = await response.json().catch(function () { return {}; });
+          if (data.sync === "off") return { sync: "off" };
           if (response.status === 409) return { conflict: true, document: data.document };
           if (!response.ok) throw new Error(data.error || "Could not save Game Manager.");
           return { document: data.document };
@@ -2040,6 +2130,10 @@
               onRevision: onRevision,
               onState: onState,
             });
+          }
+          if (syncLive !== "sse") {
+            if (onState) onState(false);
+            return function () {};
           }
           var source = new EventSource("/api/softball/game-sessions/stream");
           source.addEventListener("revision", function (event) {
@@ -2073,6 +2167,21 @@
       registerSw();
     }
 
+    document.addEventListener("pointerdown", function (event) {
+      var diamond = event.target.closest && event.target.closest(".diamond-live");
+      if (!diamond || view !== "live") return;
+      baseHeld = false;
+      clearTimeout(baseHoldTimer);
+      baseHoldTimer = setTimeout(function () {
+        baseHeld = true;
+        runnerOutPick = false;
+        errorText = "";
+        tap({ type: "count", bases: [false, false, false] });
+        render();
+      }, 550);
+    });
+    document.addEventListener("pointerup", function () { clearTimeout(baseHoldTimer); });
+    document.addEventListener("pointercancel", function () { clearTimeout(baseHoldTimer); });
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
     window.addEventListener("pagehide", function () {

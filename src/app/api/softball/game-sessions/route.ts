@@ -48,6 +48,8 @@ export async function PUT(request: Request) {
     return NextResponse.json({
       ok: true,
       conflict: false,
+      sync: result.sync,
+      live: result.live,
       document: result.document,
       revision: result.revision,
       updatedAt: result.updatedAt,

@@ -306,6 +306,69 @@ describe("game sync document", () => {
   });
 });
 
+describe("game sync local fallback", () => {
+  it("keeps scoring on this phone when the server says sync is off", async () => {
+    const storage = GameSync.memoryStorage();
+    const seeded = started(0, 1);
+    storage.setItem(GameManager.STORAGE_KEY, JSON.stringify({
+      version: 2,
+      acked: seeded,
+      queue: [],
+      localOpIds: [],
+      cache: { teams: {} },
+    }));
+    let loads = 0;
+    let saves = 0;
+    let sockets = 0;
+    let mode = "off";
+    const server = memoryServer(started(0, 1));
+    const client = GameSync.connect({
+      storage: storage,
+      storageKey: GameManager.STORAGE_KEY,
+      normalize: GameManager.normalizeDocument,
+      applyOp: GameManager.applyGameOp,
+      legacyEnvelope: GameManager.envelopeFromLegacy,
+      bindWindow: false,
+      load: async function () {
+        loads += 1;
+        if (mode === "off") return { sync: "off", document: GameManager.emptyDocument() };
+        return server.load();
+      },
+      save: async function (expected, incoming) {
+        saves += 1;
+        return server.save(expected, incoming);
+      },
+      subscribe: function () {
+        sockets += 1;
+        return function () {};
+      },
+    });
+    client.start();
+    try {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(client.status(), "local");
+    assert.equal(client.statusLabel(), "Sync off");
+    assert.equal(sockets, 0);
+    client.run({ type: "add-out", teamId: "team-16u", gameId: "game-eagles", opId: "local-out" });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(saves, 0);
+    assert.equal(loads, 1);
+    assert.equal(client.queue().length, 1);
+    assert.equal(outsOf(client.display()), 1);
+    mode = "on";
+    await client.pull();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(client.statusLabel(), "Saved");
+    assert.equal(sockets, 1);
+    assert.equal(saves, 1);
+    assert.equal(outsOf(server.snapshot()), 1);
+    assert.equal(client.queue().length, 0);
+    } finally {
+      client.stop();
+    }
+  });
+});
+
 describe("game sync realtime ping", () => {
   it("fetches only when the ping revision is newer", () => {
     assert.equal(GameSync.shouldFetchRevision(4, 5), true);

@@ -157,12 +157,12 @@
   }
 
   function appendLog(state, label) {
-    return (Array.isArray(state && state.playLog) ? state.playLog : []).concat([playLogEntry(state, label)]).slice(-80);
+    return (Array.isArray(state && state.playLog) ? state.playLog : []).concat([playLogEntry(state, label)]).slice(-400);
   }
 
   function snapshotForUndo(state, next) {
     const prior = {};
-    ["outs", "half", "inningIndex", "battingIndex", "liveRuns", "balls", "strikes", "bases", "status", "endedReason", "prompt", "lastAction", "usHits", "oppHits", "usErrors", "oppErrors", "scheduledInnings", "timeLimit", "tiebreaker", "itbRunnerId", "courtesyPool", "injuryOut", "flexBatting", "flexLeft", "flexOnCard", "flexCurrentId", "flexPos", "innings", "defense", "spots", "entries", "courtesy", "courtesyUsed", "rosterLeft", "runRule", "defensiveOuts", "openingDefense", "flexReentered", "dpReentered"].forEach(function (key) {
+    ["outs", "half", "inningIndex", "battingIndex", "liveRuns", "balls", "strikes", "bases", "status", "endedReason", "prompt", "lastAction", "usHits", "oppHits", "usErrors", "oppErrors", "scheduledInnings", "timeLimit", "tiebreaker", "itbRunnerId", "itbFrom", "courtesyPool", "injuryOut", "flexBatting", "flexLeft", "flexOnCard", "flexCurrentId", "flexPos", "innings", "defense", "spots", "entries", "courtesy", "courtesyUsed", "rosterLeft", "runRule", "defensiveOuts", "openingDefense", "flexReentered", "dpReentered", "departed", "outLog", "lastFieldPos", "forfeitWinner", "finalUs", "finalOpp"].forEach(function (key) {
       if (JSON.stringify(state[key]) !== JSON.stringify(next[key])) {
         prior[key] = JSON.parse(JSON.stringify(state[key] == null ? null : state[key]));
       }
@@ -173,7 +173,7 @@
   function remember(state, next, label, opts) {
     if (!state || !next) return next;
     const pitch = opts && opts.pitch;
-    next.playLog = appendLog(state, label || (pitch ? "Count" : ""));
+    next.playLog = appendLog(state, label || (pitch ? "Count" : "")).slice(-200);
     next.undoNote = "";
     next.actionSeq = (Number(state.actionSeq) || 0) + 1;
     if (pitch) {
@@ -185,6 +185,36 @@
     next.history = history;
     next.lastAction = label || "";
     return next;
+  }
+
+  function compactFinal(session) {
+    if (!session || session.status !== "played") return session;
+    return {
+      lineupGameId: session.lineupGameId,
+      status: "played",
+      side: session.side,
+      innings: session.innings,
+      inningIndex: session.inningIndex,
+      half: session.half,
+      endedReason: session.endedReason || "",
+      forfeitWinner: session.forfeitWinner || "",
+      finalUs: session.finalUs,
+      finalOpp: session.finalOpp,
+      scheduledInnings: session.scheduledInnings,
+      teamName: session.teamName || "",
+      clubName: session.clubName || "",
+      gameName: session.gameName || "",
+      oppName: session.oppName || "",
+      usHits: session.usHits || 0,
+      oppHits: session.oppHits || 0,
+      usErrors: session.usErrors || 0,
+      oppErrors: session.oppErrors || 0,
+      defensiveOuts: session.defensiveOuts || {},
+      playLog: (session.playLog || []).slice(-8),
+      battingMode: session.battingMode || "",
+      updatedAt: session.updatedAt,
+      endedAt: session.endedAt,
+    };
   }
 
   function undo(state, now) {
@@ -205,7 +235,6 @@
       gameName: state.gameName || "",
       oppName: state.oppName || "",
       undoNote: note,
-      seenOpKeys: [],
       updatedAt: now || Date.now(),
     });
   }
@@ -956,9 +985,32 @@
     const board = scoreboard(next);
     next.finalUs = board.usTotal;
     next.finalOpp = board.oppTotal;
-    next.tiebreaker = false;
-    next.outs = 0;
-    return next;
+    return {
+      lineupGameId: next.lineupGameId,
+      status: "played",
+      side: next.side,
+      innings: next.innings,
+      inningIndex: next.inningIndex,
+      half: next.half,
+      endedReason: next.endedReason || "",
+      forfeitWinner: next.forfeitWinner || "",
+      finalUs: next.finalUs,
+      finalOpp: next.finalOpp,
+      scheduledInnings: next.scheduledInnings,
+      teamName: next.teamName || "",
+      clubName: next.clubName || "",
+      gameName: next.gameName || "",
+      oppName: next.oppName || "",
+      usHits: next.usHits || 0,
+      oppHits: next.oppHits || 0,
+      usErrors: next.usErrors || 0,
+      oppErrors: next.oppErrors || 0,
+      playLog: (next.playLog || []).slice(-8),
+      defensiveOuts: next.defensiveOuts || {},
+      battingMode: next.battingMode || "",
+      updatedAt: stamp,
+      endedAt: stamp,
+    };
   }
 
   function clampOuts(value) {
@@ -1002,26 +1054,37 @@
     return Math.floor(n / 3) + "." + (n % 3);
   }
 
-  function addOut(state, now) {
+  function addOut(state, now, opts) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
+    const options = opts && typeof opts === "object" ? opts : {};
     const current = clampOuts(state.outs);
     if (current >= 3) return Object.assign({}, state, { outs: 3, updatedAt: now || Date.now() });
     const batting = roleFor(state.side, state.half) === "offense";
+    const runner = !!options.runner;
     const ids = batting ? [] : fieldersNow(state.defense);
+    let outs = current + 1;
+    if (options.dp && outs < 3) outs += 1;
     const next = Object.assign({}, state, {
-      outs: current + 1,
+      outs: outs,
       defensiveOuts: addCredit(state.defensiveOuts, ids),
-      outLog: (state.outLog || []).concat([ids]),
+      outLog: (state.outLog || []).concat(options.dp ? [ids, ids] : [ids]),
       lastFieldPos: rememberFieldPositions(state, state.defense),
       updatedAt: now || Date.now(),
     });
-    if (batting) {
+    if (batting && !runner) {
       next.battingIndex = stepBatter(state);
       next.balls = 0;
       next.strikes = 0;
     }
-    if (current + 1 >= 3) next.bases = [false, false, false];
-    return remember(state, next, "Out #" + (current + 1));
+    if (runner && options.base != null && outs < 3) {
+      const bases = (state.bases || [false, false, false]).slice();
+      const spot = Number(options.base);
+      if (spot >= 0 && spot < 3) bases[spot] = false;
+      next.bases = bases;
+    }
+    if (outs >= 3) next.bases = [false, false, false];
+    const label = options.dp ? "Double play" : runner ? "Runner out" : "Out #" + outs;
+    return remember(state, next, label);
   }
 
   function thirdOutPrompt(state) {
@@ -1346,6 +1409,10 @@
       const usWins = state.forfeitWinner !== "opp";
       usTotal = usWins ? 7 : 0;
       oppTotal = usWins ? 0 : 7;
+      rows.forEach(function (row) {
+        row.us = null;
+        row.opp = null;
+      });
     }
     return {
       innings: rows,
@@ -1367,18 +1434,34 @@
     return opponentLabel(gameName) || "Opponent";
   }
 
+  function fitLineName(name, fallback) {
+    const raw = String(name || "").trim();
+    const backup = fallback || "Us";
+    if (!raw) return backup;
+    const limit = 13;
+    if (raw.length <= limit) return raw;
+    let words = raw.replace(/\./g, "").split(/\s+/).filter(Boolean);
+    words = words.filter(function (word) { return !/^\d+U$/i.test(word); });
+    if (words.join(" ").length <= limit) return words.join(" ");
+    words = words.filter(function (word) { return !/^(mn|st|saint|vs|at)$/i.test(word); });
+    if (words.join(" ").length <= limit) return words.join(" ");
+    if (words.length >= 2) {
+      const tail = words.slice(-2).join(" ");
+      if (tail.length <= limit) return tail;
+    }
+    return words.length ? words[words.length - 1] : raw;
+  }
+
   function scoreboardRows(state) {
     const board = scoreboard(state);
     const home = Boolean(state && state.side === "home");
-    const usSide = home ? "Home" : "Away";
-    const oppSide = home ? "Away" : "Home";
     const usFull = ourFullName(state);
     const oppFull = oppFullName(state);
     const us = {
       team: "us",
       side: home ? "home" : "away",
-      label: ourNickname(state, usSide),
-      name: usFull || usSide,
+      label: fitLineName(usFull, "Us"),
+      name: usFull || "Us",
       needsName: !usFull,
       cells: board.innings.map(function (inn) { return inn.us; }),
       total: board.usTotal,
@@ -1388,8 +1471,8 @@
     const opp = {
       team: "opp",
       side: home ? "away" : "home",
-      label: oppNickname(state, oppSide),
-      name: oppFull || oppSide,
+      label: fitLineName(oppFull, "Opponent"),
+      name: oppFull || "Opponent",
       needsName: !oppFull,
       cells: board.innings.map(function (inn) { return inn.opp; }),
       total: board.oppTotal,
@@ -1658,7 +1741,7 @@
     const snapshot = slimGame(raw.lineupSnapshot || { id: raw.lineupGameId, name: raw.gameName });
     const finalUs = parseRuns(raw.finalUs);
     const finalOpp = parseRuns(raw.finalOpp);
-    return {
+    const session = {
       lineupGameId: String(raw.lineupGameId),
       side: raw.side,
       status: raw.status,
@@ -1748,6 +1831,7 @@
       endedAt: raw.status === "played" ? Number(raw.endedAt) || 0 : undefined,
       updatedAt: Number(raw.updatedAt) || 0,
     };
+    return session.status === "played" ? compactFinal(session) : session;
   }
 
   function emptyDocument() {
@@ -1875,8 +1959,8 @@
     }
     const team = ensureTeam(next, op.teamId, op.teamName);
     function put(session) {
-      if (session && (op.atHalf || op.type === "undo" || op.type === "add-run" || op.type === "next-batter" || op.type === "add-tally" || op.type === "add-out" || op.type === "reach-base")) {
-        const carried = op.type === "undo" ? [] : (current && current.seenOpKeys ? current.seenOpKeys : []);
+      if (session && (op.atHalf || op.type === "undo" || op.type === "add-run" || op.type === "next-batter" || op.type === "add-tally" || op.type === "add-out" || op.type === "reach-base" || op.type === "safe")) {
+        const carried = current && current.seenOpKeys ? current.seenOpKeys : [];
         const keys = carried.concat(session.seenOpKeys || []).concat([opKey(op)]);
         const uniq = [];
         keys.forEach(function (key) {
@@ -1895,7 +1979,7 @@
     }
     const gameId = String(op.gameId || "");
     const current = team.sessions[gameId];
-    if (current && (op.atHalf || op.type === "undo" || op.type === "add-run" || op.type === "next-batter" || op.type === "add-tally")) {
+    if (current && (op.atHalf || op.type === "undo" || op.type === "add-run" || op.type === "next-batter" || op.type === "add-tally" || op.type === "safe")) {
       const gate = staleGate(current, op);
       if (gate === "drop") {
         const err = new Error(op.type === "add-run"
@@ -1911,7 +1995,7 @@
         return next;
       }
     }
-    if (op.type === "add-out") put(addOut(current, stamp));
+    if (op.type === "add-out") put(addOut(current, stamp, { runner: !!op.runner, dp: !!op.dp, base: op.base }));
     else if (op.type === "undo-out") put(undoOut(current, stamp));
     else if (op.type === "undo") put(undo(current, stamp));
     else if (op.type === "record-runs" || op.type === "set-half-runs") put(recordRuns(current, op.runs, stamp));
@@ -1951,7 +2035,18 @@
     } else {
       throw new Error("Unknown Game Manager change.");
     }
-    return next;
+    return compactDocument(next);
+  }
+
+  function compactDocument(doc) {
+    const teams = doc.teams || {};
+    Object.keys(teams).forEach(function (teamId) {
+      const sessions = teams[teamId].sessions || {};
+      Object.keys(sessions).forEach(function (id) {
+        if (sessions[id] && sessions[id].status === "played") sessions[id] = compactFinal(sessions[id]);
+      });
+    });
+    return doc;
   }
 
   function emptyStore() {
@@ -2109,6 +2204,9 @@
         updatedAt: stamp,
       }), "Bases");
     }
+    if (patch && patch.foul && (state.strikes || 0) >= 2) {
+      return remember(state, Object.assign({}, state, { strikes: 2, updatedAt: stamp }), "Foul", { pitch: true });
+    }
     if (nextBalls >= 4) return safePlay(state, "walk", stamp);
     if (nextStrikes >= 3) {
       const struck = addOut(Object.assign({}, state, { balls: 0, strikes: 2 }), stamp);
@@ -2126,62 +2224,45 @@
 
   function reachBase(state, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
-    const bases = (state.bases || [false, false, false]).slice();
-    bases[0] = true;
-    return remember(state, Object.assign({}, state, {
-      battingIndex: stepBatter(state),
+    const batting = roleFor(state.side, state.half) === "offense";
+    const moved = walkBases(state.bases);
+    const next = Object.assign({}, state, {
       balls: 0,
       strikes: 0,
-      bases: bases,
+      bases: moved.bases,
+      liveRuns: (Number(state.liveRuns) || 0) + moved.runs,
       updatedAt: now || Date.now(),
-    }), "Reached base");
+    });
+    if (batting) next.battingIndex = stepBatter(state);
+    return remember(state, next, "Reached base");
   }
 
   function safePlay(state, kind, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
     const stamp = now || Date.now();
     const play = String(kind || "hit");
-    if (play === "walk" || play === "hbp") {
-      const moved = walkBases(state.bases);
-      const live = (Number(state.liveRuns) || 0) + moved.runs;
-      const next = Object.assign({}, state, {
-        liveRuns: live,
-        bases: moved.bases,
-        balls: 0,
-        strikes: 0,
-        battingIndex: stepBatter(state),
-        prompt: "",
-        updatedAt: stamp,
-      });
-      next.prompt = promptForScore(next);
-      return remember(state, next, play === "hbp" ? "HBP" : "Walk");
+    const batting = roleFor(state.side, state.half) === "offense";
+    const moved = walkBases(state.bases);
+    const next = Object.assign({}, state, {
+      liveRuns: (Number(state.liveRuns) || 0) + moved.runs,
+      bases: moved.bases,
+      balls: 0,
+      strikes: 0,
+      prompt: "",
+      updatedAt: stamp,
+    });
+    if (batting) next.battingIndex = stepBatter(state);
+    if (play === "hit") {
+      const key = (batting ? "us" : "opp") + "Hits";
+      next[key] = (Number(state[key]) || 0) + 1;
+    } else if (play === "error") {
+      const key = (batting ? "opp" : "us") + "Errors";
+      next[key] = (Number(state[key]) || 0) + 1;
     }
-    if (play === "error") {
-      const next = addTally(state, "error", roleFor(state.side, state.half) === "offense" ? "opp" : "us", stamp);
-      next.battingIndex = stepBatter(state);
-      next.balls = 0;
-      next.strikes = 0;
-      next.bases = [true, !!(state.bases && state.bases[1]), !!(state.bases && state.bases[2])];
-      next.lastAction = "Error";
-      return next;
-    }
-    if (play === "fc") {
-      return remember(state, Object.assign({}, state, {
-        battingIndex: stepBatter(state),
-        balls: 0,
-        strikes: 0,
-        bases: [true, !!(state.bases && state.bases[1]), !!(state.bases && state.bases[2])],
-        updatedAt: stamp,
-      }), "Fielder's choice");
-    }
-    const battingUs = roleFor(state.side, state.half) === "offense";
-    const next = addTally(state, "hit", battingUs ? "us" : "opp", stamp);
-    next.battingIndex = stepBatter(state);
-    next.balls = 0;
-    next.strikes = 0;
-    next.bases = [true, !!(state.bases && state.bases[1]), !!(state.bases && state.bases[2])];
-    next.lastAction = "Hit";
-    return next;
+    if (moved.runs) next.prompt = "Run scored";
+    else next.prompt = promptForScore(next);
+    const labels = { hit: "Hit", error: "Error", fc: "Fielder's choice", hbp: "HBP", walk: "Walk" };
+    return remember(state, next, labels[play] || "Safe");
   }
 
   function setBatter(state, index, now) {
@@ -2479,18 +2560,20 @@
       at.battingIndex,
       at.actionId,
       at.tally,
+      op.kind || "",
+      op.runner ? "runner" : "",
     ].join(":");
   }
 
   function staleGate(state, op) {
-    const guarded = op.type === "add-out" || op.type === "add-run" || op.type === "next-batter" || op.type === "add-tally" || op.type === "undo" || op.type === "reach-base";
+    const guarded = op.type === "add-out" || op.type === "add-run" || op.type === "next-batter" || op.type === "add-tally" || op.type === "undo" || op.type === "reach-base" || op.type === "safe";
     if (guarded && (op.atHalf || op.type === "undo")) {
       const seen = state.seenOpKeys || [];
       if (seen.indexOf(opKey(op)) >= 0) return "drop";
     }
     const at = op.atHalf || {};
     if (op.type === "add-run" && at.liveRuns != null && Number(at.liveRuns) !== (Number(state.liveRuns) || 0)) return "drop";
-    if ((op.type === "next-batter" || op.type === "reach-base") && at.battingIndex != null && Number(at.battingIndex) !== (Number(state.battingIndex) || 0)) return "drop";
+    if ((op.type === "next-batter" || op.type === "reach-base" || op.type === "safe") && at.battingIndex != null && Number(at.battingIndex) !== (Number(state.battingIndex) || 0)) return "drop";
     if (op.type === "undo" && at.actionId != null && Number(at.actionId) !== (Number(state.actionSeq) || 0)) return "drop";
     if (op.type === "add-tally" && at.tally != null && Number(at.tally) !== ((Number(state.usHits) || 0) + (Number(state.oppHits) || 0) + (Number(state.usErrors) || 0) + (Number(state.oppErrors) || 0))) return "drop";
     const sameInning = at.inningIndex == null || Number(at.inningIndex) === state.inningIndex;
@@ -2590,6 +2673,8 @@
     abbrOf: abbrOf,
     nicknameOf: nicknameOf,
     gameHeading: gameHeading,
+    fitLineName: fitLineName,
+    addOut: addOut,
     readableTeam: readableTeam,
     safePlay: safePlay,
     setCount: setCount,

@@ -256,6 +256,10 @@ async function openGame(title) {
   await page.waitForTimeout(80);
 }
 
+async function tapBase(base) {
+  await page.locator(".diamond-live [data-base='" + base + "']").evaluate((el) => el.click());
+}
+
 await page.goto(pageUrl, { waitUntil: "domcontentloaded" });
 await page.locator("button", { hasText: "vs Eagles" }).waitFor({ timeout: 8000 });
 await page.evaluate(() => document.fonts && document.fonts.ready);
@@ -280,7 +284,7 @@ await page.locator("[data-action='back']").click();
 
 await openGame("vs Lions");
 await page.locator("#add-out").waitFor();
-await page.locator("#tiebreaker").waitFor();
+await page.locator("#at-bat").waitFor();
 await shot("defense");
 await page.locator("[data-action='back']").click();
 
@@ -380,11 +384,11 @@ if (!before) {
   await openGame("vs Lions");
   const positions = await page.locator(".pos-btn").count();
   if (positions !== 9) fail("Defense is not showing all nine positions (" + positions + ").");
-  const tieCount = await page.locator("#tiebreaker").count();
-  const tieNotes = await page.locator("#tiebreaker-indicator, .tie-note").count();
-  if (tieCount !== 1 || tieNotes !== 0) fail("Tiebreaker is not a single control.");
-  const tieText = await page.locator("#tiebreaker").innerText();
-  if (!/2nd|tiebreaker/i.test(tieText)) fail("Tiebreaker control does not state the runner rule (" + tieText + ").");
+  const tieCount = await page.locator("#at-bat").count();
+  const tieNotes = await page.locator("#tiebreaker").count();
+  if (tieCount !== 1 || tieNotes !== 0) fail("Tiebreaker is not a single line on defense.");
+  const tieText = await page.locator("#at-bat").innerText();
+  if (!/Their runner/i.test(tieText)) fail("Tiebreaker control does not state the runner rule (" + tieText + ").");
   const fieldBottom = await page.locator(".pos-btn").last().evaluate((el) => el.getBoundingClientRect().bottom);
   const dockTop = await page.locator(".dock").evaluate((el) => el.getBoundingClientRect().top);
   if (fieldBottom > dockTop + 1) fail("The nine positions do not fit above the action dock.");
@@ -486,9 +490,8 @@ if (!before) {
 
   await openGame("vs Lions");
   await page.screenshot({ path: path.join(outDir, "r2-tiebreaker.png") });
-  const runnerBefore = await page.locator("#tiebreaker").innerText();
+  const runnerBefore = await page.locator("#at-bat").innerText();
   if (!/Their runner/i.test(runnerBefore)) fail("Defensive tiebreaker names our player (" + runnerBefore + ").");
-  await page.locator("#tiebreaker").click();
   await page.screenshot({ path: path.join(outDir, "r2-layout.png") });
   await page.locator("[data-action='back']").click();
 
@@ -502,7 +505,7 @@ if (!before) {
   await page.locator("#tie-prompt [data-action='close-sheet'], [data-action='close-sheet']").first().click();
   await page.screenshot({ path: path.join(outDir, "r3-reopen.png") });
   const reopenText = await page.locator("#half-indicator").innerText();
-  if (!/Bottom 5/i.test(reopenText)) fail("Reopened game is not the bottom of the 5th (" + reopenText + ").");
+  if (!/Bot 5|Bottom 5/i.test(reopenText)) fail("Reopened game is not the bottom of the 5th (" + reopenText + ").");
   await page.locator("[data-action='back']").click();
 
   await openGame("vs Flex");
@@ -533,6 +536,7 @@ if (!before) {
   await page.screenshot({ path: path.join(outDir, "r2-count.png") });
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: path.join(outDir, "r3-dock.png") });
+  await page.screenshot({ path: path.join(outDir, "r4-strip.png") });
   const dockHeight = await page.locator(".dock").evaluate((el) => el.getBoundingClientRect().height);
   if (dockHeight > 120) fail("Dock is taller than one row (" + Math.round(dockHeight) + "px).");
   for (let i = 0; i < 4; i += 1) await page.locator("[data-action='ball']").click();
@@ -553,6 +557,7 @@ if (!before) {
   await page.locator("[data-action='confirm-end']").click();
   await page.locator("#ended-summary").waitFor();
   await page.screenshot({ path: path.join(outDir, "r3-forfeit.png") });
+  await page.screenshot({ path: path.join(outDir, "r4-forfeit.png") });
   const forfeitText = await page.locator("#half-indicator").innerText();
   if (!/7–0|7-0/.test(forfeitText) || !/Forfeit/i.test(forfeitText)) {
     fail("Forfeit result is not 7–0 (" + forfeitText + ").");
@@ -563,30 +568,126 @@ if (!before) {
 if (!before) {
   await page.locator("[data-action='back']").click().catch(() => {});
   await openGame("vs Lions");
-  await page.locator("[data-action='add-run']").click();
+  await page.screenshot({ path: path.join(outDir, "r4-extra.png") });
+  await page.locator("[data-action='back']").click();
+  await openGame("vs Flex");
+  const defenseBefore = await page.locator("#at-bat").innerText();
+  if (!/Pitching #6 Tess/.test(defenseBefore)) fail("Defense line should name the pitcher (" + defenseBefore + ").");
+  await page.locator("[data-action='ask-safe']").click();
+  await page.locator("[data-action='safe-play'][data-kind='hit']").click();
+  const defenseAfter = await page.locator("#at-bat").innerText();
+  if (defenseBefore !== defenseAfter) fail("A hit on defense changed our at-bat line.");
+  await page.screenshot({ path: path.join(outDir, "r4-defense.png") });
+  await page.locator("[data-action='back']").click();
+  await openGame("vs Subs");
+  const dueBeforeSteal = await page.locator("#at-bat").innerText();
+  await tapBase("0");
+  await page.locator("[data-action='open-menu']").click();
+  await page.locator("[data-action='runner-out']").click();
+  await tapBase("0");
+  if (await page.locator("#confirm-half-sheet").count()) {
+    await page.locator("#cancel-third-out").click();
+  }
+  const dueAfterSteal = await page.locator("#at-bat").innerText();
+  if (dueBeforeSteal !== dueAfterSteal) fail("A runner out moved the batter (" + dueAfterSteal + ").");
+  await page.screenshot({ path: path.join(outDir, "r4-steal.png") });
+  await page.locator("#undo-out").click();
+  await page.locator("#undo-out").click();
+  await page.locator("#add-out").click();
+  await page.locator("[data-action='double-play']").click();
+  if (await page.locator("#confirm-half-sheet").count()) {
+    await page.locator("#cancel-third-out").click();
+  }
+  await page.screenshot({ path: path.join(outDir, "r4-dp.png") });
+  await page.locator("[data-action='open-menu']").click();
+  await page.screenshot({ path: path.join(outDir, "r4-menu.png") });
+  await page.locator("[data-action='close-sheet']").click();
+  for (const base of ["0", "1", "2"]) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const on = await page.locator(".diamond-live [data-base='" + base + "']").evaluate((el) => el.classList.contains("on"));
+      if (on) break;
+      const pending = page.waitForResponse((res) => {
+        return res.url().includes("/api/softball/game-sessions") && res.request().method() === "PUT";
+      }, { timeout: 4000 }).catch(() => null);
+      await tapBase(base);
+      await pending;
+    }
+  }
+  await page.waitForTimeout(200);
+  const filled = await page.locator(".diamond-live .base.on").count();
+  if (filled !== 3) fail("Diamond did not fill every base (" + filled + ").");
+  const diamondMarks = await page.locator(".diamond-live .base").evaluateAll((els) => els.map((el) => {
+    const mark = getComputedStyle(el, "::after");
+    const btn = getComputedStyle(el);
+    return { w: mark.width, h: mark.height, btnBg: btn.backgroundColor, btnTransform: btn.transform };
+  }));
+  if (diamondMarks.length !== 3 || diamondMarks.some((mark) => mark.w !== "16px" || mark.h !== "16px" || mark.btnTransform !== "none")) {
+    fail("Diamond bases are not equal 16px squares (" + JSON.stringify(diamondMarks) + ").");
+  }
+  await page.screenshot({ path: path.join(outDir, "r4-diamond.png") });
+  await page.locator("[data-action='back']").click();
+  await openGame("vs Lions");
   await page.screenshot({ path: path.join(outDir, "r3-itb.png") });
-  const itbText = await page.locator("#tiebreaker").innerText();
-  if (!/Their runner/i.test(itbText)) fail("Their half still names our runner (" + itbText + ").");
+  const itbText = await page.locator("#at-bat").innerText();
+  if (!/Pitching #4 Mia/.test(itbText) || !/Their runner/i.test(itbText)) {
+    fail("Their half should name our pitcher once (" + itbText + ").");
+  }
+  await page.locator("[data-action='back']").click();
+  await openGame("vs Subs");
+  await page.locator("[data-action='add-run']").click();
+  if (await page.locator("#prompt-sheet").count()) {
+    await page.locator("#prompt-sheet [data-action='close-sheet']").click();
+  }
 
+  await page.waitForFunction(() => {
+    try {
+      const env = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      const team = env.acked.teams[Object.keys(env.acked.teams)[0]];
+      const session = team.sessions["game-subs"];
+      return session && session.liveRuns >= 1 && !(env.queue || []).length;
+    } catch (e) {
+      return false;
+    }
+  });
+  const sharedNow = await page.evaluate(() => localStorage.getItem(STORAGE_KEY));
   const contextB = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     hasTouch: true,
     colorScheme: "dark",
   });
-  await contextB.addInitScript(({ hub, key, envelope }) => {
+  await contextB.addInitScript(({ hub, key, raw }) => {
     window.HUB_SOFTBALL = hub;
-    localStorage.setItem(key, JSON.stringify(envelope));
-  }, { hub, key: GameManager.STORAGE_KEY, envelope });
+    localStorage.setItem(key, raw);
+  }, { hub, key: GameManager.STORAGE_KEY, raw: sharedNow });
   const pageB = await contextB.newPage();
+  await pageB.route("**/api/softball/state", (route) => route.abort());
+  await pageB.route("**/api/softball/game-sessions/stream**", (route) => route.abort());
+  await pageB.route("**/api/softball/game-sessions", async (route) => {
+    const env = JSON.parse(sharedNow);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ sync: "on", live: "sse", document: env.acked, revision: env.acked.revision || 0 }),
+    });
+  });
   await pageB.goto(pageUrl, { waitUntil: "domcontentloaded" });
-  await pageB.locator("button", { hasText: "vs Lions" }).click();
-  await page.evaluate(() => {
+  await pageB.locator("#at-bat").waitFor({ timeout: 8000 }).catch(() => {});
+  if (!(await pageB.locator("#at-bat").count())) {
+    await pageB.locator("button", { hasText: "vs Subs" }).click();
+  }
+  await pageB.locator("#scoreboard").waitFor();
+  const dropped = await page.evaluate(() => {
     const env = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    const doc = env.acked;
+    let doc = env.acked;
+    (env.queue || []).forEach(function (queued) {
+      doc = window.GameManager.applyGameOp(doc, queued);
+    });
     const teamId = Object.keys(doc.teams)[0];
     const sessions = doc.teams[teamId].sessions;
-    const gameId = Object.keys(sessions).find((id) => sessions[id].status === "live") || Object.keys(sessions)[0];
+    const gameId = Object.keys(sessions).find(function (id) {
+      return /Subs/.test(sessions[id].gameName || sessions[id].name || "");
+    }) || Object.keys(sessions)[0];
     const session = sessions[gameId];
     const op = {
       type: "add-run",
@@ -605,24 +706,66 @@ if (!before) {
     };
     const next = window.GameManager.applyGameOp(doc, op);
     const note = next.dropNotice || "";
-    if (!note) return "missing";
-    const banner = document.querySelector(".banner") || document.querySelector("#half-indicator");
+    if (!note) return "";
+    const host = document.querySelector(".topbar") || document.querySelector("#half-indicator");
     const el = document.createElement("p");
     el.id = "sync-notice";
     el.className = "sync-notice";
     el.textContent = note;
-    if (banner) banner.insertAdjacentElement("afterend", el);
+    if (host) host.appendChild(el);
     return note;
   });
+  if (!/already/i.test(dropped)) fail("Duplicate tap did not show a dropped-play message (" + dropped + ").");
+  const scoreA = await page.locator("#scoreboard").innerText();
+  const scoreB = await pageB.locator("#scoreboard").innerText();
+  if (scoreA !== scoreB) fail("Phone B does not match phone A.\nA: " + scoreA + "\nB: " + scoreB);
   await page.screenshot({ path: path.join(outDir, "r3-phone-a.png") });
+  await page.screenshot({ path: path.join(outDir, "r4-phone-a.png") });
   await pageB.screenshot({ path: path.join(outDir, "r3-phone-b.png") });
+  await pageB.screenshot({ path: path.join(outDir, "r4-phone-b.png") });
   await contextB.close();
+
+  let sessionCalls = 0;
+  let streamCalls = 0;
+  await page.unroute("**/api/softball/game-sessions");
+  await page.unroute("**/api/softball/game-sessions/stream**");
+  await page.route("**/api/softball/game-sessions/stream**", (route) => {
+    streamCalls += 1;
+    return route.abort();
+  });
+  await page.route("**/api/softball/game-sessions", async (route) => {
+    sessionCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        sync: "off",
+        live: "none",
+        document: serverDoc,
+        revision: 0,
+        stored: "supabase",
+      }),
+    });
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator("button", { hasText: "vs Eagles" }).click();
+  await page.locator("#sync-status").waitFor();
+  const syncLabel = await page.locator("#sync-status").innerText();
+  if (!/Sync off/.test(syncLabel)) fail("Missing the Sync off note (" + syncLabel + ").");
+  const callsAfterLoad = sessionCalls;
+  await page.locator("#add-out").click();
+  await page.waitForTimeout(3500);
+  if (streamCalls !== 0) fail("Sync off still opened the live stream (" + streamCalls + ").");
+  if (sessionCalls > callsAfterLoad) fail("Sync off kept calling the server (" + (sessionCalls - callsAfterLoad) + " extra).");
+  const offOuts = await page.locator("#outs").innerText();
+  if (!/2 outs/.test(offOuts)) fail("A local out did not stick while sync is off (" + offOuts + ").");
+  await page.screenshot({ path: path.join(outDir, "r4-sync-off.png") });
 }
 
 if (!before) {
   const hashes = new Map();
   for (const file of readdirSync(outDir)) {
-    if (!file.startsWith("r3-") || !file.endsWith(".png")) continue;
+    if (!file.startsWith("r4-") || !file.endsWith(".png")) continue;
     const hash = createHash("md5").update(readFileSync(path.join(outDir, file))).digest("hex");
     if (hashes.has(hash)) fail(file + " matches " + hashes.get(hash) + " (" + hash + ")");
     else hashes.set(hash, file);
