@@ -1427,6 +1427,192 @@ describe("round 2 scoring", () => {
     assert.match(again.dropNotice, /already recorded/);
   });
 
+  it("keeps the lineup when a final is resumed or reopened", () => {
+    const roster = players().concat([
+      { id: "nia", name: "Nia Brooks", number: "15" },
+      { id: "bench", name: "Bea Lane", number: "20" },
+      { id: "remy", name: "Remy Cole", number: "8" },
+      { id: "tess", name: "Tess Alvarez", number: "6" },
+    ]);
+    const nine = Object.assign({}, sampleGame(), {
+      battingMode: "nine",
+      unavailableIds: [],
+      battingOrder: ["mia", "ava", "lina", "jo", "out-girl", "sub", "nia", "remy", "tess"],
+    });
+    let doc = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      gameId: "game-eagles",
+      input: { side: "home", game: nine, players: roster, teamName: "16U Fransen", clubName: "MN Elks", scheduledInnings: 1 },
+    }, 1000);
+    doc = GameManager.applyGameOp(doc, { type: "record-runs", teamId: "t", gameId: "game-eagles", runs: "1" }, 1001);
+    doc = GameManager.applyGameOp(doc, { type: "add-run", teamId: "t", gameId: "game-eagles" }, 1002);
+    doc = GameManager.applyGameOp(doc, {
+      type: "end", teamId: "t", gameId: "game-eagles", reason: "walk-off", runsThisHalf: 1,
+    }, 1003);
+    let live = doc.teams.t.sessions["game-eagles"];
+    assert.equal(live.status, "played");
+    assert.ok(live.players.length >= 6);
+    assert.equal(live.defense.P, "mia");
+    doc = GameManager.applyGameOp(doc, { type: "undo", teamId: "t", gameId: "game-eagles" }, 1004);
+    assert.equal(doc.teams.t.sessions["game-eagles"].status, "live");
+    doc = GameManager.applyGameOp(doc, {
+      type: "end", teamId: "t", gameId: "game-eagles", reason: "walk-off", runsThisHalf: 1,
+    }, 1005);
+    doc = GameManager.applyGameOp(doc, { type: "resume", teamId: "t", gameId: "game-eagles" }, 1006);
+    live = doc.teams.t.sessions["game-eagles"];
+    assert.equal(live.status, "live");
+    assert.equal(GameManager.liveBatters(live).length, 9);
+    assert.equal(live.defense.P, "mia");
+    doc = GameManager.applyGameOp(doc, { type: "add-out", teamId: "t", gameId: "game-eagles" }, 1007);
+    assert.ok(doc.teams.t.sessions["game-eagles"].outs >= 1);
+    doc = GameManager.applyGameOp(doc, { type: "safe", kind: "hit", teamId: "t", gameId: "game-eagles" }, 1008);
+    doc = GameManager.applyGameOp(doc, { type: "sub", teamId: "t", gameId: "game-eagles", spot: 0, playerId: "bench" }, 1009);
+    assert.equal(doc.teams.t.sessions["game-eagles"].spots[0].currentId, "bench");
+
+    doc = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      gameId: "game-eagles",
+      input: { side: "away", game: nine, players: players(), teamName: "16U Fransen", clubName: "MN Elks", scheduledInnings: 1 },
+    }, 2000);
+    doc = GameManager.applyGameOp(doc, { type: "record-runs", teamId: "t", gameId: "game-eagles", runs: "2" }, 2001);
+    doc = GameManager.applyGameOp(doc, { type: "add-out", teamId: "t", gameId: "game-eagles" }, 2002);
+    doc = GameManager.applyGameOp(doc, { type: "add-out", teamId: "t", gameId: "game-eagles" }, 2003);
+    doc = GameManager.applyGameOp(doc, { type: "add-out", teamId: "t", gameId: "game-eagles" }, 2004);
+    doc = GameManager.applyGameOp(doc, { type: "record-runs", teamId: "t", gameId: "game-eagles", runs: "1" }, 2005);
+    assert.equal(doc.teams.t.sessions["game-eagles"].status, "played");
+    doc = GameManager.applyGameOp(doc, {
+      type: "edit-half", teamId: "t", gameId: "game-eagles", inningIndex: 0, half: "bottom", runs: "2",
+    }, 2006);
+    live = doc.teams.t.sessions["game-eagles"];
+    assert.equal(live.status, "live");
+    assert.equal(GameManager.liveBatters(live).length, 9);
+    assert.equal(live.defense.P, "mia");
+    assert.equal(live.tiebreaker, true);
+    assert.ok(GameManager.itbRunner(live).id);
+    assert.equal(live.bases[1], true);
+
+    let aged = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      gameId: "game-eagles",
+      input: { side: "away", game: nine, players: roster, teamName: "16U Fransen", clubName: "MN Elks", scheduledInnings: 7 },
+    }, 3000);
+    aged = GameManager.applyGameOp(aged, {
+      type: "end", teamId: "t", gameId: "game-eagles", reason: "time", runsThisHalf: 0,
+    }, 4000);
+    assert.ok(aged.teams.t.sessions["game-eagles"].players.length);
+    aged = GameManager.applyGameOp(aged, { type: "confirm-final", teamId: "t", gameId: "game-eagles" }, 4000 + 13 * 60 * 60 * 1000);
+    assert.equal((aged.teams.t.sessions["game-eagles"].players || []).length, 0);
+  });
+
+  it("counts one walk or one strikeout when two phones tap the count", () => {
+    function begin() {
+      return GameManager.applyGameOp(GameManager.emptyDocument(), {
+        type: "start",
+        teamId: "t",
+        input: { side: "away", game: sampleGame(), players: players(), teamName: "16U Fransen", clubName: "MN Elks" },
+      }, 1);
+    }
+    let doc = begin();
+    doc = GameManager.applyGameOp(doc, { type: "count", teamId: "t", gameId: "game-eagles", balls: 3 }, 2);
+    const atWalk = doc.teams.t.sessions["game-eagles"];
+    const walk = {
+      type: "count",
+      balls: 4,
+      teamId: "t",
+      gameId: "game-eagles",
+      atHalf: {
+        inningIndex: atWalk.inningIndex,
+        half: atWalk.half,
+        outs: atWalk.outs,
+        liveRuns: 0,
+        battingIndex: atWalk.battingIndex,
+        actionId: atWalk.actionSeq || 0,
+        tally: 0,
+      },
+    };
+    doc = GameManager.applyGameOp(doc, walk, 3);
+    const walked = GameManager.applyGameOp(doc, walk, 4);
+    assert.equal(walked.teams.t.sessions["game-eagles"].battingIndex, 1);
+    assert.deepEqual(walked.teams.t.sessions["game-eagles"].bases, [true, false, false]);
+    assert.match(walked.dropNotice, /already recorded/);
+
+    doc = begin();
+    doc = GameManager.applyGameOp(doc, { type: "count", teamId: "t", gameId: "game-eagles", strikes: 2 }, 2);
+    const atK = doc.teams.t.sessions["game-eagles"];
+    const strike = {
+      type: "count",
+      strikes: 3,
+      teamId: "t",
+      gameId: "game-eagles",
+      atHalf: {
+        inningIndex: atK.inningIndex,
+        half: atK.half,
+        outs: atK.outs,
+        liveRuns: 0,
+        battingIndex: atK.battingIndex,
+        actionId: atK.actionSeq || 0,
+        tally: 0,
+      },
+    };
+    doc = GameManager.applyGameOp(doc, strike, 3);
+    const struck = GameManager.applyGameOp(doc, strike, 4);
+    assert.equal(struck.teams.t.sessions["game-eagles"].outs, 1);
+    assert.equal(struck.teams.t.sessions["game-eagles"].battingIndex, 1);
+    assert.match(struck.dropNotice, /already recorded/);
+  });
+
+  it("clears the runner a double play, a steal, or a scored run removed", () => {
+    let doc = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      input: { side: "away", game: sampleGame(), players: players(), teamName: "16U Fransen", clubName: "MN Elks" },
+    }, 1);
+    function play(op, now) {
+      doc = GameManager.applyGameOp(doc, Object.assign({ teamId: "t", gameId: "game-eagles" }, op), now);
+    }
+    play({ type: "count", bases: [true, false, false] }, 2);
+    play({ type: "add-out" }, 3);
+    play({ type: "add-out", runner: true }, 4);
+    assert.deepEqual(doc.teams.t.sessions["game-eagles"].bases, [false, false, false]);
+    assert.equal(doc.teams.t.sessions["game-eagles"].battingIndex, 1);
+    assert.equal(doc.teams.t.sessions["game-eagles"].outs, 2);
+
+    doc = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      input: { side: "away", game: sampleGame(), players: players(), teamName: "16U Fransen", clubName: "MN Elks" },
+    }, 10);
+    play({ type: "count", bases: [false, false, true] }, 11);
+    play({ type: "add-run" }, 12);
+    assert.deepEqual(doc.teams.t.sessions["game-eagles"].bases, [false, false, false]);
+    assert.equal(doc.teams.t.sessions["game-eagles"].liveRuns, 1);
+
+    doc = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      input: { side: "away", game: sampleGame(), players: players(), teamName: "16U Fransen", clubName: "MN Elks" },
+    }, 20);
+    play({ type: "count", bases: [true, false, false] }, 21);
+    play({ type: "add-out", runner: true, base: 1 }, 22);
+    assert.deepEqual(doc.teams.t.sessions["game-eagles"].bases, [false, false, false]);
+
+    doc = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      input: { side: "away", game: sampleGame(), players: players(), teamName: "16U Fransen", clubName: "MN Elks" },
+    }, 30);
+    play({ type: "count", bases: [true, true, true] }, 31);
+    play({ type: "safe", kind: "hit" }, 32);
+    const scored = doc.teams.t.sessions["game-eagles"];
+    assert.equal(scored.liveRuns, 1);
+    assert.match(scored.prompt, /^Run scores/);
+    play({ type: "add-run" }, 33);
+    assert.equal(doc.teams.t.sessions["game-eagles"].liveRuns, 1);
+  });
+
   it("keeps a season of finished games small enough to sync", () => {
     let doc = GameManager.emptyDocument();
     for (let n = 0; n < 25; n += 1) {
@@ -1445,7 +1631,23 @@ describe("round 2 scoring", () => {
         runsThisHalf: 0,
       }, n + 100);
     }
-    assert.ok(JSON.stringify(doc).length < 15000, "payload " + JSON.stringify(doc).length);
+    const fresh = doc.teams.t.sessions.g24;
+    assert.ok(fresh.players && fresh.players.length, "the newest final stays resumable");
+    doc = GameManager.applyGameOp(doc, {
+      type: "start",
+      teamId: "t",
+      gameId: "g-next",
+      input: {
+        side: "away",
+        game: Object.assign({}, sampleGame(), { id: "g-next" }),
+        players: players(),
+        teamName: "16U Fransen",
+        clubName: "MN Elks",
+        scheduledInnings: 1,
+      },
+    }, 5000);
+    assert.ok(!doc.teams.t.sessions.g24.players || !doc.teams.t.sessions.g24.players.length);
+    assert.ok(JSON.stringify(doc).length < 22000, "payload " + JSON.stringify(doc).length);
   });
 
   it("keeps a color or coach name when two teams would otherwise look the same", () => {

@@ -316,6 +316,7 @@
     let migrating = false;
     let localOnly = false;
     let armed = false;
+    let retryMs = 30000;
     const listeners = [];
 
     function online() {
@@ -412,14 +413,33 @@
       return !!(remote && remote.sync === "off");
     }
 
+    function applyLocal(op) {
+      try {
+        acked = normalize(applyOp(acked, op, op.at));
+      } catch (e) {
+        notice = e && e.message ? e.message : "";
+      }
+    }
+
+    function foldQueue() {
+      const pending = queue.slice();
+      queue = [];
+      pending.forEach(function (op) { applyLocal(op); });
+    }
+
     function enterLocal() {
       localOnly = true;
+      foldQueue();
       status = "local";
       if (pollTimer) clearInterval(pollTimer);
-      if (reconnectTimer) clearInterval(reconnectTimer);
+      if (reconnectTimer) {
+        clearInterval(reconnectTimer);
+        clearTimeout(reconnectTimer);
+      }
       pollTimer = null;
       reconnectTimer = null;
       armed = false;
+      retryMs = 30000;
       stopSocket();
       stopSocket = function () {};
       socketOpen = false;
@@ -435,9 +455,13 @@
         if (!started || localOnly || !visible() || socketOpen) return;
         pull();
       }, FALLBACK_POLL_MS);
-      reconnectTimer = setInterval(function () {
-        if (started && !localOnly && !socketOpen) connectSocket();
-      }, 3000);
+      function reconnectLater() {
+        if (!started || localOnly) return;
+        if (!socketOpen) connectSocket();
+        retryMs = Math.min(120000, retryMs * 2);
+        reconnectTimer = setTimeout(reconnectLater, retryMs);
+      }
+      reconnectTimer = setTimeout(reconnectLater, retryMs);
     }
 
     async function flush() {
@@ -543,15 +567,22 @@
       }
       next.baseRevision = queue.length ? null : revisionOf(acked);
       next.at = now || Date.now();
-      queue.push(next);
       localOpIds.push(next.opId);
       if (localOpIds.length > 200) localOpIds = localOpIds.slice(-200);
       blocked = false;
       notice = "";
-      status = localOnly ? "local" : (online() ? "saving" : "offline");
+      if (localOnly) {
+        applyLocal(next);
+        status = "local";
+        persist();
+        emit("local");
+        return next;
+      }
+      queue.push(next);
+      status = online() ? "saving" : "offline";
       persist();
       emit("local");
-      if (!localOnly && online()) flush();
+      if (online()) flush();
       return next;
     }
 
@@ -636,7 +667,10 @@
     function stop() {
       started = false;
       if (pollTimer) clearInterval(pollTimer);
-      if (reconnectTimer) clearInterval(reconnectTimer);
+      if (reconnectTimer) {
+        clearInterval(reconnectTimer);
+        clearTimeout(reconnectTimer);
+      }
       stopSocket();
       stopSocket = function () {};
     }

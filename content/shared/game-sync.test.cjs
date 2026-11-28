@@ -353,16 +353,66 @@ describe("game sync local fallback", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
     assert.equal(saves, 0);
     assert.equal(loads, 1);
-    assert.equal(client.queue().length, 1);
+    assert.equal(client.queue().length, 0);
     assert.equal(outsOf(client.display()), 1);
     mode = "on";
     await client.pull();
     await new Promise((resolve) => setTimeout(resolve, 30));
     assert.equal(client.statusLabel(), "Saved");
     assert.equal(sockets, 1);
-    assert.equal(saves, 1);
-    assert.equal(outsOf(server.snapshot()), 1);
     assert.equal(client.queue().length, 0);
+    assert.equal(outsOf(client.display()), 1);
+    } finally {
+      client.stop();
+    }
+  });
+});
+
+describe("game sync local speed", () => {
+  it("keeps the queue empty and each tap flat while sync is off", async () => {
+    const storage = GameSync.memoryStorage();
+    const client = GameSync.connect({
+      storage: storage,
+      storageKey: "gm-speed",
+      normalize: GameManager.normalizeDocument,
+      applyOp: GameManager.applyGameOp,
+      bindWindow: false,
+      load: async function () { return { sync: "off", document: null }; },
+      save: async function () { return { sync: "off" }; },
+      subscribe: function () { return function () {}; },
+    });
+    client.start();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const game = {
+        id: "g",
+        name: "vs Eagles",
+        battingMode: "nine",
+        battingOrder: ["mia", "ava", "lina", "jo", "out-girl", "sub", "mia", "ava", "lina"],
+        defensivePositions: defense({ P: "mia", C: "ava", SS: "lina" }),
+        inningDefenses: [],
+        unavailableIds: [],
+      };
+      client.run({
+        type: "start",
+        teamId: "t",
+        gameId: "g",
+        input: { side: "away", game: game, players: players(), teamName: "16U Fransen", scheduledInnings: 1 },
+      });
+      for (let n = 0; n < 40; n += 1) {
+        const session = client.display().teams.t.sessions.g;
+        if (!session || session.status !== "live") break;
+        client.run({
+          type: n % 2 ? "add-out" : "safe",
+          kind: "hit",
+          teamId: "t",
+          gameId: "g",
+        });
+      }
+      assert.equal(client.queue().length, 0);
+      const startedAt = Date.now();
+      for (let n = 0; n < 20; n += 1) client.display();
+      assert.ok((Date.now() - startedAt) / 20 < 5, "display got slow");
     } finally {
       client.stop();
     }

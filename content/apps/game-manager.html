@@ -171,7 +171,7 @@
     }
     .board {
       display: grid;
-      grid-template-columns: 4.4rem repeat(var(--n), minmax(1.55rem, 1fr)) 1.55rem 1.45rem 1.45rem;
+      grid-template-columns: 6.1rem repeat(var(--n), minmax(1.35rem, 1fr)) 1.45rem 1.25rem 1.25rem;
       min-width: 100%;
     }
     .who, .inn, .run, .run-h, .he {
@@ -184,7 +184,7 @@
       color: inherit;
       padding: 0;
     }
-    .who { justify-content: flex-start; padding: 0 6px; font-size: 0.72rem; line-height: 1.05; text-align: left; white-space: normal; }
+    .who { justify-content: flex-start; padding: 0 4px; font-size: 0.68rem; line-height: 1.1; text-align: left; white-space: nowrap; }
     .head { border-top: 0; min-height: 24px; color: var(--muted); font-size: 0.72rem; }
     .run, .run-h, .he { border-left: 1px solid rgba(148, 163, 184, 0.28); background: #0b1220; }
     .he { font-size: 0.85rem; }
@@ -207,14 +207,14 @@
       overflow: visible;
       white-space: nowrap;
     }
-    .banner .half { font-size: 1.05rem; font-weight: 600; max-width: 46%; overflow: hidden; text-overflow: ellipsis; }
+    .banner .half { flex: none; font-size: 1rem; font-weight: 600; }
     .banner .pill {
-      height: 22px;
-      padding: 0 8px;
-      font-size: 0.68rem;
+      height: 20px;
+      padding: 0 6px;
+      font-size: 0.62rem;
+      flex: none;
     }
     .banner p { margin: 0; font-weight: 500; }
-    .banner .half { font-size: 1.125rem; font-weight: 600; }
     .banner .role { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; }
     .banner.offense { background: rgba(185, 28, 28, 0.2); color: var(--accent-ink); }
     .banner.defense { background: rgba(185, 28, 28, 0.08); color: var(--ink); border: 1px solid rgba(185, 28, 28, 0.35); }
@@ -304,15 +304,18 @@
       border: 0; background: transparent; transform: none; box-shadow: none;
     }
     .diamond-live .base::after {
-      content: ""; position: absolute; left: 14px; top: 14px; width: 16px; height: 16px; box-sizing: border-box;
+      content: ""; position: absolute; width: 16px; height: 16px; box-sizing: border-box;
       border: 1.5px solid rgba(255,255,255,0.55); background: transparent; transform: rotate(45deg);
     }
     .diamond-live .base.on,
     .diamond-live .base.on:hover { background: transparent; border-color: transparent; transform: none; }
     .diamond-live .base.on::after { background: var(--accent); border-color: var(--accent); }
-    .diamond-live .b2 { top: 0; left: 6px; }
-    .diamond-live .b3 { top: 16px; left: -4px; }
-    .diamond-live .b1 { top: 16px; left: 16px; }
+    .diamond-live .b2 { top: -8px; left: 6px; }
+    .diamond-live .b2::after { left: 14px; top: 2px; }
+    .diamond-live .b3 { top: 18px; left: -8px; }
+    .diamond-live .b3::after { left: 2px; top: 16px; }
+    .diamond-live .b1 { top: 18px; left: 20px; }
+    .diamond-live .b1::after { left: 26px; top: 16px; }
     .diamond-live .plate {
       position: absolute; left: 23px; bottom: 0; width: 10px; height: 8px; pointer-events: none;
       background: rgba(255,255,255,0.7); clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
@@ -408,9 +411,11 @@
     .dock .quiet, .dock .menu-link { flex: 1; min-width: 0; min-height: 56px; }
     .dock .end-half { flex-basis: auto; }
     .snack {
-      position: sticky; bottom: 76px; z-index: 5; margin: 0;
+      position: sticky; bottom: 76px; z-index: 5; margin: 0 0 6px;
       padding: 8px 10px; border-radius: 10px; background: #1e293b; color: var(--accent-ink); font-weight: 600;
     }
+    .dp-chip { width: 100%; min-height: 44px; border-radius: 12px; background: var(--accent); color: #fff; font-weight: 600; }
+    .run-note { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--soft); color: var(--accent-ink); font-weight: 600; }
     .flex-actions { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
     .flex-actions .quiet { width: 100%; }
     .count-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; margin: 8px 0; }
@@ -790,6 +795,11 @@
       return "Pitching " + number + first;
     }
 
+    function followPrompt(session) {
+      if (!session || !session.prompt || /^Run scores/.test(session.prompt)) return "";
+      return "prompt";
+    }
+
     function firstName(label) {
       var text = String(label || "").replace(/^#\d+\s*/, "");
       return text.split(/\s+/)[0] || text;
@@ -807,8 +817,8 @@
       var deck = rows.length ? rows[(due + 1) % rows.length] : null;
       var count = (session.balls || 0) + "-" + (session.strikes || 0);
       return '<div class="atbat-row" id="at-bat"><div class="atbat-copy">'
-        + '<p class="atbat-line"><span class="tag">AB</span><strong>' + esc(batter ? batter.label : "—") + '</strong><span class="count-chip num-face">' + esc(count) + "</span></p>"
-        + '<p class="atbat-sub">On deck ' + esc(deck ? "#" + (deck.label.match(/#(\d+)/) || ["", ""])[1] + " " + firstName(deck.label) : "—") + "</p>"
+        + '<p class="atbat-line"><span class="tag">AB</span><strong>' + esc(batter ? batterFace(batter.label) : "—") + '</strong><span class="count-chip num-face">' + esc(count) + "</span></p>"
+        + '<p class="atbat-sub">On deck ' + esc(deck ? batterFace(deck.label) : "—") + "</p>"
         + "</div>"
         + '<button type="button" class="quiet" data-action="ball">Ball</button>'
         + '<button type="button" class="quiet" data-action="strike">Strike</button></div>';
@@ -1087,6 +1097,7 @@
         + bannerHtml(session)
         + atBatStrip(session)
         + tiebreakerHtml(session)
+        + (session.prompt && /^Run scores/.test(session.prompt) ? '<p class="run-note" id="run-note">' + esc(session.prompt) + "</p>" : "")
         + errorHtml()
         + "</div>"
         + "<main>"
@@ -1094,7 +1105,8 @@
           ? defenseEditorHtml(session) + trackerHtml(session, true)
           : battingOrderHtml(session))
         + "</main>"
-        + ((session.undoNote || /^Out/.test(session.lastAction || "")) ? '<p class="snack" id="undo-toast">' + esc(session.undoNote || session.lastAction) + (/^Out/.test(session.lastAction || "") && session.outs > 0 && session.outs < 3 ? ' <button type="button" data-action="double-play">Double play</button>' : "") + "</p>" : "")
+        + (session.undoNote ? '<p class="snack" id="undo-toast">' + esc(session.undoNote) + "</p>" : "")
+        + (/^Out #/.test(session.lastAction || "") && session.outs > 0 && session.outs < 3 ? '<p class="snack" id="dp-offer"><button type="button" class="dp-chip" data-action="double-play">Make it a double play?</button></p>' : "")
         + '<div class="dock">'
         + '<button type="button" class="quiet" id="undo-out" data-action="undo"' + (!(session.history && session.history.length) ? " disabled" : "") + ">Undo</button>"
         + '<button type="button" class="primary" id="add-out" data-action="add-out" aria-label="+1 Out">OUT</button>'
@@ -1535,7 +1547,7 @@
       sheet = "";
       tap(op);
       var afterChange = sessionFor(gameId);
-      if (afterChange && afterChange.prompt) sheet = "prompt";
+      if (followPrompt(afterChange)) sheet = "prompt";
       render();
     }
 
@@ -1679,7 +1691,7 @@
       if (action === "add-run") {
         tap({ type: "add-run" });
         var prompted = sessionFor(gameId);
-        if (prompted && prompted.prompt) sheet = "prompt";
+        if (followPrompt(prompted)) sheet = "prompt";
         render();
         return;
       }
@@ -1791,7 +1803,7 @@
         var b = sessionFor(gameId);
         tap({ type: "count", balls: (b.balls || 0) + 1 });
         var afterBall = sessionFor(gameId);
-        if (afterBall && afterBall.prompt) sheet = "prompt";
+        if (followPrompt(afterBall)) sheet = "prompt";
         render();
         return;
       }
@@ -1839,7 +1851,7 @@
         sheet = "";
         if (occupied) {
           runnerOutPick = true;
-          errorText = "Tap the base she was out at.";
+          errorText = "Tap the runner who was out.";
           render();
           return;
         }
@@ -1851,6 +1863,13 @@
         return;
       }
       if (action === "double-play") {
+        var busy = (sessionFor(gameId).bases || []).filter(Boolean).length;
+        if (busy > 1) {
+          runnerOutPick = true;
+          errorText = "Tap the runner who was out.";
+          render();
+          return;
+        }
         tap({ type: "add-out", runner: true });
         var afterDp = sessionFor(gameId);
         if (afterDp && GameManager.clampOuts(afterDp.outs) === 3) sheet = "confirm-half";
@@ -1861,7 +1880,7 @@
       if (action === "safe-play") {
         tap({ type: "safe", kind: button.getAttribute("data-kind") });
         var afterSafe = sessionFor(gameId);
-        sheet = afterSafe && afterSafe.prompt ? "prompt" : "";
+        sheet = followPrompt(afterSafe);
         if (afterSafe && GameManager.clampOuts(afterSafe.outs) === 3) sheet = "confirm-half";
         render();
         return;
@@ -1924,7 +1943,7 @@
         runDigits = "";
         editAt = null;
         if (edited && edited.status === "live") view = "live";
-        sheet = edited && edited.prompt ? "prompt" : "";
+        sheet = followPrompt(edited);
         render();
         return;
       }

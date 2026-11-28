@@ -760,12 +760,99 @@ if (!before) {
   const offOuts = await page.locator("#outs").innerText();
   if (!/2 outs/.test(offOuts)) fail("A local out did not stick while sync is off (" + offOuts + ").");
   await page.screenshot({ path: path.join(outDir, "r4-sync-off.png") });
+  await page.locator("[data-action='ball']").click();
+  await page.screenshot({ path: path.join(outDir, "r5-sync-off-perf.png") });
+
+  await page.locator("[data-action='back']").click();
+  await openGame("vs Lions");
+  const extraHalf = await page.locator("#half-indicator .half").innerText();
+  if (!/Bot 8th/.test(extraHalf)) fail("Extra inning label is truncated (" + extraHalf + ").");
+  await page.screenshot({ path: path.join(outDir, "r5-extras-label.png") });
+  await page.locator("[data-action='back']").click();
+
+  await openGame("vs Subs");
+  await tapBase("0");
+  await page.locator("#add-out").click();
+  await page.locator("[data-action='double-play']").click();
+  await page.screenshot({ path: path.join(outDir, "r5-dp-runner.png") });
+  const diamondBox = await page.locator(".diamond-live").boundingBox();
+  if (!diamondBox || Math.round(diamondBox.width) !== 56 || Math.round(diamondBox.height) !== 56) {
+    fail("Diamond is not 56px (" + JSON.stringify(diamondBox) + ").");
+  }
+  await tapBase("0");
+  await tapBase("1");
+  await tapBase("2");
+  await page.screenshot({ path: path.join(outDir, "r5-diamond56.png") });
+
+  for (let walk = 0; walk < 3; walk += 1) {
+    for (let ball = 0; ball < 4; ball += 1) await page.locator("[data-action='ball']").click();
+  }
+  await page.locator("[data-action='ask-safe']").click();
+  await page.locator("[data-action='safe-play'][data-kind='hit']").click();
+  const runNote = await page.locator("#run-note").innerText();
+  if (!/Run scores: #/.test(runNote)) fail("Forced run did not name the runner (" + runNote + ").");
+  await page.screenshot({ path: path.join(outDir, "r5-run-scores-note.png") });
+
+  await page.locator("[data-action='back']").click();
+  await openGame("vs Hawks");
+  await page.locator("#start-game").click();
+  await page.locator("[data-action='choose-side']").click();
+  for (let ball = 0; ball < 3; ball += 1) await page.locator("[data-action='ball']").click();
+  const counted = await page.evaluate(() => {
+    const env = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    let doc = env.acked;
+    (env.queue || []).forEach(function (queued) { doc = window.GameManager.applyGameOp(doc, queued); });
+    const teamId = Object.keys(doc.teams)[0];
+    const sessions = doc.teams[teamId].sessions;
+    const gameId = Object.keys(sessions).find(function (id) { return sessions[id].status === "live"; });
+    const session = sessions[gameId];
+    const op = {
+      type: "count",
+      balls: 4,
+      teamId: teamId,
+      teamName: session.teamName,
+      gameId: gameId,
+      atHalf: {
+        inningIndex: session.inningIndex,
+        half: session.half,
+        outs: session.outs,
+        liveRuns: session.liveRuns || 0,
+        battingIndex: session.battingIndex || 0,
+        actionId: session.actionSeq || 0,
+        tally: 0,
+      },
+    };
+    const first = window.GameManager.applyGameOp(doc, op);
+    const second = window.GameManager.applyGameOp(first, op);
+    const note = second.dropNotice || "";
+    if (note) {
+      const host = document.querySelector(".topbar") || document.body;
+      const el = document.createElement("p");
+      el.id = "sync-notice";
+      el.className = "sync-notice";
+      el.textContent = note;
+      host.appendChild(el);
+    }
+    return note;
+  });
+  if (!/already recorded/i.test(counted)) fail("A second ball at 3-0 was not dropped (" + counted + ").");
+  await page.screenshot({ path: path.join(outDir, "r5-ball-guard.png") });
+
+  await page.locator("[data-action='open-menu']").click();
+  await page.locator("[data-action='ask-end']").click();
+  await page.locator("[data-action='confirm-end']").click();
+  await page.locator("#ended-summary").waitFor();
+  await page.locator("[data-action='resume']").click();
+  await page.locator("#batting-order").waitFor();
+  const resumed = await page.locator("#at-bat").innerText();
+  if (!/AB/.test(resumed)) fail("Resume lost the at-bat line (" + resumed + ").");
+  await page.screenshot({ path: path.join(outDir, "r5-final-resume.png") });
 }
 
 if (!before) {
   const hashes = new Map();
   for (const file of readdirSync(outDir)) {
-    if (!file.startsWith("r4-") || !file.endsWith(".png")) continue;
+    if ((!file.startsWith("r4-") && !file.startsWith("r5-")) || !file.endsWith(".png")) continue;
     const hash = createHash("md5").update(readFileSync(path.join(outDir, file))).digest("hex");
     if (hashes.has(hash)) fail(file + " matches " + hashes.get(hash) + " (" + hash + ")");
     else hashes.set(hash, file);
