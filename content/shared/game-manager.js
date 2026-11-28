@@ -147,15 +147,43 @@
     return dp ? String(dp) : "";
   }
 
-  function remember(state, next, label) {
+  function playLogEntry(state, label) {
+    return {
+      n: (Number(state && state.actionSeq) || 0) + 1,
+      label: String(label || "").slice(0, 40),
+      i: state && state.inningIndex || 0,
+      h: state && state.half === "bottom" ? "b" : "t",
+    };
+  }
+
+  function appendLog(state, label) {
+    return (Array.isArray(state && state.playLog) ? state.playLog : []).concat([playLogEntry(state, label)]).slice(-80);
+  }
+
+  function snapshotForUndo(state, next) {
+    const prior = {};
+    ["outs", "half", "inningIndex", "battingIndex", "liveRuns", "balls", "strikes", "bases", "status", "endedReason", "prompt", "lastAction", "usHits", "oppHits", "usErrors", "oppErrors", "scheduledInnings", "timeLimit", "tiebreaker", "itbRunnerId", "courtesyPool", "injuryOut", "flexBatting", "flexLeft", "flexOnCard", "flexCurrentId", "flexPos", "innings", "defense", "spots", "entries", "courtesy", "courtesyUsed", "rosterLeft", "runRule", "defensiveOuts", "openingDefense", "flexReentered", "dpReentered"].forEach(function (key) {
+      if (JSON.stringify(state[key]) !== JSON.stringify(next[key])) {
+        prior[key] = JSON.parse(JSON.stringify(state[key] == null ? null : state[key]));
+      }
+    });
+    return prior;
+  }
+
+  function remember(state, next, label, opts) {
     if (!state || !next) return next;
-    const prior = JSON.parse(JSON.stringify(state));
-    delete prior.history;
-    const history = (Array.isArray(state.history) ? state.history : []).concat([prior]).slice(-20);
-    next.history = history;
-    next.lastAction = label || "";
+    const pitch = opts && opts.pitch;
+    next.playLog = appendLog(state, label || (pitch ? "Count" : ""));
     next.undoNote = "";
     next.actionSeq = (Number(state.actionSeq) || 0) + 1;
+    if (pitch) {
+      next.history = Array.isArray(state.history) ? state.history : [];
+      next.lastAction = state.lastAction || "";
+      return next;
+    }
+    const history = (Array.isArray(state.history) ? state.history : []).concat([snapshotForUndo(state, next)]).slice(-20);
+    next.history = history;
+    next.lastAction = label || "";
     return next;
   }
 
@@ -166,9 +194,18 @@
     const history = state.history.slice();
     const prev = history.pop();
     const note = "Undid: " + (state.lastAction || "last play");
-    return Object.assign({}, prev, {
+    return Object.assign({}, state, prev, {
       history: history,
+      playLog: appendLog(state, note),
+      players: state.players,
+      lineupSnapshot: state.lineupSnapshot,
+      defensePlan: state.defensePlan,
+      clubName: state.clubName || "",
+      teamName: state.teamName || "",
+      gameName: state.gameName || "",
+      oppName: state.oppName || "",
       undoNote: note,
+      seenOpKeys: [],
       updatedAt: now || Date.now(),
     });
   }
@@ -698,33 +735,72 @@
 
   function teamWords(name) {
     const colors = { gold: 1, black: 1, blue: 1, white: 1, red: 1, navy: 1, silver: 1, green: 1, orange: 1, purple: 1 };
-    return String(name || "").trim().split(/\s+/).filter(function (word) {
-      if (!word || /^\d+U$/i.test(word) || /^(mn|vs|at)$/i.test(word)) return false;
+    return String(name || "").replace(/\./g, "").trim().split(/\s+/).filter(function (word) {
+      if (!word || /^\d+U$/i.test(word) || /^(mn|vs|at|st|saint)$/i.test(word)) return false;
       return true;
     }).filter(function (word, index, list) {
       return !(colors[word.toLowerCase()] && list.length > 1 && index === list.length - 1);
     });
   }
 
-  function readableTeam(name, fallback) {
+  function nicknameOf(name, fallback) {
     const raw = String(name || "").trim();
     if (!raw || raw === "Us" || raw === "Team" || raw === "Opponent" || raw === "Opp") return fallback;
     const parts = teamWords(raw);
-    const short = parts.find(function (word) { return word.length >= 3 && word.length <= 5; });
-    return short || (parts.length ? parts[parts.length - 1] : fallback);
+    if (!parts.length) return fallback;
+    return parts[parts.length - 1];
+  }
+
+  function readableTeam(name, fallback) {
+    return nicknameOf(name, fallback);
   }
 
   function abbrOf(name, fallback) {
-    if (!name || name === "Opponent" || name === "Opp" || name === "Us") return fallback;
-    const parts = teamWords(name);
-    if (!parts.length) return fallback;
-    const compact = parts.find(function (word) {
-      const letters = word.replace(/[^A-Za-z]/g, "");
-      return letters.length >= 3 && letters.length <= 4;
-    });
-    const source = (compact || parts[parts.length - 1] || "").replace(/[^A-Za-z]/g, "");
-    if (!source) return fallback;
-    return source.slice(0, 4).toUpperCase();
+    const nick = nicknameOf(name, "");
+    return nick || fallback;
+  }
+
+  function ourFullName(state) {
+    const club = String((state && state.clubName) || "").trim();
+    const team = String((state && state.teamName) || "").trim();
+    const teamOk = team && team !== "Us" && team !== "Team";
+    if (club && teamOk) {
+      if (team.toLowerCase().indexOf(club.toLowerCase()) >= 0) return team;
+      if (club.toLowerCase().indexOf(team.toLowerCase()) >= 0) return club;
+      return club + " " + team;
+    }
+    return club || (teamOk ? team : "");
+  }
+
+  function oppFullName(state) {
+    const entered = String((state && state.oppName) || opponentLabel(state && state.gameName) || "").trim();
+    return entered;
+  }
+
+  function ourNickname(state, sideFallback) {
+    const fromClub = nicknameOf(state && state.clubName, "");
+    if (fromClub) return fromClub;
+    const team = String((state && state.teamName) || "").trim();
+    if (!team || team === "Us" || team === "Team") return sideFallback;
+    const split = team.match(/^(.*?)\s+(\d+U)\b/i);
+    if (split && split[1]) return nicknameOf(split[1], "") || split[1];
+    const rawWords = team.split(/\s+/).filter(Boolean);
+    const age = rawWords.some(function (word) { return /^\d+U$/i.test(word); });
+    if (age && rawWords.length <= 2) return team;
+    return nicknameOf(team, "") || team;
+  }
+
+  function oppNickname(state, sideFallback) {
+    const full = oppFullName(state);
+    if (!full) return sideFallback;
+    return nicknameOf(full, "") || full;
+  }
+
+  function gameHeading(state) {
+    const home = Boolean(state && state.side === "home");
+    const us = ourFullName(state) || (home ? "Home" : "Away");
+    const opp = oppFullName(state) || (home ? "Away" : "Home");
+    return us + " vs " + opp;
   }
 
   function defenseForInning(plan, index, fallback) {
@@ -830,9 +906,11 @@
       oppHits: 0,
       usErrors: 0,
       oppErrors: 0,
-      teamAbbr: input && input.teamAbbr ? String(input.teamAbbr).replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase() : "",
-      oppAbbr: input && input.oppAbbr ? String(input.oppAbbr).replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase() : "",
+      clubName: input && input.clubName ? String(input.clubName) : "",
+      teamAbbr: "",
+      oppAbbr: "",
       oppName: input && input.oppName ? String(input.oppName) : "",
+      playLog: [],
       itbFrom: input && input.itbFrom ? clampScheduledInnings(input.itbFrom) : 0,
       timeLimit: false,
       runRule: null,
@@ -844,7 +922,7 @@
       players: Array.isArray(input.players) ? input.players.map(slimPlayer).filter(Boolean) : [],
       lineupSnapshot: snapshot,
       gameName: input && input.oppName ? withOpponent(snapshot.name, input.oppName) : snapshot.name,
-      teamName: String((input && input.teamName) || "Elks"),
+      teamName: String((input && input.teamName) || ""),
       startedAt: stamp,
       updatedAt: stamp,
     };
@@ -942,6 +1020,7 @@
       next.balls = 0;
       next.strikes = 0;
     }
+    if (current + 1 >= 3) next.bases = [false, false, false];
     return remember(state, next, "Out #" + (current + 1));
   }
 
@@ -1049,7 +1128,7 @@
     advanced.itbRunnerId = advanced.tiebreaker ? runnerBeforeLeadoff(advanced) : "";
     advanced.balls = 0;
     advanced.strikes = 0;
-    advanced.bases = [false, false, false];
+    advanced.bases = advanced.tiebreaker ? [false, true, false] : [false, false, false];
     return remember(state, advanced, "End half");
   }
 
@@ -1291,13 +1370,16 @@
   function scoreboardRows(state) {
     const board = scoreboard(state);
     const home = Boolean(state && state.side === "home");
-    const usName = readableTeam(state && state.teamName, "Elks");
-    const oppName = opponentLabel(state && state.gameName) || "Opponent";
+    const usSide = home ? "Home" : "Away";
+    const oppSide = home ? "Away" : "Home";
+    const usFull = ourFullName(state);
+    const oppFull = oppFullName(state);
     const us = {
       team: "us",
       side: home ? "home" : "away",
-      label: state && state.teamAbbr ? String(state.teamAbbr).replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase() : abbrOf(usName, "ELKS"),
-      name: usName,
+      label: ourNickname(state, usSide),
+      name: usFull || usSide,
+      needsName: !usFull,
       cells: board.innings.map(function (inn) { return inn.us; }),
       total: board.usTotal,
       hits: board.usHits,
@@ -1306,8 +1388,9 @@
     const opp = {
       team: "opp",
       side: home ? "away" : "home",
-      label: state && state.oppAbbr ? String(state.oppAbbr).replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase() : abbrOf(oppName, "OPP"),
-      name: oppName,
+      label: oppNickname(state, oppSide),
+      name: oppFull || oppSide,
+      needsName: !oppFull,
       cells: board.innings.map(function (inn) { return inn.opp; }),
       total: board.oppTotal,
       hits: board.oppHits,
@@ -1627,14 +1710,23 @@
       oppHits: Math.max(0, Math.floor(Number(raw.oppHits) || 0)),
       usErrors: Math.max(0, Math.floor(Number(raw.usErrors) || 0)),
       oppErrors: Math.max(0, Math.floor(Number(raw.oppErrors) || 0)),
-      teamAbbr: raw.teamAbbr ? String(raw.teamAbbr).replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase() : "",
-      oppAbbr: raw.oppAbbr ? String(raw.oppAbbr).replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase() : "",
+      clubName: raw.clubName ? String(raw.clubName) : "",
+      teamAbbr: "",
+      oppAbbr: "",
       oppName: raw.oppName ? String(raw.oppName) : "",
       itbFrom: Math.max(0, Math.floor(Number(raw.itbFrom) || 0)),
       timeLimit: !!raw.timeLimit,
       prompt: raw.prompt ? String(raw.prompt) : "",
       forfeitWinner: raw.forfeitWinner === "opp" ? "opp" : (raw.forfeitWinner === "us" ? "us" : ""),
       overrides: Array.isArray(raw.overrides) ? raw.overrides.map(String).slice(-40) : [],
+      playLog: Array.isArray(raw.playLog) ? raw.playLog.slice(-80).map(function (entry) {
+        return {
+          n: Math.floor(Number(entry && entry.n) || 0),
+          label: String(entry && entry.label || "").slice(0, 40),
+          i: Math.floor(Number(entry && entry.i) || 0),
+          h: entry && entry.h === "b" ? "b" : "t",
+        };
+      }) : [],
       history: Array.isArray(raw.history) ? raw.history.slice(-20) : [],
       seenOpKeys: Array.isArray(raw.seenOpKeys) ? raw.seenOpKeys.map(String).slice(-40) : [],
       actionSeq: Math.max(0, Math.floor(Number(raw.actionSeq) || 0)),
@@ -1784,7 +1876,8 @@
     const team = ensureTeam(next, op.teamId, op.teamName);
     function put(session) {
       if (session && (op.atHalf || op.type === "undo" || op.type === "add-run" || op.type === "next-batter" || op.type === "add-tally" || op.type === "add-out" || op.type === "reach-base")) {
-        const keys = (current && current.seenOpKeys ? current.seenOpKeys : []).concat(session.seenOpKeys || []).concat([opKey(op)]);
+        const carried = op.type === "undo" ? [] : (current && current.seenOpKeys ? current.seenOpKeys : []);
+        const keys = carried.concat(session.seenOpKeys || []).concat([opKey(op)]);
         const uniq = [];
         keys.forEach(function (key) {
           if (uniq.indexOf(key) < 0) uniq.push(key);
@@ -1805,9 +1898,12 @@
     if (current && (op.atHalf || op.type === "undo" || op.type === "add-run" || op.type === "next-batter" || op.type === "add-tally")) {
       const gate = staleGate(current, op);
       if (gate === "drop") {
-        const err = new Error("Another phone already recorded that.");
+        const err = new Error(op.type === "add-run"
+          ? "Another phone already counted that run. Tap again if it was a different run."
+          : "Another phone already recorded that.");
         err.code = "stale";
         if (op.type === "add-out" || op.type === "record-runs" || op.type === "set-half-runs") throw err;
+        next.dropNotice = err.message;
         return next;
       }
       if (gate === "same") {
@@ -1825,6 +1921,7 @@
     else if (op.type === "set-pool") put(remember(current, Object.assign({}, current, { courtesyPool: op.pool === "jo" ? "jo" : "standard" }), "Courtesy pool"));
     else if (op.type === "set-rule") put(remember(current, Object.assign({}, current, { runRule: op.runRule || null }), "Run rule"));
     else if (op.type === "add-tally") put(addTally(current, op.kind, op.side, stamp));
+    else if (op.type === "safe") put(safePlay(current, op.kind, stamp));
     else if (op.type === "edit-half") put(editHalfRuns(current, op.inningIndex, op.half, op.runs, stamp));
     else if (op.type === "set-batter") put(setBatter(current, op.index, stamp));
     else if (op.type === "next-batter") put(advanceBatter(current, stamp));
@@ -1979,28 +2076,112 @@
     }), "Next batter");
   }
 
+  function walkBases(bases) {
+    const b = [!!(bases && bases[0]), !!(bases && bases[1]), !!(bases && bases[2])];
+    let runs = 0;
+    if (b[0]) {
+      if (b[1] && b[2]) runs = 1;
+      if (b[1]) b[2] = true;
+      b[1] = true;
+    }
+    b[0] = true;
+    return { bases: b, runs: runs };
+  }
+
+  function promptForScore(state) {
+    const board = scoreboard(state);
+    const home = state.side === "home" ? board.usTotal : board.oppTotal;
+    const away = state.side === "home" ? board.oppTotal : board.usTotal;
+    const inningNumber = state.inningIndex + 1;
+    if (state.half === "bottom" && runRuleHit(state, "bottom", inningNumber, { home: home, away: away })) return "run-rule";
+    if (state.half === "bottom" && home > away && (inningNumber >= scheduledInningsOf(state) || tiebreakerActive(state))) return "walk-off";
+    return "";
+  }
+
   function setCount(state, patch, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
-    var nextBalls = patch.balls != null ? patch.balls : (state.balls || 0);
-    var nextStrikes = patch.strikes != null ? patch.strikes : (state.strikes || 0);
-    if (nextBalls > 3) nextBalls = 0;
-    if (nextStrikes > 2) nextStrikes = 2;
+    const stamp = now || Date.now();
+    const nextBalls = patch && patch.balls != null ? Number(patch.balls) : (state.balls || 0);
+    const nextStrikes = patch && patch.strikes != null ? Number(patch.strikes) : (state.strikes || 0);
+    if (patch && patch.bases && patch.balls == null && patch.strikes == null) {
+      return remember(state, Object.assign({}, state, {
+        bases: [!!patch.bases[0], !!patch.bases[1], !!patch.bases[2]],
+        updatedAt: stamp,
+      }), "Bases");
+    }
+    if (nextBalls >= 4) return safePlay(state, "walk", stamp);
+    if (nextStrikes >= 3) {
+      const struck = addOut(Object.assign({}, state, { balls: 0, strikes: 2 }), stamp);
+      struck.lastAction = "Strikeout";
+      if (struck.playLog && struck.playLog.length) struck.playLog[struck.playLog.length - 1].label = "Strikeout";
+      return struck;
+    }
+    const foulHold = patch && patch.foul && (state.strikes || 0) >= 2;
     return remember(state, Object.assign({}, state, {
-      balls: nextBalls,
-      strikes: nextStrikes,
-      bases: patch.bases || state.bases || [false, false, false],
-      updatedAt: now || Date.now(),
-    }), "Count");
+      balls: Math.max(0, Math.min(3, nextBalls)),
+      strikes: foulHold ? 2 : Math.max(0, Math.min(2, nextStrikes)),
+      updatedAt: stamp,
+    }), patch && patch.foul ? "Foul" : "Count", { pitch: true });
   }
 
   function reachBase(state, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
+    const bases = (state.bases || [false, false, false]).slice();
+    bases[0] = true;
     return remember(state, Object.assign({}, state, {
       battingIndex: stepBatter(state),
       balls: 0,
       strikes: 0,
+      bases: bases,
       updatedAt: now || Date.now(),
     }), "Reached base");
+  }
+
+  function safePlay(state, kind, now) {
+    if (!state || state.status !== "live") throw new Error("This game is not in progress.");
+    const stamp = now || Date.now();
+    const play = String(kind || "hit");
+    if (play === "walk" || play === "hbp") {
+      const moved = walkBases(state.bases);
+      const live = (Number(state.liveRuns) || 0) + moved.runs;
+      const next = Object.assign({}, state, {
+        liveRuns: live,
+        bases: moved.bases,
+        balls: 0,
+        strikes: 0,
+        battingIndex: stepBatter(state),
+        prompt: "",
+        updatedAt: stamp,
+      });
+      next.prompt = promptForScore(next);
+      return remember(state, next, play === "hbp" ? "HBP" : "Walk");
+    }
+    if (play === "error") {
+      const next = addTally(state, "error", roleFor(state.side, state.half) === "offense" ? "opp" : "us", stamp);
+      next.battingIndex = stepBatter(state);
+      next.balls = 0;
+      next.strikes = 0;
+      next.bases = [true, !!(state.bases && state.bases[1]), !!(state.bases && state.bases[2])];
+      next.lastAction = "Error";
+      return next;
+    }
+    if (play === "fc") {
+      return remember(state, Object.assign({}, state, {
+        battingIndex: stepBatter(state),
+        balls: 0,
+        strikes: 0,
+        bases: [true, !!(state.bases && state.bases[1]), !!(state.bases && state.bases[2])],
+        updatedAt: stamp,
+      }), "Fielder's choice");
+    }
+    const battingUs = roleFor(state.side, state.half) === "offense";
+    const next = addTally(state, "hit", battingUs ? "us" : "opp", stamp);
+    next.battingIndex = stepBatter(state);
+    next.balls = 0;
+    next.strikes = 0;
+    next.bases = [true, !!(state.bases && state.bases[1]), !!(state.bases && state.bases[2])];
+    next.lastAction = "Hit";
+    return next;
   }
 
   function setBatter(state, index, now) {
@@ -2030,23 +2211,26 @@
   }
 
   function itbRunner(state) {
-    if (!state) return { id: "", label: "ITB runner on 2nd", order: 0 };
+    if (!state) return { id: "", label: "Their runner on 2nd", order: 0 };
+    if (roleFor(state.side, state.half) !== "offense") {
+      return { id: "", label: "Their runner on 2nd", order: 0 };
+    }
     const rows = liveBatters(state);
     if (state.itbRunnerId) {
       const found = rows.find(function (row) { return row.id === state.itbRunnerId; });
       if (found) return found;
     }
-    if (roleFor(state.side, state.half) !== "offense") {
-      return { id: "", label: "ITB runner on 2nd", order: 0 };
-    }
     const id = runnerBeforeLeadoff(state);
     return rows.find(function (row) { return row.id === id; }) || { id: id, label: "ITB runner on 2nd", order: 0 };
   }
 
+  function rulesOf(state) {
+    if (Array.isArray(state && state.runRule)) return state.runRule;
+    return [{ after: 3, lead: 15 }, { after: 4, lead: 12 }, { after: 5, lead: 8 }];
+  }
+
   function runRuleHit(state, half, inningNumber, scores) {
-    const rules = Array.isArray(state && state.runRule) && state.runRule.length
-      ? state.runRule
-      : [{ after: 3, lead: 15 }, { after: 4, lead: 12 }, { after: 5, lead: 8 }];
+    const rules = rulesOf(state);
     const homeLead = scores.home - scores.away;
     const gap = Math.abs(homeLead);
     return rules.some(function (rule) {
@@ -2065,9 +2249,7 @@
   }
 
   function runRuleMargin(state, complete) {
-    const rules = Array.isArray(state && state.runRule) && state.runRule.length
-      ? state.runRule
-      : [{ after: 3, lead: 15 }, { after: 4, lead: 12 }, { after: 5, lead: 8 }];
+    const rules = rulesOf(state);
     let lead = 0;
     rules.forEach(function (rule) {
       const after = Number(rule.after);
@@ -2085,7 +2267,8 @@
     }).length;
     const scores = totalsFromInnings(state.innings);
     const tied = state.endedReason === "forfeit" ? false : scores.home === scores.away;
-    if (state.endedReason === "run-rule" || state.endedReason === "time" || state.endedReason === "called" || state.endedReason === "forfeit" || state.endedReason === "walk-off" || state.endedReason === "other") {
+    if (state.endedReason === "forfeit") return "Forfeit";
+    if (state.endedReason === "run-rule" || state.endedReason === "time" || state.endedReason === "called" || state.endedReason === "walk-off" || state.endedReason === "other") {
       return "Final/" + Math.max(1, played || state.inningIndex + 1) + (tied ? " · Tie" : "");
     }
     if (state.inningIndex + 1 > scheduled) return "Final/" + (state.inningIndex + 1);
@@ -2187,11 +2370,35 @@
     const next = Object.assign({}, state, { innings: innings, updatedAt: now || Date.now() });
     const scores = totalsFromInnings(innings);
     if (next.status === "played" && next.endedReason !== "forfeit" && scores.home === scores.away) {
+      next.innings.forEach(function (inn) {
+        if (inn.top === "X") inn.top = null;
+        if (inn.bottom === "X") inn.bottom = null;
+      });
+      let spot = null;
+      next.innings.forEach(function (inn, index) {
+        if (spot) return;
+        if (inn.top == null) spot = { inningIndex: index, half: "top" };
+        else if (inn.bottom == null) spot = { inningIndex: index, half: "bottom" };
+      });
+      if (!spot) {
+        next.innings.push({ top: null, bottom: null, topTiebreaker: false, bottomTiebreaker: false });
+        spot = { inningIndex: next.innings.length - 1, half: "top" };
+      }
       next.status = "live";
       next.endedReason = "";
       next.finalUs = undefined;
       next.finalOpp = undefined;
+      next.endedAt = undefined;
+      next.inningIndex = spot.inningIndex;
+      next.half = spot.half;
+      next.outs = 0;
+      next.liveRuns = 0;
+      next.balls = 0;
+      next.strikes = 0;
       next.prompt = "Resume (now tied)";
+      next.tiebreaker = tiebreakerActive(next);
+      next.itbRunnerId = next.tiebreaker ? runnerBeforeLeadoff(next) : "";
+      next.bases = next.tiebreaker ? [false, true, false] : [false, false, false];
     } else if (next.status === "played") {
       const board = scoreboard(next);
       next.finalUs = board.usTotal;
@@ -2381,6 +2588,10 @@
     courtesyChoice: courtesyChoice,
     finalBanner: finalBanner,
     abbrOf: abbrOf,
+    nicknameOf: nicknameOf,
+    gameHeading: gameHeading,
     readableTeam: readableTeam,
+    safePlay: safePlay,
+    setCount: setCount,
   };
 });

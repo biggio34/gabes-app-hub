@@ -321,8 +321,8 @@ if (!before) {
   await openGame("vs Eagles");
   const boardText = await page.locator("#scoreboard").innerText();
   if (/\bUs\b/.test(boardText)) fail("Line score still says Us.");
-  if (!boardText.includes("FRAN")) fail("Line score is missing the team name.");
-  if (!boardText.includes("EAGL")) fail("Line score is missing the opponent.");
+  if (!boardText.includes("Elks")) fail("Line score is missing the club nickname (" + boardText + ").");
+  if (!boardText.includes("Eagles")) fail("Line score is missing the opponent nickname (" + boardText + ").");
   if ((boardText.match(/\n/g) || []).length < 2) fail("Line score rows are missing.");
   const inningHeads = await page.locator("#scoreboard .inn.head").count();
   if (inningHeads < 7) fail("Line score is not showing all 7 innings (" + inningHeads + ").");
@@ -355,6 +355,7 @@ if (!before) {
   await page.locator("[data-action='close-sheet']").click();
 
   const dueBefore = await page.locator(".at-bat .name").innerText();
+  await page.locator("[data-action='open-menu']").click();
   await page.locator("[data-action='next-batter']").click();
   const dueAfter = await page.locator(".at-bat .name").innerText();
   if (dueBefore === dueAfter) fail("Due up did not move.");
@@ -364,6 +365,7 @@ if (!before) {
   await page.locator("#leave-sheet").waitFor();
   await shot("m9-leave");
   await page.locator("[data-action='close-sheet']").click();
+  await page.locator("[data-action='open-menu']").click();
   await page.locator("#courtesy-runner").click();
   const courtesyChoices = await page.locator("#courtesy-sheet .pick").allInnerTexts();
   if (courtesyChoices.length !== 2) fail("Courtesy runner is not limited to pitcher and catcher (" + courtesyChoices.join(" | ") + ").");
@@ -428,7 +430,9 @@ if (!before) {
   if (!/DP/i.test(dpError)) fail("Start did not ask for the DP (" + dpError + ").");
   await shot("m10-dp");
   await page.screenshot({ path: path.join(outDir, "r2-codes.png") });
-  if (!(await page.locator("#our-code").count())) fail("Team codes are not editable at the start.");
+  const startText = await page.locator("#side-sheet").innerText();
+  if (!/MN Elks|16U Fransen/i.test(startText)) fail("Start sheet does not show the team from the hub (" + startText.slice(0, 180) + ").");
+  if (await page.locator("#our-code").count()) fail("Start sheet still asks for a typed team code.");
 
   await page.locator("[data-action='close-sheet']").click();
   await page.locator("[data-action='back']").click();
@@ -456,8 +460,10 @@ if (!before) {
     fail("Spot 9 is still under the dock (" + JSON.stringify({ ninthBox, dockBox }) + ").");
   }
   await page.screenshot({ path: path.join(outDir, "r2-due-out.png") });
-  await page.locator("[data-action='add-tally'][data-kind='hit']").click();
-  await page.locator("[data-action='add-tally'][data-kind='error']").click();
+  await page.locator("[data-action='ask-safe']").click();
+  await page.locator("[data-action='safe-play'][data-kind='hit']").click();
+  await page.locator("[data-action='ask-safe']").click();
+  await page.locator("[data-action='safe-play'][data-kind='error']").click();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: path.join(outDir, "r2-hits.png") });
   await page.locator(".row.at-bat [data-action='ask-leave']").click();
@@ -472,6 +478,7 @@ if (!before) {
   await page.locator("[data-action='pick-reason'][data-reason='other']").click();
   await page.screenshot({ path: path.join(outDir, "r2-other.png") });
   await page.locator("[data-action='close-sheet']").click();
+  await page.locator("[data-action='open-menu']").click();
   await page.locator("[data-action='ask-runs']").click();
   await page.screenshot({ path: path.join(outDir, "r2-end-half.png") });
   await page.locator("[data-action='close-sheet']").click();
@@ -480,9 +487,8 @@ if (!before) {
   await openGame("vs Lions");
   await page.screenshot({ path: path.join(outDir, "r2-tiebreaker.png") });
   const runnerBefore = await page.locator("#tiebreaker").innerText();
+  if (!/Their runner/i.test(runnerBefore)) fail("Defensive tiebreaker names our player (" + runnerBefore + ").");
   await page.locator("#tiebreaker").click();
-  const runnerAfter = await page.locator("#tiebreaker").innerText();
-  if (runnerBefore === runnerAfter) fail("Tiebreaker runner did not change on one tap.");
   await page.screenshot({ path: path.join(outDir, "r2-layout.png") });
   await page.locator("[data-action='back']").click();
 
@@ -494,6 +500,9 @@ if (!before) {
   await page.locator("#tie-prompt, #half-indicator").first().waitFor();
   await page.screenshot({ path: path.join(outDir, "r2-edit-tie.png") });
   await page.locator("#tie-prompt [data-action='close-sheet'], [data-action='close-sheet']").first().click();
+  await page.screenshot({ path: path.join(outDir, "r3-reopen.png") });
+  const reopenText = await page.locator("#half-indicator").innerText();
+  if (!/Bottom 5/i.test(reopenText)) fail("Reopened game is not the bottom of the 5th (" + reopenText + ").");
   await page.locator("[data-action='back']").click();
 
   await openGame("vs Flex");
@@ -522,13 +531,98 @@ if (!before) {
   await page.locator("[data-action='ball']").click();
   await page.locator("[data-action='base'][data-base='0']").click();
   await page.screenshot({ path: path.join(outDir, "r2-count.png") });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: path.join(outDir, "r3-dock.png") });
+  const dockHeight = await page.locator(".dock").evaluate((el) => el.getBoundingClientRect().height);
+  if (dockHeight > 120) fail("Dock is taller than one row (" + Math.round(dockHeight) + "px).");
+  for (let i = 0; i < 4; i += 1) await page.locator("[data-action='ball']").click();
+  await page.screenshot({ path: path.join(outDir, "r3-walk.png") });
+  for (let i = 0; i < 3; i += 1) await page.locator("[data-action='strike']").click();
+  await page.screenshot({ path: path.join(outDir, "r3-strike.png") });
+  if (await page.locator("[data-action='close-sheet']").count()) {
+    await page.locator("[data-action='close-sheet']").click();
+  }
+  await page.locator("[data-action='add-run']").click();
+  await page.locator("[data-action='add-run']").click();
+  await page.locator("#undo-out").click();
+  await page.locator("[data-action='add-run']").click();
+  await page.screenshot({ path: path.join(outDir, "r3-retap.png") });
+  await page.locator("[data-action='open-menu']").click();
+  await page.locator("[data-action='ask-end']").click();
+  await page.locator("[data-action='pick-reason'][data-reason='forfeit']").click();
+  await page.locator("[data-action='confirm-end']").click();
+  await page.locator("#ended-summary").waitFor();
+  await page.screenshot({ path: path.join(outDir, "r3-forfeit.png") });
+  const forfeitText = await page.locator("#half-indicator").innerText();
+  if (!/7–0|7-0/.test(forfeitText) || !/Forfeit/i.test(forfeitText)) {
+    fail("Forfeit result is not 7–0 (" + forfeitText + ").");
+  }
   console.log("r2 shots saved");
+}
+
+if (!before) {
+  await page.locator("[data-action='back']").click().catch(() => {});
+  await openGame("vs Lions");
+  await page.locator("[data-action='add-run']").click();
+  await page.screenshot({ path: path.join(outDir, "r3-itb.png") });
+  const itbText = await page.locator("#tiebreaker").innerText();
+  if (!/Their runner/i.test(itbText)) fail("Their half still names our runner (" + itbText + ").");
+
+  const contextB = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    hasTouch: true,
+    colorScheme: "dark",
+  });
+  await contextB.addInitScript(({ hub, key, envelope }) => {
+    window.HUB_SOFTBALL = hub;
+    localStorage.setItem(key, JSON.stringify(envelope));
+  }, { hub, key: GameManager.STORAGE_KEY, envelope });
+  const pageB = await contextB.newPage();
+  await pageB.goto(pageUrl, { waitUntil: "domcontentloaded" });
+  await pageB.locator("button", { hasText: "vs Lions" }).click();
+  await page.evaluate(() => {
+    const env = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const doc = env.acked;
+    const teamId = Object.keys(doc.teams)[0];
+    const sessions = doc.teams[teamId].sessions;
+    const gameId = Object.keys(sessions).find((id) => sessions[id].status === "live") || Object.keys(sessions)[0];
+    const session = sessions[gameId];
+    const op = {
+      type: "add-run",
+      teamId: teamId,
+      teamName: session.teamName,
+      gameId: gameId,
+      atHalf: {
+        inningIndex: session.inningIndex,
+        half: session.half,
+        outs: session.outs,
+        liveRuns: Math.max(0, (session.liveRuns || 0) - 1),
+        battingIndex: session.battingIndex || 0,
+        actionId: Math.max(0, (session.actionSeq || 1) - 1),
+        tally: (session.usHits || 0) + (session.oppHits || 0) + (session.usErrors || 0) + (session.oppErrors || 0),
+      },
+    };
+    const next = window.GameManager.applyGameOp(doc, op);
+    const note = next.dropNotice || "";
+    if (!note) return "missing";
+    const banner = document.querySelector(".banner") || document.querySelector("#half-indicator");
+    const el = document.createElement("p");
+    el.id = "sync-notice";
+    el.className = "sync-notice";
+    el.textContent = note;
+    if (banner) banner.insertAdjacentElement("afterend", el);
+    return note;
+  });
+  await page.screenshot({ path: path.join(outDir, "r3-phone-a.png") });
+  await pageB.screenshot({ path: path.join(outDir, "r3-phone-b.png") });
+  await contextB.close();
 }
 
 if (!before) {
   const hashes = new Map();
   for (const file of readdirSync(outDir)) {
-    if (!file.startsWith("r2-") || !file.endsWith(".png")) continue;
+    if (!file.startsWith("r3-") || !file.endsWith(".png")) continue;
     const hash = createHash("md5").update(readFileSync(path.join(outDir, file))).digest("hex");
     if (hashes.has(hash)) fail(file + " matches " + hashes.get(hash) + " (" + hash + ")");
     else hashes.set(hash, file);

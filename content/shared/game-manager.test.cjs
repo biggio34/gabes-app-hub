@@ -41,6 +41,7 @@ function start(side, game, innings) {
       game: game || sampleGame(),
       players: players(),
       teamName: "16U Fransen",
+      clubName: "MN Elks",
       scheduledInnings: innings,
     },
     1000,
@@ -582,27 +583,27 @@ describe("scoreboard away-home row order", () => {
     state = GameManager.recordRuns(state, 2, 1100);
     assert.equal(
       GameManager.liveScoreMeta(state),
-      "In progress · Bot 1st · Defense · Fransen 2, Eagles 0",
+      "In progress · Bot 1st · Defense · MN Elks 16U Fransen 2, Eagles 0",
     );
     state = GameManager.recordRuns(state, 1, 1200);
     const open = GameManager.scoreboardRows(state);
     assert.deepEqual(open.map((row) => row.side), ["away", "home"]);
     assert.deepEqual(open.map((row) => row.team), ["us", "opp"]);
-    assert.deepEqual(open.map((row) => row.label), ["FRAN", "EAGL"]);
+    assert.deepEqual(open.map((row) => row.label), ["Elks", "Eagles"]);
     assert.deepEqual(open[0].cells.slice(0, 2), [2, null]);
     assert.equal(open[0].cells.length, 7);
     assert.deepEqual(open[1].cells.slice(0, 2), [1, null]);
     assert.equal(open[0].total, 2);
     assert.equal(open[1].total, 1);
-    assert.equal(GameManager.scoreLine(state), "Fransen 2, Eagles 1");
-    assert.equal(GameManager.liveScoreMeta(state), "In progress · Top 2nd · Offense · Fransen 2, Eagles 1");
+    assert.equal(GameManager.scoreLine(state), "MN Elks 16U Fransen 2, Eagles 1");
+    assert.equal(GameManager.liveScoreMeta(state), "In progress · Top 2nd · Offense · MN Elks 16U Fransen 2, Eagles 1");
     const done = GameManager.endGame(state, 1300);
     const rows = GameManager.scoreboardRows(done);
-    assert.deepEqual(rows.map((row) => row.label), ["FRAN", "EAGL"]);
+    assert.deepEqual(rows.map((row) => row.label), ["Elks", "Eagles"]);
     assert.equal(rows[0].cells[0], 2);
     assert.equal(rows[1].cells[0], 1);
     assert.equal(rows[0].cells.length, 7);
-    assert.equal(GameManager.finalScoreMeta(done), "Final Fransen 2, Eagles 1");
+    assert.equal(GameManager.finalScoreMeta(done), "Final MN Elks 16U Fransen 2, Eagles 1");
   });
 
   it("puts the opponent on top when we are the home team", () => {
@@ -610,20 +611,20 @@ describe("scoreboard away-home row order", () => {
     state = GameManager.recordRuns(state, 3, 1100);
     assert.equal(
       GameManager.liveScoreMeta(state),
-      "In progress · Bot 1st · Offense · Eagles 3, Fransen 0",
+      "In progress · Bot 1st · Offense · Eagles 3, MN Elks 16U Fransen 0",
     );
     state = GameManager.recordRuns(state, 5, 1200);
     const open = GameManager.scoreboardRows(state);
     assert.deepEqual(open.map((row) => row.side), ["away", "home"]);
     assert.deepEqual(open.map((row) => row.team), ["opp", "us"]);
-    assert.deepEqual(open.map((row) => row.label), ["EAGL", "FRAN"]);
+    assert.deepEqual(open.map((row) => row.label), ["Eagles", "Elks"]);
     assert.deepEqual(open[0].cells.slice(0, 2), [3, null]);
     assert.equal(open[0].cells.length, 7);
     assert.deepEqual(open[1].cells.slice(0, 2), [5, null]);
     assert.equal(open[0].total, 3);
     assert.equal(open[1].total, 5);
-    assert.equal(GameManager.scoreLine(state), "Eagles 3, Fransen 5");
-    assert.equal(GameManager.liveScoreMeta(state), "In progress · Top 2nd · Defense · Eagles 3, Fransen 5");
+    assert.equal(GameManager.scoreLine(state), "Eagles 3, MN Elks 16U Fransen 5");
+    assert.equal(GameManager.liveScoreMeta(state), "In progress · Top 2nd · Defense · Eagles 3, MN Elks 16U Fransen 5");
     const done = GameManager.endGame(state, 1300);
     const rows = GameManager.scoreboardRows(done);
     assert.deepEqual(rows.map((row) => row.side), ["away", "home"]);
@@ -631,7 +632,7 @@ describe("scoreboard away-home row order", () => {
     assert.equal(rows[0].cells.length, 7);
     assert.equal(rows[1].cells[0], 5);
     assert.equal(rows[1].cells.length, 7);
-    assert.equal(GameManager.finalScoreMeta(done), "Final Eagles 3, Fransen 5");
+    assert.equal(GameManager.finalScoreMeta(done), "Final Eagles 3, MN Elks 16U Fransen 5");
   });
 
   it("shortens a nameless opponent to Opp in the away-home score line", () => {
@@ -639,9 +640,10 @@ describe("scoreboard away-home row order", () => {
     state = Object.assign({}, state, { gameName: "Saturday Game" });
     state = GameManager.recordRuns(state, 3, 1100);
     state = GameManager.recordRuns(state, 5, 1200);
-    assert.equal(GameManager.scoreboardRows(state)[0].label, "OPP");
-    assert.equal(GameManager.scoreboardRows(state)[1].label, "FRAN");
-    assert.equal(GameManager.scoreLine(state), "Opponent 3, Fransen 5");
+    assert.equal(GameManager.scoreboardRows(state)[0].label, "Away");
+    assert.equal(GameManager.scoreboardRows(state)[0].needsName, true);
+    assert.equal(GameManager.scoreboardRows(state)[1].label, "Elks");
+    assert.equal(GameManager.scoreLine(state), "Away 3, MN Elks 16U Fransen 5");
   });
 
   it("shows the skipped bottom X on our row at the bottom of a home game", () => {
@@ -653,15 +655,15 @@ describe("scoreboard away-home row order", () => {
     assert.equal(state.endedReason, "home-lead");
     const rows = GameManager.scoreboardRows(state);
     assert.deepEqual(rows.map((row) => row.side), ["away", "home"]);
-    assert.equal(rows[0].label, "EAGL");
+    assert.equal(rows[0].label, "Eagles");
     assert.deepEqual(rows[0].cells, [0, 0]);
     assert.equal(rows[0].total, 0);
-    assert.equal(rows[1].label, "FRAN");
+    assert.equal(rows[1].label, "Elks");
     assert.equal(rows[1].team, "us");
     assert.deepEqual(rows[1].cells, [2, "X"]);
     assert.equal(rows[1].total, 2);
-    assert.equal(GameManager.scoreLine(state), "Eagles 0, Fransen 2");
-    assert.equal(GameManager.finalScoreMeta(state), "Final Eagles 0, Fransen 2");
+    assert.equal(GameManager.scoreLine(state), "Eagles 0, MN Elks 16U Fransen 2");
+    assert.equal(GameManager.finalScoreMeta(state), "Final Eagles 0, MN Elks 16U Fransen 2");
   });
 });
 
@@ -1226,10 +1228,144 @@ describe("round 2 scoring", () => {
   });
 
   it("uses a 3 or 4 letter team code instead of a chopped last word", () => {
-    assert.equal(GameManager.abbrOf("MN Elks 16U Fransen", "ELKS"), "ELKS");
-    assert.equal(GameManager.abbrOf("Blaine Bandits", "OPP"), "BAND");
-    assert.equal(GameManager.abbrOf("Rogers Royals 16U Gold", "OPP"), "ROYA");
-    assert.notEqual(GameManager.abbrOf("Rogers Royals 16U Gold", "OPP"), "GOLD");
+    assert.equal(GameManager.nicknameOf("MN Elks", ""), "Elks");
+    assert.equal(GameManager.nicknameOf("Rogers Royals 16U Gold", ""), "Royals");
+    assert.equal(GameManager.nicknameOf("Blaine Bandits", ""), "Bandits");
+    assert.equal(GameManager.nicknameOf("Eagles", ""), "Eagles");
+    assert.notEqual(GameManager.nicknameOf("Rogers Royals 16U Gold", ""), "ROYA");
+    assert.notEqual(GameManager.nicknameOf("Eagles", ""), "EAGL");
+  });
+
+  it("reads the displayed name from the club and the game, not a code", () => {
+    const game = Object.assign({}, sampleGame(), { name: "vs. Rogers Royals 16U Gold - May 3" });
+    const state = GameManager.createLiveGame({
+      side: "away",
+      game: game,
+      players: players(),
+      teamName: "16U Fransen",
+      clubName: "MN Elks",
+    }, 1);
+    const rows = GameManager.scoreboardRows(state);
+    assert.equal(rows[0].label, "Elks");
+    assert.equal(rows[0].name, "MN Elks 16U Fransen");
+    assert.equal(rows[1].label, "Royals");
+    assert.equal(rows[1].name, "Rogers Royals 16U Gold");
+    assert.equal(GameManager.gameHeading(state), "MN Elks 16U Fransen vs Rogers Royals 16U Gold");
+    const other = GameManager.createLiveGame({
+      side: "away",
+      game: game,
+      players: players(),
+      teamName: "14U",
+      clubName: "Blaine Bandits",
+    }, 1);
+    assert.equal(GameManager.scoreboardRows(other)[0].label, "Bandits");
+    assert.equal(GameManager.scoreboardRows(other)[0].name, "Blaine Bandits 14U");
+    assert.notEqual(GameManager.scoreboardRows(other)[0].label, "Elks");
+  });
+
+  it("counts a run tapped again after undo", () => {
+    let doc = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      input: { side: "away", game: sampleGame(), players: players(), teamName: "16U Fransen", clubName: "MN Elks" },
+    }, 1);
+    const gameId = "game-eagles";
+    function tap(current, type, extra) {
+      const session = current.teams.t.sessions[gameId];
+      const atHalf = {
+        inningIndex: session.inningIndex,
+        half: session.half,
+        outs: session.outs,
+        liveRuns: session.liveRuns || 0,
+        battingIndex: session.battingIndex || 0,
+        actionId: session.actionSeq || 0,
+        tally: (session.usHits || 0) + (session.oppHits || 0) + (session.usErrors || 0) + (session.oppErrors || 0),
+      };
+      return GameManager.applyGameOp(current, Object.assign({
+        type: type,
+        teamId: "t",
+        gameId: gameId,
+        atHalf: atHalf,
+      }, extra || {}), Date.now());
+    }
+    doc = tap(doc, "add-run");
+    doc = tap(doc, "add-run");
+    doc = tap(doc, "undo");
+    doc = tap(doc, "add-run");
+    assert.equal(doc.teams.t.sessions[gameId].liveRuns, 2);
+    doc = tap(doc, "add-out");
+    doc = tap(doc, "undo");
+    doc = tap(doc, "add-out");
+    assert.equal(doc.teams.t.sessions[gameId].outs, 1);
+    const again = tap(doc, "add-run");
+    const duplicate = GameManager.applyGameOp(again, {
+      type: "add-run",
+      teamId: "t",
+      gameId: gameId,
+      atHalf: {
+        inningIndex: doc.teams.t.sessions[gameId].inningIndex,
+        half: doc.teams.t.sessions[gameId].half,
+        outs: doc.teams.t.sessions[gameId].outs,
+        liveRuns: doc.teams.t.sessions[gameId].liveRuns,
+        battingIndex: doc.teams.t.sessions[gameId].battingIndex,
+        actionId: doc.teams.t.sessions[gameId].actionSeq,
+        tally: 0,
+      },
+    }, Date.now());
+    assert.equal(duplicate.teams.t.sessions[gameId].liveRuns, again.teams.t.sessions[gameId].liveRuns);
+    assert.match(duplicate.dropNotice, /already counted/);
+  });
+
+  it("names their tiebreaker runner while they bat, home or away", () => {
+    ["away", "home"].forEach((side) => {
+      let state = start(side);
+      state = GameManager.setScheduledInnings(state, 1, 2, { timeLimit: true });
+      state = GameManager.recordRuns(state, 0, 3);
+      state = GameManager.recordRuns(state, 0, 4);
+      const offense = GameManager.roleFor(state.side, state.half) === "offense";
+      if (!offense) state = GameManager.recordRuns(state, 0, 5);
+      assert.equal(GameManager.roleFor(state.side, state.half), "offense");
+      const ours = GameManager.itbRunner(state).label;
+      assert.notEqual(ours, "Their runner on 2nd");
+      state = GameManager.recordRuns(state, 0, 6);
+      assert.equal(GameManager.roleFor(state.side, state.half), "defense");
+      assert.equal(GameManager.itbRunner(state).label, "Their runner on 2nd");
+    });
+  });
+
+  it("reopens a home-lead final in the unplayed bottom and clears the X", () => {
+    let state = start("home", null, 5);
+    [1, 2, 0, 0, 1, 0, 0, 1, 0].forEach((runs, index) => {
+      state = GameManager.recordRuns(state, runs, 10 + index);
+    });
+    assert.equal(state.status, "played");
+    assert.equal(state.innings[4].bottom, "X");
+    state = GameManager.editHalfRuns(state, 0, "bottom", 1, 50);
+    assert.equal(state.status, "live");
+    assert.equal(state.inningIndex, 4);
+    assert.equal(state.half, "bottom");
+    assert.equal(state.innings[4].bottom, null);
+    assert.equal(GameManager.roleFor(state.side, state.half), "offense");
+  });
+
+  it("walks on ball four and strikes out on strike three", () => {
+    let state = start("away");
+    state = GameManager.setCount(state, { balls: 1 }, 2);
+    state = GameManager.setCount(state, { balls: 2 }, 3);
+    state = GameManager.setCount(state, { balls: 3 }, 4);
+    state = GameManager.setCount(state, { balls: 4 }, 5);
+    assert.equal(state.balls, 0);
+    assert.equal(state.strikes, 0);
+    assert.deepEqual(state.bases, [true, false, false]);
+    assert.equal(state.battingIndex, 1);
+    assert.equal(state.usHits, 0);
+    state = GameManager.setCount(state, { strikes: 1 }, 6);
+    state = GameManager.setCount(state, { strikes: 2 }, 7);
+    state = GameManager.setCount(state, { strikes: 3 }, 8);
+    assert.equal(state.outs, 1);
+    assert.equal(state.balls, 0);
+    assert.equal(state.strikes, 0);
+    assert.equal(state.battingIndex, 2);
   });
 });
 
@@ -1257,6 +1393,9 @@ describe("game manager page", () => {
     assert.match(html, /id="batting-order"/);
     assert.match(html, /onDefense[\s\S]*defenseEditorHtml\(session\) \+ trackerHtml\(session, true\)[\s\S]*: battingOrderHtml\(session\)/);
     assert.match(html, /\+1 Out/);
+    assert.match(html, /data-winner="us"/);
+    assert.match(html, /They forfeit/);
+    assert.equal(html.includes('id="our-code"'), false);
     assert.match(html, /id="undo-out"/);
     assert.match(html, /id="confirm-half-sheet"/);
     assert.match(html, /data-action="confirm-half"/);

@@ -79,6 +79,13 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    header h1.team-title {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      font-size: 0.95rem;
+      line-height: 1.25;
+    }
     header p, .hint, .note { margin: 0; color: var(--muted); font-size: 0.82rem; font-weight: 400; }
     .grow { flex: 1; min-width: 0; }
     .back {
@@ -164,7 +171,7 @@
     }
     .board {
       display: grid;
-      grid-template-columns: 4.6rem repeat(var(--n), minmax(1.7rem, 1fr)) 1.7rem 1.7rem 1.7rem;
+      grid-template-columns: 4.4rem repeat(var(--n), minmax(1.55rem, 1fr)) 1.55rem 1.45rem 1.45rem;
       min-width: 100%;
     }
     .who, .inn, .run, .run-h, .he {
@@ -177,7 +184,7 @@
       color: inherit;
       padding: 0;
     }
-    .who { justify-content: flex-start; padding: 0 8px; font-size: 0.78rem; }
+    .who { justify-content: flex-start; padding: 0 6px; font-size: 0.72rem; line-height: 1.05; text-align: left; white-space: normal; }
     .head { border-top: 0; min-height: 24px; color: var(--muted); font-size: 0.72rem; }
     .run, .run-h, .he { border-left: 1px solid rgba(148, 163, 184, 0.28); background: #0b1220; }
     .he { font-size: 0.85rem; }
@@ -265,10 +272,33 @@
     .innings-fold summary { min-height: 44px; display: flex; align-items: center; font-weight: 600; }
 
     .dock {
-      position: sticky; bottom: 0; z-index: 4; margin-top: 0;
-      padding: 8px 0 calc(10px + env(safe-area-inset-bottom));
-      background: linear-gradient(to top, var(--bg) 75%, rgba(2, 6, 23, 0));
-      display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 8px;
+      position: sticky; bottom: 0; z-index: 6; margin-top: 0;
+      padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+      background: #020617;
+      border-top: 1px solid var(--line);
+      display: flex; flex-wrap: nowrap; align-items: stretch; gap: 6px;
+    }
+    .atbat-row { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+    .atbat-row .atbat { margin-top: 0; }
+    .atbat-row .quiet { flex: none; min-width: 64px; min-height: 44px; }
+    .atbat {
+      width: 100%; min-height: 44px; margin-top: 8px; padding: 6px 10px;
+      border-radius: 12px; border: 1px solid var(--line); background: var(--card);
+      text-align: left; font-weight: 500; line-height: 1.3;
+    }
+    .diamond-live { width: 96px; height: 96px; position: relative; flex: none; }
+    .diamond-live .base { position: absolute; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; }
+    .diamond-live .base::after {
+      content: ""; position: absolute; left: 13px; top: 13px; width: 18px; height: 18px;
+      border: 1px solid #cbd5e1; background: #0b1220; transform: rotate(45deg);
+    }
+    .diamond-live .base.on::after { background: var(--accent); border-color: var(--accent); }
+    .diamond-live .b2 { top: 0; left: 26px; }
+    .diamond-live .b3 { top: 36px; left: 0; }
+    .diamond-live .b1 { top: 36px; left: 52px; }
+    .diamond-live .plate {
+      position: absolute; left: 40px; bottom: 2px; width: 16px; height: 10px;
+      background: #cbd5e1; clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
     }
     .dock .end-half, .dock .menu-link, .dock.solo .primary { grid-column: 1 / -1; }
     .dock.solo { grid-template-columns: 1fr; }
@@ -348,10 +378,14 @@
     main { padding-bottom: 16px; }
     .more { min-width: 44px; min-height: 44px; flex: none; font-size: 1.2rem; color: var(--muted); }
     .menu-link { width: 44px; height: 44px; flex: none; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
-    .dock { display: flex; flex-wrap: wrap; align-items: center; margin-top: 0; }
-    .dock .primary { flex: 1.3; min-width: 42%; }
-    .dock .quiet { flex: 1; min-width: 28%; }
-    .dock .end-half, .undo-toast { flex-basis: 100%; }
+    .dock { display: flex; flex-wrap: nowrap; align-items: stretch; background: #020617; }
+    .dock .primary { flex: 1.35; min-width: 0; }
+    .dock .quiet, .dock .menu-link { flex: 1; min-width: 0; min-height: 56px; }
+    .dock .end-half { flex-basis: auto; }
+    .snack {
+      position: sticky; bottom: 76px; z-index: 5; margin: 0;
+      padding: 8px 10px; border-radius: 10px; background: #1e293b; color: var(--accent-ink); font-weight: 600;
+    }
     .flex-actions { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
     .flex-actions .quiet { width: 100%; }
     .count-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; margin: 8px 0; }
@@ -399,7 +433,7 @@
     var flexDraft = "";
     var endReason = "time";
     var endRuns = "";
-    var forfeitWinner = "opp";
+    var forfeitWinner = "us";
     var editAt = null;
     var loadNote = "";
     var booting = true;
@@ -508,7 +542,12 @@
         };
       }
       try {
-        dryRun(next);
+        var preview = dryRun(next);
+        if (preview && preview.dropNotice) {
+          errorText = preview.dropNotice;
+          render();
+          return null;
+        }
       } catch (e) {
         errorText = e && e.message ? e.message : "That did not work.";
         render();
@@ -524,7 +563,7 @@
     }
 
     function dryRun(op) {
-      GameManager.applyGameOp(doc(), Object.assign({ teamId: teamId, teamName: teamName, gameId: gameId }, op));
+      return GameManager.applyGameOp(doc(), Object.assign({ teamId: teamId, teamName: teamName, gameId: gameId }, op));
     }
 
     function sessionFor(id) {
@@ -636,8 +675,11 @@
     }
 
     function finalLine(session) {
+      if (session && session.endedReason === "forfeit") return ourLine(session).text + " · Forfeit";
       var note = GameManager.endNote(session);
-      return ourLine(session).text + " · " + GameManager.finalBanner(session) + (note ? " · " + note : "");
+      var banner = GameManager.finalBanner(session);
+      if (note && banner.indexOf(note) >= 0) note = "";
+      return ourLine(session).text + " · " + banner + (note ? " · " + note : "");
     }
 
     function gameDate(name) {
@@ -695,7 +737,35 @@
       var num = (state.inningIndex || 0) + 1;
       var role = board.role === "defense" ? "Defense" : "Offense";
       var extra = board.extra ? " · Extra" : "";
-      return '<div id="half-indicator" class="banner ' + board.role + '"><p class="half">' + esc(word) + ' <span class="half-num num-face">' + num + ordinalSuffix(num) + "</span>" + esc(extra) + '</p><p class="role">' + role + "</p>" + outsHtml(state) + "</div>";
+      return '<div id="half-indicator" class="banner ' + board.role + '"><p class="half">' + esc(word) + ' <span class="half-num num-face">' + num + ordinalSuffix(num) + "</span>" + esc(extra) + '</p><p class="role">' + role + "</p>" + outsHtml(state) + diamondHtml(state) + "</div>";
+    }
+
+    function diamondHtml(session) {
+      var bases = (session && session.bases) || [false, false, false];
+      if (session && GameManager.tiebreakerActive(session)) bases = [!!bases[0], true, !!bases[2]];
+      return '<div class="diamond-live" aria-label="Bases">'
+        + '<button type="button" class="base b2' + (bases[1] ? " on" : "") + '" data-action="base" data-base="1" aria-label="Second base"></button>'
+        + '<button type="button" class="base b3' + (bases[2] ? " on" : "") + '" data-action="base" data-base="2" aria-label="Third base"></button>'
+        + '<button type="button" class="base b1' + (bases[0] ? " on" : "") + '" data-action="base" data-base="0" aria-label="First base"></button>'
+        + '<i class="plate"></i></div>';
+    }
+
+    function atBatStrip(session) {
+      var onDefense = GameManager.roleFor(session.side, session.half) === "defense";
+      if (onDefense) {
+        var defenseText = GameManager.tiebreakerActive(session) ? "Their runner on 2nd" : "In the field";
+        return '<button type="button" class="atbat" id="at-bat" data-action="jump-order">' + esc(defenseText) + "</button>";
+      }
+      var rows = GameManager.liveBatters(session);
+      var due = rows.length ? GameManager.effectiveBatterIndex(session) % rows.length : 0;
+      var batter = rows[due];
+      var deck = rows.length ? rows[(due + 1) % rows.length] : null;
+      var count = (session.balls || 0) + "-" + (session.strikes || 0);
+      var text = "At bat: " + (batter ? batter.label : "—") + " · " + count
+        + (deck ? " · On deck " + deck.label : "");
+      return '<div class="atbat-row"><button type="button" class="atbat" id="at-bat" data-action="jump-order">' + esc(text) + "</button>"
+        + '<button type="button" class="quiet" data-action="ball">Ball</button>'
+        + '<button type="button" class="quiet" data-action="strike">Strike</button></div>';
     }
 
     function outsHtml(session) {
@@ -710,7 +780,9 @@
     function tiebreakerHtml(session) {
       if (!GameManager.tiebreakerActive(session) && !session.tiebreaker) return "";
       var runner = GameManager.itbRunner(session);
-      var text = runner && runner.id ? "Tiebreaker · " + runner.label + " on 2nd" : "Tiebreaker · runner on 2nd";
+      var text = runner && runner.id
+        ? "Tiebreaker · " + runner.label + " on 2nd"
+        : "Tiebreaker · " + ((runner && runner.label) || "Their runner on 2nd");
       return '<button type="button" id="tiebreaker" class="tiebreaker" data-action="change-runner" aria-pressed="true">' + esc(text) + "</button>";
     }
 
@@ -763,12 +835,10 @@
             ? '<button type="button" class="more" data-action="ask-leave" data-player="' + esc(row.id) + '" aria-label="Leaves">⋯</button>'
             : "");
         return '<div class="' + cls + '"><button type="button" class="row-hit" data-action="select-player" data-player="' + esc(row.id) + '" data-spot="' + index + '">'
-          + '<span class="num">' + row.order + '</span><span class="name">' + esc(row.label) + "</span>" + role + crTag + tag
+          + '<span class="num">' + row.order + '</span><span class="name">' + esc(batterFace(row.label)) + "</span>" + role + crTag + tag
           + "</button>" + more + "</div>";
       }).join("");
-      return '<h2 id="batting-order">Batting order</h2>' + countBox(session) + cardNote(session)
-        + '<div class="toggles"><button type="button" class="toggle" id="courtesy-runner" data-action="ask-courtesy">Courtesy runner</button>'
-        + '<button type="button" class="toggle" data-action="next-batter">Next Batter</button></div>'
+      return '<h2 id="batting-order">Batting order</h2>' + cardNote(session)
         + swapButton(session) + '<div class="order">' + rows + "</div>";
     }
 
@@ -790,6 +860,15 @@
         + cardNote(session)
         + '<div class="flex-actions">' + swapButton(session) + flexSub + flexBack + "</div>"
         + '<div class="field">' + defense + "</div>";
+    }
+
+    function batterFace(label) {
+      var text = String(label || "");
+      var num = text.match(/^#\d+/);
+      var rest = text.replace(/^#\d+\s*/, "");
+      var parts = rest.split(/\s*\/\s*/);
+      if (parts.length === 2) return (num ? num[0] + " " : "") + parts[1] + " · for " + parts[0];
+      return text;
     }
 
     function cardNote() {
@@ -849,11 +928,20 @@
       return ourLine(session).text + (date ? " · " + date : "") + " · " + banner;
     }
 
-    function headerHtml(title, sub, backLabel) {
+    function headerHtml(title, sub, backLabel, wrap) {
       return "<header>"
         + '<button type="button" class="back" data-action="back">‹ ' + esc(backLabel) + "</button>"
-        + '<div class="grow"><h1>' + esc(title) + "</h1>" + (sub ? "<p>" + esc(sub) + "</p>" : "") + syncChip() + "</div>"
+        + '<div class="grow"><h1' + (wrap ? ' class="team-title"' : "") + ">" + esc(title) + "</h1>" + (sub ? "<p>" + esc(sub) + "</p>" : "") + syncChip() + "</div>"
         + "</header>";
+    }
+
+    function displaySession(session) {
+      if (!session) return session;
+      var team = currentTeam();
+      var extra = {};
+      if (!session.clubName && team.clubName) extra.clubName = team.clubName;
+      if ((!session.teamName || session.teamName === "Us" || session.teamName === "Team") && team.name) extra.teamName = team.name;
+      return Object.keys(extra).length ? Object.assign({}, session, extra) : session;
     }
 
     function teamSelectHtml() {
@@ -923,7 +1011,7 @@
       var out = lineup.out.length ? '<p class="hint">Out: ' + lineup.out.map(function (row) { return esc(row.label); }).join(", ") + "</p>" : "";
       var flexLine = lineup.flexLabel ? '<p class="hint" id="flex-note">Flex: ' + esc(lineup.flexLabel) + ". Defense only, unless she bats in the DP's spot or the DP takes her position.</p>" : "";
       return '<div class="wrap" data-screen="detail">'
-        + headerHtml(lineup.name, teamName, "Games")
+        + headerHtml(gameTitle(lineup.name), gameDate(lineup.name) || teamLabel(currentTeam()), "Games", true)
         + '<p class="chip" id="lineup-format">' + esc(lineup.formatLabel || "Continuous order") + "</p>"
         + "<main>"
         + '<div class="lineup-grid">'
@@ -947,9 +1035,10 @@
       var format = GameManager.formatInfo(session.battingMode);
       return '<div class="wrap" data-screen="live">'
         + '<div class="topbar">'
-        + headerHtml(gameTitle(session.gameName), gameDate(session.gameName), "Games")
-        + scoreboardHtml(session)
+        + headerHtml(GameManager.gameHeading(displaySession(session)), gameDate(session.gameName), "Games", true)
+        + scoreboardHtml(displaySession(session))
         + bannerHtml(session)
+        + atBatStrip(session)
         + tiebreakerHtml(session)
         + errorHtml()
         + "</div>"
@@ -958,18 +1047,16 @@
           ? defenseEditorHtml(session) + trackerHtml(session, true)
           : battingOrderHtml(session))
         + "</main>"
+        + (session.undoNote ? '<p class="snack" id="undo-toast">' + esc(session.undoNote) + "</p>" : "")
         + '<div class="dock">'
-        + (session.undoNote ? '<p class="undo-toast" id="undo-toast">' + esc(session.undoNote) + "</p>" : "")
-        + '<button type="button" class="menu-link" data-action="open-menu" aria-label="Game menu">⋯</button>'
         + '<button type="button" class="quiet" id="undo-out" data-action="undo"' + (!(session.history && session.history.length) ? " disabled" : "") + ">Undo</button>"
-        + '<button type="button" class="primary" id="add-out" data-action="add-out">+1 Out</button>'
-        + '<button type="button" class="quiet" data-action="add-run">+1 Run</button>'
-        + '<button type="button" class="quiet" data-action="add-tally" data-kind="hit">+ Hit</button>'
-        + '<button type="button" class="quiet" data-action="add-tally" data-kind="error">+ Error</button>'
-        + (GameManager.roleFor(session.side, session.half) === "offense" ? '<button type="button" class="quiet" data-action="reach-base">Reached</button>' : "")
-        + '<button type="button" class="quiet end-half" data-action="ask-runs">End Half</button>'
+        + '<button type="button" class="primary" id="add-out" data-action="add-out" aria-label="+1 Out">OUT</button>'
+        + '<button type="button" class="quiet" data-action="ask-safe">SAFE</button>'
+        + '<button type="button" class="quiet" data-action="add-run">+RUN</button>'
+        + '<button type="button" class="menu-link" data-action="open-menu" aria-label="Game menu">⋯</button>'
         + "</div>"
         + gameMenu(session)
+        + safeSheet()
         + leaveSheet(session)
         + editSheet(session)
         + finalConfirmSheet(session)
@@ -1044,7 +1131,12 @@
       var walk = session.prompt === "walk-off";
       var rule = session.prompt === "run-rule";
       var title = walk || rule ? "That's the game" : session.prompt;
-      var detail = walk ? "Walk-off." : rule ? "Run rule." : "";
+      var rows = GameManager.scoreboardRows(displaySession(session));
+      var homeRow = rows[0].side === "home" ? rows[0] : rows[1];
+      var awayRow = rows[0].side === "away" ? rows[0] : rows[1];
+      var lead = homeRow.total >= awayRow.total ? homeRow : awayRow;
+      var trail = lead === homeRow ? awayRow : homeRow;
+      var detail = walk ? lead.name + " win " + lead.total + "–" + trail.total + " · Walk-off" : rule ? "Run rule." : "";
       return '<div class="sheet" id="prompt-sheet"><div class="sheet-card" role="dialog"><h2>' + esc(title) + "</h2>"
         + (detail ? "<p>" + esc(detail) + "</p>" : "")
         + '<button type="button" class="big" data-action="confirm-end">End Game</button>'
@@ -1127,12 +1219,13 @@
       var format = GameManager.formatInfo(session.battingMode);
       return '<div class="wrap" id="ended-summary" data-screen="played">'
         + '<div class="topbar">'
-        + headerHtml(gameTitle(session.gameName), gameDate(session.gameName) || format.label, "Games")
-        + scoreboardHtml(session)
+        + headerHtml(GameManager.gameHeading(displaySession(session)), gameDate(session.gameName) || format.label, "Games", true)
+        + scoreboardHtml(displaySession(session))
         + bannerHtml(session)
         + "</div>"
         + "<main>"
         + '<button type="button" class="quiet end-half" data-action="resume">Resume Game</button>'
+        + '<button type="button" class="quiet end-half" data-action="copy-recap">Copy recap</button>'
         + trackerHtml(session, false)
         + "</main>"
         + editSheet(session)
@@ -1161,12 +1254,9 @@
       return '<div class="sheet" id="side-sheet" data-screen="side"><div class="sheet-card" role="dialog" aria-modal="true">'
         + "<h2>Start game</h2>"
         + errorHtml()
+        + '<p class="hint">Us: ' + esc(teamLabel(currentTeam())) + "</p>"
         + '<label class="hint" for="opp-name">Opponent</label>'
-        + '<input id="opp-name" class="text-input" data-field="opp" value="' + esc(opp) + '" maxlength="40">'
-        + '<label class="hint" for="our-code">Our code</label>'
-        + '<input id="our-code" class="text-input" maxlength="4" value="' + esc(GameManager.abbrOf(teamName, "ELKS")) + '">'
-        + '<label class="hint" for="their-code">Their code</label>'
-        + '<input id="their-code" class="text-input" maxlength="4" value="' + esc(GameManager.abbrOf(opp, "OPP")) + '">'
+        + '<input id="opp-name" class="text-input" data-field="opp" value="' + esc(opp) + '" maxlength="60">'
         + '<div class="stepper"><button type="button" data-action="set-innings" data-delta="-1" aria-label="Fewer innings">−</button>'
         + '<p id="inning-count"><span class="num-face">' + plannedInnings + "</span> " + (plannedInnings === 1 ? "inning" : "innings") + "</p>"
         + '<button type="button" data-action="set-innings" data-delta="1" aria-label="More innings">+</button></div>'
@@ -1180,6 +1270,29 @@
         + "</div></div>";
     }
 
+    function safeSheet() {
+      if (sheet !== "safe") return "";
+      var kinds = [["hit", "Hit"], ["walk", "Walk"], ["error", "Error"], ["fc", "FC"], ["hbp", "HBP"]];
+      return '<div class="sheet" id="safe-sheet"><div class="sheet-card" role="dialog"><h2>Safe</h2>'
+        + '<div class="toggles">' + kinds.map(function (pair) {
+          return '<button type="button" class="toggle" data-action="safe-play" data-kind="' + pair[0] + '">' + pair[1] + "</button>";
+        }).join("") + "</div>"
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
+    }
+
+    function ruleKey(session) {
+      var rules = session && session.runRule;
+      if (Array.isArray(rules) && !rules.length) return "off";
+      if (!Array.isArray(rules)) return "jo";
+      if (rules.length === 1 && Number(rules[0].lead) === 10) return "ten";
+      if (rules.length === 1) return "custom";
+      return "jo";
+    }
+
+    function ruleButton(session, key, label) {
+      return '<button type="button" data-action="set-rule" data-rule="' + key + '" aria-pressed="' + (ruleKey(session) === key ? "true" : "false") + '">' + label + "</button>";
+    }
+
     function gameMenu(session) {
       if (sheet !== "menu") return "";
       return '<div class="sheet" id="game-menu"><div class="sheet-card" role="dialog" aria-modal="true">'
@@ -1187,12 +1300,21 @@
         + '<div class="stepper"><button type="button" data-action="nudge-innings" data-delta="-1" aria-label="Fewer innings">−</button>'
         + "<p>" + session.scheduledInnings + (session.scheduledInnings === 1 ? " inning" : " innings") + "</p>"
         + '<button type="button" data-action="nudge-innings" data-delta="1" aria-label="More innings">+</button></div>'
+        + '<button type="button" class="pick" data-action="ask-runs">End Half</button>'
+        + '<button type="button" class="pick" id="courtesy-runner" data-action="ask-courtesy">Courtesy runner</button>'
+        + '<button type="button" class="pick" data-action="next-batter">Next Batter</button>'
+        + '<button type="button" class="pick" data-action="reach-base">Reached base</button>'
+        + '<button type="button" class="pick" data-action="foul">Foul</button>'
         + '<button type="button" class="pick" data-action="time-limit">Time limit: finish this inning</button>'
-        + '<button type="button" class="pick" data-action="set-pool" data-pool="standard">Courtesy: Standard</button>'
-        + '<button type="button" class="pick" data-action="set-pool" data-pool="jo">Courtesy: JO pool play</button>'
-        + '<button type="button" class="pick" data-action="set-rule" data-rule="jo">Run rule: 15 / 12 / 8</button>'
-        + '<button type="button" class="pick" data-action="add-tally" data-kind="hit">+ Hit</button>'
-        + '<button type="button" class="pick" data-action="add-tally" data-kind="error">+ Error</button>'
+        + '<div class="segment" role="group" aria-label="Courtesy pool">'
+        + '<button type="button" data-action="set-pool" data-pool="standard" aria-pressed="' + (session.courtesyPool !== "jo" ? "true" : "false") + '">Standard</button>'
+        + '<button type="button" data-action="set-pool" data-pool="jo" aria-pressed="' + (session.courtesyPool === "jo" ? "true" : "false") + '">JO pool</button></div>'
+        + '<div class="segment" role="group" aria-label="Run rule">'
+        + ruleButton(session, "jo", "15/12/8")
+        + ruleButton(session, "ten", "10 after 5")
+        + ruleButton(session, "off", "Off")
+        + ruleButton(session, "custom", "Custom")
+        + "</div>"
         + '<button type="button" class="pick danger" id="end-game" data-action="ask-end">End Game</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
         + "</div></div>";
@@ -1255,7 +1377,7 @@
         + '<button type="button" data-action="nudge-end-runs" data-delta="1" aria-label="More runs">+</button></div>'
         + '<div class="toggles">' + chips + "</div>"
         + (endReason === "forfeit"
-          ? '<div class="segment"><button type="button" data-action="forfeit-side" data-side="opp" aria-pressed="' + (forfeitWinner !== "us" ? "true" : "false") + '">They forfeit</button><button type="button" data-action="forfeit-side" data-side="us" aria-pressed="' + (forfeitWinner === "us" ? "true" : "false") + '">We forfeit</button></div>'
+          ? '<div class="segment"><button type="button" data-action="forfeit-side" data-winner="us" aria-pressed="' + (forfeitWinner !== "opp" ? "true" : "false") + '">They forfeit · we win 7–0</button><button type="button" data-action="forfeit-side" data-winner="opp" aria-pressed="' + (forfeitWinner === "opp" ? "true" : "false") + '">We forfeit · they win 7–0</button></div>'
           : "")
         + errorHtml()
         + '<button type="button" class="big danger" id="confirm-end-game" data-action="confirm-end">End Game</button>'
@@ -1301,6 +1423,12 @@
       var mainEl = document.querySelector("main");
       var order = document.querySelector(".order");
       if (dock && mainEl && order) mainEl.style.paddingBottom = (dock.offsetHeight + 16) + "px";
+      var dueRow = document.querySelector(".row.at-bat");
+      var topbar = document.querySelector(".topbar");
+      if (dueRow && topbar && !sheet) {
+        var gap = dueRow.getBoundingClientRect().top - topbar.getBoundingClientRect().bottom;
+        if (gap < 0 || gap > 80) window.scrollBy(0, gap - 8);
+      }
       var nowCell = document.querySelector("#scoreboard .inn.now");
       if (nowCell && nowCell.scrollIntoView) nowCell.scrollIntoView({ inline: "center", block: "nearest" });
     }
@@ -1415,8 +1543,7 @@
         if (!game) return;
         var oppInput = document.getElementById("opp-name");
         if (oppInput) oppDraft = oppInput.value;
-        var ourCode = document.getElementById("our-code");
-        var theirCode = document.getElementById("their-code");
+        var hubTeam = currentTeam();
         if (game.battingMode === "dp-flex" && (!dpDraft || !flexDraft)) {
           errorText = "Pick the DP and the FLEX before the game starts.";
           render();
@@ -1426,11 +1553,10 @@
           side: button.getAttribute("data-side"),
           game: game,
           players: bundle().players,
-          teamName: teamName,
+          teamName: hubTeam.name || teamName,
+          clubName: hubTeam.clubName || "",
           scheduledInnings: plannedInnings,
           oppName: oppDraft,
-          teamAbbr: ourCode ? ourCode.value : "",
-          oppAbbr: theirCode ? theirCode.value : "",
           dpId: dpDraft,
           flexId: flexDraft,
         };
@@ -1498,6 +1624,7 @@
       }
       if (action === "next-batter") {
         tap({ type: "next-batter" });
+        sheet = "";
         render();
         return;
       }
@@ -1611,12 +1738,21 @@
         render();
         return;
       }
-      if (action === "forfeit-side") { forfeitWinner = button.getAttribute("data-side") === "us" ? "us" : "opp"; render(); return; }
-      if (action === "ball") { var b = sessionFor(gameId); tap({ type: "count", balls: (b.balls || 0) + 1 }); render(); return; }
+      if (action === "forfeit-side") { forfeitWinner = button.getAttribute("data-winner") === "opp" ? "opp" : "us"; render(); return; }
+      if (action === "ball") {
+        var b = sessionFor(gameId);
+        tap({ type: "count", balls: (b.balls || 0) + 1 });
+        var afterBall = sessionFor(gameId);
+        if (afterBall && afterBall.prompt) sheet = "prompt";
+        render();
+        return;
+      }
       if (action === "strike" || action === "foul") {
         var c = sessionFor(gameId);
         var nextStrikes = (c.strikes || 0) + (action === "foul" && c.strikes >= 2 ? 0 : 1);
-        tap({ type: "count", strikes: nextStrikes });
+        tap({ type: "count", strikes: nextStrikes, foul: action === "foul" });
+        var afterStrike = sessionFor(gameId);
+        if (afterStrike && GameManager.clampOuts(afterStrike.outs) === 3) sheet = "confirm-half";
         render();
         return;
       }
@@ -1632,9 +1768,34 @@
       if (action === "set-pool") { tap({ type: "set-pool", pool: button.getAttribute("data-pool") }); render(); return; }
       if (action === "set-rule") {
         var preset = button.getAttribute("data-rule");
-        var table = preset === "none" ? [] : [{ after: 3, lead: 15 }, { after: 4, lead: 12 }, { after: 5, lead: 8 }];
+        var table = [{ after: 3, lead: 15 }, { after: 4, lead: 12 }, { after: 5, lead: 8 }];
+        if (preset === "off") table = [];
+        else if (preset === "ten") table = [{ after: 5, lead: 10 }];
+        else if (preset === "custom") table = [{ after: 4, lead: 8 }];
         tap({ type: "set-rule", runRule: table });
         render();
+        return;
+      }
+      if (action === "ask-safe") { sheet = "safe"; render(); return; }
+      if (action === "safe-play") {
+        tap({ type: "safe", kind: button.getAttribute("data-kind") });
+        var afterSafe = sessionFor(gameId);
+        sheet = afterSafe && afterSafe.prompt ? "prompt" : "";
+        if (afterSafe && GameManager.clampOuts(afterSafe.outs) === 3) sheet = "confirm-half";
+        render();
+        return;
+      }
+      if (action === "copy-recap") {
+        var recapSession = displaySession(sessionFor(gameId));
+        var recap = GameManager.gameHeading(recapSession) + "\n" + GameManager.scoreLine(recapSession) + "\n" + GameManager.finalBanner(recapSession);
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(recap);
+        errorText = "Recap copied.";
+        render();
+        return;
+      }
+      if (action === "jump-order") {
+        var dueRow = document.querySelector(".row.at-bat");
+        if (dueRow && dueRow.scrollIntoView) dueRow.scrollIntoView({ block: "start" });
         return;
       }
       if (action === "run-key") {
