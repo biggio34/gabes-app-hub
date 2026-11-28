@@ -732,6 +732,44 @@ describe("game sync round 7", () => {
   });
 });
 
+describe("game sync run rule notice", () => {
+  it("tells the phone that lost which run rule won", async () => {
+    const server = memoryServer(started(0, 1));
+    function client() {
+      return GameSync.connect({
+        storage: GameSync.memoryStorage(),
+        storageKey: "gm",
+        normalize: GameManager.normalizeDocument,
+        applyOp: GameManager.applyGameOp,
+        load: server.load,
+        save: server.save,
+        bindWindow: false,
+        online: function () { return true; },
+      });
+    }
+    const winner = client();
+    const loser = client();
+    winner.start();
+    loser.start();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      winner.run({
+        type: "set-rule",
+        teamId: "team-16u",
+        gameId: "game-eagles",
+        runRule: [{ after: 4, lead: 8 }],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      assert.equal(winner.queue().length, 0);
+      await loser.pull();
+      assert.match(loser.notice(), /Run rule changed on another phone: 8 after 4\./);
+    } finally {
+      winner.stop();
+      loser.stop();
+    }
+  });
+});
+
 describe("game sync realtime ping", () => {
   it("fetches only when the ping revision is newer", () => {
     assert.equal(GameSync.shouldFetchRevision(4, 5), true);

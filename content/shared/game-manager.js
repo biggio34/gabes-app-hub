@@ -893,6 +893,16 @@
     const batterIds = batterIdsForMode(snapshot);
     const flexId = input && input.flexId ? String(input.flexId) : flexIdFor(snapshot);
     const dpId = input && input.dpId ? String(input.dpId) : dpIdFor(snapshot);
+    if (mode === "dp-flex") {
+      const listed = (snapshot.battingOrder || []).map(String).filter(Boolean);
+      const unavailable = new Set((snapshot.unavailableIds || []).map(String));
+      const available = listed.filter(function (id) { return !unavailable.has(id); });
+      if (available.length < 10) {
+        const err = new Error("Only 9 available. Switch to 9 batters (no DP/FLEX)");
+        err.code = "dp-flex-short";
+        throw err;
+      }
+    }
     if (mode === "dp-flex" && flexId && batterIds.indexOf(flexId) >= 0) {
       throw new Error("The FLEX bats only in the DP's spot.");
     }
@@ -1739,12 +1749,40 @@
 
   function normalizeRunRule(raw) {
     if (!Array.isArray(raw)) return null;
-    return raw.map(function (rule) {
+    const rules = raw.map(function (rule) {
       const after = Math.floor(Number(rule && rule.after));
       const lead = Math.floor(Number(rule && (rule.lead != null ? rule.lead : rule.margin)));
       if (!(after >= 1) || !(lead >= 1)) return null;
       return { after: after, lead: lead };
     }).filter(Boolean);
+    if (raw.length && !rules.length) return null;
+    return rules;
+  }
+
+  function applyBaseTap(bases, runners, spot, options) {
+    const b = [!!(bases && bases[0]), !!(bases && bases[1]), !!(bases && bases[2])];
+    const r = runnerTrio(runners);
+    const i = Math.max(0, Math.min(2, Math.floor(Number(spot) || 0)));
+    if (b[i]) {
+      b[i] = false;
+      r[i] = "";
+      return { bases: b, runners: r };
+    }
+    if (i > 0 && b[i - 1] && r[i - 1]) {
+      r[i] = r[i - 1];
+      r[i - 1] = "";
+      b[i - 1] = false;
+      b[i] = true;
+      return { bases: b, runners: r };
+    }
+    const itb = options && options.itbRunnerId ? String(options.itbRunnerId) : "";
+    if (itb && r.indexOf(itb) < 0) {
+      b[i] = true;
+      r[i] = itb;
+      return { bases: b, runners: r };
+    }
+    b[i] = true;
+    return { bases: b, runners: r };
   }
 
   function normalizeSession(raw) {
@@ -2040,7 +2078,11 @@
     else if (op.type === "reach-base") put(reachBase(current, stamp));
     else if (op.type === "count") put(setCount(current, op, stamp));
     else if (op.type === "set-pool") put(remember(current, Object.assign({}, current, { courtesyPool: op.pool === "jo" ? "jo" : "standard" }), "Courtesy pool"));
-    else if (op.type === "set-rule") put(remember(current, Object.assign({}, current, { runRule: op.runRule || null }), "Run rule"));
+    else if (op.type === "set-rule") {
+      const parsed = normalizeRunRule(op.runRule);
+      const invalid = Array.isArray(op.runRule) && op.runRule.length && parsed == null;
+      put(remember(current, Object.assign({}, current, { runRule: invalid ? current.runRule : parsed }), "Run rule"));
+    }
     else if (op.type === "add-tally") put(addTally(current, op.kind, op.side, stamp));
     else if (op.type === "safe") put(safePlay(current, op.kind, stamp));
     else if (op.type === "edit-half") put(editHalfRuns(current, op.inningIndex, op.half, op.runs, stamp));
@@ -2442,8 +2484,17 @@
     if (!tiebreakerActive(state) && !state.tiebreaker) throw new Error("The tiebreaker runner is not on yet.");
     const id = String(playerId || "");
     if (!id) throw new Error("Pick the runner.");
+    const runners = runnerTrio(state.baseRunners);
+    const bases = [!!(state.bases && state.bases[0]), !!(state.bases && state.bases[1]), !!(state.bases && state.bases[2])];
+    const old = state.itbRunnerId ? String(state.itbRunnerId) : "";
+    let spot = old ? runners.indexOf(old) : -1;
+    if (spot < 0) spot = 1;
+    runners[spot] = id;
+    bases[spot] = true;
     return remember(state, Object.assign({}, state, {
       itbRunnerId: id,
+      bases: bases,
+      baseRunners: runners,
       updatedAt: now || Date.now(),
     }), "Tiebreaker runner");
   }
@@ -2696,6 +2747,15 @@
     };
   }
 
+  function courtesyOnBase(state) {
+    const record = ofRecord(state || {});
+    const runners = (state && state.baseRunners) || [];
+    const ids = [];
+    if (record.P && runners.indexOf(record.P) >= 0) ids.push(record.P);
+    if (record.C && runners.indexOf(record.C) >= 0) ids.push(record.C);
+    return ids;
+  }
+
   function courtesyChoice(state, forId, runnerId) {
     if (!state || !forId || !runnerId) return { ok: false, reason: "Pick a runner and who she runs for." };
     const forPlayer = String(forId);
@@ -2845,8 +2905,10 @@
     resumeGame: resumeGame,
     tiebreakerActive: tiebreakerActive,
     setItbRunner: setItbRunner,
+    applyBaseTap: applyBaseTap,
     itbRunner: itbRunner,
     courtesyChoice: courtesyChoice,
+    courtesyOnBase: courtesyOnBase,
     finalBanner: finalBanner,
     abbrOf: abbrOf,
     nicknameOf: nicknameOf,

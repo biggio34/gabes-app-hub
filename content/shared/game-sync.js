@@ -201,6 +201,34 @@
     return "This " + name + " wasn't saved.";
   }
 
+  function runRuleText(rule) {
+    if (!Array.isArray(rule)) return "";
+    if (!rule.length) return "Off";
+    return rule.map(function (item) {
+      const lead = item && (item.lead != null ? item.lead : item.margin);
+      return lead + " after " + (item && item.after);
+    }).join(", ");
+  }
+
+  function runRuleChange(before, after) {
+    const teams = (after && after.teams) || {};
+    const ids = Object.keys(teams);
+    for (let t = 0; t < ids.length; t += 1) {
+      const sessions = (teams[ids[t]] && teams[ids[t]].sessions) || {};
+      const gids = Object.keys(sessions);
+      for (let g = 0; g < gids.length; g += 1) {
+        const next = sessions[gids[g]] && sessions[gids[g]].runRule;
+        const prevTeam = before && before.teams && before.teams[ids[t]];
+        const prev = prevTeam && prevTeam.sessions && prevTeam.sessions[gids[g]] && prevTeam.sessions[gids[g]].runRule;
+        if (JSON.stringify(prev == null ? null : prev) !== JSON.stringify(next == null ? null : next)) {
+          const label = runRuleText(next);
+          if (label) return "Run rule changed on another phone: " + label + ".";
+        }
+      }
+    }
+    return "";
+  }
+
   function noticeForDrops(messages) {
     if (!messages || !messages.length) return "";
     if (messages.length === 1) return messages[0];
@@ -490,10 +518,12 @@
       const merged = mergeRemote(acked, normalized, queue, localOpIds);
       if (merged.ignored) return false;
       const changed = revisionOf(normalized) !== revisionOf(acked) || merged.queue.length !== queue.length;
+      const ruleNote = merged.notice ? runRuleChange(acked, normalized) : "";
       acked = normalize(merged.acked);
       queue = merged.queue;
       bumpView();
-      if (merged.notice) notice = NOTICE;
+      if (ruleNote) notice = ruleNote;
+      else if (merged.notice) notice = NOTICE;
       if (!queue.length && status !== "offline") status = "saved";
       persist();
       if (changed || merged.notice) emit("remote");

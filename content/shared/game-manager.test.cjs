@@ -1871,6 +1871,77 @@ describe("game manager round 7", () => {
     assert.equal(state.baseRunners[2], state.itbRunnerId);
   });
 
+  it("moves the tiebreaker runner the way a coach taps the diamond", () => {
+    let state = start("home", sampleGame(), 7);
+    for (let n = 0; n < 15; n += 1) state = GameManager.recordRuns(state, 0);
+    const itb = state.itbRunnerId;
+    state = GameManager.safePlay(state, "hit");
+    assert.equal(state.bases[0], true);
+    assert.equal(state.bases[1], true);
+    let moved = GameManager.applyBaseTap(state.bases, state.baseRunners, 2, { itbRunnerId: itb });
+    assert.equal(moved.bases[0], true);
+    assert.equal(moved.bases[2], true);
+    assert.equal(moved.bases[1], false);
+    assert.equal(moved.runners[2], itb);
+    state = start("home", sampleGame(), 7);
+    for (let n = 0; n < 15; n += 1) state = GameManager.recordRuns(state, 0);
+    moved = GameManager.applyBaseTap(state.bases, state.baseRunners, 1, { itbRunnerId: state.itbRunnerId });
+    moved = GameManager.applyBaseTap(moved.bases, moved.runners, 2, { itbRunnerId: state.itbRunnerId });
+    assert.deepEqual(moved.bases, [false, false, true]);
+    assert.equal(moved.runners[2], state.itbRunnerId);
+    state = start("home", sampleGame(), 7);
+    for (let n = 0; n < 15; n += 1) state = GameManager.recordRuns(state, 0);
+    state = GameManager.safePlay(state, "walk");
+    moved = GameManager.applyBaseTap(state.bases, state.baseRunners, 2, { itbRunnerId: state.itbRunnerId });
+    assert.equal(moved.bases[2], true);
+    assert.equal(moved.runners[2], state.itbRunnerId);
+    let defense = start("home", sampleGame(), 7);
+    for (let n = 0; n < 14; n += 1) defense = GameManager.recordRuns(defense, 0);
+    assert.equal(defense.half, "top");
+    moved = GameManager.applyBaseTap(defense.bases, defense.baseRunners, 2, { itbRunnerId: defense.itbRunnerId });
+    assert.equal(moved.bases[2], true);
+    assert.equal(moved.bases[1], false);
+    state = GameManager.setCount(state, { bases: moved.bases, baseRunners: moved.runners });
+    state = GameManager.addOut(state, undefined, { runner: true, base: 2 });
+    assert.equal(state.bases[2], false);
+  });
+
+  it("keeps the tiebreaker banner when the runner changes", () => {
+    let state = start("home", sampleGame(), 7);
+    for (let n = 0; n < 15; n += 1) state = GameManager.recordRuns(state, 0);
+    const next = state.players[0].id === state.itbRunnerId ? state.players[1].id : state.players[0].id;
+    state = GameManager.setItbRunner(state, next);
+    assert.equal(state.itbRunnerId, next);
+    assert.equal(state.baseRunners.indexOf(next) >= 0, true);
+    assert.equal(state.bases[state.baseRunners.indexOf(next)], true);
+  });
+
+  it("keeps the previous run rule when a bad one arrives", () => {
+    let state = start("away");
+    state = GameManager.applyGameOp({
+      revision: 0, updatedAt: 0, appliedOpIds: [], active: null,
+      teams: { t: { teamName: "16U", sessions: { [state.lineupGameId]: state } } },
+    }, { type: "set-rule", teamId: "t", gameId: state.lineupGameId, runRule: [{ after: 5, lead: 10 }] }, 2);
+    let session = state.teams.t.sessions[Object.keys(state.teams.t.sessions)[0]];
+    state = GameManager.applyGameOp(state, {
+      type: "set-rule", teamId: "t", gameId: session.lineupGameId, runRule: [{ after: 0, lead: "abc" }],
+    }, 3);
+    session = state.teams.t.sessions[session.lineupGameId];
+    assert.deepEqual(session.runRule, [{ after: 5, lead: 10 }]);
+    const reloaded = GameManager.normalizeDocument(JSON.parse(JSON.stringify({
+      revision: 1, teams: { t: { teamName: "16U", sessions: { g: Object.assign({}, session, { runRule: [{ after: "no" }] }) } } },
+    })));
+    assert.equal(reloaded.teams.t.sessions[session.lineupGameId].runRule, null);
+  });
+
+  it("offers a courtesy runner only when she is on base", () => {
+    const state = start("away");
+    const pitcher = state.defense.P;
+    assert.deepEqual(GameManager.courtesyOnBase(state), []);
+    const on = GameManager.setCount(state, { bases: [true, false, false], baseRunners: [pitcher, "", ""] });
+    assert.deepEqual(GameManager.courtesyOnBase(on), [pitcher]);
+  });
+
   it("stores a typed custom run rule", () => {
     const state = GameManager.applyGameOp(GameManager.applyGameOp(GameManager.emptyDocument(), {
       type: "start",
