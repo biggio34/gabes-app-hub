@@ -167,9 +167,111 @@
     return resolveConflict;
   }
 
+  function tapName(op) {
+    if (!op) return "tap";
+    if (op.type === "count") {
+      if (op.foul) return "Foul";
+      if (op.strikes != null && op.balls == null) return "Strike";
+      if (op.balls != null) return "Ball";
+      return "Count";
+    }
+    if (op.type === "add-out") return op.runner ? "Runner out" : "Out";
+    if (op.type === "add-run") return "Run";
+    if (op.type === "record-runs" || op.type === "set-half-runs") return "run total";
+    if (op.type === "edit-half") return "half-runs edit";
+    if (op.type === "safe") return "Safe";
+    if (op.type === "undo") return "Undo";
+    if (op.type === "start") return "Start";
+    if (op.type === "end") return "End";
+    return "tap";
+  }
+
+  function unsavedNotice(op, error) {
+    if (error && error.dropNotice) return String(error.dropNotice);
+    const name = tapName(op);
+    const raw = error && error.message ? String(error.message) : "";
+    if (/not in progress|already ended/i.test(raw)) {
+      return "This " + name + " wasn't saved: the game had already ended on another phone.";
+    }
+    if (error && (error.code === "stale" || /already recorded|already counted/i.test(raw))) {
+      if (op && op.type === "add-run") return "Another phone already counted that run. This Run was not applied.";
+      return "Another phone already recorded that " + name + ". This " + name + " was not applied.";
+    }
+    if (raw) return "This " + name + " wasn't saved: " + raw;
+    return "This " + name + " wasn't saved.";
+  }
+
+  function runRuleText(rule) {
+    if (!Array.isArray(rule)) return "";
+    if (!rule.length) return "Off";
+    return rule.map(function (item) {
+      const lead = item && (item.lead != null ? item.lead : item.margin);
+      return lead + " after " + (item && item.after);
+    }).join(", ");
+  }
+
+  function runRuleChange(before, after) {
+    const teams = (after && after.teams) || {};
+    const ids = Object.keys(teams);
+    for (let t = 0; t < ids.length; t += 1) {
+      const sessions = (teams[ids[t]] && teams[ids[t]].sessions) || {};
+      const gids = Object.keys(sessions);
+      for (let g = 0; g < gids.length; g += 1) {
+        const next = sessions[gids[g]] && sessions[gids[g]].runRule;
+        const prevTeam = before && before.teams && before.teams[ids[t]];
+        const prev = prevTeam && prevTeam.sessions && prevTeam.sessions[gids[g]] && prevTeam.sessions[gids[g]].runRule;
+        if (JSON.stringify(prev == null ? null : prev) !== JSON.stringify(next == null ? null : next)) {
+          const label = runRuleText(next);
+          if (label) return "Run rule changed on another phone: " + label + ".";
+        }
+      }
+    }
+    return "";
+  }
+
+  function chunkSetsRule(chunk, after) {
+    const sets = (chunk || []).filter(function (op) { return op && op.type === "set-rule"; });
+    if (!sets.length) return false;
+    const own = sets[sets.length - 1];
+    const wanted = runRuleText(Array.isArray(own.runRule) ? own.runRule : null);
+    if (!wanted) return false;
+    const teams = (after && after.teams) || {};
+    const ids = Object.keys(teams);
+    for (let t = 0; t < ids.length; t += 1) {
+      const sessions = (teams[ids[t]] && teams[ids[t]].sessions) || {};
+      const gids = Object.keys(sessions);
+      for (let g = 0; g < gids.length; g += 1) {
+        const rule = sessions[gids[g]] && sessions[gids[g]].runRule;
+        if (runRuleText(rule) === wanted) return true;
+      }
+    }
+    return false;
+  }
+
+  function noticeForDrops(messages) {
+    if (!messages || !messages.length) return "";
+    if (messages.length === 1) return messages[0];
+    const ended = messages.every(function (message) { return /already ended/i.test(message); });
+    if (ended) return messages.length + " taps weren't saved: the game had already ended on another phone.";
+    const unique = [];
+    messages.forEach(function (message) {
+      if (unique.indexOf(message) < 0) unique.push(message);
+    });
+    return messages.length + " taps weren't saved. " + unique.join(" ");
+  }
+
   function planWrite(serverDoc, op, applyOp, now, options) {
     const current = serverDoc || { revision: 0, appliedOpIds: [] };
-    if (!op || !op.opId) return { kind: "stop", doc: current, error: "Missing change.", rebased: false, notice: false };
+    if (!op || !op.opId) {
+      return {
+        kind: "drop",
+        doc: current,
+        expectedRevision: revisionOf(current),
+        rebased: false,
+        notice: true,
+        message: "This tap wasn't saved: it had no id.",
+      };
+    }
     if (hasOp(current, op.opId)) {
       return {
         kind: "skip",
@@ -189,12 +291,22 @@
         : { applied: true, doc: applyOp(current, op, now) };
     } catch (error) {
       return {
-        kind: "stop",
+        kind: "drop",
         doc: current,
-        error: error && error.message ? error.message : String(error),
-        rebased: stale,
-        notice: false,
         expectedRevision: revisionOf(current),
+        rebased: true,
+        notice: true,
+        message: unsavedNotice(op, error),
+      };
+    }
+    if (resolved && resolved.doc && resolved.doc.dropNotice) {
+      return {
+        kind: "drop",
+        doc: current,
+        expectedRevision: revisionOf(current),
+        rebased: true,
+        notice: true,
+        message: String(resolved.doc.dropNotice),
       };
     }
     if (!resolved || !resolved.applied) {
@@ -305,6 +417,18 @@
     let reconnectTimer = null;
     let opCounter = 0;
     let migrating = false;
+    let localOnly = false;
+    let armed = false;
+    let retryMs = 30000;
+    let viewGen = 0;
+    let viewCache = null;
+    let viewGenSeen = -1;
+    let replayAcked = null;
+    let replayIds = [];
+    let replayDoc = null;
+    let conflictStreak = 0;
+    let flushWait = null;
+    const FLUSH_CHUNK = 200;
     const listeners = [];
 
     function online() {
@@ -317,6 +441,11 @@
       if (typeof options.visible === "function") return options.visible() !== false;
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return false;
       return true;
+    }
+
+    function bumpView() {
+      viewGen += 1;
+      viewCache = null;
     }
 
     function persist() {
@@ -350,6 +479,7 @@
       localOpIds = envelope.localOpIds || [];
       cache = envelope.cache || { teams: {} };
       if (!cache.teams) cache.teams = {};
+      bumpView();
     }
 
     if (options.storage && options.storageKey) {
@@ -366,18 +496,53 @@
       });
     }
 
+    function replayOnto(base, ops) {
+      let doc = base;
+      (ops || []).forEach(function (op) {
+        if (!op || hasOp(doc, op.opId)) return;
+        try {
+          doc = applyOp(doc, op, op.at || Date.now());
+        } catch (err) {}
+      });
+      return doc;
+    }
+
     function display(now) {
-      return replay(acked, queue, applyOp, now).doc;
+      if (now) return replay(acked, queue, applyOp, now).doc;
+      if (viewCache && viewGenSeen === viewGen) return viewCache;
+      const ids = [];
+      for (let i = 0; i < queue.length; i += 1) ids.push(queue[i] && queue[i].opId);
+      let doc = acked;
+      let start = 0;
+      if (replayDoc && replayAcked === acked) {
+        let matched = 0;
+        const limit = Math.min(replayIds.length, ids.length);
+        while (matched < limit && replayIds[matched] === ids[matched]) matched += 1;
+        if (matched === replayIds.length) {
+          doc = replayDoc;
+          start = matched;
+        }
+      }
+      if (start < queue.length) doc = replayOnto(start === 0 ? acked : doc, queue.slice(start));
+      replayAcked = acked;
+      replayIds = ids;
+      replayDoc = doc;
+      viewCache = doc;
+      viewGenSeen = viewGen;
+      return doc;
     }
 
     function acceptRemote(serverDoc) {
-      const normalized = normalize(serverDoc);
+      const normalized = normalize(serverDoc, acked);
       const merged = mergeRemote(acked, normalized, queue, localOpIds);
       if (merged.ignored) return false;
       const changed = revisionOf(normalized) !== revisionOf(acked) || merged.queue.length !== queue.length;
+      const ruleNote = merged.notice ? runRuleChange(acked, normalized) : "";
       acked = normalize(merged.acked);
       queue = merged.queue;
-      if (merged.notice) notice = NOTICE;
+      bumpView();
+      if (ruleNote) notice = ruleNote;
+      else if (merged.notice) notice = NOTICE;
       if (!queue.length && status !== "offline") status = "saved";
       persist();
       if (changed || merged.notice) emit("remote");
@@ -397,23 +562,69 @@
       }
     }
 
+    function syncOff(remote) {
+      return !!(remote && remote.sync === "off");
+    }
+
+    function applyLocal(op) {
+      try {
+        acked = normalize(applyOp(acked, op, op.at));
+      } catch (e) {
+        notice = e && e.message ? e.message : "";
+      }
+    }
+
+    function foldQueue() {
+      const pending = queue.slice();
+      queue = [];
+      pending.forEach(function (op) { applyLocal(op); });
+      bumpView();
+    }
+
+    function enterLocal() {
+      localOnly = true;
+      foldQueue();
+      status = "local";
+      if (pollTimer) clearInterval(pollTimer);
+      if (reconnectTimer) {
+        clearInterval(reconnectTimer);
+        clearTimeout(reconnectTimer);
+      }
+      pollTimer = null;
+      reconnectTimer = null;
+      armed = false;
+      retryMs = 30000;
+      stopSocket();
+      stopSocket = function () {};
+      socketOpen = false;
+      persist();
+      emit("status");
+    }
+
+    function armLiveSync() {
+      if (armed || localOnly || !started) return;
+      armed = true;
+      connectSocket();
+      pollTimer = setInterval(function () {
+        if (!started || localOnly || !visible() || socketOpen) return;
+        pull();
+      }, FALLBACK_POLL_MS);
+      function reconnectLater() {
+        if (!started || localOnly) return;
+        if (!socketOpen) connectSocket();
+        retryMs = Math.min(120000, retryMs * 2);
+        reconnectTimer = setTimeout(reconnectLater, retryMs);
+      }
+      reconnectTimer = setTimeout(reconnectLater, retryMs);
+    }
+
     async function flush() {
-      if (flushing) return;
+      if (flushing || localOnly) return;
       flushing = true;
       blocked = false;
-      let paused = false;
-      let sawConflict = false;
-      let attempts = 0;
+      let backoff = false;
       try {
         while (queue.length && !blocked) {
-          attempts += 1;
-          if (attempts > 8) {
-            paused = true;
-            status = "saving";
-            persist();
-            emit("status");
-            return;
-          }
           if (!online()) {
             status = "offline";
             persist();
@@ -421,7 +632,6 @@
             return;
           }
           status = "saving";
-          const op = queue[0];
           let remote;
           try {
             remote = await options.load();
@@ -432,58 +642,91 @@
             return;
           }
           const localBefore = acked;
+          const ruleBaseline = acked;
           if (remote && remote.document) acceptRemote(remote.document);
           queueAdopt(normalize(remote && remote.document), localBefore);
           if (!queue.length) break;
-          if (!queue[0] || queue[0].opId !== op.opId) {
-            sawConflict = false;
-            continue;
-          }
           const serverDoc = revisionOf(acked) >= revisionOf(remote && remote.document) ? acked : normalize(remote.document);
-          const plan = planWrite(serverDoc, queue[0], applyOp, queue[0].at, { conflict: sawConflict });
-          if (plan.kind === "skip" || plan.kind === "drop") {
-            queue.shift();
-            if (plan.notice) notice = NOTICE;
-            sawConflict = false;
+          const chunk = queue.slice(0, FLUSH_CHUNK);
+          let working = serverDoc;
+          const dropped = [];
+          let rebased = false;
+          const finished = [];
+          chunk.forEach(function (op) {
+            if (!op || !queue.some(function (item) { return item && item.opId === op.opId; })) return;
+            const plan = planWrite(working, op, applyOp, op.at, {});
+            finished.push(op.opId);
+            if (plan.kind === "write") {
+              working = plan.doc;
+              if (plan.notice) rebased = true;
+            } else if (plan.message) {
+              dropped.push(plan.message);
+            } else if (plan.notice) {
+              dropped.push(NOTICE);
+            }
+          });
+          const dropMessage = noticeForDrops(dropped);
+          if (!finished.length) break;
+          const wrote = working !== serverDoc;
+          if (!wrote) {
+            queue = queue.filter(function (op) { return finished.indexOf(op.opId) < 0; });
+            if (dropMessage) notice = dropMessage;
+            bumpView();
             persist();
             emit("local");
             continue;
           }
-          if (plan.kind === "stop") {
-            blocked = true;
-            status = queue.length ? "saving" : "saved";
-            persist();
-            emit("status");
-            return;
-          }
           let saved;
           try {
-            saved = await options.save(plan.expectedRevision, plan.doc);
+            saved = await options.save(revisionOf(serverDoc), working);
           } catch (e) {
             status = "offline";
             persist();
             emit("status");
             return;
           }
+          if (saved && saved.sync === "off") {
+            enterLocal();
+            return;
+          }
           if (saved && saved.conflict) {
-            sawConflict = true;
+            conflictStreak += 1;
             notice = NOTICE;
             if (saved.document) acceptRemote(saved.document);
+            const conflictRule = runRuleChange(ruleBaseline, acked);
+            if (conflictRule && !chunkSetsRule(chunk, acked)) notice = conflictRule;
             emit("status");
+            if (conflictStreak >= 3) {
+              backoff = true;
+              const wait = Math.min(8000, 200 * conflictStreak);
+              if (flushWait) clearTimeout(flushWait);
+              flushWait = setTimeout(function () { flush(); }, wait);
+              return;
+            }
             continue;
           }
-          sawConflict = false;
-          if (plan.notice) notice = NOTICE;
+          conflictStreak = 0;
+          queue = queue.filter(function (op) { return finished.indexOf(op.opId) < 0; });
           if (saved && saved.document) acceptRemote(saved.document);
-          else if (queue[0] && queue[0].opId === op.opId) queue.shift();
+          else {
+            acked = normalize(working);
+            bumpView();
+          }
+          if (dropMessage) notice = dropMessage;
+          else if (rebased) {
+            const rebasedRule = runRuleChange(ruleBaseline, acked);
+            if (rebasedRule && !chunkSetsRule(chunk, acked)) notice = rebasedRule;
+            else if (!/Run rule changed on another phone/.test(notice || "")) notice = NOTICE;
+          }
           persist();
+          emit("local");
         }
-        status = "saved";
+        if (!queue.length && status !== "offline") status = "saved";
         persist();
         emit("status");
       } finally {
         flushing = false;
-        if (!paused && !blocked && queue.length && status !== "offline") flush();
+        if (!backoff && !blocked && queue.length && status !== "offline") flush();
       }
     }
 
@@ -496,11 +739,20 @@
       }
       next.baseRevision = queue.length ? null : revisionOf(acked);
       next.at = now || Date.now();
-      queue.push(next);
       localOpIds.push(next.opId);
       if (localOpIds.length > 200) localOpIds = localOpIds.slice(-200);
       blocked = false;
       notice = "";
+      if (localOnly) {
+        applyLocal(next);
+        bumpView();
+        status = "local";
+        persist();
+        emit("local");
+        return next;
+      }
+      queue.push(next);
+      bumpView();
       status = online() ? "saving" : "offline";
       persist();
       emit("local");
@@ -510,6 +762,7 @@
 
     async function pull() {
       if (!online()) {
+        if (localOnly) return;
         status = "offline";
         emit("status");
         return;
@@ -518,19 +771,30 @@
       try {
         remote = await options.load();
       } catch (e) {
+        if (localOnly) return;
         status = "offline";
         emit("status");
         return;
       }
+      if (syncOff(remote)) {
+        enterLocal();
+        return;
+      }
+      const wasLocal = localOnly;
+      if (wasLocal) {
+        localOnly = false;
+        armed = false;
+      }
       const localBefore = acked;
       if (remote && remote.document) acceptRemote(remote.document);
       queueAdopt(normalize(remote && remote.document), localBefore);
-      if (queue.length) flush();
+      if (queue.length) await flush();
       else if (status !== "saved") {
         status = "saved";
         persist();
         emit("status");
       }
+      if (wasLocal) armLiveSync();
     }
 
     function connectSocket() {
@@ -546,16 +810,19 @@
     function start() {
       if (started) return;
       started = true;
-      pull();
-      connectSocket();
       if (typeof window !== "undefined" && options.bindWindow !== false) {
         window.addEventListener("focus", pull);
         window.addEventListener("online", function () {
+          if (localOnly) {
+            pull();
+            return;
+          }
           status = "saving";
           flush();
           pull();
         });
         window.addEventListener("offline", function () {
+          if (localOnly) return;
           status = "offline";
           emit("status");
         });
@@ -565,24 +832,27 @@
           });
         }
       }
-      pollTimer = setInterval(function () {
-        if (!started || !visible() || socketOpen) return;
-        pull();
-      }, FALLBACK_POLL_MS);
-      reconnectTimer = setInterval(function () {
-        if (started && !socketOpen) connectSocket();
-      }, 3000);
+      pull().then(function () {
+        if (!started || localOnly) return;
+        armLiveSync();
+      });
     }
 
     function stop() {
       started = false;
+      if (flushWait) clearTimeout(flushWait);
+      flushWait = null;
       if (pollTimer) clearInterval(pollTimer);
-      if (reconnectTimer) clearInterval(reconnectTimer);
+      if (reconnectTimer) {
+        clearInterval(reconnectTimer);
+        clearTimeout(reconnectTimer);
+      }
       stopSocket();
       stopSocket = function () {};
     }
 
     function statusLabel() {
+      if (localOnly || status === "local") return "Sync off";
       if (status === "offline") return "Offline, will sync";
       if (status === "saving" || queue.length) return "Saving";
       return "Saved";
