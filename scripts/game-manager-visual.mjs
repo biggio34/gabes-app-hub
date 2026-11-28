@@ -223,6 +223,20 @@ let itbLive = GameManager.createLiveGame({
   scheduledInnings: 7,
 }, 9400);
 itbLive = advance(itbLive, Array.from({ length: 15 }, () => 0));
+const itbBothGame = lineup("game-itb10", "vs Rogers Royals 16U Gold - May 24");
+let itbBoth = GameManager.createLiveGame({
+  side: "home",
+  game: itbBothGame,
+  players,
+  teamName: "16U Fransen",
+  scheduledInnings: 7,
+}, 9700);
+itbBoth = advance(itbBoth, Array.from({ length: 15 }, () => 0));
+const short8Game = lineup("game-short8", "vs Rogers Royals 16U Gold - May 25");
+short8Game.battingMode = "dp-flex";
+short8Game.battingOrder = nineIds.concat(["tess"]);
+short8Game.defensivePositions = Object.assign({}, short8Game.defensivePositions, { P: "tess", DP: "mia" });
+short8Game.unavailableIds = ["sky", "rory"];
 const itbDefGame = lineup("game-itbdef", "vs Rogers Royals 16U Gold - May 22");
 let itbDef = GameManager.createLiveGame({
   side: "home",
@@ -248,7 +262,7 @@ shortGame.battingOrder = nineIds.concat(["tess"]);
 shortGame.defensivePositions = Object.assign({}, shortGame.defensivePositions, { P: "tess", DP: "mia" });
 shortGame.unavailableIds = ["lina"];
 
-const games = [offenseGame, defenseGame, finalGame, preGame, subGame, flexGame, nodpGame, walkGame, lineup("game-rule", "vs Rule - May 9"), royalsGame, extrasGame, flexShowGame, longGame, itbGame, itbDefGame, crGame, shortGame];
+const games = [offenseGame, defenseGame, finalGame, preGame, subGame, flexGame, nodpGame, walkGame, lineup("game-rule", "vs Rule - May 9"), royalsGame, extrasGame, flexShowGame, longGame, itbGame, itbDefGame, crGame, shortGame, itbBothGame, short8Game];
 const sessions = {
   [offense.lineupGameId]: offense,
   [defense.lineupGameId]: defense,
@@ -262,6 +276,7 @@ const sessions = {
   [flexShow.lineupGameId]: flexShow,
   [longLive.lineupGameId]: longLive,
   [itbLive.lineupGameId]: itbLive,
+  [itbBoth.lineupGameId]: itbBoth,
   [itbDef.lineupGameId]: itbDef,
   [crLive.lineupGameId]: crLive,
 };
@@ -697,7 +712,7 @@ if (!before) {
   await page.locator("[data-action='open-menu']").click();
   await page.screenshot({ path: path.join(outDir, "r4-menu.png") });
   await page.locator("[data-action='close-sheet']").click();
-  for (const base of ["0", "1", "2"]) {
+  for (const base of ["2", "1", "0"]) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const on = await page.locator(".diamond-live [data-base='" + base + "']").evaluate((el) => el.classList.contains("on"));
       if (on) break;
@@ -874,9 +889,9 @@ if (!before) {
   if (!diamondBox || Math.round(diamondBox.width) !== 56 || Math.round(diamondBox.height) !== 56) {
     fail("Diamond is not 56px (" + JSON.stringify(diamondBox) + ").");
   }
-  await tapBase("0");
-  await tapBase("1");
   await tapBase("2");
+  await tapBase("1");
+  await tapBase("0");
   await page.screenshot({ path: path.join(outDir, "r5-diamond56.png") });
 
   for (let walk = 0; walk < 3; walk += 1) {
@@ -1021,9 +1036,9 @@ if (!before) {
   await page.locator("#run-sheet [data-action='run-key'][data-key='0']").click();
   await page.locator("[data-action='commit-runs']").click();
   await page.locator("[data-action='ball']").waitFor();
-  await tapBase("0");
-  await tapBase("1");
   await tapBase("2");
+  await tapBase("1");
+  await tapBase("0");
   for (let ball = 0; ball < 4; ball += 1) await page.locator("[data-action='ball']").click();
   await page.locator("#prompt-sheet").waitFor();
   const walkoffTitle = await page.locator("#prompt-sheet h2").innerText();
@@ -1102,9 +1117,9 @@ if (!before) {
   const strikeFix = await page.locator("[data-action='fix-strike']").isDisabled();
   if (!ballFix || !strikeFix) fail("Count fixes stay enabled at 0-0.");
   await page.locator("#count-sheet [data-action='close-sheet']").click();
-  await tapBase("0");
-  await tapBase("1");
   await tapBase("2");
+  await tapBase("1");
+  await tapBase("0");
   for (let ball = 0; ball < 4; ball += 1) await page.locator("[data-action='ball']").click();
   await page.locator("#prompt-sheet").waitFor();
   const seventh = await page.locator("#prompt-sheet").innerText();
@@ -1330,11 +1345,23 @@ if (!before) {
   await page.locator("[data-game='game-itb9']").click();
   await page.locator("#tiebreaker").waitFor();
   const beforeSwap = await page.locator("#tiebreaker").innerText();
+  const swapBatter = await page.locator("#at-bat strong").innerText();
+  const batterFirst = swapBatter.replace(/^#\d+\s*/, "").trim().split(/\s+/)[0];
+  const runnerLabel = beforeSwap.replace(/^.*#\d+\s*/, "").replace(/\s+on\s+\S+$/, "").trim();
   await page.locator("#tiebreaker").click();
+  await page.locator("#runner-sheet").waitFor();
+  const pickerNames = await page.locator("#runner-sheet .pick").allInnerTexts();
+  if (pickerNames.some((name) => name.includes(batterFirst))) {
+    fail("The tiebreaker picker lists the batter (" + swapBatter + " / " + pickerNames.join(" | ") + ").");
+  }
+  await page.locator("#runner-sheet .pick").filter({ hasNotText: runnerLabel }).first().click();
   await page.locator("#tiebreaker", { hasText: "2nd" }).waitFor();
   const afterSwap = await page.locator("#tiebreaker").innerText();
   if (!/on 2nd/.test(afterSwap)) fail("Changing the tiebreaker runner dropped the banner (" + afterSwap + ").");
   if (afterSwap === beforeSwap) fail("The tiebreaker runner did not change.");
+  if (batterFirst && afterSwap.includes(batterFirst)) {
+    fail("The tiebreaker runner is the batter (" + afterSwap + ").");
+  }
   await page.screenshot({ path: path.join(outDir, "r9-itb-runner-swap.png") });
   await page.locator("#undo-out").click();
   await page.locator("#tiebreaker", { hasText: beforeSwap }).waitFor();
@@ -1377,29 +1404,68 @@ if (!before) {
 
   await page.locator("[data-action='back']").click();
   await page.locator("[data-game='game-short']").click();
-  await page.locator("#start-game").click();
-  await page.locator("#dp-pick").selectOption("mia");
-  await page.locator("#flex-pick").selectOption("tess");
-  for (let step = 0; step < 12; step += 1) {
-    const innings = (await page.locator("#inning-count").innerText()).trim();
-    if (innings.startsWith("7")) break;
-    const delta = /^[1-6]\b/.test(innings) ? "1" : "-1";
-    await page.locator("[data-action='set-innings'][data-delta='" + delta + "']").click();
-  }
-  await page.locator("#opp-name").fill("Rogers Royals 16U Gold");
-  await page.locator("[data-action='choose-side']").click();
-  await page.locator("#switch-nine").waitFor();
-  const shortText = await page.locator("#side-sheet").innerText();
+  await page.locator("#short-lineup").waitFor();
+  if (!(await page.locator("#start-game").isDisabled())) fail("Start stays enabled on a short DP/FLEX lineup.");
+  const disabledStart = await page.locator("#start-game").evaluate((el) => getComputedStyle(el).backgroundColor);
+  if (/rgb\(\s*185,\s*28,\s*28\s*\)/.test(disabledStart)) fail("Start is still the red button while the lineup is short.");
+  const shortText = await page.locator("#short-lineup").innerText();
   if (!/Only 9 available/.test(shortText) || !/Switch to 9 batters/.test(shortText)) {
-    fail("A 9-player DP/FLEX card did not offer the switch (" + shortText.slice(0, 240) + ").");
+    fail("A 9-player DP/FLEX card did not offer the switch (" + shortText + ").");
   }
   await page.screenshot({ path: path.join(outDir, "r9-dpflex-9-available.png") });
+  await page.locator("#switch-nine").click();
+  await page.locator("[data-screen='detail']").waitFor();
+  if (await page.locator("#at-bat").count()) fail("Switch to 9 batters started the game.");
+  if (await page.locator("#dp-pick").count()) fail("The DP picker is still on the lineup.");
+  if (await page.locator("#start-game").isDisabled()) fail("Start stays disabled after the lineup is 9 batters.");
+  const reviewed = await page.locator("main").innerText();
+  if (/Tess Alvarez/.test(reviewed) && /Flex:/.test(reviewed)) fail("The FLEX is still on the reviewed lineup.");
+  await page.screenshot({ path: path.join(outDir, "r10-switch-review.png") });
+
+  await page.locator("[data-action='back']").click();
+  await page.locator("[data-game='game-short8']").click();
+  await page.locator("#short-lineup", { hasText: "Only 8 available" }).waitFor();
+  const eightText = await page.locator("#short-lineup").innerText();
+  if (!/Switch to 8 batters/.test(eightText)) fail("An 8-player card did not name the real count (" + eightText + ").");
+  await page.screenshot({ path: path.join(outDir, "r10-short-8.png") });
+  await page.locator("#switch-nine").click();
+  const eightDefense = await page.locator("section", { hasText: "Defense" }).innerText();
+  if (/Sky Nguyen/.test(eightDefense) || /Rory Patel/.test(eightDefense)) {
+    fail("Unavailable players are still on the defense card (" + eightDefense + ").");
+  }
+
+  await page.locator("[data-action='back']").click();
+  await page.locator("[data-game='game-itb10']").click();
+  await page.locator("#tiebreaker").waitFor();
+  const due = await page.locator("#at-bat strong").innerText();
+  await page.locator("#tiebreaker").click();
+  await page.locator("#runner-sheet").waitFor();
+  const listed = await page.locator("#runner-sheet .pick").allInnerTexts();
+  const dueFirst = due.replace(/^#\d+\s*/, "").split(" ")[0];
+  if (listed.some((name) => name.includes(dueFirst))) fail("The picker includes the batter " + dueFirst + " (" + listed.join(" | ") + ").");
+  await page.screenshot({ path: path.join(outDir, "r10-itb-picker.png") });
+  await page.locator("#runner-sheet [data-action='close-sheet']").click();
+  await page.locator("[data-action='open-count']").click();
+  await page.locator("#count-sheet [data-action='fix-ball'][disabled]").waitFor();
+  await page.locator("#count-sheet [data-action='reset-count'][disabled]").waitFor();
+  const fixColor = await page.locator("#count-sheet [data-action='fix-ball']").evaluate((el) => getComputedStyle(el).backgroundColor);
+  if (/rgb\(\s*185,\s*28,\s*28\s*\)/.test(fixColor)) fail("Ball −1 is still red at 0-0.");
+  await page.screenshot({ path: path.join(outDir, "r10-count-zero.png") });
+  await page.locator("#count-sheet [data-action='close-sheet']").click();
+  await page.locator("[data-action='ask-safe']").click();
+  await page.locator("[data-action='safe-play'][data-kind='hit']").click();
+  await page.locator(".diamond-live [data-base='2']").evaluate((el) => el.click());
+  await page.locator(".diamond-live [data-base='1']").evaluate((el) => el.click());
+  await page.locator("#tiebreaker", { hasText: "3rd" }).waitFor();
+  const secondAndThird = await page.locator(".diamond-live .base.on").evaluateAll((els) => els.map((el) => el.getAttribute("data-base")).sort());
+  if (secondAndThird.join(",") !== "1,2") fail("2nd and 3rd are not both lit (" + secondAndThird.join(",") + ").");
+  await page.screenshot({ path: path.join(outDir, "r10-itb-2nd-3rd.png") });
 }
 
 if (!before) {
   const hashes = new Map();
   for (const file of readdirSync(outDir)) {
-    if (!/^r[4-9]-/.test(file) || !file.endsWith(".png")) continue;
+    if (!/^r(?:[4-9]|10)-/.test(file) || !file.endsWith(".png")) continue;
     const hash = createHash("md5").update(readFileSync(path.join(outDir, file))).digest("hex");
     if (hashes.has(hash)) fail(file + " matches " + hashes.get(hash) + " (" + hash + ")");
     else hashes.set(hash, file);

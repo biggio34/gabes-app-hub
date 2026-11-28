@@ -332,6 +332,9 @@
     .count-actions { display: flex; gap: 6px; }
     .count-actions .quiet { min-height: 44px; min-width: 72px; padding: 0 12px; }
     .reset-count { width: 100%; min-height: 44px; margin-top: 8px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-weight: 500; }
+    .big.count-fix { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+    .big.count-fix:disabled { opacity: 1; background: transparent; color: var(--muted); border-color: var(--line); }
+    #start-game:disabled { background: var(--card); color: var(--muted); border: 1px solid var(--line); opacity: 1; }
     .atbat-sub { margin: 0; color: var(--muted); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .tag { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); }
     .dock .end-half, .dock .menu-link, .dock.solo .primary { grid-column: 1 / -1; }
@@ -866,6 +869,23 @@
       return "final";
     }
 
+    function shortInfo(game) {
+      return game ? GameManager.dpFlexAvailability(game) : { ok: true, available: 0, message: "" };
+    }
+
+    function shortLineupHtml(game) {
+      var info = shortInfo(game);
+      if (info.ok) return "";
+      return '<p class="form-error" id="short-lineup">' + esc(info.message) + "</p>"
+        + '<button type="button" class="big" id="switch-nine" data-action="switch-nine">Switch to ' + info.available + " batters</button>";
+    }
+
+    function startGameButton(game) {
+      var info = shortInfo(game);
+      if (!info.ok) return '<button type="button" class="primary" id="start-game" data-action="ask-side" disabled>Start Game</button>';
+      return '<button type="button" class="primary" id="start-game" data-action="ask-side">Start Game</button>';
+    }
+
     function courtesyCandidates(session) {
       if (!session) return [];
       var ids = [];
@@ -1134,9 +1154,9 @@
         + '<h2>Subs</h2><p class="subs">' + subs + "</p>"
         + flexLine
         + out
-        + ""
+        + shortLineupHtml(game)
         + "</main>"
-        + '<div class="dock solo"><button type="button" class="primary" id="start-game" data-action="ask-side">Start Game</button></div>'
+        + '<div class="dock solo">' + startGameButton(game) + "</div>"
         + sideSheet()
         + "</div>";
     }
@@ -1187,6 +1207,7 @@
         + pickSheet(session)
         + subSheet(session)
         + courtesySheet(session)
+        + runnerSheet(session)
         + flexSubSheet(session)
         + confirmSubSheet()
         + illegalSheet()
@@ -1261,6 +1282,20 @@
         + (detail ? "<p>" + esc(detail) + "</p>" : "")
         + '<button type="button" class="big" data-action="confirm-end">End Game</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Keep playing</button></div></div>';
+    }
+
+    function runnerSheet(session) {
+      if (sheet !== "runner") return "";
+      var pack = GameManager.itbChoices(session);
+      var picks = pack.choices.map(function (row) {
+        var on = row.id === pack.defaultId;
+        return '<button type="button" class="pick" data-action="pick-runner" data-player="' + esc(row.id) + '"' + (on ? ' aria-pressed="true"' : "") + ">"
+          + esc(row.label) + (row.id === pack.correctId ? " · tiebreaker" : "") + "</button>";
+      }).join("");
+      return '<div class="sheet" id="runner-sheet"><div class="sheet-card" role="dialog"><h2>Tiebreaker runner</h2>'
+        + "<p>The batter and anyone already on base stay out.</p>"
+        + picks
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
     }
 
     function courtesySheet(session) {
@@ -1386,9 +1421,10 @@
         + '<button type="button" data-action="pick-side" data-side="away" aria-pressed="' + (awayOn ? "true" : "false") + '">Away</button>'
         + '<button type="button" data-action="pick-side" data-side="home" aria-pressed="' + (awayOn ? "false" : "true") + '">Home</button>'
         + "</div>"
-        + dpPick
-        + (/Only 9 available/.test(errorText) ? '<button type="button" class="big" id="switch-nine" data-action="switch-nine">Switch to 9 batters</button>' : "")
-        + '<button type="button" class="big" data-action="choose-side" data-side="' + (awayOn ? "away" : "home") + '">Start game</button>'
+        + (shortInfo(game).ok ? dpPick : "")
+        + (shortInfo(game).ok
+          ? '<button type="button" class="big" data-action="choose-side" data-side="' + (awayOn ? "away" : "home") + '">Start game</button>'
+          : '<button type="button" class="big count-fix" data-action="choose-side" disabled>Start game</button>')
         + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
         + "</div></div>";
     }
@@ -1423,9 +1459,9 @@
       var strikes = session.strikes || 0;
       return '<div class="sheet" id="count-sheet"><div class="sheet-card" role="dialog" aria-modal="true">'
         + "<h2>Count " + esc(count) + "</h2>"
-        + '<button type="button" class="big" data-action="fix-ball"' + (balls ? "" : " disabled") + ">Ball −1</button>"
-        + '<button type="button" class="big" data-action="fix-strike"' + (strikes ? "" : " disabled") + ">Strike −1</button>"
-        + '<button type="button" class="reset-count" data-action="reset-count">Reset count</button>'
+        + '<button type="button" class="big count-fix" data-action="fix-ball"' + (balls ? "" : " disabled") + ">Ball −1</button>"
+        + '<button type="button" class="big count-fix" data-action="fix-strike"' + (strikes ? "" : " disabled") + ">Strike −1</button>"
+        + '<button type="button" class="big count-fix reset-count" data-action="reset-count"' + (balls || strikes ? "" : " disabled") + ">Reset count</button>"
         + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
         + "</div></div>";
     }
@@ -1699,20 +1735,35 @@
       }
       if (action === "set-dp") { dpDraft = button.getAttribute("data-player"); render(); return; }
       if (action === "set-flex") { flexDraft = button.getAttribute("data-player"); render(); return; }
-      if (action === "choose-side" || action === "switch-nine") {
+      if (action === "switch-nine") {
+        var card = findGame(gameId);
+        if (!card) return;
+        var switched = GameManager.switchToNoDpFlex(card);
+        card.battingMode = switched.battingMode;
+        card.battingOrder = switched.battingOrder;
+        card.defensivePositions = switched.defensivePositions;
+        card.inningDefenses = switched.inningDefenses;
+        errorText = "";
+        sheet = "";
+        dpDraft = "";
+        flexDraft = "";
+        view = "detail";
+        render();
+        return;
+      }
+      if (action === "choose-side") {
         var game = findGame(gameId);
         if (!game) return;
         var oppInput = document.getElementById("opp-name");
         if (oppInput) oppDraft = oppInput.value;
         var hubTeam = currentTeam();
-        if (game.battingMode === "dp-flex" && action !== "switch-nine" && (!dpDraft || !flexDraft)) {
+        if (game.battingMode === "dp-flex" && (!dpDraft || !flexDraft)) {
           errorText = "Pick the DP and the FLEX before the game starts.";
           render();
           return;
         }
-        if (action === "switch-nine") game.battingMode = "nine";
         var input = {
-          side: action === "switch-nine" ? plannedSide : button.getAttribute("data-side"),
+          side: button.getAttribute("data-side"),
           game: game,
           players: bundle().players,
           teamName: hubTeam.name || teamName,
@@ -1982,8 +2033,11 @@
           return;
         }
         var liveBases = sessionFor(gameId);
+        var batterRows = GameManager.liveBatters(liveBases);
+        var batterAt = batterRows.length ? GameManager.effectiveBatterIndex(liveBases) % batterRows.length : 0;
         var moved = GameManager.applyBaseTap(liveBases.bases, liveBases.baseRunners, spot, {
           itbRunnerId: liveBases.itbRunnerId || "",
+          batterId: batterRows[batterAt] ? batterRows[batterAt].id : "",
         });
         tap({ type: "count", bases: moved.bases, baseRunners: moved.runners });
         render();
@@ -2114,13 +2168,13 @@
         return;
       }
       if (action === "change-runner") {
-        var runnerSession = sessionFor(gameId);
-        var runnerRows = GameManager.liveBatters(runnerSession);
-        var runnerNow = GameManager.itbRunner(runnerSession).id;
-        var runnerAt = 0;
-        runnerRows.forEach(function (row, index) { if (row.id === runnerNow) runnerAt = index; });
-        var runnerNext = runnerRows.length ? runnerRows[(runnerAt + 1) % runnerRows.length] : null;
-        if (runnerNext) tap({ type: "set-runner", playerId: runnerNext.id });
+        sheet = "runner";
+        render();
+        return;
+      }
+      if (action === "pick-runner") {
+        tap({ type: "set-runner", playerId: button.getAttribute("data-player") });
+        sheet = "";
         render();
         return;
       }

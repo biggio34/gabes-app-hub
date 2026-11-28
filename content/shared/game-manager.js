@@ -893,15 +893,12 @@
     const batterIds = batterIdsForMode(snapshot);
     const flexId = input && input.flexId ? String(input.flexId) : flexIdFor(snapshot);
     const dpId = input && input.dpId ? String(input.dpId) : dpIdFor(snapshot);
-    if (mode === "dp-flex") {
-      const listed = (snapshot.battingOrder || []).map(String).filter(Boolean);
-      const unavailable = new Set((snapshot.unavailableIds || []).map(String));
-      const available = listed.filter(function (id) { return !unavailable.has(id); });
-      if (available.length < 10) {
-        const err = new Error("Only 9 available. Switch to 9 batters (no DP/FLEX)");
-        err.code = "dp-flex-short";
-        throw err;
-      }
+    const short = dpFlexAvailability(snapshot);
+    if (!short.ok) {
+      const err = new Error(short.message);
+      err.code = "dp-flex-short";
+      err.available = short.available;
+      throw err;
     }
     if (mode === "dp-flex" && flexId && batterIds.indexOf(flexId) >= 0) {
       throw new Error("The FLEX bats only in the DP's spot.");
@@ -1112,6 +1109,7 @@
       next.bases = cleared.bases;
       next.baseRunners = cleared.runners;
     }
+    next.itbRunnerId = itbStillThere(state, next.baseRunners || state.baseRunners);
     const label = options.dp ? "Double play" : runner ? "Runner out" : "Out #" + outs;
     return remember(state, next, label);
   }
@@ -1747,16 +1745,23 @@
     };
   }
 
+  var INVALID_RULE = { invalidRule: true };
+
   function normalizeRunRule(raw) {
-    if (!Array.isArray(raw)) return null;
+    if (raw == null) return null;
+    if (!Array.isArray(raw)) return INVALID_RULE;
     const rules = raw.map(function (rule) {
       const after = Math.floor(Number(rule && rule.after));
       const lead = Math.floor(Number(rule && (rule.lead != null ? rule.lead : rule.margin)));
       if (!(after >= 1) || !(lead >= 1)) return null;
       return { after: after, lead: lead };
     }).filter(Boolean);
-    if (raw.length && !rules.length) return null;
+    if (raw.length && !rules.length) return INVALID_RULE;
     return rules;
+  }
+
+  function isInvalidRule(rule) {
+    return !!(rule && rule.invalidRule);
   }
 
   function applyBaseTap(bases, runners, spot, options) {
@@ -1768,24 +1773,41 @@
       r[i] = "";
       return { bases: b, runners: r };
     }
-    if (i > 0 && b[i - 1] && r[i - 1]) {
-      r[i] = r[i - 1];
+    if (i > 0 && b[i - 1]) {
+      r[i] = r[i - 1] || "";
       r[i - 1] = "";
       b[i - 1] = false;
       b[i] = true;
-      return { bases: b, runners: r };
+      return { bases: b, runners: uniqueRunnerIds(b, r) };
     }
     const itb = options && options.itbRunnerId ? String(options.itbRunnerId) : "";
-    if (itb && r.indexOf(itb) < 0) {
+    const batterId = options && options.batterId ? String(options.batterId) : "";
+    if (itb && itb !== batterId && r.indexOf(itb) < 0) {
       b[i] = true;
       r[i] = itb;
-      return { bases: b, runners: r };
+      return { bases: b, runners: uniqueRunnerIds(b, r) };
     }
     b[i] = true;
-    return { bases: b, runners: r };
+    return { bases: b, runners: uniqueRunnerIds(b, r) };
   }
 
-  function normalizeSession(raw) {
+  function uniqueRunnerIds(bases, runners) {
+    const seen = {};
+    for (let i = 0; i < 3; i += 1) {
+      if (runners[i] && seen[runners[i]]) runners[i] = "";
+      if (runners[i]) seen[runners[i]] = true;
+      if (!bases[i]) runners[i] = "";
+    }
+    return runners;
+  }
+
+  function itbStillThere(state, runners) {
+    const id = state && state.itbRunnerId ? String(state.itbRunnerId) : "";
+    if (!id) return "";
+    return (runners || []).indexOf(id) >= 0 ? id : "";
+  }
+
+  function normalizeSession(raw, previous) {
     if (!raw || typeof raw !== "object") return null;
     if (raw.status !== "live" && raw.status !== "played") return null;
     if (raw.side !== "home" && raw.side !== "away") return null;
@@ -1868,7 +1890,7 @@
       oppName: raw.oppName ? String(raw.oppName) : "",
       itbFrom: Math.max(0, Math.floor(Number(raw.itbFrom) || 0)),
       timeLimit: !!raw.timeLimit,
-      runRule: normalizeRunRule(raw.runRule),
+      runRule: keptRunRule(raw.runRule, previous),
       prompt: raw.prompt ? String(raw.prompt) : "",
       runNote: raw.runNote ? String(raw.runNote) : "",
       forfeitWinner: raw.forfeitWinner === "opp" ? "opp" : (raw.forfeitWinner === "us" ? "us" : ""),
@@ -1920,7 +1942,16 @@
     return normalizeDocument(JSON.parse(JSON.stringify(doc || emptyDocument())));
   }
 
-  function normalizeDocument(raw) {
+  function keptRunRule(rawRule, previous) {
+    const parsed = normalizeRunRule(rawRule);
+    if (!isInvalidRule(parsed)) return parsed;
+    if (!previous) return null;
+    const prev = previous.runRule;
+    if (isInvalidRule(prev)) return null;
+    return prev == null ? null : prev;
+  }
+
+  function normalizeDocument(raw, previous) {
     const doc = emptyDocument();
     if (!raw || typeof raw !== "object") return doc;
     doc.revision = documentRevision(raw);
@@ -1936,8 +1967,12 @@
       const bundle = teams[teamId] || {};
       const sessions = {};
       const rawSessions = bundle.sessions && typeof bundle.sessions === "object" ? bundle.sessions : {};
+      const prevBundle = previous && previous.teams && previous.teams[teamId] ? previous.teams[teamId] : {};
+      const prevSessions = prevBundle.sessions && typeof prevBundle.sessions === "object" ? prevBundle.sessions : {};
       Object.keys(rawSessions).forEach(function (id) {
-        const session = normalizeSession(rawSessions[id]);
+        const rawSession = rawSessions[id];
+        const prevSession = prevSessions[id] || (rawSession && prevSessions[rawSession.lineupGameId]) || null;
+        const session = normalizeSession(rawSession, prevSession);
         if (session) sessions[session.lineupGameId] = session;
       });
       doc.teams[String(teamId)] = {
@@ -2080,8 +2115,7 @@
     else if (op.type === "set-pool") put(remember(current, Object.assign({}, current, { courtesyPool: op.pool === "jo" ? "jo" : "standard" }), "Courtesy pool"));
     else if (op.type === "set-rule") {
       const parsed = normalizeRunRule(op.runRule);
-      const invalid = Array.isArray(op.runRule) && op.runRule.length && parsed == null;
-      put(remember(current, Object.assign({}, current, { runRule: invalid ? current.runRule : parsed }), "Run rule"));
+      put(remember(current, Object.assign({}, current, { runRule: isInvalidRule(parsed) ? current.runRule : parsed }), "Run rule"));
     }
     else if (op.type === "add-tally") put(addTally(current, op.kind, op.side, stamp));
     else if (op.type === "safe") put(safePlay(current, op.kind, stamp));
@@ -2430,6 +2464,7 @@
       updatedAt: now || Date.now(),
     });
     if (batting) next.battingIndex = stepBatter(state);
+    next.itbRunnerId = itbStillThere(state, moved.runners);
     next.runNote = moved.runs ? scoreNote() : "";
     next.prompt = promptForScore(next);
     return remember(state, next, "Reached base");
@@ -2451,6 +2486,7 @@
       updatedAt: stamp,
     });
     if (batting) next.battingIndex = stepBatter(state);
+    next.itbRunnerId = itbStillThere(state, moved.runners);
     if (play === "hit") {
       const key = (batting ? "us" : "opp") + "Hits";
       next[key] = (Number(state[key]) || 0) + 1;
@@ -2479,13 +2515,44 @@
     return state.inningIndex + 1 >= start;
   }
 
+  function itbChoices(state) {
+    const rows = liveBatters(state);
+    const batterId = batterReaching(state);
+    const onBase = {};
+    ((state && state.baseRunners) || []).forEach(function (id) {
+      if (id) onBase[String(id)] = true;
+    });
+    const current = state && state.itbRunnerId ? String(state.itbRunnerId) : "";
+    const correct = runnerBeforeLeadoff(state);
+    const choices = rows.filter(function (row) {
+      if (!row.id || row.id === batterId) return false;
+      if (onBase[row.id] && row.id !== current) return false;
+      return true;
+    });
+    let defaultId = "";
+    if (correct && correct !== batterId && choices.some(function (row) { return row.id === correct; })) defaultId = correct;
+    else if (current && choices.some(function (row) { return row.id === current; })) defaultId = current;
+    else if (choices[0]) defaultId = choices[0].id;
+    return { choices: choices, defaultId: defaultId, correctId: correct, batterId: batterId };
+  }
+
   function setItbRunner(state, playerId, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
     if (!tiebreakerActive(state) && !state.tiebreaker) throw new Error("The tiebreaker runner is not on yet.");
     const id = String(playerId || "");
     if (!id) throw new Error("Pick the runner.");
+    const pack = itbChoices(state);
+    if (!pack.choices.some(function (row) { return row.id === id; })) {
+      throw new Error("Pick a runner who is not batting and not already on base.");
+    }
     const runners = runnerTrio(state.baseRunners);
     const bases = [!!(state.bases && state.bases[0]), !!(state.bases && state.bases[1]), !!(state.bases && state.bases[2])];
+    for (let i = 0; i < 3; i += 1) {
+      if (runners[i] === id) {
+        runners[i] = "";
+        bases[i] = false;
+      }
+    }
     const old = state.itbRunnerId ? String(state.itbRunnerId) : "";
     let spot = old ? runners.indexOf(old) : -1;
     if (spot < 0) spot = 1;
@@ -2497,6 +2564,47 @@
       baseRunners: runners,
       updatedAt: now || Date.now(),
     }), "Tiebreaker runner");
+  }
+
+  function dpFlexAvailability(game) {
+    if (normalizeMode(game && game.battingMode) !== "dp-flex") return { ok: true, available: 0, message: "" };
+    const listed = (game.battingOrder || []).map(String).filter(Boolean);
+    const unavailable = new Set((game.unavailableIds || []).map(String));
+    const available = listed.filter(function (id) { return !unavailable.has(id); });
+    if (available.length >= 10) return { ok: true, available: available.length, message: "" };
+    const n = available.length;
+    return {
+      ok: false,
+      available: n,
+      message: "Only " + n + " available. Switch to " + n + " batters (no DP/FLEX)",
+    };
+  }
+
+  function clearDroppedDefenders(defense, drop) {
+    const next = cloneDefense(defense);
+    Object.keys(next).forEach(function (pos) {
+      const id = next[pos] ? String(next[pos]) : "";
+      if (pos === "DP" || (id && drop.has(id))) next[pos] = "";
+    });
+    return next;
+  }
+
+  function switchToNoDpFlex(game) {
+    const source = game || {};
+    const flex = flexIdFor(source);
+    const order = (source.battingOrder || []).map(String).filter(function (id) {
+      return id && id !== flex;
+    });
+    const drop = new Set((source.unavailableIds || []).map(String));
+    if (flex) drop.add(flex);
+    return Object.assign({}, source, {
+      battingMode: "nine",
+      battingOrder: order,
+      defensivePositions: clearDroppedDefenders(source.defensivePositions, drop),
+      inningDefenses: Array.isArray(source.inningDefenses)
+        ? source.inningDefenses.map(function (inning) { return clearDroppedDefenders(inning, drop); })
+        : [],
+    });
   }
 
   function itbRunner(state) {
@@ -2624,6 +2732,7 @@
       liveRuns: live,
       bases: cleared.bases,
       baseRunners: cleared.runners,
+      itbRunnerId: itbStillThere(state, cleared.runners),
       prompt: "",
       runNote: "",
       updatedAt: stamp,
@@ -2905,6 +3014,9 @@
     resumeGame: resumeGame,
     tiebreakerActive: tiebreakerActive,
     setItbRunner: setItbRunner,
+    itbChoices: itbChoices,
+    dpFlexAvailability: dpFlexAvailability,
+    switchToNoDpFlex: switchToNoDpFlex,
     applyBaseTap: applyBaseTap,
     itbRunner: itbRunner,
     courtesyChoice: courtesyChoice,

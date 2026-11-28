@@ -768,6 +768,48 @@ describe("game sync run rule notice", () => {
       loser.stop();
     }
   });
+
+  it("names the run rule after an offline reconnect", async () => {
+    const server = memoryServer(started(0, 1));
+    let online = true;
+    function client() {
+      return GameSync.connect({
+        storage: GameSync.memoryStorage(),
+        storageKey: "gm",
+        normalize: GameManager.normalizeDocument,
+        applyOp: GameManager.applyGameOp,
+        load: async function () {
+          if (!online) throw new Error("offline");
+          return server.load();
+        },
+        save: server.save,
+        bindWindow: false,
+        online: function () { return online; },
+      });
+    }
+    const home = client();
+    const away = client();
+    home.start();
+    away.start();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      online = false;
+      away.run({ type: "record-runs", teamId: "team-16u", gameId: "game-eagles", runs: "0" });
+      online = true;
+      home.run({
+        type: "set-rule",
+        teamId: "team-16u",
+        gameId: "game-eagles",
+        runRule: [{ after: 4, lead: 8 }],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      await away.pull();
+      assert.match(away.notice(), /Run rule changed on another phone: 8 after 4\./);
+    } finally {
+      home.stop();
+      away.stop();
+    }
+  });
 });
 
 describe("game sync realtime ping", () => {

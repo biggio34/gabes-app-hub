@@ -1909,7 +1909,8 @@ describe("game manager round 7", () => {
   it("keeps the tiebreaker banner when the runner changes", () => {
     let state = start("home", sampleGame(), 7);
     for (let n = 0; n < 15; n += 1) state = GameManager.recordRuns(state, 0);
-    const next = state.players[0].id === state.itbRunnerId ? state.players[1].id : state.players[0].id;
+    const pack = GameManager.itbChoices(state);
+    const next = pack.choices.map((row) => row.id).find((id) => id !== state.itbRunnerId) || pack.defaultId;
     state = GameManager.setItbRunner(state, next);
     assert.equal(state.itbRunnerId, next);
     assert.equal(state.baseRunners.indexOf(next) >= 0, true);
@@ -1928,10 +1929,91 @@ describe("game manager round 7", () => {
     }, 3);
     session = state.teams.t.sessions[session.lineupGameId];
     assert.deepEqual(session.runRule, [{ after: 5, lead: 10 }]);
-    const reloaded = GameManager.normalizeDocument(JSON.parse(JSON.stringify({
+    state = GameManager.applyGameOp(state, {
+      type: "set-rule", teamId: "t", gameId: session.lineupGameId, runRule: "x",
+    }, 4);
+    session = state.teams.t.sessions[session.lineupGameId];
+    assert.deepEqual(session.runRule, [{ after: 5, lead: 10 }]);
+    const garbage = {
       revision: 1, teams: { t: { teamName: "16U", sessions: { g: Object.assign({}, session, { runRule: [{ after: "no" }] }) } } },
-    })));
-    assert.equal(reloaded.teams.t.sessions[session.lineupGameId].runRule, null);
+    };
+    const kept = GameManager.normalizeDocument(JSON.parse(JSON.stringify(garbage)), state);
+    assert.deepEqual(kept.teams.t.sessions[session.lineupGameId].runRule, [{ after: 5, lead: 10 }]);
+    const cold = GameManager.normalizeDocument(JSON.parse(JSON.stringify(garbage)));
+    assert.equal(cold.teams.t.sessions[session.lineupGameId].runRule, null);
+  });
+
+  it("picks a tiebreaker runner who is not the batter and not already on base", () => {
+    let state = start("home", sampleGame(), 7);
+    for (let n = 0; n < 15; n += 1) state = GameManager.recordRuns(state, 0);
+    const pack = GameManager.itbChoices(state);
+    const batter = GameManager.liveBatters(state)[GameManager.effectiveBatterIndex(state)].id;
+    assert.equal(pack.choices.some((row) => row.id === batter), false);
+    assert.equal(pack.defaultId, pack.correctId);
+    assert.equal(pack.defaultId, state.itbRunnerId);
+    state = GameManager.safePlay(state, "hit");
+    const onFirst = state.baseRunners[0];
+    const due = GameManager.liveBatters(state)[GameManager.effectiveBatterIndex(state)].id;
+    const next = GameManager.itbChoices(state);
+    assert.equal(next.choices.some((row) => row.id === due), false);
+    assert.equal(next.choices.some((row) => row.id === onFirst), false);
+    assert.throws(() => GameManager.setItbRunner(state, onFirst), /not batting|not already on base/);
+    assert.throws(() => GameManager.setItbRunner(state, due), /not batting|not already on base/);
+    const choice = next.choices.find((row) => row.id !== state.itbRunnerId) || next.choices[0];
+    state = GameManager.setItbRunner(state, choice.id);
+    const spots = state.baseRunners.filter((id) => id === choice.id);
+    assert.equal(spots.length, 1);
+    assert.notEqual(choice.id, due);
+  });
+
+  it("switches a short DP/FLEX card without starting the game", () => {
+    const ids = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "flex"];
+    const roster = ids.map((id) => ({ id: id, name: id }));
+    function card(unavailable) {
+      return {
+        id: "g",
+        name: "vs Rogers Royals",
+        battingMode: "dp-flex",
+        battingOrder: ids.slice(),
+        defensivePositions: defense({ P: "flex", C: "b", "2B": "d", DP: "a" }),
+        inningDefenses: [],
+        unavailableIds: unavailable,
+      };
+    }
+    const nine = card(["d"]);
+    assert.equal(GameManager.dpFlexAvailability(nine).message, "Only 9 available. Switch to 9 batters (no DP/FLEX)");
+    assert.throws(() => GameManager.createLiveGame({ side: "home", game: nine, players: roster, teamName: "T" }, 1), /Only 9 available\. Switch to 9 batters/);
+    const switched = GameManager.switchToNoDpFlex(nine);
+    assert.equal(switched.status, undefined);
+    assert.equal(switched.battingMode, "nine");
+    assert.equal(switched.battingOrder.indexOf("flex"), -1);
+    assert.equal(switched.defensivePositions["2B"], "");
+    assert.equal(switched.defensivePositions.P, "");
+    assert.equal(switched.defensivePositions.DP, "");
+    assert.equal(GameManager.dpFlexAvailability(switched).ok, true);
+    const eight = card(["d", "e"]);
+    assert.equal(GameManager.dpFlexAvailability(eight).message, "Only 8 available. Switch to 8 batters (no DP/FLEX)");
+    const dropped = GameManager.switchToNoDpFlex(eight);
+    assert.equal(dropped.defensivePositions["2B"], "");
+    assert.equal(dropped.battingOrder.indexOf("d") >= 0, true);
+  });
+
+  it("moves a tapped runner and does not relabel the tiebreaker runner after she is out", () => {
+    let moved = GameManager.applyBaseTap([false, false, false], ["", "", ""], 0, {});
+    moved = GameManager.applyBaseTap(moved.bases, moved.runners, 1, {});
+    assert.deepEqual(moved.bases, [false, true, false]);
+    assert.equal(moved.runners[1], "");
+    let state = start("home", sampleGame(), 7);
+    for (let n = 0; n < 15; n += 1) state = GameManager.recordRuns(state, 0);
+    const itb = state.itbRunnerId;
+    state = GameManager.addOut(state, 2, { runner: true, base: 1 });
+    assert.equal(state.itbRunnerId, "");
+    const again = GameManager.applyBaseTap(state.bases, state.baseRunners, 1, { itbRunnerId: state.itbRunnerId });
+    assert.equal(again.runners.indexOf(itb), -1);
+    state = start("home", sampleGame(), 7);
+    for (let n = 0; n < 15; n += 1) state = GameManager.recordRuns(state, 0);
+    state = GameManager.addRun(state);
+    assert.equal(state.itbRunnerId, "");
   });
 
   it("offers a courtesy runner only when she is on base", () => {

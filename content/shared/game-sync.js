@@ -229,6 +229,25 @@
     return "";
   }
 
+  function chunkSetsRule(chunk, after) {
+    const sets = (chunk || []).filter(function (op) { return op && op.type === "set-rule"; });
+    if (!sets.length) return false;
+    const own = sets[sets.length - 1];
+    const wanted = runRuleText(Array.isArray(own.runRule) ? own.runRule : null);
+    if (!wanted) return false;
+    const teams = (after && after.teams) || {};
+    const ids = Object.keys(teams);
+    for (let t = 0; t < ids.length; t += 1) {
+      const sessions = (teams[ids[t]] && teams[ids[t]].sessions) || {};
+      const gids = Object.keys(sessions);
+      for (let g = 0; g < gids.length; g += 1) {
+        const rule = sessions[gids[g]] && sessions[gids[g]].runRule;
+        if (runRuleText(rule) === wanted) return true;
+      }
+    }
+    return false;
+  }
+
   function noticeForDrops(messages) {
     if (!messages || !messages.length) return "";
     if (messages.length === 1) return messages[0];
@@ -514,7 +533,7 @@
     }
 
     function acceptRemote(serverDoc) {
-      const normalized = normalize(serverDoc);
+      const normalized = normalize(serverDoc, acked);
       const merged = mergeRemote(acked, normalized, queue, localOpIds);
       if (merged.ignored) return false;
       const changed = revisionOf(normalized) !== revisionOf(acked) || merged.queue.length !== queue.length;
@@ -623,6 +642,7 @@
             return;
           }
           const localBefore = acked;
+          const ruleBaseline = acked;
           if (remote && remote.document) acceptRemote(remote.document);
           queueAdopt(normalize(remote && remote.document), localBefore);
           if (!queue.length) break;
@@ -673,6 +693,8 @@
             conflictStreak += 1;
             notice = NOTICE;
             if (saved.document) acceptRemote(saved.document);
+            const conflictRule = runRuleChange(ruleBaseline, acked);
+            if (conflictRule && !chunkSetsRule(chunk, acked)) notice = conflictRule;
             emit("status");
             if (conflictStreak >= 3) {
               backoff = true;
@@ -691,7 +713,11 @@
             bumpView();
           }
           if (dropMessage) notice = dropMessage;
-          else if (rebased) notice = NOTICE;
+          else if (rebased) {
+            const rebasedRule = runRuleChange(ruleBaseline, acked);
+            if (rebasedRule && !chunkSetsRule(chunk, acked)) notice = rebasedRule;
+            else if (!/Run rule changed on another phone/.test(notice || "")) notice = NOTICE;
+          }
           persist();
           emit("local");
         }
