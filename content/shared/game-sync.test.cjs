@@ -569,7 +569,7 @@ describe("game sync round 7", () => {
       offlineA = false;
       await phoneA.pull();
       assert.equal(phoneA.queue().length, 0);
-      assert.match(phoneA.notice(), /wasn't saved/);
+      assert.match(phoneA.notice(), /wasn.t saved|weren.t saved/);
       assert.match(phoneA.notice(), /already ended/);
       const sessions = server.teams.t.sessions;
       assert.equal(sessions.g.status, "played");
@@ -633,6 +633,74 @@ describe("game sync round 7", () => {
       assert.equal(server.teams.t.sessions.g.usHits, 250);
     } finally {
       phone.stop();
+    }
+  });
+
+  it("names every tap an ended game rejects and backs off on conflicts", async () => {
+    let server = GameManager.normalizeDocument(null);
+    let offlineA = false;
+    let conflict = false;
+    let saves = 0;
+    function connect(storage) {
+      return GameSync.connect({
+        storage: storage,
+        storageKey: "gm-multi",
+        normalize: GameManager.normalizeDocument,
+        applyOp: GameManager.applyGameOp,
+        bindWindow: false,
+        load: async function () {
+          if (offlineA && storage === phoneAStorage) throw new Error("offline");
+          return { document: server };
+        },
+        save: async function (expected, incoming) {
+          saves += 1;
+          if (offlineA && storage === phoneAStorage) throw new Error("offline");
+          if (conflict) return { conflict: true, document: server };
+          if (expected !== (server.revision || 0)) return { conflict: true, document: server };
+          server = GameManager.normalizeDocument(incoming);
+          server.revision = expected + 1;
+          return { document: server };
+        },
+        subscribe: function () { return function () {}; },
+      });
+    }
+    const phoneAStorage = GameSync.memoryStorage();
+    const phoneA = connect(phoneAStorage);
+    const phoneB = connect(GameSync.memoryStorage());
+    phoneA.start();
+    phoneB.start();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      phoneA.run({
+        type: "start",
+        teamId: "t",
+        input: { side: "away", game: game("g"), players: players(), teamName: "16U Fransen" },
+      });
+      await phoneA.pull();
+      await phoneB.pull();
+      offlineA = true;
+      phoneB.run({ type: "end", teamId: "t", gameId: "g", reason: "walk-off", runsThisHalf: 1 });
+      await phoneB.pull();
+      for (let n = 0; n < 4; n += 1) phoneA.run({ type: "add-out", teamId: "t", gameId: "g" });
+      phoneA.run({ type: "add-run", teamId: "t", gameId: "g" });
+      phoneA.run({ type: "record-runs", teamId: "t", gameId: "g", runs: "1" });
+      offlineA = false;
+      await phoneA.pull();
+      assert.equal(phoneA.queue().length, 0);
+      assert.match(phoneA.notice(), /6 taps weren't saved/);
+      assert.match(phoneA.notice(), /already ended/);
+      conflict = true;
+      saves = 0;
+      phoneA.run({
+        type: "start",
+        teamId: "t",
+        input: { side: "away", game: game("g3"), players: players(), teamName: "16U Fransen" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      assert.ok(saves > 0 && saves < 12, "conflict saves " + saves);
+    } finally {
+      phoneA.stop();
+      phoneB.stop();
     }
   });
 

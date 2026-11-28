@@ -893,6 +893,12 @@
     const batterIds = batterIdsForMode(snapshot);
     const flexId = input && input.flexId ? String(input.flexId) : flexIdFor(snapshot);
     const dpId = input && input.dpId ? String(input.dpId) : dpIdFor(snapshot);
+    if (mode === "dp-flex" && flexId && batterIds.indexOf(flexId) >= 0) {
+      throw new Error("The FLEX bats only in the DP's spot.");
+    }
+    if (mode === "dp-flex" && dpId && flexId && dpId === flexId) {
+      throw new Error("The DP and the FLEX have to be different players.");
+    }
     const stamp = now || Date.now();
     return {
       lineupGameId: snapshot.id,
@@ -1731,6 +1737,16 @@
     };
   }
 
+  function normalizeRunRule(raw) {
+    if (!Array.isArray(raw)) return null;
+    return raw.map(function (rule) {
+      const after = Math.floor(Number(rule && rule.after));
+      const lead = Math.floor(Number(rule && (rule.lead != null ? rule.lead : rule.margin)));
+      if (!(after >= 1) || !(lead >= 1)) return null;
+      return { after: after, lead: lead };
+    }).filter(Boolean);
+  }
+
   function normalizeSession(raw) {
     if (!raw || typeof raw !== "object") return null;
     if (raw.status !== "live" && raw.status !== "played") return null;
@@ -1771,7 +1787,7 @@
       outLog: outLog,
       scheduledInnings: clampScheduledInnings(raw.scheduledInnings),
       tiebreaker: !!raw.tiebreaker,
-      endedReason: ["home-lead", "final", "manual", "run-rule", "time", "called", "forfeit", "other"].indexOf(raw.endedReason) >= 0
+      endedReason: ["home-lead", "final", "manual", "run-rule", "time", "called", "forfeit", "other", "walk-off"].indexOf(raw.endedReason) >= 0
         ? raw.endedReason
         : "",
       outs: clampOuts(raw.outs),
@@ -1814,6 +1830,7 @@
       oppName: raw.oppName ? String(raw.oppName) : "",
       itbFrom: Math.max(0, Math.floor(Number(raw.itbFrom) || 0)),
       timeLimit: !!raw.timeLimit,
+      runRule: normalizeRunRule(raw.runRule),
       prompt: raw.prompt ? String(raw.prompt) : "",
       runNote: raw.runNote ? String(raw.runNote) : "",
       forfeitWinner: raw.forfeitWinner === "opp" ? "opp" : (raw.forfeitWinner === "us" ? "us" : ""),
@@ -1996,6 +2013,9 @@
     }
     const gameId = String(op.gameId || "");
     const current = team.sessions[gameId];
+    if (current && current.status !== "live" && ["resume", "edit-half", "undo", "confirm-final"].indexOf(op.type) < 0) {
+      throw new Error("This game is not in progress.");
+    }
     if (current && (op.atHalf || op.type === "undo" || op.type === "add-run" || op.type === "next-batter" || op.type === "add-tally" || op.type === "count" || op.type === "safe")) {
       const gate = staleGate(current, op);
       if (gate === "drop") {
@@ -2238,6 +2258,9 @@
     if (!op) return "tap";
     if (op.type === "count") {
       if (op.foul) return "Foul";
+      if (op.fix && op.balls === 0 && op.strikes === 0) return "Reset count";
+      if (op.deltaStrikes < 0 && op.balls == null) return "Strike −1";
+      if (op.deltaBalls < 0) return "Ball −1";
       if (op.strikes != null && op.balls == null) return "Strike";
       if (op.balls != null) return "Ball";
       return "Count";
@@ -2319,8 +2342,8 @@
     const nextStrikes = pitchValue(state.strikes || 0, patch && patch.strikes, patch && patch.deltaStrikes);
     if (patch && patch.bases && patch.balls == null && patch.strikes == null) {
       const bases = [!!patch.bases[0], !!patch.bases[1], !!patch.bases[2]];
-      const runners = runnerTrio(state.baseRunners);
-      bases.forEach(function (on, index) { if (!on) runners[index] = ""; });
+      const runners = runnerTrio(patch.baseRunners || state.baseRunners);
+      if (!patch.baseRunners) bases.forEach(function (on, index) { if (!on) runners[index] = ""; });
       return remember(state, Object.assign({}, state, {
         bases: bases,
         baseRunners: runners,
@@ -2339,12 +2362,17 @@
       return struck;
     }
     const foulHold = patch && patch.foul && (state.strikes || 0) >= 2;
+    const fixing = patch && (patch.fix || patch.deltaBalls < 0 || patch.deltaStrikes < 0);
+    let countLabel = patch && patch.foul ? "Foul" : "Count";
+    if (fixing && patch.balls === 0 && patch.strikes === 0) countLabel = "Reset count";
+    else if (fixing && patch.deltaBalls < 0) countLabel = "Ball −1";
+    else if (fixing && patch.deltaStrikes < 0) countLabel = "Strike −1";
     return remember(state, Object.assign({}, state, {
       balls: Math.max(0, Math.min(3, nextBalls)),
       strikes: foulHold ? 2 : Math.max(0, Math.min(2, nextStrikes)),
       runNote: "",
       updatedAt: stamp,
-    }), patch && patch.foul ? "Foul" : "Count", { pitch: true });
+    }), countLabel, fixing ? undefined : { pitch: true });
   }
 
   function reachBase(state, now) {

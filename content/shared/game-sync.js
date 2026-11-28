@@ -201,6 +201,18 @@
     return "This " + name + " wasn't saved.";
   }
 
+  function noticeForDrops(messages) {
+    if (!messages || !messages.length) return "";
+    if (messages.length === 1) return messages[0];
+    const ended = messages.every(function (message) { return /already ended/i.test(message); });
+    if (ended) return messages.length + " taps weren't saved: the game had already ended on another phone.";
+    const unique = [];
+    messages.forEach(function (message) {
+      if (unique.indexOf(message) < 0) unique.push(message);
+    });
+    return messages.length + " taps weren't saved. " + unique.join(" ");
+  }
+
   function planWrite(serverDoc, op, applyOp, now, options) {
     const current = serverDoc || { revision: 0, appliedOpIds: [] };
     if (!op || !op.opId) {
@@ -367,6 +379,8 @@
     let replayAcked = null;
     let replayIds = [];
     let replayDoc = null;
+    let conflictStreak = 0;
+    let flushWait = null;
     const FLUSH_CHUNK = 200;
     const listeners = [];
 
@@ -559,6 +573,7 @@
       if (flushing || localOnly) return;
       flushing = true;
       blocked = false;
+      let backoff = false;
       try {
         while (queue.length && !blocked) {
           if (!online()) {
@@ -584,7 +599,7 @@
           const serverDoc = revisionOf(acked) >= revisionOf(remote && remote.document) ? acked : normalize(remote.document);
           const chunk = queue.slice(0, FLUSH_CHUNK);
           let working = serverDoc;
-          let dropMessage = "";
+          const dropped = [];
           let rebased = false;
           const finished = [];
           chunk.forEach(function (op) {
@@ -595,11 +610,12 @@
               working = plan.doc;
               if (plan.notice) rebased = true;
             } else if (plan.message) {
-              dropMessage = plan.message;
+              dropped.push(plan.message);
             } else if (plan.notice) {
-              dropMessage = dropMessage || NOTICE;
+              dropped.push(NOTICE);
             }
           });
+          const dropMessage = noticeForDrops(dropped);
           if (!finished.length) break;
           const wrote = working !== serverDoc;
           if (!wrote) {
@@ -624,11 +640,20 @@
             return;
           }
           if (saved && saved.conflict) {
+            conflictStreak += 1;
             notice = NOTICE;
             if (saved.document) acceptRemote(saved.document);
             emit("status");
+            if (conflictStreak >= 3) {
+              backoff = true;
+              const wait = Math.min(8000, 200 * conflictStreak);
+              if (flushWait) clearTimeout(flushWait);
+              flushWait = setTimeout(function () { flush(); }, wait);
+              return;
+            }
             continue;
           }
+          conflictStreak = 0;
           queue = queue.filter(function (op) { return finished.indexOf(op.opId) < 0; });
           if (saved && saved.document) acceptRemote(saved.document);
           else {
@@ -645,7 +670,7 @@
         emit("status");
       } finally {
         flushing = false;
-        if (!blocked && queue.length && status !== "offline") flush();
+        if (!backoff && !blocked && queue.length && status !== "offline") flush();
       }
     }
 
@@ -759,6 +784,8 @@
 
     function stop() {
       started = false;
+      if (flushWait) clearTimeout(flushWait);
+      flushWait = null;
       if (pollTimer) clearInterval(pollTimer);
       if (reconnectTimer) {
         clearInterval(reconnectTimer);

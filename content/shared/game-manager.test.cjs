@@ -1735,7 +1735,7 @@ describe("game manager round 7", () => {
     assert.equal(state.runNote, "");
   });
 
-  it("labels the FLEX player FLEX", () => {
+  it("labels the FLEX player FLEX and refuses one who also bats", () => {
     const people = players().concat([{ id: "blake", name: "Blake Quinn", number: "8" }]);
     const order = ["mia", "ava", "lina", "jo", "out-girl", "sub", "mia", "ava", "lina", "blake"];
     const game = {
@@ -1747,17 +1747,26 @@ describe("game manager round 7", () => {
       inningDefenses: [],
       unavailableIds: [],
     };
-    const state = GameManager.createLiveGame({
+    assert.throws(() => GameManager.createLiveGame({
       side: "home",
       game: game,
       players: people,
       dpId: "mia",
       flexId: "ava",
+    }, 1), /FLEX bats only/);
+    const state = GameManager.createLiveGame({
+      side: "home",
+      game: game,
+      players: people,
+      dpId: "mia",
+      flexId: "blake",
     }, 1);
-    const flex = GameManager.liveBatters(state).find((row) => row.id === "ava");
-    const dp = GameManager.liveBatters(state).find((row) => row.id === "mia");
+    state.flexBatting = true;
+    state.spots.forEach((spot) => {
+      if (spot.starterId === "mia") spot.currentId = "blake";
+    });
+    const flex = GameManager.liveBatters(state).find((row) => row.id === "blake");
     assert.equal(flex.role, "FLEX");
-    assert.equal(dp.role, "DP");
   });
 
   it("keeps both a ball and a minus ball when the phones disagree", () => {
@@ -1806,6 +1815,60 @@ describe("game manager round 7", () => {
       assert.equal(doc.dropNotice || "", "");
       assert.ok(session().actionSeq > before, "undo " + (n + 1) + " did not advance");
     }
+  });
+
+  it("keeps a run rule through the next half, a reload, and a walk-off", () => {
+    let doc = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      input: { side: "home", game: sampleGame(), players: players(), teamName: "16U Fransen", scheduledInnings: 7 },
+    }, 1);
+    doc = GameManager.applyGameOp(doc, { type: "set-rule", teamId: "t", gameId: "game-eagles", runRule: [] }, 2);
+    doc = GameManager.normalizeDocument(JSON.parse(JSON.stringify(doc)));
+    doc = GameManager.applyGameOp(doc, { type: "record-runs", teamId: "t", gameId: "game-eagles", runs: "0" }, 3);
+    doc = GameManager.applyGameOp(doc, { type: "record-runs", teamId: "t", gameId: "game-eagles", runs: "8" }, 4);
+    let session = doc.teams.t.sessions["game-eagles"];
+    assert.deepEqual(session.runRule, []);
+    assert.equal(session.status, "live");
+    doc = GameManager.applyGameOp(doc, {
+      type: "set-rule", teamId: "t", gameId: "game-eagles", runRule: [{ after: 5, lead: 10 }],
+    }, 5);
+    doc = GameManager.normalizeDocument(JSON.parse(JSON.stringify(doc)));
+    session = doc.teams.t.sessions["game-eagles"];
+    assert.deepEqual(session.runRule, [{ after: 5, lead: 10 }]);
+    doc = GameManager.applyGameOp(doc, {
+      type: "end", teamId: "t", gameId: "game-eagles", reason: "walk-off", runsThisHalf: 1,
+    }, 6);
+    doc = GameManager.normalizeDocument(JSON.parse(JSON.stringify(doc)));
+    session = doc.teams.t.sessions["game-eagles"];
+    assert.equal(session.endedReason, "walk-off");
+    assert.equal(GameManager.endNote(session), "Walk-off");
+  });
+
+  it("undoes a reset count", () => {
+    let state = GameManager.setCount(start("away"), { balls: 2, strikes: 1 });
+    state = GameManager.setCount(state, { balls: 0, strikes: 0, fix: true });
+    assert.equal(state.balls, 0);
+    assert.equal(state.strikes, 0);
+    state = GameManager.undo(state);
+    assert.equal(state.balls, 2);
+    assert.equal(state.strikes, 1);
+  });
+
+  it("clears the tiebreaker diamond after the runner scores", () => {
+    let state = start("home", sampleGame(), 7);
+    for (let n = 0; n < 15; n += 1) state = GameManager.recordRuns(state, 0);
+    assert.equal(state.half, "bottom");
+    assert.equal(state.inningIndex, 7);
+    assert.equal(state.bases[1], true);
+    state = GameManager.addRun(state);
+    assert.deepEqual(state.bases, [false, false, false]);
+    assert.deepEqual(state.baseRunners, ["", "", ""]);
+    state = GameManager.undo(state);
+    state = GameManager.setCount(state, { bases: [false, false, true], baseRunners: ["", "", state.itbRunnerId] });
+    assert.equal(state.bases[2], true);
+    assert.equal(state.bases[1], false);
+    assert.equal(state.baseRunners[2], state.itbRunnerId);
   });
 
   it("stores a typed custom run rule", () => {

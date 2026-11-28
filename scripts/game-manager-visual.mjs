@@ -195,11 +195,27 @@ let flexShow = GameManager.createLiveGame({
   teamName: "16U Fransen",
   scheduledInnings: 7,
   dpId: "mia",
-  flexId: "ava",
+  flexId: "tess",
 }, 9200);
 flexShow = GameManager.recordRuns(flexShow, 0, 9201);
+flexShow.flexBatting = true;
+flexShow.spots = (flexShow.spots || []).map((spot) => (
+  spot.starterId === "mia" ? Object.assign({}, spot, { currentId: "tess" }) : spot
+));
+const longGame = lineup("game-long", "vs Rogers Royals 16U Gold - May 19");
+longGame.battingOrder = longGame.battingOrder.concat(["mack"]);
+const longPlayers = players.concat([{ id: "mack", name: "Mackenzie Vanderberg", number: "7" }]);
+let longLive = GameManager.createLiveGame({
+  side: "home",
+  game: longGame,
+  players: longPlayers,
+  teamName: "16U Fransen",
+  scheduledInnings: 7,
+}, 9300);
+longLive = GameManager.recordRuns(longLive, 0, 9301);
+longLive = Object.assign({}, longLive, { battingIndex: longGame.battingOrder.indexOf("mack") });
 
-const games = [offenseGame, defenseGame, finalGame, preGame, subGame, flexGame, nodpGame, walkGame, lineup("game-rule", "vs Rule - May 9"), royalsGame, extrasGame, flexShowGame];
+const games = [offenseGame, defenseGame, finalGame, preGame, subGame, flexGame, nodpGame, walkGame, lineup("game-rule", "vs Rule - May 9"), royalsGame, extrasGame, flexShowGame, longGame];
 const sessions = {
   [offense.lineupGameId]: offense,
   [defense.lineupGameId]: defense,
@@ -211,6 +227,7 @@ const sessions = {
   [royals.lineupGameId]: royals,
   [extras.lineupGameId]: extras,
   [flexShow.lineupGameId]: flexShow,
+  [longLive.lineupGameId]: longLive,
 };
 const document = GameManager.normalizeDocument({
   revision: 3,
@@ -960,7 +977,7 @@ if (!before) {
     await page.locator("#side-sheet [data-action='set-innings'][data-delta='-1']").click();
   }
   await page.locator("#dp-pick").selectOption("mia");
-  await page.locator("#flex-pick").selectOption("ava");
+  await page.locator("#flex-pick").selectOption("tess");
   await page.locator("#opp-name").fill("Nodp");
   await page.locator("[data-action='choose-side']").click();
   await page.locator("#half-indicator").waitFor();
@@ -1046,6 +1063,9 @@ if (!before) {
     fail("Count sheet targets are under 44px (" + countTargets.join(",") + ").");
   }
   await page.screenshot({ path: path.join(outDir, "r7-count-sheet.png") });
+  const ballFix = await page.locator("[data-action='fix-ball']").isDisabled();
+  const strikeFix = await page.locator("[data-action='fix-strike']").isDisabled();
+  if (!ballFix || !strikeFix) fail("Count fixes stay enabled at 0-0.");
   await page.locator("#count-sheet [data-action='close-sheet']").click();
   await tapBase("0");
   await tapBase("1");
@@ -1055,17 +1075,34 @@ if (!before) {
   const seventh = await page.locator("#prompt-sheet").innerText();
   if (!/That's the game/i.test(seventh)) fail("Bottom of the 7th did not walk off (" + seventh + ").");
   await page.screenshot({ path: path.join(outDir, "r7-walkoff-b7.png") });
-  await page.locator("#prompt-sheet [data-action='close-sheet']").click();
+  await page.locator("#prompt-sheet [data-action='confirm-end']").click();
+  await page.locator("#ended-summary").waitFor();
+  const seventhFinal = await page.locator("#half-indicator").innerText();
+  if (!/Walk-off/.test(seventhFinal)) fail("The 7th-inning final does not read Walk-off (" + seventhFinal + ").");
+  await page.screenshot({ path: path.join(outDir, "r8-b7-walkoff-final.png") });
 
   await page.locator("[data-action='back']").click();
   await page.locator("[data-game='game-extras']").click();
   await page.locator("#tiebreaker").waitFor();
+  await page.locator(".diamond-live [data-base='2']").evaluate((el) => el.click());
+  await page.locator("#tiebreaker", { hasText: "3rd" }).waitFor();
+  const stealBases = await page.locator(".diamond-live .base.on").evaluateAll((els) => els.map((el) => el.getAttribute("data-base")));
+  if (stealBases.join(",") !== "2") fail("A stolen third still shows another base (" + stealBases.join(",") + ").");
+  await page.screenshot({ path: path.join(outDir, "r8-itb-steal3.png") });
+  await page.locator("#undo-out").click();
+  await page.locator("#tiebreaker", { hasText: "2nd" }).waitFor();
   await page.locator("[data-action='add-run']").click();
+  const litAfterRun = await page.locator(".diamond-live .base.on").count();
+  if (litAfterRun) fail("+RUN in the 8th left a runner on the diamond.");
   await page.locator("#prompt-sheet").waitFor();
   const eighth = await page.locator("#prompt-sheet").innerText();
   if (!/That's the game/i.test(eighth)) fail("The 8th-inning tiebreaker did not walk off (" + eighth + ").");
   await page.screenshot({ path: path.join(outDir, "r7-walkoff-8th-itb.png") });
-  await page.locator("#prompt-sheet [data-action='close-sheet']").click();
+  await page.locator("#prompt-sheet [data-action='confirm-end']").click();
+  await page.locator("#ended-summary").waitFor();
+  const eighthFinal = await page.locator("#half-indicator").innerText();
+  if (!/Walk-off/.test(eighthFinal)) fail("The 8th-inning final does not read Walk-off (" + eighthFinal + ").");
+  await page.screenshot({ path: path.join(outDir, "r8-itb-walkoff-final.png") });
   await page.locator("[data-action='back']").click();
 
   await page.locator("[data-game='game-flexshow']").click();
@@ -1075,6 +1112,11 @@ if (!before) {
   await page.screenshot({ path: path.join(outDir, "r7-flex.png") });
   await page.locator("[data-action='open-menu']").click();
   await page.locator("[data-action='set-rule'][data-rule='custom']").click();
+  await page.locator("#rule-after").fill("abc");
+  await page.locator("#rule-lead").fill("0");
+  await page.locator("[data-action='save-custom-rule']").click();
+  await page.locator("#rule-error").waitFor();
+  await page.screenshot({ path: path.join(outDir, "r8-rule-error.png") });
   await page.locator("#rule-after").fill("6");
   await page.locator("#rule-lead").fill("10");
   await page.screenshot({ path: path.join(outDir, "r7-run-rule-custom.png") });
@@ -1093,7 +1135,7 @@ if (!before) {
       teams: { [teamId]: { teamName: team.teamName, sessions: { [id]: session } } },
     };
     return JSON.stringify({ version: 2, acked: doc, queue: [], localOpIds: [], cache: { teams: {} } });
-  }, "game-royals");
+  }, "game-flexshow");
   let dropServer = JSON.parse(royalsRaw).acked;
   async function syncedPhone() {
     const context = await browser.newContext({
@@ -1125,7 +1167,7 @@ if (!before) {
     });
     await synced.goto(pageUrl, { waitUntil: "domcontentloaded" });
     if (!(await synced.locator("#at-bat").count())) {
-      await synced.locator("[data-game='game-royals']").click();
+      await synced.locator("[data-game='game-flexshow']").click();
     }
     await synced.locator("#at-bat").waitFor();
     return { context, synced };
@@ -1152,12 +1194,108 @@ if (!before) {
   await latePhone.synced.screenshot({ path: path.join(outDir, "r7-sync-drop-notice.png") });
   await endedPhone.context.close();
   await latePhone.context.close();
+
+  await page.locator("[data-action='back']").click();
+  await page.locator("[data-game='game-long']").click();
+  await page.locator("#at-bat strong", { hasText: "Mackenzie Vanderberg" }).waitFor();
+  const longFit = await page.evaluate(() => {
+    const name = document.querySelector("#at-bat strong");
+    const chip = document.querySelector("#count-chip");
+    if (!name || !chip) return false;
+    const nameBox = name.getBoundingClientRect();
+    const chipBox = chip.getBoundingClientRect();
+    return nameBox.right <= chipBox.left + 1 && name.scrollHeight >= name.clientHeight;
+  });
+  if (!longFit) fail("The long batter name runs under the count chip.");
+  await page.screenshot({ path: path.join(outDir, "r8-longname.png") });
+  await page.locator("[data-action='open-count']").click();
+  await page.locator("#count-sheet [data-action='fix-ball'][disabled]").waitFor();
+  await page.screenshot({ path: path.join(outDir, "r8-count-sheet.png") });
+  await page.locator("#count-sheet [data-action='close-sheet']").click();
+
+  const longRaw = await page.evaluate((id) => {
+    const env = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const teamId = Object.keys(env.acked.teams)[0];
+    const team = env.acked.teams[teamId];
+    const session = team.sessions[id];
+    return JSON.stringify({
+      version: 2,
+      acked: {
+        revision: 1,
+        updatedAt: 1,
+        appliedOpIds: [],
+        active: { teamId: teamId, gameId: id },
+        teams: { [teamId]: { teamName: team.teamName, sessions: { [id]: session } } },
+      },
+      queue: [],
+      localOpIds: [],
+      cache: { teams: {} },
+    });
+  }, "game-long");
+  let manyServer = JSON.parse(longRaw).acked;
+  const liveLong = JSON.parse(longRaw).acked;
+  let serveEnded = false;
+  async function manyPhone() {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 2,
+      hasTouch: true,
+      colorScheme: "dark",
+    });
+    await context.addInitScript(({ hub, key, raw }) => {
+      window.HUB_SOFTBALL = hub;
+      localStorage.setItem(key, raw);
+    }, { hub, key: GameManager.STORAGE_KEY, raw: longRaw });
+    const synced = await context.newPage();
+    await synced.route("**/api/softball/state", (route) => route.abort());
+    await synced.route("**/api/softball/game-sessions/stream**", (route) => route.abort());
+    await synced.route("**/api/softball/game-sessions", async (route) => {
+      if (route.request().method() === "PUT") {
+        try {
+          const body = JSON.parse(route.request().postData() || "{}");
+          if (body.document) manyServer = body.document;
+        } catch { /* keep */ }
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ sync: "on", document: serveEnded ? manyServer : liveLong }),
+      });
+    });
+    await synced.goto(pageUrl, { waitUntil: "domcontentloaded" });
+    if (!(await synced.locator("#at-bat").count())) await synced.locator("[data-game='game-long']").click();
+    await synced.locator("#at-bat").waitFor();
+    return { context, synced };
+  }
+  const endMany = await manyPhone();
+  const lateMany = await manyPhone();
+  await endMany.synced.locator("[data-action='open-menu']").click();
+  await endMany.synced.locator("[data-action='ask-end']").click();
+  await Promise.all([
+    endMany.synced.waitForResponse((resp) => resp.url().includes("game-sessions") && resp.request().method() === "PUT"),
+    endMany.synced.locator("[data-action='confirm-end']").click(),
+  ]);
+  serveEnded = true;
+  await lateMany.synced.evaluate(() => {
+    document.querySelector("#add-out").click();
+    document.querySelector("#add-out").click();
+    document.querySelector("[data-action='add-run']").click();
+    document.querySelector("[data-action='ball']").click();
+  });
+  await lateMany.synced.locator("#sync-notice").waitFor({ timeout: 8000 });
+  const manyText = await lateMany.synced.locator("#sync-notice").innerText();
+  if (!/taps weren't saved|taps weren.t saved/i.test(manyText) || !/already ended/i.test(manyText)) {
+    fail("Several rejected taps were not listed (" + manyText + ").");
+  }
+  await lateMany.synced.screenshot({ path: path.join(outDir, "r8-multi-reject.png") });
+  await endMany.context.close();
+  await lateMany.context.close();
 }
 
 if (!before) {
   const hashes = new Map();
   for (const file of readdirSync(outDir)) {
-    if (!/^r[4-7]-/.test(file) || !file.endsWith(".png")) continue;
+    if (!/^r[4-8]-/.test(file) || !file.endsWith(".png")) continue;
     const hash = createHash("md5").update(readFileSync(path.join(outDir, file))).digest("hex");
     if (hashes.has(hash)) fail(file + " matches " + hashes.get(hash) + " (" + hash + ")");
     else hashes.set(hash, file);

@@ -323,7 +323,7 @@
     .atbat-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; min-height: 56px; }
     .atbat-copy { flex: 1; min-width: 0; }
     .atbat-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-    .atbat-line strong { font-size: 1rem; font-weight: 600; white-space: nowrap; }
+    .atbat-line strong { font-size: 1rem; font-weight: 600; white-space: normal; overflow-wrap: anywhere; line-height: 1.2; }
     .count-stack { display: flex; flex-direction: column; align-items: stretch; gap: 6px; flex: none; }
     .count-chip {
       min-height: 44px; min-width: 72px; padding: 0 12px; border-radius: 12px;
@@ -475,7 +475,7 @@
     var oppDraft = "";
     var dpDraft = "";
     var flexDraft = "";
-    var endReason = "time";
+    var endReason = "final";
     var endRuns = "";
     var forfeitWinner = "us";
     var editAt = null;
@@ -752,8 +752,6 @@
           var shown = header ? String(inn.inning) : cell(row.cells[index]);
           var cls = "inn num-face" + (header ? " head" : "") + (inn.current ? " now" : "") + (!header && shown === "X" ? " skip" : "");
           if (!header && row.side === batting) cls += " batting";
-          var tie = !header && ((row.side === "away" && inn.topTiebreaker) || (row.side === "home" && inn.bottomTiebreaker));
-          if (tie) shown = shown ? shown + "·" : "TB";
           if (header || shown === "" || (state && state.status === "played" && !GameManager.lineupKept(state))) return '<div class="' + cls + '">' + esc(shown) + "</div>";
           var half = row.side === "away" ? "top" : "bottom";
           return '<button type="button" class="' + cls + '" data-action="edit-cell" data-inning="' + index + '" data-half="' + half + '" aria-label="Edit ' + esc(half) + " " + inn.inning + '">' + esc(shown) + "</button>";
@@ -793,7 +791,6 @@
 
     function diamondHtml(session) {
       var bases = (session && session.bases) || [false, false, false];
-      if (session && GameManager.tiebreakerActive(session)) bases = [!!bases[0], true, !!bases[2]];
       return '<div class="diamond-live" aria-label="Bases">'
         + '<i class="infield"></i>'
         + '<button type="button" class="base b2' + (bases[1] ? " on" : "") + '" data-action="base" data-base="1" aria-label="Second base"></button>'
@@ -825,7 +822,8 @@
       var onDefense = GameManager.roleFor(session.side, session.half) === "defense";
       var rows = GameManager.liveBatters(session);
       if (onDefense) {
-        var extra = GameManager.tiebreakerActive(session) ? " · Their runner on 2nd" : "";
+        var where = tiebreakerPlace(session);
+        var extra = where ? " · Their runner on " + where : "";
         return '<div class="atbat-row" id="at-bat"><div class="atbat-copy"><p class="atbat-line"><strong>' + esc(pitchingLabel(session) + extra) + "</strong></p></div></div>";
       }
       var due = rows.length ? GameManager.effectiveBatterIndex(session) % rows.length : 0;
@@ -853,13 +851,34 @@
       return '<div id="outs" class="outs" aria-label="' + esc(label) + '"><span class="out-marks">' + dots + '</span><span class="outs-label">' + esc(label) + "</span></div>";
     }
 
+    function suggestedEnd(session) {
+      if (!session) return "final";
+      if (session.prompt === "run-rule") return "run-rule";
+      if (session.prompt === "walk-off") return "walk-off";
+      var board = GameManager.scoreboard(session);
+      var home = session.side === "home" ? board.usTotal : board.oppTotal;
+      var away = session.side === "home" ? board.oppTotal : board.usTotal;
+      var inning = (session.inningIndex || 0) + 1;
+      var last = inning >= (session.scheduledInnings || 7) || GameManager.tiebreakerActive(session);
+      if (session.half === "bottom" && home > away && last) return "walk-off";
+      return "final";
+    }
+
+    function tiebreakerPlace(session) {
+      if (!session) return "";
+      var id = session.itbRunnerId;
+      if (!id) return "";
+      var runners = session.baseRunners || [];
+      var spot = runners.indexOf(id);
+      return spot === 0 ? "1st" : spot === 1 ? "2nd" : spot === 2 ? "3rd" : "";
+    }
+
     function tiebreakerHtml(session) {
       if (GameManager.roleFor(session.side, session.half) !== "offense") return "";
-      if (!GameManager.tiebreakerActive(session) && !session.tiebreaker) return "";
+      var place = tiebreakerPlace(session);
+      if (!place) return "";
       var runner = GameManager.itbRunner(session);
-      var text = runner && runner.id
-        ? "Tiebreaker · " + runner.label + " on 2nd"
-        : "Tiebreaker · " + ((runner && runner.label) || "Their runner on 2nd");
+      var text = "Tiebreaker · " + (runner && runner.label ? runner.label : "Tiebreaker runner") + " on " + place;
       return '<button type="button" id="tiebreaker" class="tiebreaker" data-action="change-runner" aria-pressed="true">' + esc(text) + "</button>";
     }
 
@@ -1381,11 +1400,13 @@
     function countSheet(session) {
       if (sheet !== "count" || !session) return "";
       var count = (session.balls || 0) + "-" + (session.strikes || 0);
+      var balls = session.balls || 0;
+      var strikes = session.strikes || 0;
       return '<div class="sheet" id="count-sheet"><div class="sheet-card" role="dialog" aria-modal="true">'
         + "<h2>Count " + esc(count) + "</h2>"
-        + '<button type="button" class="big" data-action="fix-ball">Ball −1</button>'
-        + '<button type="button" class="big" data-action="fix-strike">Strike −1</button>'
-        + '<button type="button" class="big" data-action="reset-count">Reset count</button>'
+        + '<button type="button" class="big" data-action="fix-ball"' + (balls ? "" : " disabled") + ">Ball −1</button>"
+        + '<button type="button" class="big" data-action="fix-strike"' + (strikes ? "" : " disabled") + ">Strike −1</button>"
+        + '<button type="button" class="quiet" data-action="reset-count">Reset count</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
         + "</div></div>";
     }
@@ -1398,6 +1419,7 @@
         + '<input id="rule-after" class="text-input" inputmode="numeric" value="' + esc(customAfter) + '">'
         + '<label class="hint" for="rule-lead">Run margin</label>'
         + '<input id="rule-lead" class="text-input" inputmode="numeric" value="' + esc(customLead) + '">'
+        + (errorText ? '<p class="form-error" id="rule-error">' + esc(errorText) + "</p>" : "")
         + '<button type="button" class="big" data-action="save-custom-rule">Save rule</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
         + "</div></div>";
@@ -1680,7 +1702,13 @@
           dpId: dpDraft,
           flexId: flexDraft,
         };
-        var session = GameManager.createLiveGame(input);
+        var session;
+        try { session = GameManager.createLiveGame(input); }
+        catch (e) {
+          errorText = e && e.message ? e.message : "That lineup can't start.";
+          render();
+          return;
+        }
         gameId = session.lineupGameId;
         view = "live";
         sheet = "";
@@ -1863,9 +1891,9 @@
       if (action === "fix-ball" || action === "fix-strike" || action === "reset-count") {
         var fixing = sessionFor(gameId);
         if (fixing) {
-          if (action === "reset-count") tap({ type: "count", balls: 0, strikes: 0 });
-          if (action === "fix-ball" && (fixing.balls || 0) > 0) tap({ type: "count", balls: fixing.balls - 1, deltaBalls: -1 });
-          if (action === "fix-strike" && (fixing.strikes || 0) > 0) tap({ type: "count", strikes: fixing.strikes - 1, deltaStrikes: -1 });
+          if (action === "reset-count") tap({ type: "count", balls: 0, strikes: 0, fix: true });
+          if (action === "fix-ball" && (fixing.balls || 0) > 0) tap({ type: "count", balls: fixing.balls - 1, deltaBalls: -1, fix: true });
+          if (action === "fix-strike" && (fixing.strikes || 0) > 0) tap({ type: "count", strikes: fixing.strikes - 1, deltaStrikes: -1, fix: true });
         }
         render();
         return;
@@ -1873,12 +1901,22 @@
       if (action === "save-custom-rule") {
         var afterInput = document.getElementById("rule-after");
         var leadInput = document.getElementById("rule-lead");
-        var afterN = parseInt(afterInput && afterInput.value, 10);
-        var leadN = parseInt(leadInput && leadInput.value, 10);
-        if (!afterN || afterN < 1) afterN = 5;
-        if (!leadN || leadN < 1) leadN = 10;
+        var afterRaw = afterInput ? String(afterInput.value).trim() : "";
+        var leadRaw = leadInput ? String(leadInput.value).trim() : "";
+        var afterOk = /^[1-9]\d*$/.test(afterRaw) && parseInt(afterRaw, 10) <= 12;
+        var leadOk = /^[1-9]\d*$/.test(leadRaw);
+        if (!afterOk || !leadOk) {
+          customAfter = afterRaw;
+          customLead = leadRaw;
+          errorText = "Enter an inning from 1 to 7 and a margin of 1 or more.";
+          render();
+          return;
+        }
+        var afterN = parseInt(afterRaw, 10);
+        var leadN = parseInt(leadRaw, 10);
         customAfter = String(afterN);
         customLead = String(leadN);
+        errorText = "";
         tap({ type: "set-rule", runRule: [{ after: afterN, lead: leadN }] });
         sheet = "";
         render();
@@ -1923,7 +1961,27 @@
           render();
           return;
         }
-        var bases = (sessionFor(gameId).bases || [false, false, false]).slice();
+        var liveBases = sessionFor(gameId);
+        var bases = (liveBases.bases || [false, false, false]).slice();
+        var runners = (liveBases.baseRunners || ["", "", ""]).slice();
+        var occupied = bases.map(Boolean);
+        if (!occupied[spot]) {
+          var from = [];
+          occupied.forEach(function (on, index) { if (on) from.push(index); });
+          if (from.length === 1 && spot === from[0] + 1 && runners[from[0]]) {
+            runners[spot] = runners[from[0]];
+            runners[from[0]] = "";
+            bases[from[0]] = false;
+            bases[spot] = true;
+            tap({ type: "count", bases: bases, baseRunners: runners });
+            render();
+            return;
+          }
+          if (GameManager.tiebreakerActive(liveBases)) {
+            render();
+            return;
+          }
+        }
         bases[spot] = !bases[spot];
         tap({ type: "count", bases: bases });
         render();
@@ -1937,6 +1995,13 @@
         if (preset === "off") table = [];
         else if (preset === "ten") table = [{ after: 5, lead: 10 }];
         else if (preset === "custom") {
+          var liveRule = sessionFor(gameId);
+          var currentRule = liveRule && Array.isArray(liveRule.runRule) ? liveRule.runRule[0] : null;
+          if (currentRule && currentRule.after && currentRule.lead) {
+            customAfter = String(currentRule.after);
+            customLead = String(currentRule.lead);
+          }
+          errorText = "";
           sheet = "custom-rule";
           render();
           return;
@@ -2083,6 +2148,7 @@
       if (action === "ask-end") {
         var endingNow = sessionFor(gameId);
         endRuns = endingNow && endingNow.liveRuns ? String(endingNow.liveRuns) : "0";
+        endReason = suggestedEnd(endingNow);
         sheet = "end";
         render();
         return;
