@@ -1073,6 +1073,9 @@
       if (sheet !== "menu") return "";
       return '<div class="sheet" id="game-menu"><div class="sheet-card" role="dialog" aria-modal="true">'
         + "<h2>Game</h2>"
+        + '<div class="stepper"><button type="button" data-action="nudge-innings" data-delta="-1" aria-label="Fewer innings">−</button>'
+        + "<p>" + session.scheduledInnings + (session.scheduledInnings === 1 ? " inning" : " innings") + "</p>"
+        + '<button type="button" data-action="nudge-innings" data-delta="1" aria-label="More innings">+</button></div>'
         + '<button type="button" class="pick" data-action="time-limit">Time limit: finish this inning</button>'
         + '<button type="button" class="pick" data-action="add-tally" data-kind="hit">+ Hit</button>'
         + '<button type="button" class="pick" data-action="add-tally" data-kind="error">+ Error</button>'
@@ -1389,6 +1392,13 @@
         return;
       }
       if (action === "open-menu") { sheet = "menu"; render(); return; }
+      if (action === "nudge-innings") {
+        var counted = sessionFor(gameId);
+        var step = parseInt(button.getAttribute("data-delta"), 10) || 0;
+        tap({ type: "set-innings", innings: counted.scheduledInnings + step });
+        render();
+        return;
+      }
       if (action === "time-limit") {
         var live = sessionFor(gameId);
         tap({ type: "set-innings", innings: live.inningIndex + 1, timeLimit: true });
