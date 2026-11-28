@@ -419,6 +419,88 @@ describe("game sync local speed", () => {
   });
 });
 
+describe("game sync long outage", () => {
+  it("keeps every out and run from a 1000-tap outage and syncs them to a second phone", async () => {
+    let server = GameManager.normalizeDocument(null);
+    let offline = true;
+    function connect(storage) {
+      return GameSync.connect({
+        storage: storage,
+        storageKey: "gm-outage",
+        normalize: GameManager.normalizeDocument,
+        applyOp: GameManager.applyGameOp,
+        bindWindow: false,
+        load: async function () {
+          if (offline) throw new Error("offline");
+          return { document: server };
+        },
+        save: async function (expected, incoming) {
+          if (offline) throw new Error("offline");
+          if (expected !== (server.revision || 0)) return { conflict: true, document: server };
+          server = GameManager.normalizeDocument(incoming);
+          server.revision = expected + 1;
+          return { document: server };
+        },
+        subscribe: function () { return function () {}; },
+      });
+    }
+    const phoneA = connect(GameSync.memoryStorage());
+    phoneA.start();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      const game = {
+        id: "g",
+        name: "vs Eagles",
+        battingMode: "nine",
+        battingOrder: ["mia", "ava", "lina"],
+        defensivePositions: defense({ P: "mia", C: "ava", SS: "lina" }),
+        inningDefenses: [],
+        unavailableIds: [],
+      };
+      phoneA.run({
+        type: "start",
+        teamId: "t",
+        gameId: "g",
+        input: { side: "away", game: game, players: players(), teamName: "16U Fransen", scheduledInnings: 200 },
+      });
+      phoneA.run({ type: "set-rule", teamId: "t", gameId: "g", runRule: [] });
+      let taps = 0;
+      while (taps < 1000) {
+        const session = phoneA.display().teams.t.sessions.g;
+        if (!session || session.status !== "live") break;
+        if (GameManager.clampOuts(session.outs) >= 3) {
+          phoneA.run({ type: "record-runs", teamId: "t", gameId: "g", runs: "1" });
+        } else {
+          phoneA.run({ type: "add-out", teamId: "t", gameId: "g" });
+        }
+        taps += 1;
+      }
+      const mid = phoneA.display().teams.t && phoneA.display().teams.t.sessions.g;
+      assert.ok(taps >= 1000, "stopped at " + taps + " " + (mid ? mid.status + " " + mid.endedReason : "no session"));
+      assert.equal(phoneA.queue().length, taps + 2);
+      const before = phoneA.display().teams.t.sessions.g;
+      const score = GameManager.scoreLine(before);
+      const outs = before.outs;
+      const runs = before.liveRuns;
+      offline = false;
+      await phoneA.pull();
+      assert.equal(phoneA.queue().length, 0);
+      const phoneB = connect(GameSync.memoryStorage());
+      phoneB.start();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await phoneB.pull();
+      const seen = phoneB.display().teams.t.sessions.g;
+      assert.equal(GameManager.scoreLine(seen), score);
+      assert.equal(seen.outs, outs);
+      assert.equal(seen.liveRuns, runs);
+      assert.equal(seen.status, before.status);
+      phoneB.stop();
+    } finally {
+      phoneA.stop();
+    }
+  });
+});
+
 describe("game sync realtime ping", () => {
   it("fetches only when the ping revision is newer", () => {
     assert.equal(GameSync.shouldFetchRevision(4, 5), true);

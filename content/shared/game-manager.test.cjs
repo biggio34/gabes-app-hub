@@ -1507,6 +1507,66 @@ describe("round 2 scoring", () => {
     assert.equal((aged.teams.t.sessions["game-eagles"].players || []).length, 0);
   });
 
+  it("adds the next run after a forced run was already counted", () => {
+    let doc = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      input: { side: "away", game: sampleGame(), players: players(), teamName: "16U Fransen", clubName: "MN Elks" },
+    }, 1);
+    function play(op, now) {
+      doc = GameManager.applyGameOp(doc, Object.assign({ teamId: "t", gameId: "game-eagles" }, op), now);
+    }
+    play({ type: "count", bases: [true, true, true] }, 2);
+    play({ type: "safe", kind: "walk" }, 3);
+    assert.equal(doc.teams.t.sessions["game-eagles"].liveRuns, 1);
+    assert.match(doc.teams.t.sessions["game-eagles"].runNote, /already counted/);
+    play({ type: "add-out" }, 4);
+    play({ type: "add-run" }, 5);
+    assert.equal(doc.teams.t.sessions["game-eagles"].liveRuns, 2);
+  });
+
+  it("shows that's the game when a bases-loaded walk wins", () => {
+    let doc = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      gameId: "game-eagles",
+      input: { side: "home", game: sampleGame(), players: players(), teamName: "16U Fransen", clubName: "MN Elks", scheduledInnings: 1 },
+    }, 1);
+    doc = GameManager.applyGameOp(doc, { type: "record-runs", teamId: "t", gameId: "game-eagles", runs: "0" }, 2);
+    doc = GameManager.applyGameOp(doc, { type: "count", teamId: "t", gameId: "game-eagles", bases: [true, true, true] }, 3);
+    doc = GameManager.applyGameOp(doc, { type: "safe", kind: "walk", teamId: "t", gameId: "game-eagles" }, 4);
+    const live = doc.teams.t.sessions["game-eagles"];
+    assert.equal(live.liveRuns, 1);
+    assert.equal(live.prompt, "walk-off");
+    assert.match(live.runNote, /already counted/);
+  });
+
+  it("puts a walk-off's runs back into the live count on resume", () => {
+    let doc = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      gameId: "game-eagles",
+      input: { side: "home", game: sampleGame(), players: players(), teamName: "16U Fransen", clubName: "MN Elks", scheduledInnings: 1 },
+    }, 1);
+    doc = GameManager.applyGameOp(doc, { type: "record-runs", teamId: "t", gameId: "game-eagles", runs: "1" }, 2);
+    doc = GameManager.applyGameOp(doc, { type: "add-run", teamId: "t", gameId: "game-eagles" }, 3);
+    doc = GameManager.applyGameOp(doc, { type: "add-run", teamId: "t", gameId: "game-eagles" }, 4);
+    assert.equal(GameManager.scoreboard(doc.teams.t.sessions["game-eagles"]).usTotal, 2);
+    doc = GameManager.applyGameOp(doc, {
+      type: "end", teamId: "t", gameId: "game-eagles", reason: "walk-off", runsThisHalf: 2,
+    }, 5);
+    assert.equal(GameManager.scoreLine(doc.teams.t.sessions["game-eagles"]).includes("2"), true);
+    doc = GameManager.applyGameOp(doc, { type: "resume", teamId: "t", gameId: "game-eagles" }, 6);
+    let live = doc.teams.t.sessions["game-eagles"];
+    assert.equal(live.liveRuns, 2);
+    assert.equal(live.innings[0].bottom, null);
+    assert.equal(GameManager.scoreboard(live).usTotal, 2);
+    doc = GameManager.applyGameOp(doc, { type: "add-run", teamId: "t", gameId: "game-eagles" }, 7);
+    live = doc.teams.t.sessions["game-eagles"];
+    assert.equal(live.liveRuns, 3);
+    assert.equal(GameManager.scoreboard(live).usTotal, 3);
+  });
+
   it("counts one walk or one strikeout when two phones tap the count", () => {
     function begin() {
       return GameManager.applyGameOp(GameManager.emptyDocument(), {
@@ -1608,9 +1668,12 @@ describe("round 2 scoring", () => {
     play({ type: "safe", kind: "hit" }, 32);
     const scored = doc.teams.t.sessions["game-eagles"];
     assert.equal(scored.liveRuns, 1);
-    assert.match(scored.prompt, /^Run scores/);
+    assert.match(scored.runNote, /already counted/);
     play({ type: "add-run" }, 33);
-    assert.equal(doc.teams.t.sessions["game-eagles"].liveRuns, 1);
+    assert.equal(doc.teams.t.sessions["game-eagles"].liveRuns, 2);
+    play({ type: "add-out" }, 34);
+    play({ type: "add-run" }, 35);
+    assert.equal(doc.teams.t.sessions["game-eagles"].liveRuns, 3);
   });
 
   it("keeps a season of finished games small enough to sync", () => {

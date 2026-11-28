@@ -162,7 +162,7 @@
 
   function snapshotForUndo(state, next) {
     const prior = {};
-    ["outs", "half", "inningIndex", "battingIndex", "liveRuns", "balls", "strikes", "bases", "baseRunners", "status", "endedReason", "endedAt", "prompt", "lastAction", "usHits", "oppHits", "usErrors", "oppErrors", "scheduledInnings", "timeLimit", "tiebreaker", "itbRunnerId", "itbFrom", "courtesyPool", "injuryOut", "flexBatting", "flexLeft", "flexOnCard", "flexCurrentId", "flexPos", "innings", "defense", "spots", "entries", "courtesy", "courtesyUsed", "rosterLeft", "runRule", "defensiveOuts", "openingDefense", "flexReentered", "dpReentered", "departed", "outLog", "lastFieldPos", "forfeitWinner", "finalUs", "finalOpp"].forEach(function (key) {
+    ["outs", "half", "inningIndex", "battingIndex", "liveRuns", "balls", "strikes", "bases", "baseRunners", "status", "endedReason", "endedAt", "prompt", "runNote", "lastAction", "usHits", "oppHits", "usErrors", "oppErrors", "scheduledInnings", "timeLimit", "tiebreaker", "itbRunnerId", "itbFrom", "courtesyPool", "injuryOut", "flexBatting", "flexLeft", "flexOnCard", "flexCurrentId", "flexPos", "innings", "defense", "spots", "entries", "courtesy", "courtesyUsed", "rosterLeft", "runRule", "defensiveOuts", "openingDefense", "flexReentered", "dpReentered", "departed", "outLog", "lastFieldPos", "forfeitWinner", "finalUs", "finalOpp"].forEach(function (key) {
       if (JSON.stringify(state[key]) !== JSON.stringify(next[key])) {
         prior[key] = JSON.parse(JSON.stringify(state[key] == null ? null : state[key]));
       }
@@ -1813,6 +1813,7 @@
       itbFrom: Math.max(0, Math.floor(Number(raw.itbFrom) || 0)),
       timeLimit: !!raw.timeLimit,
       prompt: raw.prompt ? String(raw.prompt) : "",
+      runNote: raw.runNote ? String(raw.runNote) : "",
       forfeitWinner: raw.forfeitWinner === "opp" ? "opp" : (raw.forfeitWinner === "us" ? "us" : ""),
       overrides: Array.isArray(raw.overrides) ? raw.overrides.map(String).slice(-40) : [],
       playLog: Array.isArray(raw.playLog) ? raw.playLog.slice(-80).map(function (entry) {
@@ -2001,7 +2002,7 @@
           : "Another phone already recorded that.");
         err.code = "stale";
         if (op.type === "add-out" || op.type === "record-runs" || op.type === "set-half-runs") throw err;
-        next.dropNotice = err.message;
+        next.dropNotice = droppedMessage(op);
         return next;
       }
       if (gate === "same") {
@@ -2226,10 +2227,55 @@
     return { bases: b, runners: r, runs: runs, scored: scored };
   }
 
-  function scoreNote(state, runnerId) {
-    if (!runnerId) return "Run scores";
-    const player = ((state && state.players) || []).filter(function (item) { return item.id === runnerId; })[0];
-    return "Run scores: " + playerLabel(player || { id: runnerId, name: "Runner" });
+  function scoreNote() {
+    return "1 run already counted. Tap +RUN only for additional runs.";
+  }
+
+  function droppedTapName(op) {
+    if (!op) return "tap";
+    if (op.type === "count") {
+      if (op.foul) return "Foul";
+      if (op.strikes != null && op.balls == null) return "Strike";
+      if (op.balls != null) return "Ball";
+      return "Count";
+    }
+    if (op.type === "add-out") return op.runner ? "Runner out" : "Out";
+    if (op.type === "add-run") return "Run";
+    if (op.type === "safe") return String(op.kind || "Safe");
+    if (op.type === "next-batter") return "Next batter";
+    if (op.type === "undo") return "Undo";
+    return "tap";
+  }
+
+  function droppedMessage(op) {
+    const name = droppedTapName(op);
+    if (op && op.type === "add-run") {
+      return "Another phone already counted that run. This Run was not applied.";
+    }
+    return "Another phone already recorded that " + name + ". This " + name + " was not applied.";
+  }
+
+  function lineupKept(state) {
+    if (!state) return false;
+    if (state.players && state.players.length) return true;
+    if (state.spots && state.spots.length) return true;
+    const order = state.lineupSnapshot && state.lineupSnapshot.battingOrder;
+    return !!(order && order.length);
+  }
+
+  function releaseCurrentHalf(state) {
+    const innings = (state.innings || []).map(copyInning);
+    const idx = Math.max(0, state.inningIndex || 0);
+    while (innings.length <= idx) innings.push({ top: null, bottom: null, topTiebreaker: false, bottomTiebreaker: false });
+    const cell = copyInning(innings[idx]);
+    const half = state.half === "bottom" ? "bottom" : "top";
+    const raw = cell[half];
+    const scored = typeof raw === "number" ? raw : 0;
+    cell[half] = null;
+    innings[idx] = cell;
+    let outs = clampOuts(state.outs);
+    if (outs >= 3) outs = 2;
+    return { innings: innings, liveRuns: (Number(state.liveRuns) || 0) + scored, outs: outs };
   }
 
   function batterReaching(state) {
@@ -2296,7 +2342,8 @@
       updatedAt: now || Date.now(),
     });
     if (batting) next.battingIndex = stepBatter(state);
-    if (moved.runs) next.prompt = scoreNote(state, moved.scored);
+    next.runNote = moved.runs ? scoreNote() : "";
+    next.prompt = promptForScore(next);
     return remember(state, next, "Reached base");
   }
 
@@ -2323,8 +2370,8 @@
       const key = (batting ? "opp" : "us") + "Errors";
       next[key] = (Number(state[key]) || 0) + 1;
     }
-    if (moved.runs) next.prompt = scoreNote(state, moved.scored);
-    else next.prompt = promptForScore(next);
+    next.runNote = moved.runs ? scoreNote() : "";
+    next.prompt = promptForScore(next);
     const labels = { hit: "Hit", error: "Error", fc: "Fielder's choice", hbp: "HBP", walk: "Walk" };
     return remember(state, next, labels[play] || "Safe");
   }
@@ -2474,9 +2521,6 @@
   function addRun(state, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
     const stamp = now || Date.now();
-    if (/^Run scores/.test(state.prompt || "")) {
-      return remember(state, Object.assign({}, state, { prompt: "", updatedAt: stamp }), "Confirmed run");
-    }
     const cleared = clearLeadRunner(state.bases, state.baseRunners);
     const live = (Number(state.liveRuns) || 0) + 1;
     const next = Object.assign({}, state, {
@@ -2484,6 +2528,7 @@
       bases: cleared.bases,
       baseRunners: cleared.runners,
       prompt: "",
+      runNote: "",
       updatedAt: stamp,
     });
     const board = scoreboard(next);
@@ -2547,11 +2592,14 @@
       next.endedAt = undefined;
       next.inningIndex = spot.inningIndex;
       next.half = spot.half;
-      next.outs = 0;
-      next.liveRuns = 0;
       next.balls = 0;
       next.strikes = 0;
       next.prompt = "Resume (now tied)";
+      next.runNote = "";
+      const held = next.innings[spot.inningIndex] && next.innings[spot.inningIndex][spot.half];
+      next.liveRuns = typeof held === "number" ? held : 0;
+      next.outs = 0;
+      if (typeof held === "number" && next.innings[spot.inningIndex]) next.innings[spot.inningIndex][spot.half] = null;
       next.tiebreaker = (spot.inningIndex + 1 > scheduledInningsOf(next)) || tiebreakerActive(next);
       next.itbRunnerId = next.tiebreaker ? runnerBeforeLeadoff(next) : "";
       next.bases = next.tiebreaker ? [false, true, false] : [false, false, false];
@@ -2579,11 +2627,14 @@
 
   function resumeGame(state, now) {
     if (!state || state.status !== "played") throw new Error("This game is not final.");
-    return remember(state, Object.assign({}, state, {
+    if (!lineupKept(state)) throw new Error("This final is only a score. The lineup is no longer on the card.");
+    const released = releaseCurrentHalf(state);
+    return remember(state, Object.assign({}, state, released, {
       status: "live",
       endedReason: "",
       endedAt: undefined,
       prompt: "",
+      runNote: "",
       updatedAt: now || Date.now(),
     }));
   }
@@ -2708,6 +2759,7 @@
     scoreboard: scoreboard,
     scoreboardRows: scoreboardRows,
     scoreLine: scoreLine,
+    lineupKept: lineupKept,
     liveScoreMeta: liveScoreMeta,
     finalScoreMeta: finalScoreMeta,
     endGame: endGame,

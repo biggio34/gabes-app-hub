@@ -206,6 +206,16 @@
         expectedRevision: revisionOf(current),
       };
     }
+    if (resolved && resolved.doc && resolved.doc.dropNotice) {
+      return {
+        kind: "drop",
+        doc: current,
+        expectedRevision: revisionOf(current),
+        rebased: true,
+        notice: true,
+        message: String(resolved.doc.dropNotice),
+      };
+    }
     if (!resolved || !resolved.applied) {
       return {
         kind: "drop",
@@ -317,6 +327,9 @@
     let localOnly = false;
     let armed = false;
     let retryMs = 30000;
+    let viewGen = 0;
+    let viewCache = null;
+    let viewGenSeen = -1;
     const listeners = [];
 
     function online() {
@@ -329,6 +342,11 @@
       if (typeof options.visible === "function") return options.visible() !== false;
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return false;
       return true;
+    }
+
+    function bumpView() {
+      viewGen += 1;
+      viewCache = null;
     }
 
     function persist() {
@@ -362,6 +380,7 @@
       localOpIds = envelope.localOpIds || [];
       cache = envelope.cache || { teams: {} };
       if (!cache.teams) cache.teams = {};
+      bumpView();
     }
 
     if (options.storage && options.storageKey) {
@@ -379,7 +398,13 @@
     }
 
     function display(now) {
-      return replay(acked, queue, applyOp, now).doc;
+      if (!now && viewCache && viewGenSeen === viewGen) return viewCache;
+      const played = replay(acked, queue, applyOp, now).doc;
+      if (!now) {
+        viewCache = played;
+        viewGenSeen = viewGen;
+      }
+      return played;
     }
 
     function acceptRemote(serverDoc) {
@@ -389,6 +414,7 @@
       const changed = revisionOf(normalized) !== revisionOf(acked) || merged.queue.length !== queue.length;
       acked = normalize(merged.acked);
       queue = merged.queue;
+      bumpView();
       if (merged.notice) notice = NOTICE;
       if (!queue.length && status !== "offline") status = "saved";
       persist();
@@ -425,6 +451,7 @@
       const pending = queue.slice();
       queue = [];
       pending.forEach(function (op) { applyLocal(op); });
+      bumpView();
     }
 
     function enterLocal() {
@@ -474,7 +501,7 @@
       try {
         while (queue.length && !blocked) {
           attempts += 1;
-          if (attempts > 8) {
+          if (attempts > 5000) {
             paused = true;
             status = "saving";
             persist();
@@ -510,7 +537,9 @@
           const plan = planWrite(serverDoc, queue[0], applyOp, queue[0].at, { conflict: sawConflict });
           if (plan.kind === "skip" || plan.kind === "drop") {
             queue.shift();
-            if (plan.notice) notice = NOTICE;
+            bumpView();
+            if (plan.message) notice = plan.message;
+            else if (plan.notice) notice = NOTICE;
             sawConflict = false;
             persist();
             emit("local");
@@ -573,12 +602,14 @@
       notice = "";
       if (localOnly) {
         applyLocal(next);
+        bumpView();
         status = "local";
         persist();
         emit("local");
         return next;
       }
       queue.push(next);
+      bumpView();
       status = online() ? "saving" : "offline";
       persist();
       emit("local");
@@ -614,7 +645,7 @@
       const localBefore = acked;
       if (remote && remote.document) acceptRemote(remote.document);
       queueAdopt(normalize(remote && remote.document), localBefore);
-      if (queue.length) flush();
+      if (queue.length) await flush();
       else if (status !== "saved") {
         status = "saved";
         persist();

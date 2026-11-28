@@ -790,7 +790,7 @@ if (!before) {
   await page.locator("[data-action='ask-safe']").click();
   await page.locator("[data-action='safe-play'][data-kind='hit']").click();
   const runNote = await page.locator("#run-note").innerText();
-  if (!/Run scores: #/.test(runNote)) fail("Forced run did not name the runner (" + runNote + ").");
+  if (!/already counted/i.test(runNote)) fail("Forced run did not keep the run note (" + runNote + ").");
   await page.screenshot({ path: path.join(outDir, "r5-run-scores-note.png") });
 
   await page.locator("[data-action='back']").click();
@@ -847,12 +847,148 @@ if (!before) {
   const resumed = await page.locator("#at-bat").innerText();
   if (!/AB/.test(resumed)) fail("Resume lost the at-bat line (" + resumed + ").");
   await page.screenshot({ path: path.join(outDir, "r5-final-resume.png") });
+
+  await page.locator("[data-action='fix-ball']").click();
+  const fixedCount = await page.locator(".count-chip").innerText();
+  if (fixedCount !== "2-0") fail("Ball fix did not step the count back (" + fixedCount + ").");
+  await page.screenshot({ path: path.join(outDir, "r6-count-fix.png") });
+  await page.locator("[data-action='ball']").click();
+  await page.locator(".count-chip", { hasText: "3-0" }).waitFor();
+  const sharedAtThree = await page.evaluate(() => localStorage.getItem(STORAGE_KEY));
+  let guardServer = JSON.parse(sharedAtThree).acked;
+  async function openSyncedPhone() {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 2,
+      hasTouch: true,
+      colorScheme: "dark",
+    });
+    await context.addInitScript(({ hub, key, raw }) => {
+      window.HUB_SOFTBALL = hub;
+      localStorage.setItem(key, raw);
+    }, { hub, key: GameManager.STORAGE_KEY, raw: sharedAtThree });
+    const synced = await context.newPage();
+    synced.on("pageerror", (error) => fail("guard pageerror: " + error.message));
+    await synced.route("**/api/softball/state", (route) => route.abort());
+    await synced.route("**/api/softball/game-sessions/stream**", (route) => route.abort());
+    await synced.route("**/api/softball/game-sessions", async (route) => {
+      if (route.request().method() === "PUT") {
+        try {
+          const body = JSON.parse(route.request().postData() || "{}");
+          if (body.document) guardServer = body.document;
+        } catch { /* keep the last document */ }
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ sync: "on", document: guardServer }),
+      });
+    });
+    await synced.goto(pageUrl, { waitUntil: "domcontentloaded" });
+    if (!(await synced.locator(".count-chip", { hasText: "3-0" }).count())) {
+      await synced.locator("button", { hasText: "vs Hawks" }).click();
+    }
+    await synced.locator(".count-chip", { hasText: "3-0" }).waitFor();
+    return { context, synced };
+  }
+  const phoneA = await openSyncedPhone();
+  const phoneB = await openSyncedPhone();
+  await Promise.all([
+    phoneA.synced.waitForResponse((resp) => resp.url().includes("game-sessions") && resp.request().method() === "PUT"),
+    phoneA.synced.locator("[data-action='ball']").click(),
+  ]);
+  await phoneB.synced.locator("[data-action='ball']").click();
+  await phoneB.synced.locator("#sync-notice, #form-error").waitFor({ timeout: 8000 });
+  const guardText = await phoneB.synced.locator("#sync-notice, #form-error").first().innerText();
+  if (!/Ball/.test(guardText) || !/not applied|already recorded/i.test(guardText)) {
+    fail("The second phone did not show which tap was dropped (" + guardText + ").");
+  }
+  await phoneB.synced.screenshot({ path: path.join(outDir, "r6-ball-guard.png") });
+  await phoneA.context.close();
+  await phoneB.context.close();
+
+  await page.locator("[data-action='back']").click();
+  await openGame("vs Nodp");
+  await page.locator("#start-game").click();
+  await page.locator("[data-action='pick-side'][data-side='home']").click();
+  for (let n = 0; n < 6; n += 1) {
+    await page.locator("#side-sheet [data-action='set-innings'][data-delta='-1']").click();
+  }
+  await page.locator("#dp-pick").selectOption("mia");
+  await page.locator("#flex-pick").selectOption("ava");
+  await page.locator("#opp-name").fill("Nodp");
+  await page.locator("[data-action='choose-side']").click();
+  await page.locator("#half-indicator").waitFor();
+  await page.locator("[data-action='open-menu']").click();
+  await page.locator("[data-action='ask-runs']").click();
+  await page.locator("#run-sheet [data-action='run-key'][data-key='0']").click();
+  await page.locator("[data-action='commit-runs']").click();
+  await page.locator("[data-action='ball']").waitFor();
+  await tapBase("0");
+  await tapBase("1");
+  await tapBase("2");
+  for (let ball = 0; ball < 4; ball += 1) await page.locator("[data-action='ball']").click();
+  await page.locator("#prompt-sheet").waitFor();
+  const walkoffTitle = await page.locator("#prompt-sheet h2").innerText();
+  if (!/That's the game/i.test(walkoffTitle)) fail("Loaded walk did not end the game (" + walkoffTitle + ").");
+  await page.screenshot({ path: path.join(outDir, "r6-walkoff-loaded.png") });
+  await page.locator("#prompt-sheet [data-action='close-sheet']").click();
+  await page.locator("#run-note").waitFor();
+  const runCopy = await page.locator("#run-note").innerText();
+  if (!/1 run already counted/.test(runCopy)) fail("Run note copy changed (" + runCopy + ").");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: path.join(outDir, "r6-run-note.png") });
+  await page.evaluate(() => window.scrollBy(0, 140));
+  const bannerBox = await page.locator("#half-indicator").boundingBox();
+  const liveDiamond = await page.locator(".diamond-live").boundingBox();
+  if (bannerBox && liveDiamond && (liveDiamond.y < bannerBox.y - 1 || liveDiamond.y + liveDiamond.height > bannerBox.y + bannerBox.height + 1)) {
+    fail("Diamond does not sit inside the inning bar (" + JSON.stringify({ bannerBox, liveDiamond }) + ").");
+  }
+  await page.screenshot({ path: path.join(outDir, "r6-diamond-inside.png") });
+  await page.locator("[data-action='open-menu']").click();
+  await page.locator("[data-action='ask-end']").click();
+  await page.locator("[data-action='pick-reason'][data-reason='walk-off']").click();
+  await page.locator("[data-action='confirm-end']").click();
+  await page.locator("#ended-summary").waitFor();
+  const finalRuns = await page.locator("#scoreboard .run").allInnerTexts();
+  await page.locator("[data-action='resume']").click();
+  await page.locator("#at-bat").waitFor();
+  const resumedRuns = await page.locator("#scoreboard .run").allInnerTexts();
+  if (resumedRuns.join(",") !== finalRuns.join(",")) fail("Resume changed the walk-off totals (" + finalRuns + " -> " + resumedRuns + ").");
+  await page.screenshot({ path: path.join(outDir, "r6-resume-walkoff.png") });
+
+  await page.locator("#add-out").click();
+  const outsAfterOut = await page.locator("#outs").innerText();
+  await page.locator("[data-action='double-play']").waitFor();
+  await tapBase("1");
+  const outsToggled = await page.locator("#outs").innerText();
+  if (outsToggled !== outsAfterOut) fail("Tapping a base after OUT recorded an out (" + outsToggled + ").");
+  await page.locator("#add-out").click();
+  await page.locator("[data-action='double-play']").click();
+  await page.locator("#cancel-runner").waitFor();
+  await page.locator("#cancel-runner").evaluate((el) => el.scrollIntoView({ block: "center" }));
+  const cancelBox = await page.locator("#cancel-runner").boundingBox();
+  const dockBoxNow = await page.locator(".dock").boundingBox();
+  if (!cancelBox || (dockBoxNow && cancelBox.y + cancelBox.height > dockBoxNow.y + 1)) {
+    fail("Cancel is hidden behind the dock (" + JSON.stringify({ cancelBox, dockBoxNow }) + ").");
+  }
+  const lastRow = await page.locator(".order .row").last().boundingBox();
+  const promptBox = await page.locator("#runner-pick").boundingBox();
+  if (lastRow && promptBox && lastRow.y + lastRow.height > promptBox.y + 1 && lastRow.y < promptBox.y + promptBox.height) {
+    fail("The runner prompt covers the last batting-order row.");
+  }
+  await page.screenshot({ path: path.join(outDir, "r6-dp-prompt.png") });
+  await page.locator("#cancel-runner").click();
+  const outsAfterCancel = await page.locator("#outs").innerText();
+  await tapBase("0");
+  const outsAfterBase = await page.locator("#outs").innerText();
+  if (outsAfterBase !== outsAfterCancel) fail("A base tap after Cancel recorded an out (" + outsAfterBase + ").");
 }
 
 if (!before) {
   const hashes = new Map();
   for (const file of readdirSync(outDir)) {
-    if ((!file.startsWith("r4-") && !file.startsWith("r5-")) || !file.endsWith(".png")) continue;
+    if (!/^r[456]-/.test(file) || !file.endsWith(".png")) continue;
     const hash = createHash("md5").update(readFileSync(path.join(outDir, file))).digest("hex");
     if (hashes.has(hash)) fail(file + " matches " + hashes.get(hash) + " (" + hash + ")");
     else hashes.set(hash, file);
