@@ -167,9 +167,52 @@
     return resolveConflict;
   }
 
+  function tapName(op) {
+    if (!op) return "tap";
+    if (op.type === "count") {
+      if (op.foul) return "Foul";
+      if (op.strikes != null && op.balls == null) return "Strike";
+      if (op.balls != null) return "Ball";
+      return "Count";
+    }
+    if (op.type === "add-out") return op.runner ? "Runner out" : "Out";
+    if (op.type === "add-run") return "Run";
+    if (op.type === "record-runs" || op.type === "set-half-runs") return "run total";
+    if (op.type === "edit-half") return "half-runs edit";
+    if (op.type === "safe") return "Safe";
+    if (op.type === "undo") return "Undo";
+    if (op.type === "start") return "Start";
+    if (op.type === "end") return "End";
+    return "tap";
+  }
+
+  function unsavedNotice(op, error) {
+    if (error && error.dropNotice) return String(error.dropNotice);
+    const name = tapName(op);
+    const raw = error && error.message ? String(error.message) : "";
+    if (/not in progress|already ended/i.test(raw)) {
+      return "This " + name + " wasn't saved: the game had already ended on another phone.";
+    }
+    if (error && (error.code === "stale" || /already recorded|already counted/i.test(raw))) {
+      if (op && op.type === "add-run") return "Another phone already counted that run. This Run was not applied.";
+      return "Another phone already recorded that " + name + ". This " + name + " was not applied.";
+    }
+    if (raw) return "This " + name + " wasn't saved: " + raw;
+    return "This " + name + " wasn't saved.";
+  }
+
   function planWrite(serverDoc, op, applyOp, now, options) {
     const current = serverDoc || { revision: 0, appliedOpIds: [] };
-    if (!op || !op.opId) return { kind: "stop", doc: current, error: "Missing change.", rebased: false, notice: false };
+    if (!op || !op.opId) {
+      return {
+        kind: "drop",
+        doc: current,
+        expectedRevision: revisionOf(current),
+        rebased: false,
+        notice: true,
+        message: "This tap wasn't saved: it had no id.",
+      };
+    }
     if (hasOp(current, op.opId)) {
       return {
         kind: "skip",
@@ -188,22 +231,13 @@
         ? ruleFrom(options)(current, op, applyOp, now)
         : { applied: true, doc: applyOp(current, op, now) };
     } catch (error) {
-      if (error && (error.code === "stale" || /already recorded/.test(String(error.message || "")))) {
-        return {
-          kind: "drop",
-          doc: current,
-          expectedRevision: revisionOf(current),
-          rebased: true,
-          notice: true,
-        };
-      }
       return {
-        kind: "stop",
+        kind: "drop",
         doc: current,
-        error: error && error.message ? error.message : String(error),
-        rebased: stale,
-        notice: false,
         expectedRevision: revisionOf(current),
+        rebased: true,
+        notice: true,
+        message: unsavedNotice(op, error),
       };
     }
     if (resolved && resolved.doc && resolved.doc.dropNotice) {
@@ -330,6 +364,10 @@
     let viewGen = 0;
     let viewCache = null;
     let viewGenSeen = -1;
+    let replayAcked = null;
+    let replayIds = [];
+    let replayDoc = null;
+    const FLUSH_CHUNK = 200;
     const listeners = [];
 
     function online() {
@@ -397,14 +435,40 @@
       });
     }
 
+    function replayOnto(base, ops) {
+      let doc = base;
+      (ops || []).forEach(function (op) {
+        if (!op || hasOp(doc, op.opId)) return;
+        try {
+          doc = applyOp(doc, op, op.at || Date.now());
+        } catch (err) {}
+      });
+      return doc;
+    }
+
     function display(now) {
-      if (!now && viewCache && viewGenSeen === viewGen) return viewCache;
-      const played = replay(acked, queue, applyOp, now).doc;
-      if (!now) {
-        viewCache = played;
-        viewGenSeen = viewGen;
+      if (now) return replay(acked, queue, applyOp, now).doc;
+      if (viewCache && viewGenSeen === viewGen) return viewCache;
+      const ids = [];
+      for (let i = 0; i < queue.length; i += 1) ids.push(queue[i] && queue[i].opId);
+      let doc = acked;
+      let start = 0;
+      if (replayDoc && replayAcked === acked) {
+        let matched = 0;
+        const limit = Math.min(replayIds.length, ids.length);
+        while (matched < limit && replayIds[matched] === ids[matched]) matched += 1;
+        if (matched === replayIds.length) {
+          doc = replayDoc;
+          start = matched;
+        }
       }
-      return played;
+      if (start < queue.length) doc = replayOnto(start === 0 ? acked : doc, queue.slice(start));
+      replayAcked = acked;
+      replayIds = ids;
+      replayDoc = doc;
+      viewCache = doc;
+      viewGenSeen = viewGen;
+      return doc;
     }
 
     function acceptRemote(serverDoc) {
@@ -495,19 +559,8 @@
       if (flushing || localOnly) return;
       flushing = true;
       blocked = false;
-      let paused = false;
-      let sawConflict = false;
-      let attempts = 0;
       try {
         while (queue.length && !blocked) {
-          attempts += 1;
-          if (attempts > 5000) {
-            paused = true;
-            status = "saving";
-            persist();
-            emit("status");
-            return;
-          }
           if (!online()) {
             status = "offline";
             persist();
@@ -515,7 +568,6 @@
             return;
           }
           status = "saving";
-          const op = queue[0];
           let remote;
           try {
             remote = await options.load();
@@ -529,32 +581,38 @@
           if (remote && remote.document) acceptRemote(remote.document);
           queueAdopt(normalize(remote && remote.document), localBefore);
           if (!queue.length) break;
-          if (!queue[0] || queue[0].opId !== op.opId) {
-            sawConflict = false;
-            continue;
-          }
           const serverDoc = revisionOf(acked) >= revisionOf(remote && remote.document) ? acked : normalize(remote.document);
-          const plan = planWrite(serverDoc, queue[0], applyOp, queue[0].at, { conflict: sawConflict });
-          if (plan.kind === "skip" || plan.kind === "drop") {
-            queue.shift();
+          const chunk = queue.slice(0, FLUSH_CHUNK);
+          let working = serverDoc;
+          let dropMessage = "";
+          let rebased = false;
+          const finished = [];
+          chunk.forEach(function (op) {
+            if (!op || !queue.some(function (item) { return item && item.opId === op.opId; })) return;
+            const plan = planWrite(working, op, applyOp, op.at, {});
+            finished.push(op.opId);
+            if (plan.kind === "write") {
+              working = plan.doc;
+              if (plan.notice) rebased = true;
+            } else if (plan.message) {
+              dropMessage = plan.message;
+            } else if (plan.notice) {
+              dropMessage = dropMessage || NOTICE;
+            }
+          });
+          if (!finished.length) break;
+          const wrote = working !== serverDoc;
+          if (!wrote) {
+            queue = queue.filter(function (op) { return finished.indexOf(op.opId) < 0; });
+            if (dropMessage) notice = dropMessage;
             bumpView();
-            if (plan.message) notice = plan.message;
-            else if (plan.notice) notice = NOTICE;
-            sawConflict = false;
             persist();
             emit("local");
             continue;
           }
-          if (plan.kind === "stop") {
-            blocked = true;
-            status = queue.length ? "saving" : "saved";
-            persist();
-            emit("status");
-            return;
-          }
           let saved;
           try {
-            saved = await options.save(plan.expectedRevision, plan.doc);
+            saved = await options.save(revisionOf(serverDoc), working);
           } catch (e) {
             status = "offline";
             persist();
@@ -566,24 +624,28 @@
             return;
           }
           if (saved && saved.conflict) {
-            sawConflict = true;
             notice = NOTICE;
             if (saved.document) acceptRemote(saved.document);
             emit("status");
             continue;
           }
-          sawConflict = false;
-          if (plan.notice) notice = NOTICE;
+          queue = queue.filter(function (op) { return finished.indexOf(op.opId) < 0; });
           if (saved && saved.document) acceptRemote(saved.document);
-          else if (queue[0] && queue[0].opId === op.opId) queue.shift();
+          else {
+            acked = normalize(working);
+            bumpView();
+          }
+          if (dropMessage) notice = dropMessage;
+          else if (rebased) notice = NOTICE;
           persist();
+          emit("local");
         }
-        status = "saved";
+        if (!queue.length && status !== "offline") status = "saved";
         persist();
         emit("status");
       } finally {
         flushing = false;
-        if (!paused && !blocked && queue.length && status !== "offline") flush();
+        if (!blocked && queue.length && status !== "offline") flush();
       }
     }
 

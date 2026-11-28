@@ -1725,6 +1725,104 @@ describe("round 2 scoring", () => {
   });
 });
 
+describe("game manager round 7", () => {
+  it("clears the run note on the next play", () => {
+    let state = start("away");
+    state = GameManager.setCount(state, { bases: [true, true, true] });
+    state = GameManager.safePlay(state, "walk");
+    assert.match(state.runNote, /already counted/);
+    state = GameManager.addOut(state);
+    assert.equal(state.runNote, "");
+  });
+
+  it("labels the FLEX player FLEX", () => {
+    const people = players().concat([{ id: "blake", name: "Blake Quinn", number: "8" }]);
+    const order = ["mia", "ava", "lina", "jo", "out-girl", "sub", "mia", "ava", "lina", "blake"];
+    const game = {
+      id: "game-flex",
+      name: "vs Eagles",
+      battingMode: "dp-flex",
+      battingOrder: order,
+      defensivePositions: defense({ P: "blake", C: "ava", SS: "lina", DP: "mia" }),
+      inningDefenses: [],
+      unavailableIds: [],
+    };
+    const state = GameManager.createLiveGame({
+      side: "home",
+      game: game,
+      players: people,
+      dpId: "mia",
+      flexId: "ava",
+    }, 1);
+    const flex = GameManager.liveBatters(state).find((row) => row.id === "ava");
+    const dp = GameManager.liveBatters(state).find((row) => row.id === "mia");
+    assert.equal(flex.role, "FLEX");
+    assert.equal(dp.role, "DP");
+  });
+
+  it("keeps both a ball and a minus ball when the phones disagree", () => {
+    let ahead = GameManager.setCount(start("away"), { balls: 2 });
+    ahead = GameManager.setCount(ahead, { balls: 3, deltaBalls: 1 });
+    ahead = GameManager.setCount(ahead, { balls: 1, deltaBalls: -1 });
+    assert.equal(ahead.balls, 2);
+    let behind = GameManager.setCount(start("away"), { balls: 2 });
+    behind = GameManager.setCount(behind, { balls: 1, deltaBalls: -1 });
+    behind = GameManager.setCount(behind, { balls: 3, deltaBalls: 1 });
+    assert.equal(behind.balls, 2);
+  });
+
+  it("does not drop the third undo after resume", () => {
+    let doc = GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      input: { side: "away", game: sampleGame(), players: players(), teamName: "16U Fransen" },
+    }, 1);
+    function session() { return doc.teams.t.sessions["game-eagles"]; }
+    function tap(op) {
+      const live = session();
+      doc = GameManager.applyGameOp(doc, Object.assign({
+        teamId: "t",
+        gameId: "game-eagles",
+        atHalf: {
+          inningIndex: live.inningIndex,
+          half: live.half,
+          outs: live.outs,
+          liveRuns: live.liveRuns || 0,
+          battingIndex: live.battingIndex || 0,
+          actionId: live.actionSeq || 0,
+          status: live.status || "",
+          tally: 0,
+        },
+      }, op), 50);
+    }
+    tap({ type: "add-out" });
+    tap({ type: "add-out" });
+    tap({ type: "add-run" });
+    tap({ type: "end", reason: "manual", runsThisHalf: 1 });
+    tap({ type: "resume" });
+    for (let n = 0; n < 3; n += 1) {
+      const before = session().actionSeq;
+      tap({ type: "undo" });
+      assert.equal(doc.dropNotice || "", "");
+      assert.ok(session().actionSeq > before, "undo " + (n + 1) + " did not advance");
+    }
+  });
+
+  it("stores a typed custom run rule", () => {
+    const state = GameManager.applyGameOp(GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      input: { side: "home", game: sampleGame(), players: players(), teamName: "16U Fransen", scheduledInnings: 7 },
+    }, 1), {
+      type: "set-rule",
+      teamId: "t",
+      gameId: "game-eagles",
+      runRule: [{ after: 6, lead: 10 }],
+    }, 2);
+    assert.deepEqual(state.teams.t.sessions["game-eagles"].runRule, [{ after: 6, lead: 10 }]);
+  });
+});
+
 describe("game manager page", () => {
   it("reads lineup data and keeps the dugout game on the phone", () => {
     const html = fs.readFileSync(path.join(__dirname, "../apps/game-manager.html"), "utf8");

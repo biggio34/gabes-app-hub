@@ -501,6 +501,169 @@ describe("game sync long outage", () => {
   });
 });
 
+describe("game sync round 7", () => {
+  function game(id) {
+    return {
+      id: id,
+      name: "vs Eagles",
+      battingMode: "nine",
+      battingOrder: ["mia", "ava", "lina"],
+      defensivePositions: defense({ P: "mia", C: "ava", SS: "lina" }),
+      inningDefenses: [],
+      unavailableIds: [],
+    };
+  }
+
+  it("drops a tap the finished game rejects and still syncs the next game", async () => {
+    let server = GameManager.normalizeDocument(null);
+    let offlineA = false;
+    function connect(storage) {
+      return GameSync.connect({
+        storage: storage,
+        storageKey: "gm-jam",
+        normalize: GameManager.normalizeDocument,
+        applyOp: GameManager.applyGameOp,
+        bindWindow: false,
+        load: async function () {
+          if (offlineA && storage === phoneAStorage) throw new Error("offline");
+          return { document: server };
+        },
+        save: async function (expected, incoming) {
+          if (offlineA && storage === phoneAStorage) throw new Error("offline");
+          if (expected !== (server.revision || 0)) return { conflict: true, document: server };
+          server = GameManager.normalizeDocument(incoming);
+          server.revision = expected + 1;
+          return { document: server };
+        },
+        subscribe: function () { return function () {}; },
+      });
+    }
+    const phoneAStorage = GameSync.memoryStorage();
+    const phoneA = connect(phoneAStorage);
+    const phoneB = connect(GameSync.memoryStorage());
+    phoneA.start();
+    phoneB.start();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      phoneA.run({
+        type: "start",
+        teamId: "t",
+        input: { side: "away", game: game("g"), players: players(), teamName: "16U Fransen" },
+      });
+      await phoneA.pull();
+      await phoneB.pull();
+      offlineA = true;
+      phoneB.run({ type: "end", teamId: "t", gameId: "g", reason: "manual", runsThisHalf: 0 });
+      await phoneB.pull();
+      for (let n = 0; n < 5; n += 1) phoneA.run({ type: "add-out", teamId: "t", gameId: "g" });
+      phoneA.run({ type: "add-run", teamId: "t", gameId: "g" });
+      phoneA.run({
+        type: "start",
+        teamId: "t",
+        input: { side: "away", game: game("g2"), players: players(), teamName: "16U Fransen" },
+      });
+      for (let n = 0; n < 4; n += 1) {
+        phoneA.run({ type: "add-tally", kind: "hit", side: "us", teamId: "t", gameId: "g2" });
+      }
+      assert.ok(phoneA.queue().length >= 8);
+      offlineA = false;
+      await phoneA.pull();
+      assert.equal(phoneA.queue().length, 0);
+      assert.match(phoneA.notice(), /wasn't saved/);
+      assert.match(phoneA.notice(), /already ended/);
+      const sessions = server.teams.t.sessions;
+      assert.equal(sessions.g.status, "played");
+      assert.equal(sessions.g2.status, "live");
+      assert.equal(sessions.g2.usHits, 4);
+    } finally {
+      phoneA.stop();
+      phoneB.stop();
+    }
+  });
+
+  it("sends a long offline queue in a few round trips and stays fast per tap", async () => {
+    let server = GameManager.normalizeDocument(null);
+    let offline = true;
+    let loads = 0;
+    let saves = 0;
+    const phone = GameSync.connect({
+      storage: GameSync.memoryStorage(),
+      storageKey: "gm-batch",
+      normalize: GameManager.normalizeDocument,
+      applyOp: GameManager.applyGameOp,
+      bindWindow: false,
+      load: async function () {
+        loads += 1;
+        if (offline) throw new Error("offline");
+        return { document: server };
+      },
+      save: async function (expected, incoming) {
+        saves += 1;
+        if (offline) throw new Error("offline");
+        if (expected !== (server.revision || 0)) return { conflict: true, document: server };
+        server = GameManager.normalizeDocument(incoming);
+        server.revision = expected + 1;
+        return { document: server };
+      },
+      subscribe: function () { return function () {}; },
+    });
+    phone.start();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      phone.run({
+        type: "start",
+        teamId: "t",
+        input: { side: "away", game: game("g"), players: players(), teamName: "16U Fransen", scheduledInnings: 7 },
+      });
+      const began = Date.now();
+      for (let n = 0; n < 250; n += 1) {
+        phone.run({ type: "add-tally", kind: "hit", side: "us", teamId: "t", gameId: "g" });
+        if (n === 249) phone.display();
+      }
+      const perTap = (Date.now() - began) / 250;
+      assert.ok(perTap < 8, "a queued tap took " + perTap.toFixed(1) + " ms");
+      assert.equal(phone.queue().length, 251);
+      offline = false;
+      loads = 0;
+      saves = 0;
+      await phone.pull();
+      assert.equal(phone.queue().length, 0);
+      assert.ok(saves <= 4, "saves " + saves);
+      assert.ok(loads <= 6, "loads " + loads);
+      assert.equal(server.teams.t.sessions.g.usHits, 250);
+    } finally {
+      phone.stop();
+    }
+  });
+
+  it("names a dropped out", async () => {
+    const server = memoryServer(started(1, 3));
+    const atHalf = { inningIndex: 0, half: "top", outs: 1, actionId: 1, status: "live" };
+    function client() {
+      return GameSync.connect({
+        storage: GameSync.memoryStorage(),
+        storageKey: "gm-named",
+        normalize: GameManager.normalizeDocument,
+        applyOp: GameManager.applyGameOp,
+        load: server.load,
+        save: server.save,
+        bindWindow: false,
+        online: function () { return true; },
+      });
+    }
+    const a = client();
+    const b = client();
+    a.run({ type: "add-out", teamId: "team-16u", gameId: "game-eagles", opId: "out-a", atHalf: atHalf });
+    b.run({ type: "add-out", teamId: "team-16u", gameId: "game-eagles", opId: "out-b", atHalf: atHalf });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const notes = [a.notice(), b.notice()].filter(Boolean).join(" ");
+    assert.match(notes, /Out/);
+    assert.match(notes, /not applied|already recorded/);
+    a.stop();
+    b.stop();
+  });
+});
+
 describe("game sync realtime ping", () => {
   it("fetches only when the ping revision is newer", () => {
     assert.equal(GameSync.shouldFetchRevision(4, 5), true);

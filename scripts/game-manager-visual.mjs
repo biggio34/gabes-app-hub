@@ -159,7 +159,47 @@ let ruleLive = GameManager.createLiveGame({
 for (let i = 0; i < 6; i += 1) ruleLive = GameManager.recordRuns(ruleLive, i % 2 ? 4 : 0, 8200 + i);
 ruleLive = GameManager.recordRuns(ruleLive, 0, 8300);
 
-const games = [offenseGame, defenseGame, finalGame, preGame, subGame, flexGame, nodpGame, walkGame, lineup("game-rule", "vs Rule - May 9")];
+const royalsGame = lineup("game-royals", "vs Rogers Royals 16U Gold - May 16");
+let royals = GameManager.createLiveGame({
+  side: "home",
+  game: royalsGame,
+  players,
+  teamName: "16U Fransen",
+  scheduledInnings: 7,
+}, 9000);
+royals = advance(royals, Array.from({ length: 13 }, () => 0));
+royals = Object.assign({}, royals, { battingIndex: 1 });
+const extrasGame = lineup("game-extras", "vs Rogers Royals 16U Gold - May 17");
+let extras = GameManager.createLiveGame({
+  side: "home",
+  game: extrasGame,
+  players,
+  teamName: "16U Fransen",
+  scheduledInnings: 7,
+}, 9100);
+extras = advance(extras, Array.from({ length: 15 }, () => 0));
+if (royals.half !== "bottom" || royals.inningIndex !== 6 || royals.status !== "live") {
+  throw new Error("Royals fixture is not the bottom of the 7th.");
+}
+if (extras.half !== "bottom" || extras.inningIndex !== 7 || !extras.tiebreaker) {
+  throw new Error("Extras fixture is not the bottom of the 8th with the tiebreaker.");
+}
+const flexShowGame = lineup("game-flexshow", "vs Rogers Royals 16U Gold - May 18");
+flexShowGame.battingMode = "dp-flex";
+flexShowGame.battingOrder = nineIds.concat(["tess"]);
+flexShowGame.defensivePositions = Object.assign({}, flexShowGame.defensivePositions, { P: "tess", DP: "mia" });
+let flexShow = GameManager.createLiveGame({
+  side: "home",
+  game: flexShowGame,
+  players,
+  teamName: "16U Fransen",
+  scheduledInnings: 7,
+  dpId: "mia",
+  flexId: "ava",
+}, 9200);
+flexShow = GameManager.recordRuns(flexShow, 0, 9201);
+
+const games = [offenseGame, defenseGame, finalGame, preGame, subGame, flexGame, nodpGame, walkGame, lineup("game-rule", "vs Rule - May 9"), royalsGame, extrasGame, flexShowGame];
 const sessions = {
   [offense.lineupGameId]: offense,
   [defense.lineupGameId]: defense,
@@ -168,6 +208,9 @@ const sessions = {
   [flexLive.lineupGameId]: flexLive,
   [walkLive.lineupGameId]: walkLive,
   [ruleLive.lineupGameId]: ruleLive,
+  [royals.lineupGameId]: royals,
+  [extras.lineupGameId]: extras,
+  [flexShow.lineupGameId]: flexShow,
 };
 const document = GameManager.normalizeDocument({
   revision: 3,
@@ -848,7 +891,9 @@ if (!before) {
   if (!/AB/.test(resumed)) fail("Resume lost the at-bat line (" + resumed + ").");
   await page.screenshot({ path: path.join(outDir, "r5-final-resume.png") });
 
+  await page.locator("[data-action='open-count']").click();
   await page.locator("[data-action='fix-ball']").click();
+  await page.locator("#count-sheet [data-action='close-sheet']").click();
   const fixedCount = await page.locator(".count-chip").innerText();
   if (fixedCount !== "2-0") fail("Ball fix did not step the count back (" + fixedCount + ").");
   await page.screenshot({ path: path.join(outDir, "r6-count-fix.png") });
@@ -983,12 +1028,136 @@ if (!before) {
   await tapBase("0");
   const outsAfterBase = await page.locator("#outs").innerText();
   if (outsAfterBase !== outsAfterCancel) fail("A base tap after Cancel recorded an out (" + outsAfterBase + ").");
+
+  await page.locator("[data-action='back']").click();
+  await page.locator("[data-game='game-royals']").click();
+  await page.locator("#at-bat strong").waitFor();
+  const batterName = await page.locator("#at-bat strong").innerText();
+  if (!/#12 Ava Cole/.test(batterName)) fail("The at-bat line hid the batter (" + batterName + ").");
+  const nameFits = await page.locator("#at-bat strong").evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
+  if (!nameFits) fail("The batter name is truncated at 390px.");
+  const deckLine = await page.locator("#at-bat .atbat-sub").innerText();
+  if (!/On deck/.test(deckLine)) fail("On deck is not its own line (" + deckLine + ").");
+  await page.screenshot({ path: path.join(outDir, "r7-atbat.png") });
+  await page.locator("[data-action='open-count']").click();
+  await page.locator("#count-sheet").waitFor();
+  const countTargets = await page.locator("#count-sheet .big").evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().height));
+  if (countTargets.length < 3 || countTargets.some((height) => height < 44)) {
+    fail("Count sheet targets are under 44px (" + countTargets.join(",") + ").");
+  }
+  await page.screenshot({ path: path.join(outDir, "r7-count-sheet.png") });
+  await page.locator("#count-sheet [data-action='close-sheet']").click();
+  await tapBase("0");
+  await tapBase("1");
+  await tapBase("2");
+  for (let ball = 0; ball < 4; ball += 1) await page.locator("[data-action='ball']").click();
+  await page.locator("#prompt-sheet").waitFor();
+  const seventh = await page.locator("#prompt-sheet").innerText();
+  if (!/That's the game/i.test(seventh)) fail("Bottom of the 7th did not walk off (" + seventh + ").");
+  await page.screenshot({ path: path.join(outDir, "r7-walkoff-b7.png") });
+  await page.locator("#prompt-sheet [data-action='close-sheet']").click();
+
+  await page.locator("[data-action='back']").click();
+  await page.locator("[data-game='game-extras']").click();
+  await page.locator("#tiebreaker").waitFor();
+  await page.locator("[data-action='add-run']").click();
+  await page.locator("#prompt-sheet").waitFor();
+  const eighth = await page.locator("#prompt-sheet").innerText();
+  if (!/That's the game/i.test(eighth)) fail("The 8th-inning tiebreaker did not walk off (" + eighth + ").");
+  await page.screenshot({ path: path.join(outDir, "r7-walkoff-8th-itb.png") });
+  await page.locator("#prompt-sheet [data-action='close-sheet']").click();
+  await page.locator("[data-action='back']").click();
+
+  await page.locator("[data-game='game-flexshow']").click();
+  await page.locator(".order").waitFor();
+  const flexRow = await page.locator(".order").innerText();
+  if (!/FLEX/.test(flexRow)) fail("The FLEX player is not labeled FLEX (" + flexRow.slice(0, 240) + ").");
+  await page.screenshot({ path: path.join(outDir, "r7-flex.png") });
+  await page.locator("[data-action='open-menu']").click();
+  await page.locator("[data-action='set-rule'][data-rule='custom']").click();
+  await page.locator("#rule-after").fill("6");
+  await page.locator("#rule-lead").fill("10");
+  await page.screenshot({ path: path.join(outDir, "r7-run-rule-custom.png") });
+  await page.locator("[data-action='save-custom-rule']").click();
+
+  const royalsRaw = await page.evaluate((id) => {
+    const env = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const teamId = Object.keys(env.acked.teams)[0];
+    const team = env.acked.teams[teamId];
+    const session = team.sessions[id];
+    const doc = {
+      revision: 1,
+      updatedAt: 1,
+      appliedOpIds: [],
+      active: { teamId: teamId, gameId: id },
+      teams: { [teamId]: { teamName: team.teamName, sessions: { [id]: session } } },
+    };
+    return JSON.stringify({ version: 2, acked: doc, queue: [], localOpIds: [], cache: { teams: {} } });
+  }, "game-royals");
+  let dropServer = JSON.parse(royalsRaw).acked;
+  async function syncedPhone() {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 2,
+      hasTouch: true,
+      colorScheme: "dark",
+    });
+    await context.addInitScript(({ hub, key, raw }) => {
+      window.HUB_SOFTBALL = hub;
+      localStorage.setItem(key, raw);
+    }, { hub, key: GameManager.STORAGE_KEY, raw: royalsRaw });
+    const synced = await context.newPage();
+    synced.on("pageerror", (error) => fail("drop pageerror: " + error.message));
+    await synced.route("**/api/softball/state", (route) => route.abort());
+    await synced.route("**/api/softball/game-sessions/stream**", (route) => route.abort());
+    await synced.route("**/api/softball/game-sessions", async (route) => {
+      if (route.request().method() === "PUT") {
+        try {
+          const body = JSON.parse(route.request().postData() || "{}");
+          if (body.document) dropServer = body.document;
+        } catch { /* keep the last document */ }
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ sync: "on", document: dropServer }),
+      });
+    });
+    await synced.goto(pageUrl, { waitUntil: "domcontentloaded" });
+    if (!(await synced.locator("#at-bat").count())) {
+      await synced.locator("[data-game='game-royals']").click();
+    }
+    await synced.locator("#at-bat").waitFor();
+    return { context, synced };
+  }
+  const endedPhone = await syncedPhone();
+  const latePhone = await syncedPhone();
+  await endedPhone.synced.locator("[data-action='open-menu']").click();
+  await endedPhone.synced.locator("[data-action='ask-end']").click();
+  await Promise.all([
+    endedPhone.synced.waitForResponse((resp) => resp.url().includes("game-sessions") && resp.request().method() === "PUT"),
+    endedPhone.synced.locator("[data-action='confirm-end']").click(),
+  ]);
+  await latePhone.synced.locator("#add-out").click();
+  await latePhone.synced.locator("#sync-notice").waitFor({ timeout: 8000 });
+  const dropText = await latePhone.synced.locator("#sync-notice").innerText();
+  if (!/Out/.test(dropText) || !/wasn't saved|already ended/i.test(dropText)) {
+    fail("The ended game did not name the dropped out (" + dropText + ").");
+  }
+  const headerBox = await latePhone.synced.locator("header").boundingBox();
+  const noticeBox = await latePhone.synced.locator("#sync-notice").boundingBox();
+  if (headerBox && noticeBox && noticeBox.y < headerBox.y + headerBox.height - 4) {
+    fail("The drop notice sits inside the header.");
+  }
+  await latePhone.synced.screenshot({ path: path.join(outDir, "r7-sync-drop-notice.png") });
+  await endedPhone.context.close();
+  await latePhone.context.close();
 }
 
 if (!before) {
   const hashes = new Map();
   for (const file of readdirSync(outDir)) {
-    if (!/^r[456]-/.test(file) || !file.endsWith(".png")) continue;
+    if (!/^r[4-7]-/.test(file) || !file.endsWith(".png")) continue;
     const hash = createHash("md5").update(readFileSync(path.join(outDir, file))).digest("hex");
     if (hashes.has(hash)) fail(file + " matches " + hashes.get(hash) + " (" + hash + ")");
     else hashes.set(hash, file);

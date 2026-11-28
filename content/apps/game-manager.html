@@ -320,12 +320,17 @@
       position: absolute; left: 23px; bottom: 0; width: 10px; height: 8px; pointer-events: none;
       background: rgba(255,255,255,0.7); clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
     }
-    .atbat-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; min-height: 56px; }
+    .atbat-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; min-height: 56px; }
     .atbat-copy { flex: 1; min-width: 0; }
-    .atbat-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
-    .atbat-line strong { flex: 1; min-width: 0; font-size: 1rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .atbat-line .count-chip { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
-    .fix-count { min-height: 32px; padding: 0 6px; font-size: 0.72rem; flex: none; }
+    .atbat-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+    .atbat-line strong { font-size: 1rem; font-weight: 600; white-space: nowrap; }
+    .count-stack { display: flex; flex-direction: column; align-items: stretch; gap: 6px; flex: none; }
+    .count-chip {
+      min-height: 44px; min-width: 72px; padding: 0 12px; border-radius: 12px;
+      border: 1px solid var(--line); background: var(--card); font-size: 1.15rem; font-weight: 600;
+    }
+    .count-actions { display: flex; gap: 6px; }
+    .count-actions .quiet { min-height: 44px; min-width: 72px; padding: 0 12px; }
     .atbat-sub { margin: 0; color: var(--muted); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .tag { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); }
     .dock .end-half, .dock .menu-link, .dock.solo .primary { grid-column: 1 / -1; }
@@ -395,9 +400,9 @@
     .mini .name { flex: 1; font-size: 0.8rem; }
     .empty, .subs, .final-note { margin: 8px 0; color: #cbd5e1; font-weight: 400; border: 0; background: transparent; padding: 0; }
     .form-error { margin: 8px 0 0; color: #fecaca; font-weight: 500; font-size: 0.9rem; }
-    .sync { margin: 2px 0 0; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+    .sync { margin: 2px 0 0; font-size: 0.78rem; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); }
     .sync.saving, .sync.offline { color: var(--accent-ink); }
-    .sync.local { color: var(--muted); text-transform: none; letter-spacing: 0; font-size: 0.78rem; }
+    .sync.local { color: var(--muted); }
     .sync-notice { margin: 6px 0 0; padding: 6px 8px; border-radius: 10px; background: var(--soft); color: var(--accent-ink); font-weight: 500; }
     .text-input {
       width: 100%; min-height: 44px; margin: 8px 0; border-radius: 12px;
@@ -463,6 +468,8 @@
     var plannedSide = "away";
     var errorText = "";
     var runnerOutPick = false;
+    var customAfter = "5";
+    var customLead = "10";
     var baseHoldTimer = 0;
     var baseHeld = false;
     var oppDraft = "";
@@ -558,10 +565,15 @@
     function syncChip() {
       if (!sync) return "";
       var kind = sync.status();
+      if (kind === "saved" && !sync.notice()) return "";
+      return '<p id="sync-status" class="sync ' + esc(kind) + '">' + esc(sync.statusLabel()) + "</p>";
+    }
+
+    function syncNotice() {
+      if (!sync) return "";
       var note = sync.notice();
-      if (kind === "saved" && !note) return "";
-      return '<p id="sync-status" class="sync ' + esc(kind) + '">' + esc(sync.statusLabel()) + "</p>"
-        + (note ? '<p id="sync-notice" class="sync-notice">' + esc(note) + "</p>" : "");
+      if (!note) return "";
+      return '<p id="sync-notice" class="sync-notice">' + esc(note) + "</p>";
     }
 
     function tap(op) {
@@ -575,6 +587,7 @@
           liveRuns: Number(session.liveRuns) || 0,
           battingIndex: Number(session.battingIndex) || 0,
           actionId: Number(session.actionSeq) || 0,
+          status: session.status || "",
           tally: (Number(session.usHits) || 0) + (Number(session.oppHits) || 0) + (Number(session.usErrors) || 0) + (Number(session.oppErrors) || 0),
         };
       }
@@ -820,13 +833,15 @@
       var deck = rows.length ? rows[(due + 1) % rows.length] : null;
       var count = (session.balls || 0) + "-" + (session.strikes || 0);
       return '<div class="atbat-row" id="at-bat"><div class="atbat-copy">'
-        + '<p class="atbat-line"><span class="tag">AB</span><strong>' + esc(batter ? batterFace(batter.label) : "—") + '</strong><span class="count-chip num-face">' + esc(count) + '</span>'
-        + '<button type="button" class="quiet fix-count" data-action="fix-ball">− Ball</button>'
-        + '<button type="button" class="quiet fix-count" data-action="fix-strike">− Strike</button></p>'
+        + '<p class="atbat-line"><span class="tag">AB</span><strong>' + esc(batter ? batterFace(batter.label) : "—") + "</strong></p>"
         + '<p class="atbat-sub">On deck ' + esc(deck ? batterFace(deck.label) : "—") + "</p>"
         + "</div>"
+        + '<div class="count-stack">'
+        + '<button type="button" class="count-chip num-face" id="count-chip" data-action="open-count">' + esc(count) + "</button>"
+        + '<div class="count-actions">'
         + '<button type="button" class="quiet" data-action="ball">Ball</button>'
-        + '<button type="button" class="quiet" data-action="strike">Strike</button></div>';
+        + '<button type="button" class="quiet" data-action="strike">Strike</button>'
+        + "</div></div></div>";
     }
 
     function outsHtml(session) {
@@ -1099,6 +1114,7 @@
         + '<div class="topbar">'
         + headerHtml(GameManager.gameHeading(displaySession(session)), gameDate(session.gameName), "Games", true)
         + scoreboardHtml(displaySession(session))
+        + syncNotice()
         + bannerHtml(session)
         + atBatStrip(session)
         + tiebreakerHtml(session)
@@ -1122,6 +1138,8 @@
         + '<button type="button" class="menu-link" data-action="open-menu" aria-label="Game menu">⋯</button>'
         + "</div>"
         + gameMenu(session)
+        + countSheet(session)
+        + customRuleSheet()
         + safeSheet()
         + leaveSheet(session)
         + editSheet(session)
@@ -1287,6 +1305,7 @@
         + '<div class="topbar">'
         + headerHtml(GameManager.gameHeading(displaySession(session)), gameDate(session.gameName) || format.label, "Games", true)
         + scoreboardHtml(displaySession(session))
+        + syncNotice()
         + bannerHtml(session)
         + "</div>"
         + "<main>"
@@ -1357,6 +1376,31 @@
 
     function ruleButton(session, key, label) {
       return '<button type="button" data-action="set-rule" data-rule="' + key + '" aria-pressed="' + (ruleKey(session) === key ? "true" : "false") + '">' + label + "</button>";
+    }
+
+    function countSheet(session) {
+      if (sheet !== "count" || !session) return "";
+      var count = (session.balls || 0) + "-" + (session.strikes || 0);
+      return '<div class="sheet" id="count-sheet"><div class="sheet-card" role="dialog" aria-modal="true">'
+        + "<h2>Count " + esc(count) + "</h2>"
+        + '<button type="button" class="big" data-action="fix-ball">Ball −1</button>'
+        + '<button type="button" class="big" data-action="fix-strike">Strike −1</button>'
+        + '<button type="button" class="big" data-action="reset-count">Reset count</button>'
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
+        + "</div></div>";
+    }
+
+    function customRuleSheet() {
+      if (sheet !== "custom-rule") return "";
+      return '<div class="sheet" id="custom-rule"><div class="sheet-card" role="dialog" aria-modal="true">'
+        + "<h2>Custom run rule</h2>"
+        + '<label class="hint" for="rule-after">After inning</label>'
+        + '<input id="rule-after" class="text-input" inputmode="numeric" value="' + esc(customAfter) + '">'
+        + '<label class="hint" for="rule-lead">Run margin</label>'
+        + '<input id="rule-lead" class="text-input" inputmode="numeric" value="' + esc(customLead) + '">'
+        + '<button type="button" class="big" data-action="save-custom-rule">Save rule</button>'
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
+        + "</div></div>";
     }
 
     function gameMenu(session) {
@@ -1815,18 +1859,34 @@
         return;
       }
       if (action === "forfeit-side") { forfeitWinner = button.getAttribute("data-winner") === "opp" ? "opp" : "us"; render(); return; }
-      if (action === "fix-ball" || action === "fix-strike") {
+      if (action === "open-count") { sheet = "count"; render(); return; }
+      if (action === "fix-ball" || action === "fix-strike" || action === "reset-count") {
         var fixing = sessionFor(gameId);
         if (fixing) {
-          if (action === "fix-ball" && (fixing.balls || 0) > 0) tap({ type: "count", balls: fixing.balls - 1 });
-          if (action === "fix-strike" && (fixing.strikes || 0) > 0) tap({ type: "count", strikes: fixing.strikes - 1 });
+          if (action === "reset-count") tap({ type: "count", balls: 0, strikes: 0 });
+          if (action === "fix-ball" && (fixing.balls || 0) > 0) tap({ type: "count", balls: fixing.balls - 1, deltaBalls: -1 });
+          if (action === "fix-strike" && (fixing.strikes || 0) > 0) tap({ type: "count", strikes: fixing.strikes - 1, deltaStrikes: -1 });
         }
+        render();
+        return;
+      }
+      if (action === "save-custom-rule") {
+        var afterInput = document.getElementById("rule-after");
+        var leadInput = document.getElementById("rule-lead");
+        var afterN = parseInt(afterInput && afterInput.value, 10);
+        var leadN = parseInt(leadInput && leadInput.value, 10);
+        if (!afterN || afterN < 1) afterN = 5;
+        if (!leadN || leadN < 1) leadN = 10;
+        customAfter = String(afterN);
+        customLead = String(leadN);
+        tap({ type: "set-rule", runRule: [{ after: afterN, lead: leadN }] });
+        sheet = "";
         render();
         return;
       }
       if (action === "ball") {
         var b = sessionFor(gameId);
-        tap({ type: "count", balls: (b.balls || 0) + 1 });
+        tap({ type: "count", balls: (b.balls || 0) + 1, deltaBalls: 1 });
         var afterBall = sessionFor(gameId);
         if (followPrompt(afterBall)) sheet = "prompt";
         render();
@@ -1835,7 +1895,7 @@
       if (action === "strike" || action === "foul") {
         var c = sessionFor(gameId);
         var nextStrikes = (c.strikes || 0) + (action === "foul" && c.strikes >= 2 ? 0 : 1);
-        tap({ type: "count", strikes: nextStrikes, foul: action === "foul" });
+        tap({ type: "count", strikes: nextStrikes, deltaStrikes: action === "foul" && c.strikes >= 2 ? 0 : 1, foul: action === "foul" });
         var afterStrike = sessionFor(gameId);
         if (afterStrike && GameManager.clampOuts(afterStrike.outs) === 3) sheet = "confirm-half";
         render();
@@ -1848,15 +1908,16 @@
           var occupied = sessionFor(gameId).bases || [];
           var flags = [!!occupied[0], !!occupied[1], !!occupied[2]];
           var countOn = flags.filter(Boolean).length;
-          var known = flags[spot] || (countOn === 1) || (spot > 0 && flags[spot - 1] && countOn === 1);
-          if (!known) {
+          var target = flags[spot] ? spot : flags.indexOf(true);
+          var known = flags[spot] || countOn === 1;
+          if (!known || target < 0) {
             errorText = "Which runner? Tap the base she was on.";
             render();
             return;
           }
           runnerOutPick = false;
           errorText = "";
-          tap({ type: "add-out", runner: true, base: spot });
+          tap({ type: "add-out", runner: true, base: target });
           var afterPick = sessionFor(gameId);
           sheet = afterPick && GameManager.clampOuts(afterPick.outs) === 3 ? "confirm-half" : "";
           render();
@@ -1875,7 +1936,11 @@
         var table = [{ after: 3, lead: 15 }, { after: 4, lead: 12 }, { after: 5, lead: 8 }];
         if (preset === "off") table = [];
         else if (preset === "ten") table = [{ after: 5, lead: 10 }];
-        else if (preset === "custom") table = [{ after: 4, lead: 8 }];
+        else if (preset === "custom") {
+          sheet = "custom-rule";
+          render();
+          return;
+        }
         tap({ type: "set-rule", runRule: table });
         render();
         return;

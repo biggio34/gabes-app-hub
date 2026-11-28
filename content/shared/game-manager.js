@@ -235,6 +235,7 @@
       gameName: state.gameName || "",
       oppName: state.oppName || "",
       undoNote: note,
+      actionSeq: (Number(state.actionSeq) || 0) + 1,
       updatedAt: now || Date.now(),
     });
   }
@@ -683,9 +684,8 @@
     return state.spots.map(function (spot, index) {
       const id = slotCurrent(spot);
       let role = "";
-      if (state.battingMode === "dp-flex" && (id === state.dpId || id === state.flexId || spot.starterId === state.dpId)) {
-        role = state.flexBatting && id === state.flexId ? "Flex" : "DP";
-      }
+      if (state.battingMode === "dp-flex" && id === state.flexId) role = "FLEX";
+      else if (state.battingMode === "dp-flex" && (id === state.dpId || spot.starterId === state.dpId)) role = "DP";
       if ((state.battingMode === "one-ap" || state.battingMode === "two-ap") && index >= 9) role = "EP";
       return { order: index + 1, id: id, starterId: spot.starterId, role: role, label: label(id) };
     });
@@ -1080,6 +1080,7 @@
       defensiveOuts: addCredit(state.defensiveOuts, ids),
       outLog: (state.outLog || []).concat(options.dp ? [ids, ids] : [ids]),
       lastFieldPos: rememberFieldPositions(state, state.defense),
+      runNote: "",
       updatedAt: now || Date.now(),
     });
     if (batting && !runner) {
@@ -1144,6 +1145,7 @@
       courtesy: [],
       liveRuns: 0,
       prompt: "",
+      runNote: "",
       updatedAt: stamp,
     };
 
@@ -1997,12 +1999,12 @@
     if (current && (op.atHalf || op.type === "undo" || op.type === "add-run" || op.type === "next-batter" || op.type === "add-tally" || op.type === "count" || op.type === "safe")) {
       const gate = staleGate(current, op);
       if (gate === "drop") {
-        const err = new Error(op.type === "add-run"
-          ? "Another phone already counted that run. Tap again if it was a different run."
-          : "Another phone already recorded that.");
+        const message = droppedMessage(op);
+        const err = new Error(message);
         err.code = "stale";
+        err.dropNotice = message;
         if (op.type === "add-out" || op.type === "record-runs" || op.type === "set-half-runs") throw err;
-        next.dropNotice = droppedMessage(op);
+        next.dropNotice = message;
         return next;
       }
       if (gate === "same") {
@@ -2196,6 +2198,7 @@
       battingIndex: stepBatter(state),
       balls: 0,
       strikes: 0,
+      runNote: "",
       updatedAt: now || Date.now(),
     }), "Next batter");
   }
@@ -2241,6 +2244,8 @@
     }
     if (op.type === "add-out") return op.runner ? "Runner out" : "Out";
     if (op.type === "add-run") return "Run";
+    if (op.type === "record-runs" || op.type === "set-half-runs") return "run total";
+    if (op.type === "edit-half") return "half-runs edit";
     if (op.type === "safe") return String(op.kind || "Safe");
     if (op.type === "next-batter") return "Next batter";
     if (op.type === "undo") return "Undo";
@@ -2296,11 +2301,22 @@
     return "";
   }
 
+  function pitchValue(current, absolute, delta) {
+    if (absolute == null || absolute === "") return current;
+    const abs = Number(absolute);
+    if (!Number.isFinite(abs)) return current;
+    if (delta == null || delta === "") return abs;
+    const step = Number(delta);
+    if (!Number.isFinite(step)) return abs;
+    if (current !== abs - step) return current + step;
+    return abs;
+  }
+
   function setCount(state, patch, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
     const stamp = now || Date.now();
-    const nextBalls = patch && patch.balls != null ? Number(patch.balls) : (state.balls || 0);
-    const nextStrikes = patch && patch.strikes != null ? Number(patch.strikes) : (state.strikes || 0);
+    const nextBalls = pitchValue(state.balls || 0, patch && patch.balls, patch && patch.deltaBalls);
+    const nextStrikes = pitchValue(state.strikes || 0, patch && patch.strikes, patch && patch.deltaStrikes);
     if (patch && patch.bases && patch.balls == null && patch.strikes == null) {
       const bases = [!!patch.bases[0], !!patch.bases[1], !!patch.bases[2]];
       const runners = runnerTrio(state.baseRunners);
@@ -2308,11 +2324,12 @@
       return remember(state, Object.assign({}, state, {
         bases: bases,
         baseRunners: runners,
+        runNote: "",
         updatedAt: stamp,
       }), "Bases");
     }
     if (patch && patch.foul && (state.strikes || 0) >= 2) {
-      return remember(state, Object.assign({}, state, { strikes: 2, updatedAt: stamp }), "Foul", { pitch: true });
+      return remember(state, Object.assign({}, state, { strikes: 2, runNote: "", updatedAt: stamp }), "Foul", { pitch: true });
     }
     if (nextBalls >= 4) return safePlay(state, "walk", stamp);
     if (nextStrikes >= 3) {
@@ -2325,6 +2342,7 @@
     return remember(state, Object.assign({}, state, {
       balls: Math.max(0, Math.min(3, nextBalls)),
       strikes: foulHold ? 2 : Math.max(0, Math.min(2, nextStrikes)),
+      runNote: "",
       updatedAt: stamp,
     }), patch && patch.foul ? "Foul" : "Count", { pitch: true });
   }
@@ -2686,6 +2704,7 @@
       at.liveRuns,
       at.battingIndex,
       at.actionId,
+      at.status || "",
       at.tally,
       op.kind || "",
       op.runner ? "runner" : "",
