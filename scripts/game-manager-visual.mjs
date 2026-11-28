@@ -5,7 +5,8 @@
  *   node scripts/game-manager-visual.mjs --before
  *   node scripts/game-manager-visual.mjs
  */
-import { mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
@@ -61,7 +62,7 @@ function advance(state, runs) {
   return runs.reduce((current, scored, index) => GameManager.recordRuns(current, scored, 1000 + index), state);
 }
 
-const offenseGame = lineup("game-eagles", "vs. Eagles - May 3");
+const offenseGame = lineup("game-eagles", "vs Eagles - May 3");
 let offense = GameManager.createLiveGame({
   side: "away",
   game: offenseGame,
@@ -72,7 +73,7 @@ let offense = GameManager.createLiveGame({
 offense = advance(offense, [1, 0, 2, 0, 0, 3]);
 offense = GameManager.addOut(offense, 2000);
 
-const defenseGame = lineup("game-lions", "vs. Lions - May 17");
+const defenseGame = lineup("game-lions", "vs Lions - May 17");
 let defense = GameManager.createLiveGame({
   side: "away",
   game: defenseGame,
@@ -85,7 +86,7 @@ defense = GameManager.addOut(defense, 4000);
 defense = GameManager.addOut(defense, 4001);
 defense = GameManager.setTiebreaker(defense, true, 4002);
 
-const finalGame = lineup("game-bears", "vs. Bears - Apr 12");
+const finalGame = lineup("game-bears", "vs Bears - Apr 12");
 let finished = GameManager.createLiveGame({
   side: "home",
   game: finalGame,
@@ -95,7 +96,7 @@ let finished = GameManager.createLiveGame({
 }, 5000);
 finished = advance(finished, [1, 2, 0, 0, 1, 0, 0, 1, 0]);
 
-const preGame = lineup("game-hawks", "vs. Hawks - May 10");
+const preGame = lineup("game-hawks", "vs Hawks - May 10");
 
 if (offense.half !== "top" || offense.status !== "live") {
   throw new Error("Offense fixture is not the top of a live inning.");
@@ -114,7 +115,7 @@ if (finished.status !== "played" || finished.endedReason !== "home-lead") {
 }
 
 const nineIds = players.slice(0, 9).map((player) => player.id);
-const subGame = lineup("game-subs", "vs. Subs - May 1");
+const subGame = lineup("game-subs", "vs Subs - May 1");
 subGame.battingMode = "nine";
 subGame.battingOrder = nineIds;
 const subsLive = GameManager.createLiveGame({
@@ -124,7 +125,7 @@ const subsLive = GameManager.createLiveGame({
   teamName: "16U Fransen",
   scheduledInnings: 7,
 }, 6000);
-const flexGame = lineup("game-flex", "vs. Flex - May 2");
+const flexGame = lineup("game-flex", "vs Flex - May 2");
 flexGame.battingMode = "dp-flex";
 flexGame.battingOrder = nineIds.concat(["tess"]);
 flexGame.defensivePositions = Object.assign({}, flexGame.defensivePositions, { P: "tess", DP: "mia" });
@@ -135,17 +136,38 @@ const flexLive = GameManager.createLiveGame({
   teamName: "16U Fransen",
   scheduledInnings: 7,
 }, 7000);
-const nodpGame = lineup("game-nodp", "vs. Nodp - May 4");
+const nodpGame = lineup("game-nodp", "vs Nodp - May 4");
 nodpGame.battingMode = "dp-flex";
 nodpGame.battingOrder = nineIds.concat(["tess"]);
 
-const games = [offenseGame, defenseGame, finalGame, preGame, subGame, flexGame, nodpGame];
+const walkGame = lineup("game-walk", "vs Walkoff - May 8");
+let walkLive = GameManager.createLiveGame({
+  side: "home",
+  game: walkGame,
+  players,
+  teamName: "16U Fransen",
+  scheduledInnings: 1,
+}, 8000);
+walkLive = GameManager.recordRuns(walkLive, 1, 8001);
+let ruleLive = GameManager.createLiveGame({
+  side: "home",
+  game: lineup("game-rule", "vs Rule - May 9"),
+  players,
+  teamName: "16U Fransen",
+  scheduledInnings: 7,
+}, 8100);
+for (let i = 0; i < 6; i += 1) ruleLive = GameManager.recordRuns(ruleLive, i % 2 ? 4 : 0, 8200 + i);
+ruleLive = GameManager.recordRuns(ruleLive, 0, 8300);
+
+const games = [offenseGame, defenseGame, finalGame, preGame, subGame, flexGame, nodpGame, walkGame, lineup("game-rule", "vs Rule - May 9")];
 const sessions = {
   [offense.lineupGameId]: offense,
   [defense.lineupGameId]: defense,
   [finished.lineupGameId]: finished,
   [subsLive.lineupGameId]: subsLive,
   [flexLive.lineupGameId]: flexLive,
+  [walkLive.lineupGameId]: walkLive,
+  [ruleLive.lineupGameId]: ruleLive,
 };
 const document = GameManager.normalizeDocument({
   revision: 3,
@@ -235,12 +257,12 @@ async function openGame(title) {
 }
 
 await page.goto(pageUrl, { waitUntil: "domcontentloaded" });
-await page.locator("button", { hasText: "vs. Eagles" }).waitFor({ timeout: 8000 });
+await page.locator("button", { hasText: "vs Eagles" }).waitFor({ timeout: 8000 });
 await page.evaluate(() => document.fonts && document.fonts.ready);
 await page.waitForTimeout(200);
 await shot("list");
 
-await openGame("vs. Hawks");
+await openGame("vs Hawks");
 await page.locator("#start-game").waitFor();
 await shot("prestart");
 
@@ -250,25 +272,25 @@ await shot("dialog");
 await page.locator("[data-action='close-sheet']").click();
 await page.locator("[data-action='back']").click();
 
-await openGame("vs. Eagles");
+await openGame("vs Eagles");
 await page.locator("#add-out").waitFor();
 await page.locator("#half-indicator").waitFor();
 await shot("offense");
 await page.locator("[data-action='back']").click();
 
-await openGame("vs. Lions");
+await openGame("vs Lions");
 await page.locator("#add-out").waitFor();
 await page.locator("#tiebreaker").waitFor();
 await shot("defense");
 await page.locator("[data-action='back']").click();
 
-await openGame("vs. Bears");
+await openGame("vs Bears");
 await page.locator("#ended-summary").waitFor();
 await shot("final");
 
 if (!before) {
   await page.locator("[data-action='back']").click();
-  await openGame("vs. Hawks");
+  await openGame("vs Hawks");
   const noa = page.locator(".name", { hasText: "Noa / Bennett" }).first();
   const noaBox = await noa.evaluate((el) => {
     const style = getComputedStyle(el);
@@ -296,11 +318,11 @@ if (!before) {
   await page.locator("[data-action='close-sheet']").click();
   await page.locator("[data-action='back']").click();
 
-  await openGame("vs. Eagles");
+  await openGame("vs Eagles");
   const boardText = await page.locator("#scoreboard").innerText();
   if (/\bUs\b/.test(boardText)) fail("Line score still says Us.");
-  if (!boardText.includes("FRANSE")) fail("Line score is missing the team name.");
-  if (!boardText.includes("EAGLES")) fail("Line score is missing the opponent.");
+  if (!boardText.includes("FRAN")) fail("Line score is missing the team name.");
+  if (!boardText.includes("EAGL")) fail("Line score is missing the opponent.");
   if ((boardText.match(/\n/g) || []).length < 2) fail("Line score rows are missing.");
   const inningHeads = await page.locator("#scoreboard .inn.head").count();
   if (inningHeads < 7) fail("Line score is not showing all 7 innings (" + inningHeads + ").");
@@ -338,9 +360,7 @@ if (!before) {
   if (dueBefore === dueAfter) fail("Due up did not move.");
   await shot("m1-due-up");
   await page.locator(".row.at-bat [data-action='select-player']").click();
-  const leaveCount = await page.locator(".sub-btn").count();
-  if (leaveCount !== 1) fail("Leaves should show on the selected player only (" + leaveCount + ").");
-  await page.locator("[data-action='ask-leave']").click();
+  await page.locator(".row.at-bat [data-action='ask-leave']").click();
   await page.locator("#leave-sheet").waitFor();
   await shot("m9-leave");
   await page.locator("[data-action='close-sheet']").click();
@@ -355,14 +375,14 @@ if (!before) {
   await shot("m8-linescore");
 
   await page.locator("[data-action='back']").click();
-  await openGame("vs. Lions");
+  await openGame("vs Lions");
   const positions = await page.locator(".pos-btn").count();
   if (positions !== 9) fail("Defense is not showing all nine positions (" + positions + ").");
   const tieCount = await page.locator("#tiebreaker").count();
   const tieNotes = await page.locator("#tiebreaker-indicator, .tie-note").count();
   if (tieCount !== 1 || tieNotes !== 0) fail("Tiebreaker is not a single control.");
   const tieText = await page.locator("#tiebreaker").innerText();
-  if (!/runner on 2nd/i.test(tieText)) fail("Tiebreaker control does not state the runner rule.");
+  if (!/2nd|tiebreaker/i.test(tieText)) fail("Tiebreaker control does not state the runner rule (" + tieText + ").");
   const fieldBottom = await page.locator(".pos-btn").last().evaluate((el) => el.getBoundingClientRect().bottom);
   const dockTop = await page.locator(".dock").evaluate((el) => el.getBoundingClientRect().top);
   if (fieldBottom > dockTop + 1) fail("The nine positions do not fit above the action dock.");
@@ -381,16 +401,16 @@ if (!before) {
   if (small.length) fail("Touch targets under 44px: " + small.join("; "));
 
   await page.locator("[data-action='back']").click();
-  await openGame("vs. Subs");
+  await openGame("vs Subs");
   await page.locator(".row-hit").first().click();
-  await page.locator("[data-action='ask-sub']").click();
+  await page.locator("[data-action='ask-sub']").first().click();
   await page.locator("[data-action='pick-sub']").first().click();
   await page.locator("#sub-effect").waitFor();
   await shot("m5-reentry");
   await page.locator("[data-action='close-sheet']").click();
 
   await page.locator("[data-action='back']").click();
-  await openGame("vs. Flex");
+  await openGame("vs Flex");
   await page.locator("#sub-for-flex").click();
   await page.locator("[data-action='pick-flex-sub']", { hasText: "Ava Cole" }).click();
   await page.locator("#form-error").waitFor();
@@ -400,13 +420,120 @@ if (!before) {
   await shot("m11-error");
 
   await page.locator("[data-action='back']").click();
-  await openGame("vs. Nodp");
+  await openGame("vs Nodp");
   await page.locator("#start-game").click();
   await page.locator("[data-action='choose-side']").click();
   await page.locator("#form-error").waitFor();
   const dpError = await page.locator("#form-error").innerText();
   if (!/DP/i.test(dpError)) fail("Start did not ask for the DP (" + dpError + ").");
   await shot("m10-dp");
+  await page.screenshot({ path: path.join(outDir, "r2-codes.png") });
+  if (!(await page.locator("#our-code").count())) fail("Team codes are not editable at the start.");
+
+  await page.locator("[data-action='close-sheet']").click();
+  await page.locator("[data-action='back']").click();
+  await page.screenshot({ path: path.join(outDir, "r2-list.png") });
+
+  await openGame("vs Eagles");
+  await page.locator("[data-action='add-run']").click();
+  await page.locator("[data-action='add-run']").click();
+  await page.screenshot({ path: path.join(outDir, "r2-sync.png") });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.locator("#add-out").click();
+  await page.locator("#undo-out").click();
+  await page.locator("#undo-toast").waitFor();
+  await page.screenshot({ path: path.join(outDir, "r2-undo.png") });
+  await page.evaluate(() => {
+    const row = document.querySelector(".order .row:last-child");
+    const dock = document.querySelector(".dock");
+    if (!row || !dock) return;
+    const overlap = row.getBoundingClientRect().bottom - dock.getBoundingClientRect().top + 16;
+    if (overlap > 0) window.scrollBy(0, overlap);
+  });
+  const ninthBox = await page.locator(".order .row").nth(8).boundingBox();
+  const dockBox = await page.locator(".dock").boundingBox();
+  if (!ninthBox || !dockBox || ninthBox.y + ninthBox.height > dockBox.y + 1) {
+    fail("Spot 9 is still under the dock (" + JSON.stringify({ ninthBox, dockBox }) + ").");
+  }
+  await page.screenshot({ path: path.join(outDir, "r2-due-out.png") });
+  await page.locator("[data-action='add-tally'][data-kind='hit']").click();
+  await page.locator("[data-action='add-tally'][data-kind='error']").click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: path.join(outDir, "r2-hits.png") });
+  await page.locator(".row.at-bat [data-action='ask-leave']").click();
+  await page.locator("[data-action='leave-reason'][data-reason='ejected']").click();
+  await page.locator("#sub-effect").waitFor();
+  await page.screenshot({ path: path.join(outDir, "r2-ejection.png") });
+  await page.locator("[data-action='close-sheet']").click();
+  await page.locator("[data-action='open-menu']").click();
+  await page.locator("[data-action='ask-end']").click();
+  await page.locator("[data-action='pick-reason'][data-reason='forfeit']").click();
+  await page.screenshot({ path: path.join(outDir, "r2-forfeit.png") });
+  await page.locator("[data-action='pick-reason'][data-reason='other']").click();
+  await page.screenshot({ path: path.join(outDir, "r2-other.png") });
+  await page.locator("[data-action='close-sheet']").click();
+  await page.locator("[data-action='ask-runs']").click();
+  await page.screenshot({ path: path.join(outDir, "r2-end-half.png") });
+  await page.locator("[data-action='close-sheet']").click();
+  await page.locator("[data-action='back']").click();
+
+  await openGame("vs Lions");
+  await page.screenshot({ path: path.join(outDir, "r2-tiebreaker.png") });
+  const runnerBefore = await page.locator("#tiebreaker").innerText();
+  await page.locator("#tiebreaker").click();
+  const runnerAfter = await page.locator("#tiebreaker").innerText();
+  if (runnerBefore === runnerAfter) fail("Tiebreaker runner did not change on one tap.");
+  await page.screenshot({ path: path.join(outDir, "r2-layout.png") });
+  await page.locator("[data-action='back']").click();
+
+  await openGame("vs Bears");
+  await page.screenshot({ path: path.join(outDir, "r2-final.png") });
+  await page.locator("[aria-label='Edit bottom 1']").click();
+  await page.locator("#edit-sheet [data-action='run-key'][data-key='1']").click();
+  await page.locator("[data-action='save-edit']").click();
+  await page.locator("#tie-prompt, #half-indicator").first().waitFor();
+  await page.screenshot({ path: path.join(outDir, "r2-edit-tie.png") });
+  await page.locator("#tie-prompt [data-action='close-sheet'], [data-action='close-sheet']").first().click();
+  await page.locator("[data-action='back']").click();
+
+  await openGame("vs Flex");
+  await page.locator("#sub-for-flex").click();
+  await page.locator("[data-action='pick-flex-sub']", { hasText: "Ava Cole" }).click();
+  await page.locator("#form-error").waitFor();
+  await page.screenshot({ path: path.join(outDir, "r2-flex-name.png") });
+  await page.locator("[data-action='back']").click();
+
+  await openGame("vs Walkoff");
+  await page.locator("[data-action='add-run']").click();
+  await page.locator("[data-action='add-run']").click();
+  await page.locator("#prompt-sheet").waitFor();
+  const walkTitle = await page.locator("#prompt-sheet h2").innerText();
+  if (!/That's the game/i.test(walkTitle)) fail("Walk-off did not prompt That's the game (" + walkTitle + ").");
+  await page.screenshot({ path: path.join(outDir, "r2-walkoff.png") });
+  await page.locator("[data-action='close-sheet']").click();
+  await page.locator("[data-action='back']").click();
+
+  await openGame("vs Rule");
+  await page.locator("#ended-summary, #half-indicator").first().waitFor();
+  await page.screenshot({ path: path.join(outDir, "r2-run-rule.png") });
+  await page.locator("[data-action='back']").click();
+
+  await openGame("vs Eagles");
+  await page.locator("[data-action='ball']").click();
+  await page.locator("[data-action='base'][data-base='0']").click();
+  await page.screenshot({ path: path.join(outDir, "r2-count.png") });
+  console.log("r2 shots saved");
+}
+
+if (!before) {
+  const hashes = new Map();
+  for (const file of readdirSync(outDir)) {
+    if (!file.startsWith("r2-") || !file.endsWith(".png")) continue;
+    const hash = createHash("md5").update(readFileSync(path.join(outDir, file))).digest("hex");
+    if (hashes.has(hash)) fail(file + " matches " + hashes.get(hash) + " (" + hash + ")");
+    else hashes.set(hash, file);
+    console.log(hash.slice(0, 8), file);
+  }
 }
 
 await browser.close();

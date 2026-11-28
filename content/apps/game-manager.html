@@ -209,8 +209,7 @@
     .outs { margin-left: auto; display: flex; align-items: center; gap: 6px; }
     .out-marks { display: flex; gap: 4px; }
     .mark { width: 9px; height: 9px; border-radius: 99px; background: rgba(226, 232, 240, 0.28); display: block; }
-    .mark.on { background: #fff; }
-    .banner.defense .mark.on { background: var(--accent); }
+    .mark.on, .banner.offense .mark.on, .banner.defense .mark.on { background: var(--accent); }
     .outs-label { font-weight: 600; font-variant-numeric: tabular-nums; font-size: 0.88rem; }
     .tiebreaker {
       width: 100%;
@@ -266,7 +265,7 @@
     .innings-fold summary { min-height: 44px; display: flex; align-items: center; font-weight: 600; }
 
     .dock {
-      position: sticky; bottom: 0; z-index: 4; margin-top: auto;
+      position: sticky; bottom: 0; z-index: 4; margin-top: 0;
       padding: 8px 0 calc(10px + env(safe-area-inset-bottom));
       background: linear-gradient(to top, var(--bg) 75%, rgba(2, 6, 23, 0));
       display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 8px;
@@ -346,6 +345,26 @@
       border: 1px solid var(--line); background: var(--bg); padding: 8px 12px; font-size: 16px;
     }
     .winner { font-weight: 600; }
+    main { padding-bottom: 16px; }
+    .more { min-width: 44px; min-height: 44px; flex: none; font-size: 1.2rem; color: var(--muted); }
+    .menu-link { width: 44px; height: 44px; flex: none; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+    .dock { display: flex; flex-wrap: wrap; align-items: center; margin-top: 0; }
+    .dock .primary { flex: 1.3; min-width: 42%; }
+    .dock .quiet { flex: 1; min-width: 28%; }
+    .dock .end-half, .undo-toast { flex-basis: 100%; }
+    .flex-actions { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+    .flex-actions .quiet { width: 100%; }
+    .count-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; margin: 8px 0; }
+    .count-row .quiet { min-width: 0; padding: 0 10px; flex: 0 1 auto; }
+    .count { margin: 0; font-size: 1.4rem; min-width: 2.2rem; }
+    .diamond { width: 78px; height: 68px; position: relative; margin-left: auto; flex: none; }
+    .base { position: absolute; width: 16px; height: 16px; padding: 0; border: 1px solid #cbd5e1; background: #0b1220; transform: rotate(45deg); }
+    .base.on { background: var(--accent); border-color: var(--accent); }
+    .b2 { top: 4px; left: 31px; }
+    .b3 { top: 32px; left: 8px; }
+    .b1 { top: 32px; left: 54px; }
+    .undo-toast { margin: 0 0 6px; padding: 8px 10px; border-radius: 10px; background: #1e293b; color: var(--accent-ink); font-weight: 600; }
+    .quiet.end-half { width: 100%; }
 
   </style>
 </head>
@@ -379,6 +398,8 @@
     var dpDraft = "";
     var flexDraft = "";
     var endReason = "time";
+    var endRuns = "";
+    var forfeitWinner = "opp";
     var editAt = null;
     var loadNote = "";
     var booting = true;
@@ -467,6 +488,7 @@
       if (!sync) return "";
       var kind = sync.status();
       var note = sync.notice();
+      if (kind === "saved" && !note) return "";
       return '<p id="sync-status" class="sync ' + esc(kind) + '">' + esc(sync.statusLabel()) + "</p>"
         + (note ? '<p id="sync-notice" class="sync-notice">' + esc(note) + "</p>" : "");
     }
@@ -474,8 +496,16 @@
     function tap(op) {
       var session = sessionFor(gameId);
       var next = Object.assign({ teamId: teamId, teamName: teamName, gameId: gameId }, op);
-      if (session && next.type !== "start" && next.type !== "set-active" && next.type !== "undo" && next.type !== "resume") {
-        next.atHalf = { inningIndex: session.inningIndex, half: session.half, outs: GameManager.clampOuts(session.outs) };
+      if (session && next.type !== "start" && next.type !== "set-active" && next.type !== "resume") {
+        next.atHalf = {
+          inningIndex: session.inningIndex,
+          half: session.half,
+          outs: GameManager.clampOuts(session.outs),
+          liveRuns: Number(session.liveRuns) || 0,
+          battingIndex: Number(session.battingIndex) || 0,
+          actionId: Number(session.actionSeq) || 0,
+          tally: (Number(session.usHits) || 0) + (Number(session.oppHits) || 0) + (Number(session.usErrors) || 0) + (Number(session.oppErrors) || 0),
+        };
       }
       try {
         dryRun(next);
@@ -582,6 +612,39 @@
       return Object.assign({}, session, { players: players });
     }
 
+    function ordinalSuffix(n) {
+      var mod100 = n % 100;
+      var mod10 = n % 10;
+      if (mod100 >= 11 && mod100 <= 13) return "th";
+      if (mod10 === 1) return "st";
+      if (mod10 === 2) return "nd";
+      if (mod10 === 3) return "rd";
+      return "th";
+    }
+
+    function gameTitle(name) {
+      var opp = GameManager.opponentLabel(name);
+      return opp ? "vs " + opp : (name || "Game");
+    }
+
+    function ourLine(session) {
+      var rows = GameManager.scoreboardRows(session);
+      var us = rows[0].team === "us" ? rows[0] : rows[1];
+      var opp = us === rows[0] ? rows[1] : rows[0];
+      var mark = us.total > opp.total ? "W" : us.total < opp.total ? "L" : "T";
+      return { mark: mark, text: mark + " " + us.total + "–" + opp.total };
+    }
+
+    function finalLine(session) {
+      var note = GameManager.endNote(session);
+      return ourLine(session).text + " · " + GameManager.finalBanner(session) + (note ? " · " + note : "");
+    }
+
+    function gameDate(name) {
+      var match = String(name || "").match(/[-–—]\s*(.+)$/);
+      return match ? match[1] : "";
+    }
+
     function cell(value) {
       if (value === "X") return "X";
       return typeof value === "number" ? String(value) : "";
@@ -598,7 +661,7 @@
           var cls = "inn num-face" + (header ? " head" : "") + (inn.current ? " now" : "") + (!header && shown === "X" ? " skip" : "");
           if (!header && row.side === batting) cls += " batting";
           var tie = !header && ((row.side === "away" && inn.topTiebreaker) || (row.side === "home" && inn.bottomTiebreaker));
-          if (tie) cls += " tie";
+          if (tie) shown = shown ? shown + "·" : "TB";
           if (header || shown === "") return '<div class="' + cls + '">' + esc(shown) + "</div>";
           var half = row.side === "away" ? "top" : "bottom";
           return '<button type="button" class="' + cls + '" data-action="edit-cell" data-inning="' + index + '" data-half="' + half + '" aria-label="Edit ' + esc(half) + " " + inn.inning + '">' + esc(shown) + "</button>";
@@ -626,15 +689,13 @@
     function bannerHtml(state) {
       var board = GameManager.scoreboard(state);
       if (state.status !== "live") {
-        var banner = GameManager.finalBanner(state);
-        return '<div id="half-indicator" class="banner final"><p class="half">' + esc(banner) + '</p><p class="role">' + esc(GameManager.scoreLine(state)) + "</p></div>";
+        return '<div id="half-indicator" class="banner final"><p class="half">' + esc(finalLine(state)) + "</p></div>";
       }
-      var parts = board.label.split(" ");
-      var word = parts[0] || "Top";
-      var num = parts[1] || "";
+      var word = state.half === "bottom" ? "Bottom" : "Top";
+      var num = (state.inningIndex || 0) + 1;
       var role = board.role === "defense" ? "Defense" : "Offense";
-      var extra = board.extra ? '<span class="extra">Extra</span> ' : "";
-      return '<div id="half-indicator" class="banner ' + board.role + '"><p class="half">' + extra + esc(word) + ' <span class="half-num num-face">' + esc(num) + '</span></p><p class="role">' + role + "</p>" + outsHtml(state) + "</div>";
+      var extra = board.extra ? " · Extra" : "";
+      return '<div id="half-indicator" class="banner ' + board.role + '"><p class="half">' + esc(word) + ' <span class="half-num num-face">' + num + ordinalSuffix(num) + "</span>" + esc(extra) + '</p><p class="role">' + role + "</p>" + outsHtml(state) + "</div>";
     }
 
     function outsHtml(session) {
@@ -664,8 +725,16 @@
       }).join("");
     }
 
+    function shortName(label) {
+      var text = String(label || "");
+      var num = text.match(/^#\d+/);
+      var rest = text.replace(/^#\d+\s*/, "").split(/[\s/]+/).filter(Boolean)[0] || "";
+      return (num ? num[0] + " " : "") + rest;
+    }
+
     function trackerHtml(state, folded) {
       var body = trackerRows(state, !folded);
+      if (!body || body.indexOf("No defensive") >= 0) return "";
       if (folded) {
         return '<details id="defensive-innings" class="innings-fold"><summary>Defensive innings</summary>' + body + "</details>";
       }
@@ -687,18 +756,17 @@
         var role = row.role ? '<span class="role-tag">' + esc(row.role) + "</span>" : "";
         var cr = courtesy.filter(function (item) { return item.forId === row.id || item.runnerId === row.id; })[0];
         var crTag = cr ? '<span class="cr-tag">CR ' + esc(playerName(session, cr.runnerId)) + "</span>" : "";
-        var picked = row.id === selectedId;
-        var sub = picked && canSub ? '<button type="button" class="sub-btn" data-action="ask-sub" data-spot="' + index + '">Sub</button>' : "";
-        var leave = picked && session.battingMode === "roster"
-          ? '<button type="button" class="sub-btn" data-action="ask-leave" data-player="' + esc(row.id) + '">Leaves</button>'
-          : "";
-        var cls = "row" + (tagName === "Due up" ? " at-bat" : "") + (picked ? " is-selected" : "");
+        var cls = "row" + (tagName === "Due up" ? " at-bat" : "");
+        var more = canSub
+          ? '<button type="button" class="more" data-action="ask-sub" data-spot="' + index + '" aria-label="Sub">⋯</button>'
+          : (session.battingMode === "roster"
+            ? '<button type="button" class="more" data-action="ask-leave" data-player="' + esc(row.id) + '" aria-label="Leaves">⋯</button>'
+            : "");
         return '<div class="' + cls + '"><button type="button" class="row-hit" data-action="select-player" data-player="' + esc(row.id) + '" data-spot="' + index + '">'
           + '<span class="num">' + row.order + '</span><span class="name">' + esc(row.label) + "</span>" + role + crTag + tag
-          + "</button>" + sub + leave + "</div>";
+          + "</button>" + more + "</div>";
       }).join("");
-      var wrap = '<p id="due-wrap" hidden></p>';
-      return '<h2 id="batting-order">Batting order</h2>' + wrap + cardNote(session)
+      return '<h2 id="batting-order">Batting order</h2>' + countBox(session) + cardNote(session)
         + '<div class="toggles"><button type="button" class="toggle" id="courtesy-runner" data-action="ask-courtesy">Courtesy runner</button>'
         + '<button type="button" class="toggle" data-action="next-batter">Next Batter</button></div>'
         + swapButton(session) + '<div class="order">' + rows + "</div>";
@@ -710,7 +778,7 @@
       });
       var defense = rows.map(function (row) {
         return '<button type="button" class="pos-btn" data-action="pick-defense" data-pos="' + esc(row.pos) + '">'
-          + '<span class="pos">' + esc(row.pos) + '</span><span class="name">' + esc(row.label) + "</span></button>";
+          + '<span class="pos">' + esc(row.pos) + '</span><span class="name">' + esc(shortName(row.label)) + "</span></button>";
       }).join("");
       var flexSub = session.battingMode === "dp-flex" && !session.flexLeft && !session.flexBatting
         ? '<button type="button" class="quiet" id="sub-for-flex" data-action="ask-flex-sub">Sub for FLEX</button>'
@@ -720,16 +788,29 @@
         : "";
       return "<h2>Defense</h2>"
         + cardNote(session)
-        + swapButton(session)
-        + flexSub
-        + flexBack
+        + '<div class="flex-actions">' + swapButton(session) + flexSub + flexBack + "</div>"
         + '<div class="field">' + defense + "</div>";
     }
 
-    function cardNote(session) {
-      if (!session || session.battingMode !== "dp-flex") return "";
-      if (session.flexBatting || session.flexLeft) return '<p class="hint" id="card-size">Lineup is 9.</p>';
-      return '<p class="hint" id="card-size">10 on the card. 9 bat.</p>';
+    function cardNote() {
+      return "";
+    }
+
+    function countBox(session) {
+      if (!session || GameManager.roleFor(session.side, session.half) !== "offense") return "";
+      var balls = session.balls || 0;
+      var strikes = session.strikes || 0;
+      var bases = session.bases || [false, false, false];
+      return '<div class="count-row">'
+        + '<p class="count num-face" id="count">' + balls + "-" + strikes + "</p>"
+        + '<button type="button" class="quiet" data-action="ball">Ball</button>'
+        + '<button type="button" class="quiet" data-action="strike">Strike</button>'
+        + '<button type="button" class="quiet" data-action="foul">Foul</button>'
+        + '<div class="diamond" aria-label="Bases">'
+        + '<button type="button" class="base b2' + (bases[1] ? " on" : "") + '" data-action="base" data-base="1" aria-label="Second base"></button>'
+        + '<button type="button" class="base b3' + (bases[2] ? " on" : "") + '" data-action="base" data-base="2" aria-label="Third base"></button>'
+        + '<button type="button" class="base b1' + (bases[0] ? " on" : "") + '" data-action="base" data-base="0" aria-label="First base"></button>'
+        + "</div></div>";
     }
 
     function playerName(session, id) {
@@ -755,10 +836,17 @@
     }
 
     function listMeta(game, session) {
-      if (session && session.status === "live") return GameManager.liveScoreMeta(session);
-      var count = (game.battingOrder || []).length;
-      if (!count) return "No batting order yet";
-      return count === 1 ? "1 batter" : count + " batters";
+      if (session && session.status === "live") {
+        return GameManager.liveScoreMeta(session).replace("In progress · ", "").replace("Bot ", "Bottom ");
+      }
+      var date = gameDate(game && game.name);
+      return "Not started" + (date ? " · " + date : "");
+    }
+
+    function playedLine(session, game) {
+      var date = gameDate((game && game.name) || session.gameName);
+      var banner = GameManager.finalBanner(session).replace(/^Final/, "F");
+      return ourLine(session).text + (date ? " · " + date : "") + " · " + banner;
     }
 
     function headerHtml(title, sub, backLabel) {
@@ -789,7 +877,7 @@
           var session = pack.sessions[game.id];
           var live = session && session.status === "live";
           return '<button type="button" class="game-btn' + (live ? " live" : "") + '" data-action="open-game" data-game="' + esc(game.id) + '">'
-            + '<span class="game-top"><strong class="game-name">' + esc(game.name || "Game") + "</strong>"
+            + '<span class="game-top"><strong class="game-name">' + esc(gameTitle(game.name)) + "</strong>"
             + (live ? '<span class="pill live">Live</span>' : "") + "</span>"
             + '<span class="meta">' + esc(listMeta(game, session)) + "</span></button>";
         }).join("")
@@ -799,8 +887,8 @@
           var game = row.game;
           var session = row.session;
           return '<button type="button" class="game-btn" data-action="open-played" data-game="' + esc(session.lineupGameId) + '">'
-            + "<strong>" + esc((game && game.name) || session.gameName || "Game") + "</strong>"
-            + "<span>" + esc(GameManager.finalScoreMeta(session)) + "</span></button>";
+            + "<strong>" + esc(gameTitle((game && game.name) || session.gameName)) + "</strong>"
+            + '<span class="meta" title="' + esc(GameManager.finalScoreMeta(session)) + '">' + esc(playedLine(session, game)) + "</span></button>";
         }).join("")
         : "";
       return '<div class="wrap" data-screen="list">'
@@ -859,7 +947,7 @@
       var format = GameManager.formatInfo(session.battingMode);
       return '<div class="wrap" data-screen="live">'
         + '<div class="topbar">'
-        + headerHtml(session.gameName, GameManager.opponentLabel(session.gameName) ? "vs " + GameManager.opponentLabel(session.gameName) : "", "Games")
+        + headerHtml(gameTitle(session.gameName), gameDate(session.gameName), "Games")
         + scoreboardHtml(session)
         + bannerHtml(session)
         + tiebreakerHtml(session)
@@ -871,10 +959,14 @@
           : battingOrderHtml(session))
         + "</main>"
         + '<div class="dock">'
+        + (session.undoNote ? '<p class="undo-toast" id="undo-toast">' + esc(session.undoNote) + "</p>" : "")
+        + '<button type="button" class="menu-link" data-action="open-menu" aria-label="Game menu">⋯</button>'
         + '<button type="button" class="quiet" id="undo-out" data-action="undo"' + (!(session.history && session.history.length) ? " disabled" : "") + ">Undo</button>"
         + '<button type="button" class="primary" id="add-out" data-action="add-out">+1 Out</button>'
-        + '<button type="button" class="quiet" data-action="add-run">+ Run</button>'
-        + '<button type="button" class="menu-link" data-action="open-menu">Game menu</button>'
+        + '<button type="button" class="quiet" data-action="add-run">+1 Run</button>'
+        + '<button type="button" class="quiet" data-action="add-tally" data-kind="hit">+ Hit</button>'
+        + '<button type="button" class="quiet" data-action="add-tally" data-kind="error">+ Error</button>'
+        + (GameManager.roleFor(session.side, session.half) === "offense" ? '<button type="button" class="quiet" data-action="reach-base">Reached</button>' : "")
         + '<button type="button" class="quiet end-half" data-action="ask-runs">End Half</button>'
         + "</div>"
         + gameMenu(session)
@@ -917,15 +1009,19 @@
         + "<h2>Leaves</h2>"
         + '<button type="button" class="pick" data-action="leave-reason" data-reason="skip">Injured. Skip her spot, no out</button>'
         + '<button type="button" class="pick" data-action="leave-reason" data-reason="auto-out">Left early. Out each time</button>'
-        + '<button type="button" class="pick" data-action="leave-reason" data-reason="ejected">Ejected. Out each time</button>'
+        + '<button type="button" class="pick" data-action="leave-reason" data-reason="ejected">Ejected. Replace her or forfeit</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
     }
 
     function editSheet() {
       if (sheet !== "edit" || !editAt) return "";
       var shown = runDigits === "" ? "–" : runDigits;
+      var keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "Del"].map(function (key) {
+        return '<button type="button" data-action="run-key" data-key="' + esc(key) + '">' + esc(key) + "</button>";
+      }).join("");
       return '<div class="sheet" id="edit-sheet"><div class="sheet-card" role="dialog"><h2>Edit half</h2>'
         + '<p class="run-num num-face">' + esc(shown) + "</p>"
+        + '<div class="pad">' + keys + "</div>"
         + '<button type="button" class="big" data-action="save-edit"' + (runDigits === "" ? " disabled" : "") + ">Save</button>"
         + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
     }
@@ -940,8 +1036,17 @@
 
     function promptSheet(session) {
       if (sheet !== "prompt" || !session || !session.prompt) return "";
-      var title = session.prompt === "walk-off" ? "Walk-off: end the game?" : "Run rule: end the game?";
-      return '<div class="sheet"><div class="sheet-card" role="dialog"><h2>' + title + "</h2>"
+      if (session.prompt === "Resume (now tied)") {
+        return '<div class="sheet" id="tie-prompt"><div class="sheet-card" role="dialog"><h2>The game is live again</h2>'
+          + "<p>The score is tied, so this is not a final.</p>"
+          + '<button type="button" class="big plain" data-action="close-sheet">Keep playing</button></div></div>';
+      }
+      var walk = session.prompt === "walk-off";
+      var rule = session.prompt === "run-rule";
+      var title = walk || rule ? "That's the game" : session.prompt;
+      var detail = walk ? "Walk-off." : rule ? "Run rule." : "";
+      return '<div class="sheet" id="prompt-sheet"><div class="sheet-card" role="dialog"><h2>' + esc(title) + "</h2>"
+        + (detail ? "<p>" + esc(detail) + "</p>" : "")
         + '<button type="button" class="big" data-action="confirm-end">End Game</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Keep playing</button></div></div>';
     }
@@ -965,8 +1070,10 @@
         var batters = GameManager.liveBatters(session).filter(function (row) {
           return ids.indexOf(row.id) >= 0;
         }).map(function (row) {
+          var cardP = session.lineupSnapshot && session.lineupSnapshot.defensivePositions && session.lineupSnapshot.defensivePositions.P;
+          var pos = (session.defense && session.defense.P === row.id) || cardP === row.id ? "P" : "C";
           return '<button type="button" class="pick" data-action="courtesy-for" data-player="' + esc(row.id) + '">'
-            + esc(row.order + " " + row.label) + "</button>";
+            + esc(pos + " · " + row.label.replace(/^#?\d*\s*/, "")) + "</button>";
         }).join("");
         return '<div class="sheet" id="courtesy-sheet"><div class="sheet-card"><h2>Courtesy runner for</h2>'
           + batters
@@ -1020,16 +1127,16 @@
       var format = GameManager.formatInfo(session.battingMode);
       return '<div class="wrap" id="ended-summary" data-screen="played">'
         + '<div class="topbar">'
-        + headerHtml(session.gameName, "Final · " + format.label, "Games")
+        + headerHtml(gameTitle(session.gameName), gameDate(session.gameName) || format.label, "Games")
         + scoreboardHtml(session)
         + bannerHtml(session)
         + "</div>"
         + "<main>"
-        + '<p class="final-note" id="final-note">' + esc(GameManager.finalBanner(session)) + " · " + esc(GameManager.scoreLine(session))
-        + (GameManager.endNote(session) ? " · " + esc(GameManager.endNote(session)) : "") + "</p>"
-        + '<button type="button" class="quiet" data-action="resume">Resume Game</button>'
+        + '<button type="button" class="quiet end-half" data-action="resume">Resume Game</button>'
         + trackerHtml(session, false)
         + "</main>"
+        + editSheet(session)
+        + promptSheet(session)
         + "</div>";
     }
 
@@ -1043,19 +1150,23 @@
       var needDp = game && game.battingMode === "dp-flex";
       if (needDp) {
         var players = bundle().players || [];
-        dpPick = '<p class="hint">Who is the DP? Who is the FLEX?</p>'
-          + players.map(function (player) {
-            return '<button type="button" class="pick' + (dpDraft === player.id ? " on" : "") + '" data-action="set-dp" data-player="' + esc(player.id) + '">DP · ' + esc(GameManager.playerLabel(player)) + "</button>";
-          }).join("")
-          + players.map(function (player) {
-            return '<button type="button" class="pick' + (flexDraft === player.id ? " on" : "") + '" data-action="set-flex" data-player="' + esc(player.id) + '">FLEX · ' + esc(GameManager.playerLabel(player)) + "</button>";
+        function roleOptions(selected) {
+          return '<option value="">Choose</option>' + players.map(function (player) {
+            return '<option value="' + esc(player.id) + '"' + (selected === player.id ? " selected" : "") + ">" + esc(GameManager.playerLabel(player)) + "</option>";
           }).join("");
+        }
+        dpPick = '<label class="hint" for="dp-pick">DP</label><select id="dp-pick" class="team-select">' + roleOptions(dpDraft) + "</select>"
+          + '<label class="hint" for="flex-pick">FLEX</label><select id="flex-pick" class="team-select">' + roleOptions(flexDraft) + "</select>";
       }
       return '<div class="sheet" id="side-sheet" data-screen="side"><div class="sheet-card" role="dialog" aria-modal="true">'
         + "<h2>Start game</h2>"
         + errorHtml()
         + '<label class="hint" for="opp-name">Opponent</label>'
         + '<input id="opp-name" class="text-input" data-field="opp" value="' + esc(opp) + '" maxlength="40">'
+        + '<label class="hint" for="our-code">Our code</label>'
+        + '<input id="our-code" class="text-input" maxlength="4" value="' + esc(GameManager.abbrOf(teamName, "ELKS")) + '">'
+        + '<label class="hint" for="their-code">Their code</label>'
+        + '<input id="their-code" class="text-input" maxlength="4" value="' + esc(GameManager.abbrOf(opp, "OPP")) + '">'
         + '<div class="stepper"><button type="button" data-action="set-innings" data-delta="-1" aria-label="Fewer innings">−</button>'
         + '<p id="inning-count"><span class="num-face">' + plannedInnings + "</span> " + (plannedInnings === 1 ? "inning" : "innings") + "</p>"
         + '<button type="button" data-action="set-innings" data-delta="1" aria-label="More innings">+</button></div>'
@@ -1077,6 +1188,9 @@
         + "<p>" + session.scheduledInnings + (session.scheduledInnings === 1 ? " inning" : " innings") + "</p>"
         + '<button type="button" data-action="nudge-innings" data-delta="1" aria-label="More innings">+</button></div>'
         + '<button type="button" class="pick" data-action="time-limit">Time limit: finish this inning</button>'
+        + '<button type="button" class="pick" data-action="set-pool" data-pool="standard">Courtesy: Standard</button>'
+        + '<button type="button" class="pick" data-action="set-pool" data-pool="jo">Courtesy: JO pool play</button>'
+        + '<button type="button" class="pick" data-action="set-rule" data-rule="jo">Run rule: 15 / 12 / 8</button>'
         + '<button type="button" class="pick" data-action="add-tally" data-kind="hit">+ Hit</button>'
         + '<button type="button" class="pick" data-action="add-tally" data-kind="error">+ Error</button>'
         + '<button type="button" class="pick danger" id="end-game" data-action="ask-end">End Game</button>'
@@ -1124,8 +1238,9 @@
       var reasons = [
         ["run-rule", "Run rule"],
         ["time", "Time limit"],
-        ["called", "Called"],
+        ["called", "Called (weather)"],
         ["forfeit", "Forfeit"],
+        ["walk-off", "Walk-off"],
         ["other", "Other"],
       ];
       var chips = reasons.map(function (pair) {
@@ -1135,8 +1250,13 @@
         + "<h2>End Game</h2>"
         + "<p>" + esc(GameManager.scoreLine(session)) + "</p>"
         + '<p class="hint">Runs in this half so far</p>'
-        + '<p class="run-num num-face" id="end-runs">' + esc(String(session.liveRuns || 0)) + "</p>"
+        + '<div class="stepper"><button type="button" data-action="nudge-end-runs" data-delta="-1" aria-label="Fewer runs">−</button>'
+        + '<p class="run-num num-face" id="end-runs">' + esc(String(endRuns === "" ? (session.liveRuns || 0) : endRuns)) + "</p>"
+        + '<button type="button" data-action="nudge-end-runs" data-delta="1" aria-label="More runs">+</button></div>'
         + '<div class="toggles">' + chips + "</div>"
+        + (endReason === "forfeit"
+          ? '<div class="segment"><button type="button" data-action="forfeit-side" data-side="opp" aria-pressed="' + (forfeitWinner !== "us" ? "true" : "false") + '">They forfeit</button><button type="button" data-action="forfeit-side" data-side="us" aria-pressed="' + (forfeitWinner === "us" ? "true" : "false") + '">We forfeit</button></div>'
+          : "")
         + errorHtml()
         + '<button type="button" class="big danger" id="confirm-end-game" data-action="confirm-end">End Game</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Keep playing</button>'
@@ -1177,6 +1297,10 @@
       }
       var html = view === "detail" ? renderDetail() : view === "live" ? renderLive() : view === "played" ? renderPlayed() : renderList();
       root.innerHTML = html;
+      var dock = document.querySelector(".dock");
+      var mainEl = document.querySelector("main");
+      var order = document.querySelector(".order");
+      if (dock && mainEl && order) mainEl.style.paddingBottom = (dock.offsetHeight + 16) + "px";
       var nowCell = document.querySelector("#scoreboard .inn.now");
       if (nowCell && nowCell.scrollIntoView) nowCell.scrollIntoView({ inline: "center", block: "nearest" });
     }
@@ -1234,6 +1358,8 @@
       effectText = "";
       sheet = "";
       tap(op);
+      var afterChange = sessionFor(gameId);
+      if (afterChange && afterChange.prompt) sheet = "prompt";
       render();
     }
 
@@ -1289,6 +1415,8 @@
         if (!game) return;
         var oppInput = document.getElementById("opp-name");
         if (oppInput) oppDraft = oppInput.value;
+        var ourCode = document.getElementById("our-code");
+        var theirCode = document.getElementById("their-code");
         if (game.battingMode === "dp-flex" && (!dpDraft || !flexDraft)) {
           errorText = "Pick the DP and the FLEX before the game starts.";
           render();
@@ -1301,6 +1429,8 @@
           teamName: teamName,
           scheduledInnings: plannedInnings,
           oppName: oppDraft,
+          teamAbbr: ourCode ? ourCode.value : "",
+          oppAbbr: theirCode ? theirCode.value : "",
           dpId: dpDraft,
           flexId: flexDraft,
         };
@@ -1468,8 +1598,42 @@
         return;
       }
       if (action === "ask-runs") {
+        var liveRuns = sessionFor(gameId);
+        runDigits = liveRuns && liveRuns.liveRuns ? String(liveRuns.liveRuns) : "";
+        endRuns = runDigits;
         sheet = "runs";
-        runDigits = "";
+        render();
+        return;
+      }
+      if (action === "nudge-end-runs") {
+        var currentRuns = parseInt(endRuns === "" ? String((sessionFor(gameId) || {}).liveRuns || 0) : endRuns, 10) || 0;
+        endRuns = String(Math.max(0, currentRuns + (parseInt(button.getAttribute("data-delta"), 10) || 0)));
+        render();
+        return;
+      }
+      if (action === "forfeit-side") { forfeitWinner = button.getAttribute("data-side") === "us" ? "us" : "opp"; render(); return; }
+      if (action === "ball") { var b = sessionFor(gameId); tap({ type: "count", balls: (b.balls || 0) + 1 }); render(); return; }
+      if (action === "strike" || action === "foul") {
+        var c = sessionFor(gameId);
+        var nextStrikes = (c.strikes || 0) + (action === "foul" && c.strikes >= 2 ? 0 : 1);
+        tap({ type: "count", strikes: nextStrikes });
+        render();
+        return;
+      }
+      if (action === "base") {
+        var bases = (sessionFor(gameId).bases || [false, false, false]).slice();
+        var spot = parseInt(button.getAttribute("data-base"), 10) || 0;
+        bases[spot] = !bases[spot];
+        tap({ type: "count", bases: bases });
+        render();
+        return;
+      }
+      if (action === "reach-base") { tap({ type: "reach-base" }); render(); return; }
+      if (action === "set-pool") { tap({ type: "set-pool", pool: button.getAttribute("data-pool") }); render(); return; }
+      if (action === "set-rule") {
+        var preset = button.getAttribute("data-rule");
+        var table = preset === "none" ? [] : [{ after: 3, lead: 15 }, { after: 4, lead: 12 }, { after: 5, lead: 8 }];
+        tap({ type: "set-rule", runRule: table });
         render();
         return;
       }
@@ -1514,9 +1678,22 @@
       if (action === "save-edit") {
         if (!editAt) return;
         tap({ type: "edit-half", inningIndex: editAt.inningIndex, half: editAt.half, runs: runDigits });
-        sheet = "";
+        var edited = sessionFor(gameId);
         runDigits = "";
         editAt = null;
+        if (edited && edited.status === "live") view = "live";
+        sheet = edited && edited.prompt ? "prompt" : "";
+        render();
+        return;
+      }
+      if (action === "change-runner") {
+        var runnerSession = sessionFor(gameId);
+        var runnerRows = GameManager.liveBatters(runnerSession);
+        var runnerNow = GameManager.itbRunner(runnerSession).id;
+        var runnerAt = 0;
+        runnerRows.forEach(function (row, index) { if (row.id === runnerNow) runnerAt = index; });
+        var runnerNext = runnerRows.length ? runnerRows[(runnerAt + 1) % runnerRows.length] : null;
+        if (runnerNext) tap({ type: "set-runner", playerId: runnerNext.id });
         render();
         return;
       }
@@ -1544,17 +1721,22 @@
         return;
       }
       if (action === "ask-end") {
+        var endingNow = sessionFor(gameId);
+        endRuns = endingNow && endingNow.liveRuns ? String(endingNow.liveRuns) : "0";
         sheet = "end";
         render();
         return;
       }
       if (action === "confirm-end") {
         var ending = sessionFor(gameId);
+        var reason = endReason;
+        if (sheet === "prompt" && ending && ending.prompt === "walk-off") reason = "walk-off";
+        if (sheet === "prompt" && ending && ending.prompt === "run-rule") reason = "run-rule";
         var ran = tap({
           type: "end",
-          reason: endReason,
-          runsThisHalf: ending && ending.liveRuns ? ending.liveRuns : 0,
-          forfeitWinner: "us",
+          reason: reason,
+          runsThisHalf: sheet === "prompt" ? (ending && ending.liveRuns ? ending.liveRuns : 0) : (endRuns === "" ? (ending && ending.liveRuns ? ending.liveRuns : 0) : endRuns),
+          forfeitWinner: forfeitWinner,
         });
         if (!ran && errorText) { render(); return; }
         view = "played";
@@ -1565,7 +1747,10 @@
     }
 
     function onChange(event) {
-      if (!event.target || event.target.id !== "team-select") return;
+      if (!event.target) return;
+      if (event.target.id === "dp-pick") { dpDraft = event.target.value; return; }
+      if (event.target.id === "flex-pick") { flexDraft = event.target.value; return; }
+      if (event.target.id !== "team-select") return;
       if (window.ElksData && ElksData.setCurrentHubTeam) ElksData.setCurrentHubTeam(event.target.value);
       var team = currentTeam();
       teamId = team.id;

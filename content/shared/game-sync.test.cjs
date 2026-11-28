@@ -120,6 +120,28 @@ describe("game sync conflict rule", () => {
     assert.equal(outsOf(resolved.doc), 2);
   });
 
+  it("counts one run and one batter when two phones tap together", () => {
+    const server = started(0, 1);
+    const atHalf = { inningIndex: 0, half: "top", outs: 0, liveRuns: 0, battingIndex: 0 };
+    const once = GameManager.applyGameOp(server, {
+      type: "add-run", teamId: "team-16u", gameId: "game-eagles", atHalf: atHalf,
+    }, 2);
+    const twice = GameManager.applyGameOp(once, {
+      type: "add-run", teamId: "team-16u", gameId: "game-eagles", atHalf: atHalf,
+    }, 3);
+    assert.equal(outsOf(twice) === 0 && twice.teams["team-16u"].sessions["game-eagles"].liveRuns, 1);
+    const stepped = GameManager.applyGameOp(twice, {
+      type: "next-batter", teamId: "team-16u", gameId: "game-eagles", atHalf: atHalf,
+    }, 4);
+    const steppedAgain = GameManager.applyGameOp(stepped, {
+      type: "next-batter", teamId: "team-16u", gameId: "game-eagles", atHalf: atHalf,
+    }, 5);
+    assert.equal(steppedAgain.teams["team-16u"].sessions["game-eagles"].battingIndex, stepped.teams["team-16u"].sessions["game-eagles"].battingIndex);
+    const undone = GameManager.applyGameOp(steppedAgain, { type: "undo", teamId: "team-16u", gameId: "game-eagles" }, 6);
+    const undoneAgain = GameManager.applyGameOp(undone, { type: "undo", teamId: "team-16u", gameId: "game-eagles" }, 7);
+    assert.equal(undoneAgain.teams["team-16u"].sessions["game-eagles"].battingIndex, undone.teams["team-16u"].sessions["game-eagles"].battingIndex);
+  });
+
   it("drops a second out aimed at the same count", async () => {
     const server = memoryServer(started(1, 3));
     const atHalf = { inningIndex: 0, half: "top", outs: 1 };
