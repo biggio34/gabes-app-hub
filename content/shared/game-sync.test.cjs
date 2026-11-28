@@ -120,6 +120,31 @@ describe("game sync conflict rule", () => {
     assert.equal(outsOf(resolved.doc), 2);
   });
 
+  it("drops a second out aimed at the same count", async () => {
+    const server = memoryServer(started(1, 3));
+    const atHalf = { inningIndex: 0, half: "top", outs: 1 };
+    function client() {
+      return GameSync.connect({
+        storage: GameSync.memoryStorage(),
+        storageKey: "gm",
+        normalize: GameManager.normalizeDocument,
+        applyOp: GameManager.applyGameOp,
+        load: server.load,
+        save: server.save,
+        bindWindow: false,
+        online: function () { return true; },
+      });
+    }
+    const a = client();
+    const b = client();
+    a.run({ type: "add-out", teamId: "team-16u", gameId: "game-eagles", opId: "tap-a", atHalf: atHalf });
+    b.run({ type: "add-out", teamId: "team-16u", gameId: "game-eagles", opId: "tap-b", atHalf: atHalf });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(outsOf(server.snapshot()), 2);
+    assert.equal(a.queue().length, 0);
+    assert.equal(b.queue().length, 0);
+  });
+
   it("lands both near-simultaneous outs on the shared server", async () => {
     const server = memoryServer(started(1, 3));
     function client() {

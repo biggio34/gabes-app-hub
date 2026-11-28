@@ -188,6 +188,15 @@
         ? ruleFrom(options)(current, op, applyOp, now)
         : { applied: true, doc: applyOp(current, op, now) };
     } catch (error) {
+      if (error && (error.code === "stale" || /already recorded/.test(String(error.message || "")))) {
+        return {
+          kind: "drop",
+          doc: current,
+          expectedRevision: revisionOf(current),
+          rebased: true,
+          notice: true,
+        };
+      }
       return {
         kind: "stop",
         doc: current,

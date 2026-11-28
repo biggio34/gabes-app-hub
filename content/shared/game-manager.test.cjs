@@ -102,7 +102,7 @@ describe("game manager half innings", () => {
     assert.equal(GameManager.battingSide("top"), "away");
     const state = start("away");
     const board = GameManager.scoreboard(state);
-    assert.equal(board.label, "Top 1");
+    assert.equal(board.label, "Top 1st");
     assert.equal(board.role, "offense");
   });
 
@@ -112,14 +112,14 @@ describe("game manager half innings", () => {
     assert.equal(GameManager.battingSide("bottom"), "home");
     const state = start("home");
     assert.equal(GameManager.scoreboard(state).role, "defense");
-    assert.equal(GameManager.halfLabel(0, "top"), "Top 1");
+    assert.equal(GameManager.halfLabel(0, "top"), "Top 1st");
   });
 
   it("records our top-inning runs, then flips to defense", () => {
     let state = start("away");
     state = GameManager.recordRuns(state, 2, 1100);
     const board = GameManager.scoreboard(state);
-    assert.equal(board.label, "Bottom 1");
+    assert.equal(board.label, "Bot 1st");
     assert.equal(board.role, "defense");
     assert.equal(board.innings[0].us, 2);
     assert.equal(board.innings[0].opp, null);
@@ -136,7 +136,7 @@ describe("game manager half innings", () => {
     state = GameManager.recordRuns(state, 3, 1100);
     const board = GameManager.scoreboard(state);
     assert.equal(board.role, "offense");
-    assert.equal(board.label, "Bottom 1");
+    assert.equal(board.label, "Bot 1st");
     assert.equal(board.innings[0].opp, 3);
     assert.equal(board.oppTotal, 3);
     assert.equal(board.usTotal, 0);
@@ -148,7 +148,7 @@ describe("game manager half innings", () => {
     const next = GameManager.scoreboard(state);
     assert.equal(next.usTotal, 4);
     assert.equal(next.oppTotal, 3);
-    assert.equal(next.label, "Top 2");
+    assert.equal(next.label, "Top 2nd");
     assert.equal(next.role, "defense");
     assert.equal(state.defensiveOuts.mia, 3);
   });
@@ -296,7 +296,7 @@ describe("game manager defensive innings", () => {
     const board = GameManager.scoreboard(state);
     assert.equal(board.oppTotal, 2);
     assert.equal(board.usTotal, 1);
-    assert.equal(board.label, "Bottom 2");
+    assert.equal(board.label, "Bot 2nd");
     assert.equal(board.role, "offense");
   });
 });
@@ -446,7 +446,7 @@ describe("outs", () => {
     state = GameManager.addOut(state, 2);
     assert.equal(GameManager.thirdOutPrompt(state), null);
     state = GameManager.addOut(state, 3);
-    assert.deepEqual(GameManager.thirdOutPrompt(state), { title: "End Top 1?", label: "Top 1" });
+    assert.deepEqual(GameManager.thirdOutPrompt(state), { title: "End Top 1st?", label: "Top 1st" });
     const cancelled = GameManager.undoOut(state, 4);
     assert.equal(cancelled.outs, 2);
     assert.equal(GameManager.thirdOutPrompt(cancelled), null);
@@ -455,7 +455,7 @@ describe("outs", () => {
     bottom = GameManager.addOut(bottom, 6);
     bottom = GameManager.addOut(bottom, 7);
     bottom = GameManager.addOut(bottom, 8);
-    assert.equal(GameManager.thirdOutPrompt(bottom).title, "End Bottom 1?");
+    assert.equal(GameManager.thirdOutPrompt(bottom).title, "End Bot 1st?");
     const confirmed = bottom;
     assert.equal(confirmed.outs, 3);
     const advanced = GameManager.recordRuns(confirmed, 1, 9);
@@ -497,7 +497,7 @@ describe("game manager saved games", () => {
     state = GameManager.recordRuns(state, 2, 1300);
     state = GameManager.addOut(state, 4);
     assert.equal(GameManager.scoreboard(state).role, "defense");
-    assert.equal(GameManager.scoreboard(state).label, "Bottom 2");
+    assert.equal(GameManager.scoreboard(state).label, "Bot 2nd");
     const outsSoFar = Object.assign({}, state.defensiveOuts);
     state = GameManager.endGame(state, 1400);
     assert.equal(state.status, "played");
@@ -511,7 +511,7 @@ describe("game manager saved games", () => {
     assert.equal(board.label, "Final");
     assert.equal(board.usTotal, 6);
     assert.equal(board.oppTotal, 1);
-    assert.equal(board.innings.length, 2);
+    assert.equal(board.innings.length, 7);
     assert.equal(board.innings[1].us, 2);
     assert.equal(board.innings[1].opp, null);
     assert.deepEqual(
@@ -535,7 +535,7 @@ describe("game manager saved games", () => {
     assert.equal(state.finalOpp, 1);
     const board = GameManager.scoreboard(state);
     assert.equal(board.label, "Final");
-    assert.equal(board.innings.length, 1);
+    assert.equal(board.innings.length, 7);
     assert.equal(board.usTotal, 2);
     const played = GameManager.playedEntries(games, sessions);
     assert.equal(played.length, 1);
@@ -570,7 +570,9 @@ describe("game manager saved games", () => {
 
   it("names the opponent from the lineup game title", () => {
     assert.equal(GameManager.opponentLabel("vs. Eagles - May 3"), "Eagles");
-    assert.equal(GameManager.opponentLabel("New Game - Nov 20"), "Opponent");
+    assert.equal(GameManager.opponentLabel("New Game - Nov 20"), "");
+    assert.equal(GameManager.opponentLabel("@ Blaine Bandits"), "Blaine Bandits");
+    assert.equal(GameManager.opponentLabel("at Rogers"), "Rogers");
   });
 });
 
@@ -580,25 +582,27 @@ describe("scoreboard away-home row order", () => {
     state = GameManager.recordRuns(state, 2, 1100);
     assert.equal(
       GameManager.liveScoreMeta(state),
-      "In progress · Bottom 1 · Defense · Us 2, Eagles 0",
+      "In progress · Bot 1st · Defense · Fransen 2, Eagles 0",
     );
     state = GameManager.recordRuns(state, 1, 1200);
     const open = GameManager.scoreboardRows(state);
     assert.deepEqual(open.map((row) => row.side), ["away", "home"]);
     assert.deepEqual(open.map((row) => row.team), ["us", "opp"]);
-    assert.deepEqual(open.map((row) => row.label), ["Us", "Eagles"]);
-    assert.deepEqual(open[0].cells, [2, null]);
-    assert.deepEqual(open[1].cells, [1, null]);
+    assert.deepEqual(open.map((row) => row.label), ["FRANSE", "EAGLES"]);
+    assert.deepEqual(open[0].cells.slice(0, 2), [2, null]);
+    assert.equal(open[0].cells.length, 7);
+    assert.deepEqual(open[1].cells.slice(0, 2), [1, null]);
     assert.equal(open[0].total, 2);
     assert.equal(open[1].total, 1);
-    assert.equal(GameManager.scoreLine(state), "Us 2, Eagles 1");
-    assert.equal(GameManager.liveScoreMeta(state), "In progress · Top 2 · Offense · Us 2, Eagles 1");
+    assert.equal(GameManager.scoreLine(state), "Fransen 2, Eagles 1");
+    assert.equal(GameManager.liveScoreMeta(state), "In progress · Top 2nd · Offense · Fransen 2, Eagles 1");
     const done = GameManager.endGame(state, 1300);
     const rows = GameManager.scoreboardRows(done);
-    assert.deepEqual(rows.map((row) => row.label), ["Us", "Eagles"]);
-    assert.deepEqual(rows[0].cells, [2]);
-    assert.deepEqual(rows[1].cells, [1]);
-    assert.equal(GameManager.finalScoreMeta(done), "Final Us 2, Eagles 1");
+    assert.deepEqual(rows.map((row) => row.label), ["FRANSE", "EAGLES"]);
+    assert.equal(rows[0].cells[0], 2);
+    assert.equal(rows[1].cells[0], 1);
+    assert.equal(rows[0].cells.length, 7);
+    assert.equal(GameManager.finalScoreMeta(done), "Final Fransen 2, Eagles 1");
   });
 
   it("puts the opponent on top when we are the home team", () => {
@@ -606,25 +610,28 @@ describe("scoreboard away-home row order", () => {
     state = GameManager.recordRuns(state, 3, 1100);
     assert.equal(
       GameManager.liveScoreMeta(state),
-      "In progress · Bottom 1 · Offense · Eagles 3, Us 0",
+      "In progress · Bot 1st · Offense · Eagles 3, Fransen 0",
     );
     state = GameManager.recordRuns(state, 5, 1200);
     const open = GameManager.scoreboardRows(state);
     assert.deepEqual(open.map((row) => row.side), ["away", "home"]);
     assert.deepEqual(open.map((row) => row.team), ["opp", "us"]);
-    assert.deepEqual(open.map((row) => row.label), ["Eagles", "Us"]);
-    assert.deepEqual(open[0].cells, [3, null]);
-    assert.deepEqual(open[1].cells, [5, null]);
+    assert.deepEqual(open.map((row) => row.label), ["EAGLES", "FRANSE"]);
+    assert.deepEqual(open[0].cells.slice(0, 2), [3, null]);
+    assert.equal(open[0].cells.length, 7);
+    assert.deepEqual(open[1].cells.slice(0, 2), [5, null]);
     assert.equal(open[0].total, 3);
     assert.equal(open[1].total, 5);
-    assert.equal(GameManager.scoreLine(state), "Eagles 3, Us 5");
-    assert.equal(GameManager.liveScoreMeta(state), "In progress · Top 2 · Defense · Eagles 3, Us 5");
+    assert.equal(GameManager.scoreLine(state), "Eagles 3, Fransen 5");
+    assert.equal(GameManager.liveScoreMeta(state), "In progress · Top 2nd · Defense · Eagles 3, Fransen 5");
     const done = GameManager.endGame(state, 1300);
     const rows = GameManager.scoreboardRows(done);
     assert.deepEqual(rows.map((row) => row.side), ["away", "home"]);
-    assert.deepEqual(rows[0].cells, [3]);
-    assert.deepEqual(rows[1].cells, [5]);
-    assert.equal(GameManager.finalScoreMeta(done), "Final Eagles 3, Us 5");
+    assert.equal(rows[0].cells[0], 3);
+    assert.equal(rows[0].cells.length, 7);
+    assert.equal(rows[1].cells[0], 5);
+    assert.equal(rows[1].cells.length, 7);
+    assert.equal(GameManager.finalScoreMeta(done), "Final Eagles 3, Fransen 5");
   });
 
   it("shortens a nameless opponent to Opp in the away-home score line", () => {
@@ -632,9 +639,9 @@ describe("scoreboard away-home row order", () => {
     state = Object.assign({}, state, { gameName: "Saturday Game" });
     state = GameManager.recordRuns(state, 3, 1100);
     state = GameManager.recordRuns(state, 5, 1200);
-    assert.equal(GameManager.scoreboardRows(state)[0].label, "Opp");
-    assert.equal(GameManager.scoreboardRows(state)[1].label, "Us");
-    assert.equal(GameManager.scoreLine(state), "Opp 3, Us 5");
+    assert.equal(GameManager.scoreboardRows(state)[0].label, "OPP");
+    assert.equal(GameManager.scoreboardRows(state)[1].label, "FRANSE");
+    assert.equal(GameManager.scoreLine(state), "Opponent 3, Fransen 5");
   });
 
   it("shows the skipped bottom X on our row at the bottom of a home game", () => {
@@ -646,15 +653,15 @@ describe("scoreboard away-home row order", () => {
     assert.equal(state.endedReason, "home-lead");
     const rows = GameManager.scoreboardRows(state);
     assert.deepEqual(rows.map((row) => row.side), ["away", "home"]);
-    assert.equal(rows[0].label, "Eagles");
+    assert.equal(rows[0].label, "EAGLES");
     assert.deepEqual(rows[0].cells, [0, 0]);
     assert.equal(rows[0].total, 0);
-    assert.equal(rows[1].label, "Us");
+    assert.equal(rows[1].label, "FRANSE");
     assert.equal(rows[1].team, "us");
     assert.deepEqual(rows[1].cells, [2, "X"]);
     assert.equal(rows[1].total, 2);
-    assert.equal(GameManager.scoreLine(state), "Eagles 0, Us 2");
-    assert.equal(GameManager.finalScoreMeta(state), "Final Eagles 0, Us 2");
+    assert.equal(GameManager.scoreLine(state), "Eagles 0, Fransen 2");
+    assert.equal(GameManager.finalScoreMeta(state), "Final Eagles 0, Fransen 2");
   });
 });
 
@@ -678,7 +685,7 @@ describe("lineup formats", () => {
     const order = nine.concat(rest);
     const game = card("roster", order, { P: "mia", C: "ava", SS: "lina" });
     const view = GameManager.lineupView(game, players());
-    assert.equal(view.formatLabel, "Bat the roster");
+    assert.equal(view.formatLabel, "Continuous order");
     assert.equal(view.batting.length, 12);
     assert.deepEqual(GameManager.dueSlots(12, 11), [11, 0, 1]);
     assert.deepEqual(GameManager.dueSlots(12, 8), [8, 9, 10]);
@@ -696,19 +703,17 @@ describe("lineup formats", () => {
     assert.equal(state.defensiveOuts.mia || 0, 0);
     assert.equal(GameManager.liveBatters(state).some((row) => row.id === "sage"), true);
     assert.equal(state.injuryOut, false);
-    const leaving = GameManager.describeChange(state, { type: "leave", playerId: "ava" });
-    assert.match(leaving.text, /stays in the batting order/);
-    assert.match(leaving.text, /Not an automatic out/);
-    state = GameManager.leaveRosterPlayer(state, "ava", 5);
-    assert.equal(GameManager.liveBatters(state).find((row) => row.id === "ava").role, "Left game");
+    const leaving = GameManager.describeChange(state, { type: "leave", playerId: "ava", reason: "skip" });
+    assert.match(leaving.text, /Skip her spot, no out/);
+    state = GameManager.leaveRosterPlayer(state, "ava", "skip", 5);
+    assert.equal(GameManager.liveBatters(state).find((row) => row.id === "ava").role, "Skipped");
     assert.equal(state.defense.C, null);
     const avaOuts = state.defensiveOuts.ava || 0;
     state = GameManager.addOut(state, 6);
     assert.equal(state.defensiveOuts.ava || 0, avaOuts);
-    state = GameManager.setInjuryOut(state, true, 7);
-    const auto = GameManager.describeChange(state, { type: "leave", playerId: "lina" });
-    assert.match(auto.text, /automatic out/);
-    state = GameManager.leaveRosterPlayer(state, "lina", 8);
+    const auto = GameManager.describeChange(state, { type: "leave", playerId: "lina", reason: "auto-out" });
+    assert.match(auto.text, /An out each time her spot comes up/);
+    state = GameManager.leaveRosterPlayer(state, "lina", "auto-out", 8);
     assert.equal(GameManager.liveBatters(state).find((row) => row.id === "lina").role, "Auto out");
     assert.equal(GameManager.liveBatters(state).some((row) => row.id === "lina"), true);
   });
@@ -721,12 +726,10 @@ describe("lineup formats", () => {
     assert.ok(view.subs.some((row) => row.id === "sub"));
     let state = GameManager.createLiveGame({ side: "home", game: game, players: players() }, 1);
     const effect = GameManager.describeChange(state, { type: "bat", spot: 0, playerId: "sub" });
-    assert.match(effect.text, /Brooks enters at P and takes Hill's #1 batting spot/);
-    assert.match(effect.text, /Pinch hitters and pinch runners count as this sub/);
+    assert.match(effect.text, /Brooks for Hill · #1 · P/);
     const beforeCourtesy = JSON.stringify({ spots: state.spots, defense: state.defense, departed: state.departed });
     const courtesy = GameManager.describeChange(state, { type: "courtesy", forId: "mia", runnerId: "jo" });
-    assert.match(courtesy.text, /Not a sub/);
-    assert.match(courtesy.text, /Re-entry unchanged/);
+    assert.match(courtesy.text, /CR Park for P Hill/);
     state = GameManager.setCourtesy(state, "mia", "jo", 2);
     assert.equal(JSON.stringify({ spots: state.spots, defense: state.defense, departed: state.departed }), beforeCourtesy);
     state = GameManager.applySub(state, 0, "sub", false, 2);
@@ -741,17 +744,21 @@ describe("lineup formats", () => {
     state = GameManager.applySub(state, 0, "jo", false, 5);
     const again = GameManager.subChoice(state, 0, "mia");
     assert.equal(again.illegal, true);
-    assert.match(again.reason, /original batting spot/);
+    assert.match(again.reason, /one re-entry/);
     const wrongSpot = GameManager.subChoice(state, 1, "mia");
     assert.equal(wrongSpot.illegal, true);
-    assert.throws(() => GameManager.applySub(state, 0, "sub", false, 6), /cannot re-enter/);
+    assert.match(wrongSpot.reason, /original batting spot/);
+    state = GameManager.applySub(state, 0, "sub", false, 6);
+    assert.equal(GameManager.liveBatters(state)[0].id, "sub");
+    state = GameManager.applySub(state, 0, "jo", false, 7);
+    assert.throws(() => GameManager.applySub(state, 0, "sub", false, 8), /one re-entry/);
   });
 
   it("plays DP / Flex with 9 batters, a fielding Flex, and a role swap", () => {
     const order = nine.concat(["blake"]);
     const game = card("dp-flex", order, { P: "blake", C: "ava", DP: "mia" });
     const view = GameManager.lineupView(game, players());
-    assert.equal(view.formatLabel, "DP / Flex");
+    assert.equal(view.formatLabel, "DP / FLEX");
     assert.equal(view.batting.length, 9);
     assert.equal(view.flexId, "blake");
     assert.equal(view.batting.some((row) => row.id === "blake"), false);
@@ -773,8 +780,9 @@ describe("lineup formats", () => {
     assert.equal(state.defensiveOuts.blake, 1);
     assert.equal(state.defensiveOuts.lina || 0, 0);
     const flexEffect = GameManager.describeChange(state, { type: "flex" });
-    assert.match(flexEffect.text, /Flex bats for DP in spot 1; DP leaves offense/);
-    assert.match(flexEffect.text, /Lineup drops to 9/);
+    assert.match(flexEffect.text, /FLEX bats for DP in #1/);
+    assert.match(flexEffect.text, /DP leaves the game/);
+    assert.match(flexEffect.text, /Lineup is 9/);
     assert.match(flexEffect.text, /DP leaves SS/);
     state = GameManager.swapDpFlex(state, 4);
     assert.equal(GameManager.liveBatters(state)[0].id, "blake");
@@ -815,13 +823,11 @@ describe("lineup formats", () => {
     assert.throws(() => GameManager.reenterFlex(dropped, false, 6), /only once/);
     let pinch = GameManager.createLiveGame({ side: "home", game: gameForFlex, players: players() }, 1);
     const pinchEffect = GameManager.describeChange(pinch, { type: "bat", spot: 0, playerId: "sub" });
-    assert.match(pinchEffect.text, /takes the DP's #1 batting spot/);
-    assert.match(pinchEffect.text, /Pinch hitters and pinch runners count as this sub/);
+    assert.match(pinchEffect.text, /Brooks for Hill · #1/);
     pinch = GameManager.applySub(pinch, 0, "sub", false, 2);
     assert.equal(GameManager.liveBatters(pinch)[0].id, "sub");
     const flexSub = GameManager.describeChange(pinch, { type: "flex-sub", playerId: "jo" });
     assert.match(flexSub.text, /Defense only/);
-    assert.match(flexSub.text, /Batting order unchanged/);
     const orderIds = GameManager.liveBatters(pinch).map((row) => row.id).join(",");
     pinch = GameManager.subForFlex(pinch, "jo", false, 3);
     assert.equal(pinch.defense.P, "jo");
@@ -840,15 +846,14 @@ describe("lineup formats", () => {
     const order = nine.concat(["blake"]);
     const game = card("one-ap", order, { P: "mia", SS: "lina" });
     const view = GameManager.lineupView(game, players());
-    assert.equal(view.formatLabel, "Extra hitter");
+    assert.equal(view.formatLabel, "Bat 10 (EP)");
     assert.equal(view.batting.length, 10);
-    assert.equal(view.batting[9].role, "EH");
+    assert.equal(view.batting[9].role, "EP");
     assert.equal(view.batting[9].id, "blake");
     let state = GameManager.createLiveGame({ side: "home", game: game, players: players() }, 1);
     assert.equal(GameManager.playerMayField(state, "blake"), true);
     const ehEffect = GameManager.describeChange(state, { type: "bat", spot: 9, playerId: "sub" });
-    assert.match(ehEffect.text, /Defense unchanged/);
-    assert.match(ehEffect.text, /Pinch hitters and pinch runners count as this sub/);
+    assert.match(ehEffect.text, /#10/);
     const trade = GameManager.describeChange(state, { type: "field", position: "SS", playerId: "blake" });
     assert.match(trade.text, /hits only/);
     assert.match(trade.text, /Batting order unchanged/);
@@ -856,10 +861,10 @@ describe("lineup formats", () => {
     const fieldBefore = state.defense.P;
     state = GameManager.applySub(state, 9, "sub", false, 3);
     assert.equal(GameManager.liveBatters(state)[9].id, "sub");
-    assert.equal(GameManager.liveBatters(state)[9].role, "EH");
+    assert.equal(GameManager.liveBatters(state)[9].role, "EP");
     assert.equal(state.defense.P, fieldBefore);
     const both = GameManager.describeChange(state, { type: "bat", spot: 0, playerId: "jo" });
-    assert.match(both.text, /Park enters at P and takes Hill's #1 batting spot/);
+    assert.match(both.text, /Park for Hill · #1 · P/);
     state = GameManager.applySub(state, 0, "jo", false, 4);
     assert.equal(state.defense.P, "jo");
     state = GameManager.addOut(state, 5);
@@ -872,27 +877,26 @@ describe("lineup formats", () => {
     const order = nine.concat(["blake", "remy"]);
     const game = card("two-ap", order, { P: "mia" });
     const view = GameManager.lineupView(game, players());
-    assert.equal(view.formatLabel, "Two extra hitters");
+    assert.equal(view.formatLabel, "Bat 11 (2 EP)");
     assert.equal(view.batting.length, 11);
-    assert.equal(view.batting[9].role, "EH");
-    assert.equal(view.batting[10].role, "EH");
+    assert.equal(view.batting[9].role, "EP");
+    assert.equal(view.batting[10].role, "EP");
     let state = GameManager.createLiveGame({ side: "home", game: game, players: players() }, 1);
     assert.equal(GameManager.playerMayField(state, "remy"), true);
     const effect = GameManager.describeChange(state, { type: "bat", spot: 10, playerId: "sage" });
-    assert.match(effect.text, /Defense unchanged/);
-    assert.match(effect.text, /Pinch hitters and pinch runners count as this sub/);
+    assert.match(effect.text, /#11/);
     const trade = GameManager.describeChange(state, { type: "field", position: "SS", playerId: "remy" });
     assert.match(trade.text, /All 11 still bat/);
     const fieldBefore = state.defense.P;
     state = GameManager.applySub(state, 10, "sage", false, 2);
     assert.equal(state.defense.P, fieldBefore);
     assert.equal(GameManager.liveBatters(state)[10].id, "sage");
-    assert.equal(GameManager.liveBatters(state)[10].role, "EH");
+    assert.equal(GameManager.liveBatters(state)[10].role, "EP");
     state = GameManager.applySub(state, 10, "remy", false, 3);
     state = GameManager.applySub(state, 10, "jo", false, 4);
     const again = GameManager.subChoice(state, 10, "remy");
     assert.equal(again.illegal, true);
-    assert.match(again.reason, /only once/);
+    assert.match(again.reason, /one re-entry/);
   });
 });
 
@@ -911,23 +915,23 @@ describe("live spot and last position", () => {
     let state = GameManager.createLiveGame({ side: "away", game: early, players: players() }, 1);
     state = Object.assign({}, state, { dpSpot: 5 });
     const text = GameManager.describeChange(state, { type: "flex" }).text;
-    assert.match(text, /Flex bats for DP in spot 1;/);
+    assert.match(text, /FLEX bats for DP in #1/);
     state = GameManager.swapDpFlex(state, 2);
     assert.equal(GameManager.liveBatters(state)[0].id, "blake");
     assert.equal(GameManager.liveBatters(state)[5].id, "rory");
     const lateOrder = ["ava", "lina", "noa", "sky", "rory", "mia", "quinn", "elle", "jules", "blake"];
     const late = Object.assign({}, early, { id: "dp-late", battingOrder: lateOrder });
     const lateState = GameManager.createLiveGame({ side: "away", game: late, players: players() }, 1);
-    assert.match(GameManager.describeChange(lateState, { type: "flex" }).text, /spot 6/);
+    assert.match(GameManager.describeChange(lateState, { type: "flex" }).text, /#6/);
   });
 
   it("names the replaced player's live batting spot", () => {
     const game = Object.assign({}, sampleGame(), { battingMode: "nine" });
     const state = GameManager.createLiveGame({ side: "away", game: game, players: players() }, 1);
     const first = GameManager.describeChange(state, { type: "bat", spot: 0, playerId: "sub" }).text;
-    assert.match(first, /takes Hill's #1 batting spot/);
+    assert.match(first, /Brooks for Hill · #1/);
     const third = GameManager.describeChange(state, { type: "bat", spot: 2, playerId: "jo" }).text;
-    assert.match(third, /takes Ortiz's #3 batting spot/);
+    assert.match(third, /Park for Ortiz · #3/);
   });
 
   it("keeps the last field position after a player leaves the field", () => {
@@ -939,6 +943,152 @@ describe("live spot and last position", () => {
     const row = GameManager.defensiveInningRows(state).find((item) => item.id === "mia");
     assert.equal(row.innings, "0.1");
     assert.equal(row.position, "P");
+  });
+});
+
+describe("game manager rules fixes", () => {
+  const nine = ["mia", "ava", "lina", "noa", "sky", "rory", "quinn", "elle", "jules"];
+
+  function rosterGame() {
+    return {
+      id: "roster-game",
+      name: "vs. Eagles - May 3",
+      battingMode: "roster",
+      battingOrder: nine.concat(["blake", "remy", "sage"]),
+      defensivePositions: defense({ P: "mia", C: "ava", "1B": "lina", "2B": "noa", "3B": "sky", SS: "rory", LF: "quinn", CF: "elle", RF: "jules" }),
+      inningDefenses: [],
+      unavailableIds: [],
+    };
+  }
+
+  it("moves due up through the order, wraps, and skips an injured spot", () => {
+    let state = GameManager.createLiveGame({ side: "away", game: rosterGame(), players: players(), teamName: "16U Fransen" }, 1);
+    assert.equal(GameManager.effectiveBatterIndex(state), 0);
+    assert.deepEqual(GameManager.dueSlots(12, GameManager.effectiveBatterIndex(state)), [0, 1, 2]);
+    state = GameManager.advanceBatter(state, 2);
+    assert.equal(GameManager.effectiveBatterIndex(state), 1);
+    state = GameManager.recordRuns(state, 0, 3);
+    state = GameManager.recordRuns(state, 0, 4);
+    assert.equal(state.half, "top");
+    assert.equal(state.inningIndex, 1);
+    assert.equal(GameManager.effectiveBatterIndex(state), 1);
+    state = GameManager.leaveRosterPlayer(state, "lina", "skip", 5);
+    state = GameManager.setBatter(state, 2, 6);
+    assert.equal(GameManager.liveBatters(state)[GameManager.effectiveBatterIndex(state)].id, "noa");
+  });
+
+  it("undoes a finished half and can resume a final game", () => {
+    let state = start("away", null, 1);
+    state = GameManager.recordRuns(state, 1, 2);
+    assert.equal(state.half, "bottom");
+    state = GameManager.undo(state, 3);
+    assert.equal(state.half, "top");
+    assert.equal(state.innings[0].top, null);
+    state = GameManager.recordRuns(state, 2, 4);
+    state = GameManager.recordRuns(state, 0, 5);
+    assert.equal(state.status, "played");
+    state = GameManager.resumeGame(state, 6);
+    assert.equal(state.status, "live");
+    state = GameManager.undo(state, 7);
+    assert.equal(state.status, "played");
+  });
+
+  it("keeps the runs in progress, marks a skipped bottom, and stores the end reason", () => {
+    let state = start("home", null, 7);
+    state = GameManager.recordRuns(state, 2, 2);
+    state = GameManager.endGame(state, { reason: "time", runsThisHalf: 4 }, 3);
+    assert.equal(state.status, "played");
+    assert.equal(state.endedReason, "time");
+    assert.equal(state.innings[0].bottom, 4);
+    assert.equal(GameManager.endNote(state), "Time limit");
+    let ahead = start("home", null, 7);
+    ahead = GameManager.recordRuns(ahead, 0, 1);
+    ahead = GameManager.recordRuns(ahead, 3, 2);
+    ahead = GameManager.recordRuns(ahead, 0, 3);
+    ahead = GameManager.recordRuns(ahead, 3, 4);
+    ahead = GameManager.endGame(ahead, { reason: "run-rule", runsThisHalf: 0 }, 6);
+    assert.equal(ahead.endedReason, "run-rule");
+    assert.equal(ahead.innings[2].bottom, "X");
+    const forfeit = GameManager.endGame(start("away"), { reason: "forfeit", forfeitWinner: "us" }, 7);
+    assert.equal(forfeit.finalUs, 7);
+    assert.equal(forfeit.finalOpp, 0);
+    assert.equal(GameManager.endNote(forfeit), "Forfeit");
+  });
+
+  it("lets a time-limit tie start the tiebreaker and names our runner", () => {
+    let state = start("away", null, 7);
+    for (let i = 0; i < 8; i += 1) state = GameManager.recordRuns(state, 0, i + 1);
+    assert.equal(state.inningIndex, 4);
+    assert.equal(state.half, "top");
+    state = GameManager.setScheduledInnings(state, 4, 20, { timeLimit: true });
+    state = GameManager.recordRuns(state, 0, 21);
+    state = GameManager.recordRuns(state, 0, 22);
+    assert.equal(state.inningIndex, 5);
+    assert.equal(GameManager.tiebreakerActive(state), true);
+    assert.equal(state.tiebreaker, true);
+    const runner = GameManager.itbRunner(state);
+    assert.equal(runner.id, "lina");
+  });
+
+  it("does not put one player at two positions for a FLEX sub", () => {
+    const order = nine.concat(["blake"]);
+    const game = {
+      id: "flex-dup",
+      name: "vs. Eagles",
+      battingMode: "dp-flex",
+      battingOrder: order,
+      defensivePositions: defense({ P: "blake", C: "ava", DP: "mia" }),
+      inningDefenses: [],
+      unavailableIds: [],
+    };
+    const state = GameManager.createLiveGame({ side: "home", game: game, players: players() }, 1);
+    const blocked = GameManager.describeChange(state, { type: "flex-sub", playerId: "ava" });
+    assert.equal(blocked.ok, false);
+    assert.match(blocked.reason, /already playing C/);
+    assert.throws(() => GameManager.subForFlex(state, "ava", false, 2), /already playing/);
+  });
+
+  it("limits courtesy runners to the pitcher and catcher and clears them", () => {
+    const game = Object.assign({}, sampleGame(), { battingMode: "nine" });
+    let state = GameManager.createLiveGame({ side: "away", game: game, players: players() }, 1);
+    assert.equal(GameManager.courtesyChoice(state, "lina", "jo").ok, false);
+    assert.equal(GameManager.courtesyChoice(state, "mia", "jo").ok, true);
+    state = GameManager.setCourtesy(state, "mia", "jo", 2);
+    assert.equal(GameManager.courtesyChoice(state, "ava", "jo").ok, false);
+    state = GameManager.recordRuns(state, 0, 3);
+    assert.deepEqual(state.courtesy, []);
+    assert.equal(state.courtesyUsed.P, "jo");
+  });
+
+  it("shows every scheduled inning and does not guess the DP", () => {
+    assert.equal(GameManager.scoreboard(start("away")).innings.length, 7);
+    const order = nine.concat(["blake"]);
+    const game = {
+      id: "no-dp",
+      name: "vs. Eagles",
+      battingMode: "dp-flex",
+      battingOrder: order,
+      defensivePositions: defense({ P: "blake" }),
+      inningDefenses: [],
+      unavailableIds: [],
+    };
+    const state = GameManager.createLiveGame({ side: "home", game: game, players: players() }, 1);
+    assert.equal(state.dpId, "");
+  });
+
+  it("says why a courtesy runner or a stale tap cannot land", () => {
+    const state = start("away");
+    assert.match(GameManager.courtesyChoice(state, "lina", "jo").reason, /pitcher or catcher/);
+    assert.throws(() => GameManager.applyGameOp(GameManager.applyGameOp(GameManager.emptyDocument(), {
+      type: "start",
+      teamId: "t",
+      input: { side: "away", game: sampleGame(), players: players(), teamName: "16U Fransen" },
+    }, 1), {
+      type: "add-out",
+      teamId: "t",
+      gameId: "game-eagles",
+      atHalf: { inningIndex: 0, half: "top", outs: 2 },
+    }, 2), /already recorded/);
   });
 });
 

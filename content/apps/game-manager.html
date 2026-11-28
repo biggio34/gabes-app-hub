@@ -5,37 +5,54 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#fff4d6">
+  <meta name="theme-color" content="#020617">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Game Manager</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
   <style>
     :root {
-      --ink: #1a1208;
-      --paper: #fff4d6;
-      --card: #fffdf8;
-      --line: #1a1208;
-      --red: #9f1239;
-      --gold: #f5d90a;
-      --blue: #0b3a82;
-      --muted: #4a4034;
+      --bg: #020617;
+      --card: #0f172a;
+      --ink: #e2e8f0;
+      --muted: #94a3b8;
+      --line: rgba(148, 163, 184, 0.24);
+      --accent: #b91c1c;
+      --accent-ink: #ffe4e6;
+      --soft: rgba(185, 28, 28, 0.16);
     }
 
     * { box-sizing: border-box; }
-
     html, body { margin: 0; min-height: 100%; }
-
     body {
-      font-family: "Segoe UI", system-ui, sans-serif;
-      background: var(--paper);
+      font-family: Inter, system-ui, sans-serif;
+      background: var(--bg);
       color: var(--ink);
-      font-size: 18px;
-      line-height: 1.3;
+      font-size: 16px;
+      font-weight: 400;
+      line-height: 1.35;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
+      -webkit-font-smoothing: antialiased;
     }
-
-    button, select { font: inherit; color: inherit; touch-action: manipulation; }
+    button, select { font: inherit; color: inherit; touch-action: manipulation; background: none; border: 0; }
     button { cursor: pointer; }
-    button:active { transform: scale(0.98); }
+    button:focus-visible, select:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+    input { font: inherit; color: inherit; }
+
+    .num-face {
+      font-family: "Space Grotesk", Inter, sans-serif;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.03em;
+    }
+    .name, .who, .game-name {
+      font-weight: 400;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .at-bat .name { font-weight: 600; }
 
     .wrap {
       width: min(480px, 100%);
@@ -43,446 +60,293 @@
       min-height: 100dvh;
       display: flex;
       flex-direction: column;
-      padding: max(8px, env(safe-area-inset-top)) 14px 0;
+      padding: max(8px, env(safe-area-inset-top)) 12px 0;
     }
-
     .topbar {
       position: sticky;
       top: 0;
       z-index: 5;
-      background: var(--paper);
+      background: var(--bg);
       padding-bottom: 8px;
     }
+    header { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+    header h1 {
+      margin: 0;
+      font-size: 1.02rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    header p, .hint, .note { margin: 0; color: var(--muted); font-size: 0.82rem; font-weight: 400; }
+    .grow { flex: 1; min-width: 0; }
+    .back {
+      min-height: 44px;
+      min-width: 44px;
+      padding: 0 8px 0 0;
+      color: #cbd5e1;
+      font-weight: 500;
+      font-size: 0.95rem;
+      display: inline-flex;
+      align-items: center;
+      flex: none;
+    }
+    .team-select {
+      width: 100%;
+      min-height: 44px;
+      margin: 8px 0 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      padding: 8px 12px;
+      font-weight: 500;
+    }
+    h2 {
+      margin: 12px 0 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .game-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 3px;
+      width: 100%;
+      min-height: 64px;
+      padding: 12px 14px;
+      margin: 0 0 8px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      border-radius: 14px;
+      text-align: left;
+      color: inherit;
+    }
+    .game-top { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }
+    .game-btn strong { flex: 1; min-width: 0; font-size: 1rem; font-weight: 600; }
+    .game-btn .meta { color: var(--muted); font-weight: 400; font-size: 0.82rem; }
+    .game-btn.live { border-color: rgba(185, 28, 28, 0.55); }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      flex: none;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      margin-top: 6px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.14);
+      color: #cbd5e1;
+      font-size: 0.78rem;
+      font-weight: 500;
+    }
 
-    header {
+    .board-scroll {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #0b1220;
+    }
+    .board {
+      display: grid;
+      grid-template-columns: 4.6rem repeat(var(--n), minmax(1.7rem, 1fr)) 1.7rem 1.7rem 1.7rem;
+      min-width: 100%;
+    }
+    .who, .inn, .run, .run-h, .he {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 30px;
+      border-top: 1px solid rgba(148, 163, 184, 0.18);
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+    .who { justify-content: flex-start; padding: 0 8px; font-size: 0.78rem; }
+    .head { border-top: 0; min-height: 24px; color: var(--muted); font-size: 0.72rem; }
+    .run, .run-h, .he { border-left: 1px solid rgba(148, 163, 184, 0.28); background: #0b1220; }
+    .he { font-size: 0.85rem; }
+    .run { font-size: 1.05rem; }
+    .inn { font-size: 0.95rem; }
+    .inn.now { background: rgba(185, 28, 28, 0.2); color: var(--accent-ink); box-shadow: inset 0 -2px 0 #fecaca; }
+    .batting { background: rgba(185, 28, 28, 0.1); }
+    .inn.skip { color: #fda4af; }
+    .who { background: #0b1220; }
+    .batting.who, .batting.run, .batting.he { background: #2a1218; }
+
+    .banner {
+      margin-top: 8px;
+      min-height: 40px;
+      padding: 4px 10px;
+      border-radius: 12px;
       display: flex;
       align-items: center;
       gap: 8px;
-      min-height: 52px;
     }
-
-    header h1 {
-      margin: 0;
-      font-size: 1.25rem;
-      line-height: 1.15;
-    }
-
-    header p, .hint, .note {
-      margin: 2px 0 0;
-      color: var(--muted);
-      font-size: 0.95rem;
-      font-weight: 700;
-    }
-
-    .grow { flex: 1; min-width: 0; }
-
-    .ghost, .team-select {
-      min-height: 48px;
-      border: 2px solid var(--line);
-      background: var(--card);
-      border-radius: 14px;
-      font-weight: 800;
-      padding: 8px 12px;
-    }
-
-    .team-select { width: 100%; margin: 8px 0 12px; }
-
-    h2 {
-      margin: 16px 0 8px;
-      font-size: 0.82rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    .game-btn, .row, .pos-btn, .track, .pick {
+    .banner p { margin: 0; font-weight: 500; }
+    .banner .half { font-size: 0.95rem; }
+    .banner .role { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; }
+    .banner.offense { background: rgba(185, 28, 28, 0.2); color: var(--accent-ink); }
+    .banner.defense { background: rgba(185, 28, 28, 0.08); color: var(--ink); border: 1px solid rgba(185, 28, 28, 0.35); }
+    .banner.final { background: var(--card); border: 1px solid var(--line); }
+    .banner.final .role { text-transform: none; letter-spacing: 0; font-size: 0.95rem; font-weight: 600; }
+    .half-num { font-size: 1.15rem; }
+    .outs { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+    .out-marks { display: flex; gap: 4px; }
+    .mark { width: 9px; height: 9px; border-radius: 99px; background: rgba(226, 232, 240, 0.28); display: block; }
+    .mark.on { background: #fff; }
+    .banner.defense .mark.on { background: var(--accent); }
+    .outs-label { font-weight: 600; font-variant-numeric: tabular-nums; font-size: 0.88rem; }
+    .tiebreaker {
       width: 100%;
-      border: 2px solid var(--line);
-      background: var(--card);
-      border-radius: 16px;
+      min-height: 44px;
+      margin-top: 8px;
+      border-radius: 12px;
+      border: 1px solid rgba(185, 28, 28, 0.45);
+      background: var(--soft);
+      color: var(--accent-ink);
+      font-weight: 500;
       text-align: left;
+      padding: 0 12px;
     }
 
-    .game-btn {
-      display: block;
-      min-height: 76px;
-      padding: 14px 16px;
-      margin: 0 0 10px;
+    .order { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--card); }
+    .row { display: flex; align-items: center; min-height: 44px; border-bottom: 1px solid rgba(148, 163, 184, 0.14); }
+    .row:last-child { border-bottom: 0; }
+    .row-hit {
+      flex: 1; min-width: 0; min-height: 44px;
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 8px 0 10px; text-align: left; color: inherit;
     }
-
-    .game-btn strong { display: block; font-size: 1.2rem; }
-    .game-btn span { display: block; margin-top: 4px; font-weight: 700; color: var(--muted); }
-    .game-btn.live { background: var(--gold); }
-    .game-btn.live span { color: var(--ink); }
-
-    .row, .pos-btn, .track, .pick {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-height: 56px;
-      padding: 8px 12px;
-      margin: 0 0 8px;
-      font-weight: 800;
+    .row .num { width: 1.4rem; flex: none; color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+    .at-bat { box-shadow: inset 3px 0 0 var(--accent); background: rgba(185, 28, 28, 0.1); }
+    .at-bat .num { color: var(--accent-ink); font-weight: 600; }
+    .is-selected { background: rgba(148, 163, 184, 0.08); }
+    .due { margin-left: auto; flex: none; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-ink); }
+    .due.later { color: var(--muted); font-weight: 500; }
+    .role-tag, .cr-tag { flex: none; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.03em; color: var(--accent-ink); }
+    .sub-btn {
+      min-height: 44px; min-width: 64px; margin-right: 6px;
+      border-radius: 10px; border: 1px solid var(--line); background: #111827;
+      font-weight: 500;
     }
-
-    .num, .pos {
-      width: 2.7rem;
-      flex: none;
-      font-weight: 900;
+    .field { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .pos-btn {
+      min-height: 52px; min-width: 0; padding: 6px 8px; border-radius: 12px;
+      border: 1px solid var(--line); background: var(--card); color: inherit;
+      display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; text-align: left;
     }
-
-    .track {
-      border-left-width: 2px;
-      border-right-width: 2px;
-      border-top-width: 0;
-      border-radius: 0;
-      margin: 0;
+    .pos-btn .pos { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); }
+    .pos-btn .name { width: 100%; font-size: 0.78rem; }
+    .toggles { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+    .toggle {
+      min-height: 44px; padding: 0 12px; border-radius: 999px;
+      border: 1px solid var(--line); color: #cbd5e1; font-size: 0.85rem; font-weight: 500;
     }
+    .toggle.on { border-color: rgba(185, 28, 28, 0.7); background: var(--soft); color: var(--accent-ink); }
+    .track { display: flex; align-items: center; gap: 8px; min-height: 36px; border-top: 1px solid rgba(148, 163, 184, 0.14); }
+    .track b { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .spot { color: var(--muted); font-weight: 500; font-size: 0.8rem; }
+    .innings-fold { margin-top: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); padding: 0 12px 4px; }
+    .innings-fold summary { min-height: 44px; display: flex; align-items: center; font-weight: 600; }
 
-    .track:first-child { border-top-width: 2px; border-radius: 16px 16px 0 0; }
-    .track:last-child { border-radius: 0 0 16px 16px; }
-    .track:only-child { border-radius: 16px; }
-
-    #ended-summary .track {
-      min-height: 36px;
-      padding: 2px 10px;
+    .dock {
+      position: sticky; bottom: 0; z-index: 4; margin-top: auto;
+      padding: 8px 0 calc(10px + env(safe-area-inset-bottom));
+      background: linear-gradient(to top, var(--bg) 75%, rgba(2, 6, 23, 0));
+      display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 8px;
     }
-
-    #ended-summary .track b { font-size: 1.2rem; }
-
-    #ended-summary .empty { padding: 10px 12px; }
-
-    #ended-summary .board .who,
-    #ended-summary .board .run,
-    #ended-summary .board .run-h,
-    #ended-summary .inn { min-height: 32px; }
-
-    #ended-summary .banner { padding: 8px 14px; }
-    #ended-summary .banner .half { font-size: 1.35rem; }
-
-    .track b, .run {
-      margin-left: auto;
-      font-size: 1.7rem;
-      font-weight: 900;
-      font-variant-numeric: tabular-nums;
-      min-width: 1.6rem;
+    .dock .end-half, .dock .menu-link, .dock.solo .primary { grid-column: 1 / -1; }
+    .dock.solo { grid-template-columns: 1fr; }
+    .primary {
+      min-height: 56px; border-radius: 16px; background: var(--accent); color: #fff;
+      font-size: 1.15rem; font-weight: 600;
+    }
+    .quiet {
+      min-height: 48px; border-radius: 12px; background: var(--card);
+      border: 1px solid var(--line); color: var(--ink); font-weight: 500;
+    }
+    .quiet:disabled { opacity: 0.38; }
+    .danger {
+      min-height: 44px; color: #fecaca; font-weight: 600; background: transparent;
+    }
+    .menu-link {
+      min-height: 44px; color: #fecaca; font-weight: 600; font-size: 0.9rem;
       text-align: right;
     }
 
-    .spot { margin-left: auto; font-weight: 900; }
-
-    .board {
-      display: grid;
-      grid-template-columns: 5.4rem minmax(0, 1fr) 3rem;
-      border: 2px solid var(--line);
-      border-radius: 16px;
-      overflow: hidden;
-      background: #fff;
-    }
-
-    .who, .run, .run-h {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 42px;
-      font-weight: 900;
-      border-top: 2px solid var(--line);
-      padding: 4px;
-      text-align: center;
-    }
-
-    .board .who:nth-child(-n + 3),
-    .board .scroll:nth-child(-n + 3),
-    .board .run-h { border-top: 0; }
-
-    .run, .run-h { border-left: 2px solid var(--line); background: #fff8dc; }
-    .run { font-size: 1.55rem; }
-
-    .scroll { overflow-x: auto; border-top: 2px solid var(--line); }
-    .line { display: flex; min-width: max-content; min-height: 42px; }
-    .inn {
-      min-width: 2.35rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 900;
-      font-variant-numeric: tabular-nums;
-      font-size: 1.15rem;
-    }
-    .inn.now { background: var(--gold); }
-
-    .due, .role-tag {
-      margin-left: auto;
-      font-size: 0.95rem;
-      font-weight: 900;
-      color: var(--red);
-      flex: none;
-    }
-
-    .format-badge {
-      display: inline-block;
-      margin: 8px 0 0;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: #1a1208;
-      color: #fff;
-      font-weight: 900;
-    }
-
-    .sub-btn {
-      min-height: 44px;
-      min-width: 64px;
-      margin-left: 8px;
-      border-radius: 12px;
-      border: 2px solid var(--line);
-      background: #fff;
-      font-weight: 900;
-      flex: none;
-    }
-
-    .innings-fold {
-      margin-top: 16px;
-      border: 2px solid var(--line);
-      border-radius: 16px;
-      background: var(--card);
-      padding: 0 12px 4px;
-    }
-
-    .innings-fold summary {
-      min-height: 56px;
-      display: flex;
-      align-items: center;
-      font-weight: 900;
-    }
-
-    .banner {
-      margin-top: 10px;
-      border-radius: 16px;
-      padding: 12px 14px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .banner p { margin: 0; font-weight: 900; }
-    .banner .half { font-size: 1.7rem; }
-    .banner .role { font-size: 1.2rem; letter-spacing: 0.04em; }
-    .banner.offense { background: var(--gold); color: var(--ink); }
-    .banner.defense { background: var(--blue); color: #fff; }
-    .banner.final { background: var(--ink); color: #fff; }
-
-    .dock {
-      position: sticky;
-      bottom: 0;
-      z-index: 4;
-      margin-top: auto;
-      padding: 8px 0 calc(10px + env(safe-area-inset-bottom));
-      background: var(--paper);
-    }
-
-    .end-game {
-      width: 100%;
-      min-height: 56px;
-      margin-top: 8px;
-      border-radius: 16px;
-      border: 2px solid var(--line);
-      background: #fff;
-      font-size: 1.15rem;
-      font-weight: 900;
-    }
-
-    .stepper {
-      display: grid;
-      grid-template-columns: 64px 1fr 64px;
-      gap: 8px;
-      align-items: center;
-      margin: 12px 0;
-    }
-
-    .stepper button {
-      min-height: 56px;
-      border-radius: 14px;
-      border: 2px solid var(--line);
-      background: #fff;
-      font-size: 1.8rem;
-      font-weight: 900;
-    }
-
-    .stepper p {
-      margin: 0;
-      text-align: center;
-      font-size: 1.35rem;
-      font-weight: 900;
-    }
-
-    .tiebreaker {
-      width: 100%;
-      min-height: 56px;
-      margin-top: 10px;
-      border-radius: 16px;
-      border: 3px solid var(--blue);
-      background: #fff;
-      color: var(--ink);
-      font-size: 1.1rem;
-      font-weight: 900;
-    }
-
-    .tiebreaker.on { background: var(--blue); color: #fff; }
-
-    .tie-note {
-      margin: 8px 0 0;
-      background: var(--gold);
-      color: var(--ink);
-      border-radius: 14px;
-      padding: 12px;
-      text-align: center;
-      font-size: 1.15rem;
-      font-weight: 900;
-    }
-
-    .inn.skip { color: var(--red); }
-
-    .outs {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-top: 8px;
-      min-height: 48px;
-    }
-
-    .dot {
-      width: 26px;
-      height: 26px;
-      border-radius: 50%;
-      border: 3px solid var(--line);
-      background: transparent;
-      flex: none;
-    }
-
-    .dot.on { background: var(--ink); }
-
-    .outs-label {
-      margin-left: 4px;
-      font-size: 1.2rem;
-      font-weight: 900;
-    }
-
-    .primary, .big {
-      width: 100%;
-      min-height: 68px;
-      border-radius: 16px;
-      border: 2px solid var(--red);
-      background: var(--red);
-      color: #fff;
-      font-size: 1.25rem;
-      font-weight: 900;
-    }
-
-    .big.plain {
-      background: #fff;
-      color: var(--ink);
-      border-color: var(--line);
-      margin-top: 10px;
-    }
-
     .sheet {
-      position: fixed;
-      inset: 0;
-      z-index: 20;
-      background: rgba(26, 18, 8, 0.55);
-      display: flex;
-      align-items: flex-end;
+      position: fixed; inset: 0; z-index: 20;
+      background: rgba(2, 6, 23, 0.72);
+      display: flex; align-items: flex-end; justify-content: center;
       padding: 12px;
     }
-
     .sheet-card {
-      width: min(480px, 100%);
-      margin: 0 auto;
-      background: var(--card);
-      border-radius: 22px;
+      width: min(420px, 100%);
+      background: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 24px;
       padding: 18px 16px calc(16px + env(safe-area-inset-bottom));
-      max-height: min(92dvh, 760px);
+      max-height: min(88dvh, 720px);
       overflow: auto;
-      border: 2px solid var(--line);
     }
-
-    .sheet-card h2 { margin: 0 0 6px; font-size: 1.45rem; letter-spacing: 0; text-transform: none; }
-    #sub-effect { margin: 10px 0 14px; font-size: 1.35rem; font-weight: 900; line-height: 1.25; }
-    .run-num { margin: 8px 0; text-align: center; font-size: 4.2rem; font-weight: 900; line-height: 0.95; }
+    .sheet-card h2 { margin: 0 0 6px; font-size: 1.2rem; font-weight: 600; letter-spacing: -0.02em; text-transform: none; color: #f8fafc; }
+    #sub-effect { margin: 8px 0 12px; font-size: 1rem; font-weight: 500; line-height: 1.35; }
+    .run-num { margin: 4px 0 8px; text-align: center; font-size: 3.2rem; line-height: 0.95; }
     .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .pad button {
-      min-height: 64px;
-      border-radius: 14px;
-      border: 2px solid var(--line);
-      background: #fff;
-      font-size: 1.7rem;
-      font-weight: 900;
+    .pad button, .stepper button {
+      min-height: 48px; min-width: 44px; border-radius: 12px;
+      border: 1px solid var(--line); background: var(--bg); color: #f8fafc;
+      font-size: 1.2rem; font-weight: 600; font-variant-numeric: tabular-nums;
     }
-
-    .lineup-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      align-items: start;
+    .stepper { display: grid; grid-template-columns: 48px 1fr 48px; gap: 8px; align-items: center; margin: 12px 0; }
+    .stepper p { margin: 0; text-align: center; font-weight: 600; }
+    .segment { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); margin: 10px 0; }
+    .segment button { min-height: 44px; border-radius: 10px; color: #cbd5e1; font-weight: 500; }
+    .segment button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+    .big {
+      width: 100%; min-height: 48px; margin-top: 8px; border-radius: 14px;
+      background: var(--accent); color: #fff; font-weight: 600; font-size: 1rem;
     }
-
-    .panel {
-      background: var(--card);
-      border: 2px solid var(--line);
-      border-radius: 16px;
-      padding: 8px;
+    .big.plain { background: #1e293b; color: var(--ink); }
+    .big.danger { background: transparent; color: #fecaca; border: 1px solid rgba(252, 165, 165, 0.45); }
+    .big:disabled { opacity: 0.4; }
+    .pick {
+      width: 100%; min-height: 48px; margin: 0 0 8px; padding: 8px 12px;
+      border-radius: 12px; border: 1px solid var(--line); background: var(--bg);
+      text-align: left; font-weight: 500;
     }
-
-    .panel h2 { margin: 2px 2px 6px; }
-
-    .mini {
-      display: flex;
-      gap: 6px;
-      align-items: baseline;
-      padding: 7px 2px;
-      border-top: 2px solid #eadfc8;
-      font-weight: 800;
-      font-size: 0.98rem;
-      line-height: 1.2;
+    .lineup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .panel { min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px; }
+    .mini { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 28px; border-top: 1px solid rgba(148, 163, 184, 0.14); }
+    .mini .pos { flex: none; min-width: 1.5rem; color: var(--muted); font-size: 0.75rem; font-weight: 600; }
+    .mini .name { flex: 1; font-size: 0.8rem; }
+    .empty, .subs, .final-note { margin: 8px 0; color: #cbd5e1; font-weight: 400; border: 0; background: transparent; padding: 0; }
+    .form-error { margin: 8px 0 0; color: #fecaca; font-weight: 500; font-size: 0.9rem; }
+    .sync { margin: 2px 0 0; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+    .sync.saving, .sync.offline { color: var(--accent-ink); }
+    .sync-notice { margin: 6px 0 0; padding: 6px 8px; border-radius: 10px; background: var(--soft); color: var(--accent-ink); font-weight: 500; }
+    .text-input {
+      width: 100%; min-height: 44px; margin: 8px 0; border-radius: 12px;
+      border: 1px solid var(--line); background: var(--bg); padding: 8px 12px; font-size: 16px;
     }
+    .winner { font-weight: 600; }
 
-    [data-screen="detail"] .mini {
-      padding: 3px 1px;
-      font-size: 0.88rem;
-      line-height: 1.15;
-    }
-
-    [data-screen="detail"] h2 { margin: 8px 0 4px; }
-    [data-screen="detail"] .empty { padding: 8px 10px; }
-
-    .empty {
-      border: 2px dashed var(--line);
-      border-radius: 16px;
-      padding: 18px;
-      background: var(--card);
-      font-weight: 700;
-    }
-
-    .warn { color: var(--red); font-weight: 800; }
-
-    .sync {
-      margin: 4px 0 0;
-      font-size: 0.78rem;
-      font-weight: 900;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-
-    .sync.saving { color: var(--blue); }
-    .sync.offline { color: var(--red); }
-
-    .sync-notice {
-      margin: 6px 0 0;
-      padding: 6px 8px;
-      border-radius: 10px;
-      background: var(--gold);
-      font-weight: 900;
-    }
   </style>
 </head>
 <body>
@@ -508,6 +372,14 @@
     var effectText = "";
     var courtesyFor = "";
     var illegalReason = "";
+    var selectedId = "";
+    var plannedSide = "away";
+    var errorText = "";
+    var oppDraft = "";
+    var dpDraft = "";
+    var flexDraft = "";
+    var endReason = "time";
+    var editAt = null;
     var loadNote = "";
     var booting = true;
     var loadToken = 0;
@@ -600,9 +472,22 @@
     }
 
     function tap(op) {
+      var session = sessionFor(gameId);
+      var next = Object.assign({ teamId: teamId, teamName: teamName, gameId: gameId }, op);
+      if (session && next.type !== "start" && next.type !== "set-active" && next.type !== "undo" && next.type !== "resume") {
+        next.atHalf = { inningIndex: session.inningIndex, half: session.half, outs: GameManager.clampOuts(session.outs) };
+      }
+      try {
+        dryRun(next);
+      } catch (e) {
+        errorText = e && e.message ? e.message : "That did not work.";
+        render();
+        return null;
+      }
+      errorText = "";
       applyingLocal = true;
       try {
-        return sync.run(Object.assign({ teamId: teamId, teamName: teamName, gameId: gameId }, op));
+        return sync.run(next);
       } finally {
         applyingLocal = false;
       }
@@ -705,53 +590,67 @@
     function scoreboardHtml(state) {
       var board = GameManager.scoreboard(state);
       var rows = GameManager.scoreboardRows(state);
-      function cells(values) {
+      var n = Math.max(1, board.innings.length);
+      var batting = state && state.status === "live" ? (state.half === "bottom" ? "home" : "away") : "";
+      function cells(row, header) {
         return board.innings.map(function (inn, index) {
-          var shown = cell(values[index]);
-          var skip = shown === "X" ? " skip" : "";
-          return '<div class="inn' + (inn.current ? " now" : "") + skip + '">' + esc(shown) + "</div>";
+          var shown = header ? String(inn.inning) : cell(row.cells[index]);
+          var cls = "inn num-face" + (header ? " head" : "") + (inn.current ? " now" : "") + (!header && shown === "X" ? " skip" : "");
+          if (!header && row.side === batting) cls += " batting";
+          var tie = !header && ((row.side === "away" && inn.topTiebreaker) || (row.side === "home" && inn.bottomTiebreaker));
+          if (tie) cls += " tie";
+          if (header || shown === "") return '<div class="' + cls + '">' + esc(shown) + "</div>";
+          var half = row.side === "away" ? "top" : "bottom";
+          return '<button type="button" class="' + cls + '" data-action="edit-cell" data-inning="' + index + '" data-half="' + half + '" aria-label="Edit ' + esc(half) + " " + inn.inning + '">' + esc(shown) + "</button>";
         }).join("");
       }
       function teamLine(row) {
-        return '<div class="who">' + esc(row.label) + "</div>"
-          + '<div class="scroll"><div class="line">' + cells(row.cells) + "</div></div>"
-          + '<div class="run">' + row.total + "</div>";
+        var bat = row.side === batting ? " batting" : "";
+        return '<div class="who' + bat + '" data-side="' + esc(row.side) + '" title="' + esc(row.name || row.label) + '">' + esc(row.label) + "</div>"
+          + cells(row, false)
+          + '<div class="run num-face' + bat + '">' + row.total + "</div>"
+          + '<div class="he hits num-face' + bat + '">' + (row.hits || 0) + "</div>"
+          + '<div class="he errs num-face' + bat + '">' + (row.errors || 0) + "</div>";
       }
-      var numbers = board.innings.map(function (inn) { return inn.inning; });
-      return ''
-        + '<div class="board" id="scoreboard">'
-        + '<div class="who"></div><div class="scroll"><div class="line">' + cells(numbers) + '</div></div><div class="run-h">R</div>'
-        + teamLine(rows[0])
-        + teamLine(rows[1])
-        + "</div>";
+      var headNums = board.innings.map(function (inn) {
+        return '<div class="inn num-face head' + (inn.current ? " now" : "") + '">' + inn.inning + "</div>";
+      }).join("");
+      return '<div class="board-scroll" id="scoreboard" aria-label="Line score, away team on top">'
+        + '<div class="board" style="--n:' + n + '">'
+        + '<div class="who head"></div>' + headNums
+        + '<div class="run-h num-face head">R</div><div class="he head">H</div><div class="he head">E</div>'
+        + teamLine(rows[0]) + teamLine(rows[1])
+        + "</div></div>";
     }
 
     function bannerHtml(state) {
       var board = GameManager.scoreboard(state);
       if (state.status !== "live") {
-        return '<div id="half-indicator" class="banner final"><p class="half">Final</p><p class="role">' + esc(GameManager.scoreLine(state)) + "</p></div>";
+        var banner = GameManager.finalBanner(state);
+        return '<div id="half-indicator" class="banner final"><p class="half">' + esc(banner) + '</p><p class="role">' + esc(GameManager.scoreLine(state)) + "</p></div>";
       }
-      var role = board.role === "defense" ? "DEFENSE" : "OFFENSE";
-      if (board.extra) role = "EXTRA · " + role;
-      return '<div id="half-indicator" class="banner ' + board.role + '"><p class="half">' + esc(board.label) + '</p><p class="role">' + role + "</p></div>";
+      var parts = board.label.split(" ");
+      var word = parts[0] || "Top";
+      var num = parts[1] || "";
+      var role = board.role === "defense" ? "Defense" : "Offense";
+      var extra = board.extra ? '<span class="extra">Extra</span> ' : "";
+      return '<div id="half-indicator" class="banner ' + board.role + '"><p class="half">' + extra + esc(word) + ' <span class="half-num num-face">' + esc(num) + '</span></p><p class="role">' + role + "</p>" + outsHtml(state) + "</div>";
     }
 
     function outsHtml(session) {
       var outs = GameManager.clampOuts(session.outs);
       var dots = [0, 1, 2].map(function (index) {
-        return '<span class="dot' + (index < outs ? " on" : "") + '"></span>';
+        return '<i class="mark' + (index < outs ? " on" : "") + '"></i>';
       }).join("");
       var label = outs === 1 ? "1 out" : outs + " outs";
-      return '<div id="outs" class="outs" aria-label="' + esc(label) + '">' + dots + '<span class="outs-label">' + esc(label) + "</span></div>";
+      return '<div id="outs" class="outs" aria-label="' + esc(label) + '"><span class="out-marks">' + dots + '</span><span class="outs-label">' + esc(label) + "</span></div>";
     }
 
     function tiebreakerHtml(session) {
-      if (!GameManager.isExtraHalf(session)) return "";
-      var on = !!session.tiebreaker;
-      return '<button type="button" id="tiebreaker" class="tiebreaker' + (on ? " on" : "") + '" data-action="toggle-tiebreaker">'
-        + (on ? "Runner on second" : "Place runner on second")
-        + "</button>"
-        + (on ? '<p id="tiebreaker-indicator" class="tie-note">Tiebreaker · runner on 2nd</p>' : "");
+      if (!GameManager.tiebreakerActive(session) && !session.tiebreaker) return "";
+      var runner = GameManager.itbRunner(session);
+      var text = runner && runner.id ? "Tiebreaker · " + runner.label + " on 2nd" : "Tiebreaker · runner on 2nd";
+      return '<button type="button" id="tiebreaker" class="tiebreaker" data-action="change-runner" aria-pressed="true">' + esc(text) + "</button>";
     }
 
     function trackerRows(state, playedOnly) {
@@ -777,36 +676,32 @@
       var rowsIn = GameManager.liveBatters(session);
       if (!rowsIn.length) return '<h2 id="batting-order">Batting order</h2><p class="empty">No batting order in this lineup.</p>';
       var tags = ["Due up", "On deck", "In the hole"];
-      var dueAt = GameManager.dueSlots(rowsIn.length, 0);
+      var dueAt = GameManager.dueSlots(rowsIn.length, GameManager.effectiveBatterIndex(session));
       var tagFor = {};
       dueAt.forEach(function (index, nth) { tagFor[index] = tags[nth]; });
       var canSub = session.battingMode && session.battingMode !== "roster";
+      var courtesy = courtesyList(session);
       var rows = rowsIn.map(function (row, index) {
-        var tag = tagFor[index] ? '<span class="due">' + tagFor[index] + "</span>" : "";
+        var tagName = tagFor[index] || "";
+        var tag = tagName ? '<span class="due' + (tagName === "Due up" ? "" : " later") + '">' + tagName + "</span>" : "";
         var role = row.role ? '<span class="role-tag">' + esc(row.role) + "</span>" : "";
-        var sub = canSub ? '<button type="button" class="sub-btn" data-action="ask-sub" data-spot="' + index + '">Sub</button>' : "";
-        var leave = session.battingMode === "roster"
+        var cr = courtesy.filter(function (item) { return item.forId === row.id || item.runnerId === row.id; })[0];
+        var crTag = cr ? '<span class="cr-tag">CR ' + esc(playerName(session, cr.runnerId)) + "</span>" : "";
+        var picked = row.id === selectedId;
+        var sub = picked && canSub ? '<button type="button" class="sub-btn" data-action="ask-sub" data-spot="' + index + '">Sub</button>' : "";
+        var leave = picked && session.battingMode === "roster"
           ? '<button type="button" class="sub-btn" data-action="ask-leave" data-player="' + esc(row.id) + '">Leaves</button>'
           : "";
-        return '<div class="row"><span class="num">' + row.order + "</span><span>" + esc(row.label) + "</span>" + role + tag + sub + leave + "</div>";
+        var cls = "row" + (tagName === "Due up" ? " at-bat" : "") + (picked ? " is-selected" : "");
+        return '<div class="' + cls + '"><button type="button" class="row-hit" data-action="select-player" data-player="' + esc(row.id) + '" data-spot="' + index + '">'
+          + '<span class="num">' + row.order + '</span><span class="name">' + esc(row.label) + "</span>" + role + crTag + tag
+          + "</button>" + sub + leave + "</div>";
       }).join("");
-      var wrap = "";
-      if (session.battingMode === "roster" && rowsIn.length > 9) {
-        wrap = '<p class="hint" id="due-wrap">Due up wraps after ' + esc(rowsIn[rowsIn.length - 1].label)
-          + ", then back to " + esc(rowsIn[0].label) + ". Not after the 9th hitter. Sitting players still bat.</p>";
-      }
-      var courtesy = session.courtesy
-        ? '<p class="hint" id="courtesy-note">Courtesy runner: ' + esc(playerName(session, session.courtesy.runnerId))
-          + " for " + esc(playerName(session, session.courtesy.forId)) + ". Not a sub.</p>"
-        : "";
-      var injury = session.battingMode === "roster"
-        ? '<button type="button" class="end-game" id="injury-out" data-action="toggle-injury">'
-          + (session.injuryOut ? "Injury spot is an automatic out: On" : "Injury spot is an automatic out: Off")
-          + "</button>"
-        : "";
-      return '<h2 id="batting-order">Batting order</h2>' + wrap + cardNote(session) + injury
-        + '<button type="button" class="end-game" id="courtesy-runner" data-action="ask-courtesy">Courtesy runner</button>'
-        + courtesy + swapButton(session) + rows;
+      var wrap = '<p id="due-wrap" hidden></p>';
+      return '<h2 id="batting-order">Batting order</h2>' + wrap + cardNote(session)
+        + '<div class="toggles"><button type="button" class="toggle" id="courtesy-runner" data-action="ask-courtesy">Courtesy runner</button>'
+        + '<button type="button" class="toggle" data-action="next-batter">Next Batter</button></div>'
+        + swapButton(session) + '<div class="order">' + rows + "</div>";
     }
 
     function defenseEditorHtml(session) {
@@ -815,30 +710,20 @@
       });
       var defense = rows.map(function (row) {
         return '<button type="button" class="pos-btn" data-action="pick-defense" data-pos="' + esc(row.pos) + '">'
-          + '<span class="pos">' + esc(row.pos) + "</span><span>" + esc(row.label) + "</span></button>";
+          + '<span class="pos">' + esc(row.pos) + '</span><span class="name">' + esc(row.label) + "</span></button>";
       }).join("");
-      var rosterNote = session.battingMode === "roster"
-        ? " Sitting players still bat. A defensive swap does not change the batting order."
-        : "";
       var flexSub = session.battingMode === "dp-flex" && !session.flexLeft && !session.flexBatting
-        ? '<button type="button" class="end-game" id="sub-for-flex" data-action="ask-flex-sub">Sub for Flex</button>'
+        ? '<button type="button" class="quiet" id="sub-for-flex" data-action="ask-flex-sub">Sub for FLEX</button>'
         : "";
       var flexBack = session.battingMode === "dp-flex" && session.flexLeft
-        ? '<button type="button" class="end-game" id="flex-return" data-action="flex-return">Flex re-enters</button>'
+        ? '<button type="button" class="quiet" id="flex-return" data-action="flex-return">FLEX re-enters</button>'
         : "";
-      var injury = session.battingMode === "roster"
-        ? '<button type="button" class="end-game" id="injury-out" data-action="toggle-injury">'
-          + (session.injuryOut ? "Injury spot is an automatic out: On" : "Injury spot is an automatic out: Off")
-          + "</button>"
-        : "";
-      return "<h2>Defensive lineup</h2>"
-        + '<p class="hint">Tap a position to swap. Each out is 1/3 inning for the players on the field then.' + rosterNote + "</p>"
+      return "<h2>Defense</h2>"
         + cardNote(session)
-        + injury
         + swapButton(session)
         + flexSub
         + flexBack
-        + defense;
+        + '<div class="field">' + defense + "</div>";
     }
 
     function cardNote(session) {
@@ -853,9 +738,20 @@
     }
 
     function swapButton(session) {
-      if (!session || session.battingMode !== "dp-flex") return "";
-      return '<button type="button" class="end-game" id="swap-dp-flex" data-action="swap-dp-flex">'
-        + (session.flexBatting ? "DP bats again" : "Flex bats for DP") + "</button>";
+      if (!session || session.battingMode !== "dp-flex" || !session.dpId) return "";
+      return '<button type="button" class="quiet" id="swap-dp-flex" data-action="swap-dp-flex">'
+        + (session.flexBatting ? "DP bats again" : "FLEX bats for DP") + "</button>";
+    }
+
+    function courtesyList(session) {
+      var raw = session && session.courtesy;
+      if (Array.isArray(raw)) return raw;
+      if (raw && raw.forId) return [raw];
+      return [];
+    }
+
+    function errorHtml() {
+      return errorText ? '<p class="form-error" id="form-error">' + esc(errorText) + "</p>" : "";
     }
 
     function listMeta(game, session) {
@@ -867,7 +763,7 @@
 
     function headerHtml(title, sub, backLabel) {
       return "<header>"
-        + '<button type="button" class="ghost" data-action="back">' + esc(backLabel) + "</button>"
+        + '<button type="button" class="back" data-action="back">‹ ' + esc(backLabel) + "</button>"
         + '<div class="grow"><h1>' + esc(title) + "</h1>" + (sub ? "<p>" + esc(sub) + "</p>" : "") + syncChip() + "</div>"
         + "</header>";
     }
@@ -893,8 +789,9 @@
           var session = pack.sessions[game.id];
           var live = session && session.status === "live";
           return '<button type="button" class="game-btn' + (live ? " live" : "") + '" data-action="open-game" data-game="' + esc(game.id) + '">'
-            + "<strong>" + esc(game.name || "Untitled Game") + "</strong>"
-            + "<span>" + esc(listMeta(game, session)) + "</span></button>";
+            + '<span class="game-top"><strong class="game-name">' + esc(game.name || "Game") + "</strong>"
+            + (live ? '<span class="pill live">Live</span>' : "") + "</span>"
+            + '<span class="meta">' + esc(listMeta(game, session)) + "</span></button>";
         }).join("")
         : '<p class="empty">No games waiting. Build one in Lineup Builder, then come back.</p>';
       var playedHtml = played.length
@@ -907,12 +804,12 @@
         }).join("")
         : "";
       return '<div class="wrap" data-screen="list">'
-        + headerHtml("Game Manager", "Not played yet", "Hub")
+        + headerHtml("Game Manager", "", "Hub")
         + teamSelectHtml()
         + (loadNote ? '<p class="note">' + esc(loadNote) + "</p>" : "")
         + (booting && !(pack.games || []).length ? '<p class="empty">Loading lineups…</p>' : games)
         + playedHtml
-        + '<p class="hint">The game syncs to your other devices. If the signal drops, it stays on this phone and catches up.</p>'
+        + (sync && sync.status && sync.status() === "offline" ? '<p class="hint">Offline. This phone will catch up.</p>' : "")
         + "</div>";
     }
 
@@ -921,7 +818,7 @@
       return rows.map(function (row) {
         var tag = row.order ? String(row.order) : (row.pos || "");
         var role = row.role ? '<span class="role-tag">' + esc(row.role) + "</span>" : "";
-        return '<div class="mini"><span class="pos">' + esc(tag) + "</span><span>" + esc(row.label) + "</span>" + role + "</div>";
+        return '<div class="mini"><span class="pos">' + esc(tag) + '</span><span class="name">' + esc(row.label) + "</span>" + role + "</div>";
       }).join("");
     }
 
@@ -939,19 +836,18 @@
       var flexLine = lineup.flexLabel ? '<p class="hint" id="flex-note">Flex: ' + esc(lineup.flexLabel) + ". Defense only, unless she bats in the DP's spot or the DP takes her position.</p>" : "";
       return '<div class="wrap" data-screen="detail">'
         + headerHtml(lineup.name, teamName, "Games")
-        + '<p class="format-badge" id="lineup-format">' + esc(lineup.formatLabel || "Bat the roster") + "</p>"
-        + '<p class="hint">' + esc(lineup.formatDetail || "") + "</p>"
+        + '<p class="chip" id="lineup-format">' + esc(lineup.formatLabel || "Continuous order") + "</p>"
         + "<main>"
         + '<div class="lineup-grid">'
         + '<section class="panel"><h2>Batting order</h2>' + miniList(lineup.batting, "No batting order yet.") + "</section>"
         + '<section class="panel"><h2>Defense</h2>' + miniList(field, "No defensive lineup yet.") + "</section>"
         + "</div>"
-        + '<h2>Subs</h2><p class="empty">' + subs + "</p>"
+        + '<h2>Subs</h2><p class="subs">' + subs + "</p>"
         + flexLine
         + out
-        + '<p class="hint">Defense is inning 1 from Lineup Builder. You can change it after the game starts.</p>'
+        + ""
         + "</main>"
-        + '<div class="dock"><button type="button" class="primary" id="start-game" data-action="ask-side">Start Game</button></div>'
+        + '<div class="dock solo"><button type="button" class="primary" id="start-game" data-action="ask-side">Start Game</button></div>'
         + sideSheet()
         + "</div>";
     }
@@ -963,11 +859,11 @@
       var format = GameManager.formatInfo(session.battingMode);
       return '<div class="wrap" data-screen="live">'
         + '<div class="topbar">'
-        + headerHtml(session.gameName, format.label + " · " + teamName, "Games")
+        + headerHtml(session.gameName, GameManager.opponentLabel(session.gameName) ? "vs " + GameManager.opponentLabel(session.gameName) : "", "Games")
         + scoreboardHtml(session)
         + bannerHtml(session)
-        + outsHtml(session)
         + tiebreakerHtml(session)
+        + errorHtml()
         + "</div>"
         + "<main>"
         + (onDefense
@@ -975,11 +871,17 @@
           : battingOrderHtml(session))
         + "</main>"
         + '<div class="dock">'
+        + '<button type="button" class="quiet" id="undo-out" data-action="undo"' + (!(session.history && session.history.length) ? " disabled" : "") + ">Undo</button>"
         + '<button type="button" class="primary" id="add-out" data-action="add-out">+1 Out</button>'
-        + '<button type="button" class="end-game" id="undo-out" data-action="undo-out"' + (GameManager.clampOuts(session.outs) === 0 ? " disabled" : "") + ">Undo out</button>"
-        + '<button type="button" class="end-game" data-action="ask-runs">End half inning</button>'
-        + '<button type="button" class="end-game" id="end-game" data-action="ask-end">End Game</button>'
+        + '<button type="button" class="quiet" data-action="add-run">+ Run</button>'
+        + '<button type="button" class="menu-link" data-action="open-menu">Game menu</button>'
+        + '<button type="button" class="quiet end-half" data-action="ask-runs">End Half</button>'
         + "</div>"
+        + gameMenu(session)
+        + leaveSheet(session)
+        + editSheet(session)
+        + finalConfirmSheet(session)
+        + promptSheet(session)
         + confirmHalfSheet(session)
         + runSheet(session)
         + endSheet(session)
@@ -1009,15 +911,65 @@
         + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
     }
 
+    function leaveSheet(session) {
+      if (sheet !== "leave") return "";
+      return '<div class="sheet" id="leave-sheet"><div class="sheet-card" role="dialog">'
+        + "<h2>Leaves</h2>"
+        + '<button type="button" class="pick" data-action="leave-reason" data-reason="skip">Injured. Skip her spot, no out</button>'
+        + '<button type="button" class="pick" data-action="leave-reason" data-reason="auto-out">Left early. Out each time</button>'
+        + '<button type="button" class="pick" data-action="leave-reason" data-reason="ejected">Ejected. Out each time</button>'
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
+    }
+
+    function editSheet() {
+      if (sheet !== "edit" || !editAt) return "";
+      var shown = runDigits === "" ? "–" : runDigits;
+      return '<div class="sheet" id="edit-sheet"><div class="sheet-card" role="dialog"><h2>Edit half</h2>'
+        + '<p class="run-num num-face">' + esc(shown) + "</p>"
+        + '<button type="button" class="big" data-action="save-edit"' + (runDigits === "" ? " disabled" : "") + ">Save</button>"
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
+    }
+
+    function finalConfirmSheet(session) {
+      if (sheet !== "final-confirm") return "";
+      return '<div class="sheet" id="final-confirm"><div class="sheet-card" role="dialog"><h2>That\'s the game</h2>'
+        + "<p>" + esc(GameManager.scoreLine(session)) + "</p>"
+        + '<button type="button" class="big" data-action="confirm-final">Final</button>'
+        + '<button type="button" class="big plain" data-action="undo">Undo</button></div></div>';
+    }
+
+    function promptSheet(session) {
+      if (sheet !== "prompt" || !session || !session.prompt) return "";
+      var title = session.prompt === "walk-off" ? "Walk-off: end the game?" : "Run rule: end the game?";
+      return '<div class="sheet"><div class="sheet-card" role="dialog"><h2>' + title + "</h2>"
+        + '<button type="button" class="big" data-action="confirm-end">End Game</button>'
+        + '<button type="button" class="big plain" data-action="close-sheet">Keep playing</button></div></div>';
+    }
+
     function courtesySheet(session) {
       if (sheet !== "courtesy" && sheet !== "courtesy-runner") return "";
       if (sheet === "courtesy") {
-        var batters = GameManager.liveBatters(session).map(function (row) {
+        var record = GameManager.liveBatters(session).filter(function (row) {
+          return GameManager.courtesyChoice(session, row.id, "x").reason !== "A courtesy runner is only for the pitcher or catcher."
+            || true;
+        });
+        var card = (session.lineupSnapshot && session.lineupSnapshot.defensivePositions) || {};
+        var ids = [];
+        if (session.inningIndex === 0 && session.half === "top") {
+          if (card.P) ids.push(card.P);
+          if (card.C) ids.push(card.C);
+        } else {
+          if (session.defense && session.defense.P) ids.push(session.defense.P);
+          if (session.defense && session.defense.C) ids.push(session.defense.C);
+        }
+        var batters = GameManager.liveBatters(session).filter(function (row) {
+          return ids.indexOf(row.id) >= 0;
+        }).map(function (row) {
           return '<button type="button" class="pick" data-action="courtesy-for" data-player="' + esc(row.id) + '">'
             + esc(row.order + " " + row.label) + "</button>";
         }).join("");
         return '<div class="sheet" id="courtesy-sheet"><div class="sheet-card"><h2>Courtesy runner for</h2>'
-          + '<p class="hint">This is not a sub.</p>' + batters
+          + batters
           + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button></div></div>';
       }
       var runners = (session.players || []).map(function (player) {
@@ -1073,9 +1025,9 @@
         + bannerHtml(session)
         + "</div>"
         + "<main>"
-        + '<p class="empty" id="final-note">' + esc(GameManager.finalScoreMeta(session)) + ". "
-        + esc(GameManager.endNote(session) || "Defensive innings are locked in.")
-        + "</p>"
+        + '<p class="final-note" id="final-note">' + esc(GameManager.finalBanner(session)) + " · " + esc(GameManager.scoreLine(session))
+        + (GameManager.endNote(session) ? " · " + esc(GameManager.endNote(session)) : "") + "</p>"
+        + '<button type="button" class="quiet" data-action="resume">Resume Game</button>'
         + trackerHtml(session, false)
         + "</main>"
         + "</div>";
@@ -1083,14 +1035,48 @@
 
     function sideSheet() {
       if (sheet !== "side") return "";
-      return '<div class="sheet" id="side-sheet" data-screen="side"><div class="sheet-card">'
+      var game = findGame(gameId);
+      var awayOn = plannedSide !== "home";
+      var opp = oppDraft || (game ? GameManager.opponentLabel(game.name) : "");
+      var dpPick = "";
+      if (game && game.battingMode === "dp-flex" && !GameManager.createLiveGame) dpPick = "";
+      var needDp = game && game.battingMode === "dp-flex";
+      if (needDp) {
+        var players = bundle().players || [];
+        dpPick = '<p class="hint">Who is the DP? Who is the FLEX?</p>'
+          + players.map(function (player) {
+            return '<button type="button" class="pick' + (dpDraft === player.id ? " on" : "") + '" data-action="set-dp" data-player="' + esc(player.id) + '">DP · ' + esc(GameManager.playerLabel(player)) + "</button>";
+          }).join("")
+          + players.map(function (player) {
+            return '<button type="button" class="pick' + (flexDraft === player.id ? " on" : "") + '" data-action="set-flex" data-player="' + esc(player.id) + '">FLEX · ' + esc(GameManager.playerLabel(player)) + "</button>";
+          }).join("");
+      }
+      return '<div class="sheet" id="side-sheet" data-screen="side"><div class="sheet-card" role="dialog" aria-modal="true">'
         + "<h2>Start game</h2>"
-        + '<p class="hint">Away bats in the top. Home bats in the bottom. If the home team leads after the top of the last inning, the bottom is skipped.</p>'
+        + errorHtml()
+        + '<label class="hint" for="opp-name">Opponent</label>'
+        + '<input id="opp-name" class="text-input" data-field="opp" value="' + esc(opp) + '" maxlength="40">'
         + '<div class="stepper"><button type="button" data-action="set-innings" data-delta="-1" aria-label="Fewer innings">−</button>'
-        + '<p id="inning-count">' + plannedInnings + (plannedInnings === 1 ? " inning" : " innings") + "</p>"
+        + '<p id="inning-count"><span class="num-face">' + plannedInnings + "</span> " + (plannedInnings === 1 ? "inning" : "innings") + "</p>"
         + '<button type="button" data-action="set-innings" data-delta="1" aria-label="More innings">+</button></div>'
-        + '<button type="button" class="big" data-action="choose-side" data-side="away">We are AWAY</button>'
-        + '<button type="button" class="big" data-action="choose-side" data-side="home">We are HOME</button>'
+        + '<div class="segment" role="group" aria-label="Our side">'
+        + '<button type="button" data-action="pick-side" data-side="away" aria-pressed="' + (awayOn ? "true" : "false") + '">Away</button>'
+        + '<button type="button" data-action="pick-side" data-side="home" aria-pressed="' + (awayOn ? "false" : "true") + '">Home</button>'
+        + "</div>"
+        + dpPick
+        + '<button type="button" class="big" data-action="choose-side" data-side="' + (awayOn ? "away" : "home") + '">Start game</button>'
+        + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
+        + "</div></div>";
+    }
+
+    function gameMenu(session) {
+      if (sheet !== "menu") return "";
+      return '<div class="sheet" id="game-menu"><div class="sheet-card" role="dialog" aria-modal="true">'
+        + "<h2>Game</h2>"
+        + '<button type="button" class="pick" data-action="time-limit">Time limit: finish this inning</button>'
+        + '<button type="button" class="pick" data-action="add-tally" data-kind="hit">+ Hit</button>'
+        + '<button type="button" class="pick" data-action="add-tally" data-kind="error">+ Error</button>'
+        + '<button type="button" class="pick danger" id="end-game" data-action="ask-end">End Game</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Cancel</button>'
         + "</div></div>";
     }
@@ -1112,15 +1098,17 @@
       var board = GameManager.scoreboard(session);
       var who = board.role === "offense" ? "Runs we scored" : "Runs they scored";
       var shown = runDigits === "" ? "–" : runDigits;
+      var countLabel = runDigits === "1" ? "1 run" : (runDigits || "0") + " runs";
+      var early = session && GameManager.clampOuts(session.outs) < 3;
       var enter = runDigits === ""
-        ? '<button type="button" class="big" disabled>Enter the runs</button>'
-        : '<button type="button" class="big" data-action="commit-runs">Add ' + esc(runDigits) + " runs</button>";
+        ? '<button type="button" class="big" disabled>Save runs</button>'
+        : '<button type="button" class="big" data-action="commit-runs">Save · ' + esc(countLabel) + "</button>";
       var keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "Del"].map(function (key) {
         return '<button type="button" data-action="run-key" data-key="' + esc(key) + '">' + esc(key) + "</button>";
       }).join("");
       return '<div class="sheet" id="run-sheet"><div class="sheet-card">'
         + "<h2>" + esc(board.label) + "</h2>"
-        + '<p class="hint">' + esc(who) + "</p>"
+        + '<p class="hint">' + esc(who) + (early ? ". End this half with " + GameManager.clampOuts(session.outs) + (GameManager.clampOuts(session.outs) === 1 ? " out?" : " outs?") : "") + "</p>"
         + '<p class="run-num" id="run-digits">' + esc(shown) + "</p>"
         + '<div class="pad">' + keys + "</div>"
         + enter
@@ -1130,10 +1118,24 @@
 
     function endSheet(session) {
       if (sheet !== "end") return "";
-      return '<div class="sheet" id="end-sheet"><div class="sheet-card">'
-        + "<h2>End this game?</h2>"
-        + "<p>" + esc(GameManager.scoreLine(session)) + ". The score and defensive innings so far will be saved. This game leaves the not-yet-played list.</p>"
-        + '<button type="button" class="big" id="confirm-end-game" data-action="confirm-end">End game</button>'
+      var reasons = [
+        ["run-rule", "Run rule"],
+        ["time", "Time limit"],
+        ["called", "Called"],
+        ["forfeit", "Forfeit"],
+        ["other", "Other"],
+      ];
+      var chips = reasons.map(function (pair) {
+        return '<button type="button" class="toggle' + (endReason === pair[0] ? " on" : "") + '" data-action="pick-reason" data-reason="' + pair[0] + '">' + pair[1] + "</button>";
+      }).join("");
+      return '<div class="sheet" id="end-sheet"><div class="sheet-card" role="dialog" aria-modal="true">'
+        + "<h2>End Game</h2>"
+        + "<p>" + esc(GameManager.scoreLine(session)) + "</p>"
+        + '<p class="hint">Runs in this half so far</p>'
+        + '<p class="run-num num-face" id="end-runs">' + esc(String(session.liveRuns || 0)) + "</p>"
+        + '<div class="toggles">' + chips + "</div>"
+        + errorHtml()
+        + '<button type="button" class="big danger" id="confirm-end-game" data-action="confirm-end">End Game</button>'
         + '<button type="button" class="big plain" data-action="close-sheet">Keep playing</button>'
         + "</div></div>";
     }
@@ -1172,6 +1174,8 @@
       }
       var html = view === "detail" ? renderDetail() : view === "live" ? renderLive() : view === "played" ? renderPlayed() : renderList();
       root.innerHTML = html;
+      var nowCell = document.querySelector("#scoreboard .inn.now");
+      if (nowCell && nowCell.scrollIntoView) nowCell.scrollIntoView({ inline: "center", block: "nearest" });
     }
 
     function openGame(id) {
@@ -1192,7 +1196,13 @@
 
     function stageChange(change) {
       var effect = GameManager.describeChange(sessionFor(gameId), change);
-      if (!effect.ok && !effect.illegal) return;
+      if (!effect.ok && !effect.illegal) {
+        errorText = effect.reason || "That change is not allowed.";
+        sheet = "";
+        render();
+        return;
+      }
+      errorText = "";
       pendingSub = change;
       effectText = effect.text || "";
       illegalReason = effect.reason || "";
@@ -1207,7 +1217,7 @@
       if (change.type === "bat") op = { type: "sub", spot: change.spot, playerId: change.playerId, force: !!force };
       else if (change.type === "field") op = { type: "set-defense", position: change.position, playerId: change.playerId || "" };
       else if (change.type === "flex") op = { type: "swap-dp-flex", force: !!force };
-      else if (change.type === "leave") op = { type: "leave", playerId: change.playerId };
+      else if (change.type === "leave") op = { type: "leave", playerId: change.playerId, reason: change.reason || "auto-out" };
       else if (change.type === "courtesy") op = { type: "courtesy", forId: change.forId, runnerId: change.runnerId };
       else if (change.type === "flex-sub") op = { type: "flex-sub", playerId: change.playerId, force: !!force };
       else if (change.type === "flex-return") op = { type: "flex-return", force: !!force };
@@ -1229,12 +1239,6 @@
       if (!button) return;
       var action = button.getAttribute("data-action");
       if (action === "back") {
-        if (sheet === "confirm-half") {
-          sheet = "";
-          tap({ type: "undo-out" });
-          render();
-          return;
-        }
         if (sheet) {
           sheet = "";
           runDigits = "";
@@ -1270,15 +1274,32 @@
         render();
         return;
       }
+      if (action === "pick-side") {
+        plannedSide = button.getAttribute("data-side") === "home" ? "home" : "away";
+        render();
+        return;
+      }
+      if (action === "set-dp") { dpDraft = button.getAttribute("data-player"); render(); return; }
+      if (action === "set-flex") { flexDraft = button.getAttribute("data-player"); render(); return; }
       if (action === "choose-side") {
         var game = findGame(gameId);
         if (!game) return;
+        var oppInput = document.getElementById("opp-name");
+        if (oppInput) oppDraft = oppInput.value;
+        if (game.battingMode === "dp-flex" && (!dpDraft || !flexDraft)) {
+          errorText = "Pick the DP and the FLEX before the game starts.";
+          render();
+          return;
+        }
         var input = {
           side: button.getAttribute("data-side"),
           game: game,
           players: bundle().players,
           teamName: teamName,
           scheduledInnings: plannedInnings,
+          oppName: oppDraft,
+          dpId: dpDraft,
+          flexId: flexDraft,
         };
         var session = GameManager.createLiveGame(input);
         gameId = session.lineupGameId;
@@ -1327,7 +1348,66 @@
         return;
       }
       if (action === "ask-leave") {
-        stageChange({ type: "leave", playerId: button.getAttribute("data-player") });
+        selectedId = button.getAttribute("data-player");
+        sheet = "leave";
+        render();
+        return;
+      }
+      if (action === "leave-reason") {
+        stageChange({ type: "leave", playerId: selectedId, reason: button.getAttribute("data-reason") });
+        return;
+      }
+      if (action === "select-player") {
+        var picked = button.getAttribute("data-player");
+        selectedId = selectedId === picked ? "" : picked;
+        render();
+        return;
+      }
+      if (action === "next-batter") {
+        tap({ type: "next-batter" });
+        render();
+        return;
+      }
+      if (action === "add-run") {
+        tap({ type: "add-run" });
+        var prompted = sessionFor(gameId);
+        if (prompted && prompted.prompt) sheet = "prompt";
+        render();
+        return;
+      }
+      if (action === "add-tally") {
+        var side = GameManager.roleFor(sessionFor(gameId).side, sessionFor(gameId).half) === "offense" ? "us" : "opp";
+        if (button.getAttribute("data-kind") === "error") side = side === "us" ? "opp" : "us";
+        tap({ type: "add-tally", kind: button.getAttribute("data-kind"), side: side });
+        render();
+        return;
+      }
+      if (action === "undo") {
+        tap({ type: "undo" });
+        sheet = "";
+        render();
+        return;
+      }
+      if (action === "open-menu") { sheet = "menu"; render(); return; }
+      if (action === "time-limit") {
+        var live = sessionFor(gameId);
+        tap({ type: "set-innings", innings: live.inningIndex + 1, timeLimit: true });
+        sheet = "";
+        render();
+        return;
+      }
+      if (action === "pick-reason") { endReason = button.getAttribute("data-reason"); render(); return; }
+      if (action === "edit-cell") {
+        editAt = { inningIndex: parseInt(button.getAttribute("data-inning"), 10), half: button.getAttribute("data-half") };
+        runDigits = "";
+        sheet = "edit";
+        render();
+        return;
+      }
+      if (action === "resume") {
+        tap({ type: "resume" });
+        view = "live";
+        render();
         return;
       }
       if (action === "ask-courtesy") {
@@ -1392,18 +1472,42 @@
         return;
       }
       if (action === "commit-runs") {
+        var preview;
         try {
-          dryRun({ type: "record-runs", runs: runDigits });
+          preview = GameManager.recordRuns(sessionFor(gameId), runDigits, Date.now());
         } catch (e) {
+          errorText = e && e.message ? e.message : "Enter the runs.";
+          render();
+          return;
+        }
+        if (preview.status === "played") {
+          sheet = "final-confirm";
+          render();
           return;
         }
         tap({ type: "record-runs", runs: runDigits });
-        var live = sessionFor(gameId);
         sheet = "";
         runDigits = "";
-        if (live && live.status === "played") view = "played";
         render();
         window.scrollTo(0, 0);
+        return;
+      }
+      if (action === "confirm-final") {
+        tap({ type: "record-runs", runs: runDigits });
+        var ended = sessionFor(gameId);
+        sheet = "";
+        runDigits = "";
+        if (ended && ended.status === "played") view = "played";
+        render();
+        return;
+      }
+      if (action === "save-edit") {
+        if (!editAt) return;
+        tap({ type: "edit-half", inningIndex: editAt.inningIndex, half: editAt.half, runs: runDigits });
+        sheet = "";
+        runDigits = "";
+        editAt = null;
+        render();
         return;
       }
       if (action === "set-innings") {
@@ -1435,10 +1539,16 @@
         return;
       }
       if (action === "confirm-end") {
-        try { dryRun({ type: "end" }); } catch (e) { return; }
+        var ending = sessionFor(gameId);
+        var ran = tap({
+          type: "end",
+          reason: endReason,
+          runsThisHalf: ending && ending.liveRuns ? ending.liveRuns : 0,
+          forfeitWinner: "us",
+        });
+        if (!ran && errorText) { render(); return; }
         view = "played";
         sheet = "";
-        tap({ type: "end" });
         render();
         window.scrollTo(0, 0);
       }

@@ -94,25 +94,25 @@
   function formatInfo(mode) {
     const key = normalizeMode(mode);
     const table = {
-      roster: {
-        label: "Bat the roster",
-        detail: "Everyone bats. Due up wraps after the last hitter. Defensive swaps are free. Nobody is subbed out of the order.",
+        roster: {
+        label: "Continuous order",
+        detail: "Everyone bats. An injury skips her spot. Anyone else who leaves is an out each time that spot comes up.",
       },
       nine: {
         label: "Bat 9",
-        detail: "Nine bat. A starter may leave and re-enter once, only in her original batting spot.",
+        detail: "Nine bat. Any player may re-enter once, in her same batting spot.",
       },
       "dp-flex": {
-        label: "DP / Flex",
-        detail: "Ten names, nine bat. The Flex plays defense only. The DP hits only unless she takes a position. Either starter may re-enter once.",
+        label: "DP / FLEX",
+        detail: "Ten on the card, nine bat. The FLEX is defense only. If the FLEX bats for the DP, the DP leaves the game.",
       },
       "one-ap": {
-        label: "Extra hitter",
-        detail: "Ten bat, like Bat 9. The extra hitter and any fielder may trade defense and hitting-only. All 10 still bat.",
+        label: "Bat 10 (EP)",
+        detail: "Ten bat. The EP is fixed in her spot and may play defense. She may re-enter once.",
       },
       "two-ap": {
-        label: "Two extra hitters",
-        detail: "Eleven bat, like Bat 9. Extra hitters and fielders may trade defense and hitting-only. All 11 still bat.",
+        label: "Bat 11 (2 EP)",
+        detail: "Eleven bat. Each EP is fixed in her spot and may play defense. Each may re-enter once.",
       },
     };
     return Object.assign({ key: key }, table[key]);
@@ -144,13 +144,52 @@
   function dpIdFor(game) {
     if (normalizeMode(game && game.battingMode) !== "dp-flex") return "";
     const dp = game.defensivePositions && game.defensivePositions.DP;
-    if (dp) return String(dp);
-    const batters = batterIdsForMode(game);
-    const field = new Set(FIELD_POSITIONS.map(function (pos) {
-      return game.defensivePositions && game.defensivePositions[pos] ? String(game.defensivePositions[pos]) : "";
-    }));
-    const sitting = batters.find(function (id) { return !field.has(id); });
-    return sitting || batters[0] || "";
+    return dp ? String(dp) : "";
+  }
+
+  function remember(state, next) {
+    if (!state || !next) return next;
+    const prior = JSON.parse(JSON.stringify(state));
+    delete prior.history;
+    const history = (Array.isArray(state.history) ? state.history : []).concat([prior]).slice(-50);
+    next.history = history;
+    return next;
+  }
+
+  function undo(state, now) {
+    if (!state || !Array.isArray(state.history) || !state.history.length) {
+      throw new Error("Nothing to undo.");
+    }
+    const history = state.history.slice();
+    const prev = history.pop();
+    return Object.assign({}, prev, { history: history, updatedAt: now || Date.now() });
+  }
+
+  function ensureEntries(state) {
+    const entries = {};
+    const raw = state && state.entries && typeof state.entries === "object" ? state.entries : {};
+    Object.keys(raw).forEach(function (id) {
+      const entry = raw[id] || {};
+      const spot = Number(entry.spot);
+      entries[String(id)] = {
+        spot: Number.isFinite(spot) ? spot : -1,
+        reentered: !!entry.reentered,
+      };
+    });
+    if (Object.keys(entries).length) return entries;
+    ((state && state.spots) || []).forEach(function (spot, index) {
+      if (!spot || !spot.starterId) return;
+      entries[String(spot.starterId)] = { spot: index, reentered: !!spot.starterReturned };
+    });
+    return entries;
+  }
+
+  function starterEntries(ids) {
+    const entries = {};
+    ids.forEach(function (id, index) {
+      entries[String(id)] = { spot: index, reentered: false };
+    });
+    return entries;
   }
 
   function buildSpots(ids) {
@@ -229,20 +268,16 @@
       return { ok: false, illegal: false, reason: "A sub for the Flex is defense only." };
     }
     if (incoming === slotCurrent(spot)) return { ok: false, illegal: false, reason: "That player is already in this spot." };
-    const departed = new Set((state.departed || []).map(String));
-    const starterSpot = (state.spots || []).findIndex(function (item) { return item.starterId === incoming; });
-    if (starterSpot >= 0 && starterSpot !== spotIndex) {
-      return { ok: false, illegal: true, reason: "A starter may re-enter only once, in the original batting spot." };
-    }
-    if (incoming === spot.starterId) {
-      if (spot.starterReturned) {
-        return { ok: false, illegal: true, reason: "A starter may re-enter only once, in the original batting spot." };
+    if (inLineup(state, incoming)) return { ok: false, illegal: false, reason: "That player is already in the batting order." };
+    const entry = ensureEntries(state)[incoming];
+    if (entry) {
+      if (entry.spot !== spotIndex) {
+        return { ok: false, illegal: true, reason: "Must re-enter in her original batting spot #" + (entry.spot + 1) + " (USA 4-5)." };
+      }
+      if (entry.reentered) {
+        return { ok: false, illegal: true, reason: "Already used her one re-entry (USA 4-5)." };
       }
       return { ok: true, illegal: false, kind: "reenter", reason: "" };
-    }
-    if (inLineup(state, incoming)) return { ok: false, illegal: false, reason: "That player is already in the batting order." };
-    if (departed.has(incoming)) {
-      return { ok: false, illegal: true, reason: "A player who has left the game cannot re-enter." };
     }
     return { ok: true, illegal: false, kind: "sub", reason: "" };
   }
@@ -260,25 +295,35 @@
     const leaving = slotCurrent(spot);
     const flexId = String(state.flexId || "");
     const departed = (state.departed || []).map(String);
-    if (leaving && leaving !== spot.starterId && leaving !== flexId && departed.indexOf(leaving) < 0) departed.push(leaving);
+    if (leaving && departed.indexOf(leaving) < 0) departed.push(leaving);
     if (incoming === spot.starterId) spot.starterReturned = true;
     spot.currentId = incoming;
     const defense = cloneDefense(state.defense);
     FIELD_POSITIONS.forEach(function (pos) {
+      if (defense[pos] === incoming) defense[pos] = null;
+    });
+    FIELD_POSITIONS.forEach(function (pos) {
       if (defense[pos] === leaving) defense[pos] = incoming;
     });
+    const entries = ensureEntries(state);
+    const prior = entries[incoming];
+    entries[incoming] = {
+      spot: prior && prior.spot >= 0 ? prior.spot : spotIndex,
+      reentered: !!(prior && prior.spot === spotIndex),
+    };
     let flexBatting = !!state.flexBatting;
     if (normalizeMode(state.battingMode) === "dp-flex" && spotIndex === state.dpSpot && incoming !== flexId) {
       flexBatting = false;
     }
-    return Object.assign({}, state, {
+    return remember(state, Object.assign({}, state, {
       spots: spots,
       departed: departed,
+      entries: entries,
       defense: defense,
       lastFieldPos: rememberFieldPositions(state, defense),
       flexBatting: flexBatting,
       updatedAt: now || Date.now(),
-    });
+    }));
   }
 
   function liveDpIndex(state) {
@@ -366,7 +411,7 @@
     if (change.type === "flex") return describeFlex(state);
     if (change.type === "field") return describeField(state, change.position, change.playerId);
     if (change.type === "bat") return describeBat(state, change.spot, change.playerId);
-    if (change.type === "leave") return describeLeave(state, change.playerId);
+    if (change.type === "leave") return describeLeave(state, change.playerId, change.reason);
     if (change.type === "courtesy") return describeCourtesy(state, change.forId, change.runnerId);
     if (change.type === "flex-sub") return describeFlexSub(state, change.playerId);
     if (change.type === "flex-return") return describeFlexReturn(state);
@@ -382,16 +427,13 @@
     const leavingName = possessive(lastName(state, leaving));
     const leavingIndex = (state.spots || []).findIndex(function (item) { return slotCurrent(item) === leaving; });
     const spotNo = leavingIndex >= 0 ? leavingIndex + 1 : spotIndex + 1;
-    const counts = " Pinch hitters and pinch runners count as this sub.";
     let text;
     if (state.battingMode === "dp-flex" && spotIndex === state.dpSpot) {
-      text = incomingName + " takes the DP's #" + spotNo + " batting spot for " + leavingName.replace(/'s$|'$/, "") + ".";
-      text += pos ? " She enters at " + pos + "." : " Defense unchanged.";
-      text += counts;
+      text = incomingName + " for " + leavingName.replace(/'s$|'$/, "") + " · #" + spotNo + (pos ? " · " + pos : "") + ".";
     } else if (pos) {
-      text = incomingName + " enters at " + pos + " and takes " + leavingName + " #" + spotNo + " batting spot." + counts;
+      text = incomingName + " for " + leavingName.replace(/'s$|'$/, "") + " · #" + spotNo + " · " + pos + ".";
     } else {
-      text = incomingName + " takes " + leavingName + " #" + spotNo + " batting spot. Defense unchanged." + counts;
+      text = incomingName + " for " + leavingName.replace(/'s$|'$/, "") + " · #" + spotNo + ".";
     }
     return { ok: choice.ok, illegal: !!choice.illegal, reason: choice.reason || "", text: text };
   }
@@ -448,7 +490,7 @@
     if (!state.flexBatting) {
       const dpPos = currentPosition(state.defense, dpId);
       const flexPos = currentPosition(state.defense, flexId);
-      let text = "Flex bats for DP in spot " + spotNo + "; DP leaves offense. Lineup drops to 9.";
+      let text = "FLEX bats for DP in #" + spotNo + ". DP leaves the game (1 re-entry left). Lineup is 9.";
       if (dpPos) text += " DP leaves " + dpPos + ".";
       else if (flexPos) text += " " + lastName(state, flexId) + " stays at " + flexPos + ".";
       else text += " Defense unchanged.";
@@ -459,55 +501,72 @@
       ok: !illegal,
       illegal: illegal,
       reason: illegal ? "The DP may re-enter only once." : "",
-      text: "DP re-enters in spot " + spotNo + ", her one re-entry. Flex returns to defense only. Lineup is 10.",
+      text: "DP re-enters in #" + spotNo + ", her one re-entry. FLEX returns to defense only. Lineup is 10.",
     };
   }
 
-  function describeLeave(state, playerId) {
+  function describeLeave(state, playerId, reason) {
     if (!state || state.battingMode !== "roster") {
-      return { ok: false, illegal: false, reason: "Only bat the roster uses this.", text: "" };
+      return { ok: false, illegal: false, reason: "Only the continuous order uses this.", text: "" };
     }
     const id = String(playerId || "");
     const order = ((state.lineupSnapshot && state.lineupSnapshot.battingOrder) || []).map(String);
     const found = order.indexOf(id);
     const spotNo = found >= 0 ? found + 1 : 1;
     const name = lastName(state, id);
+    const why = reason === "skip" || reason === "auto-out" || reason === "ejected" ? reason : "";
+    if (!why) return { ok: false, illegal: false, reason: "Pick why she is leaving.", text: "" };
     const pos = currentPosition(state.defense, id);
-    let text = name + " leaves the game. ";
-    if (state.injuryOut) text += "Her #" + spotNo + " batting spot is an automatic out. ";
-    else text += "She stays in the batting order. Not an automatic out. ";
-    text += pos ? name + " leaves " + pos + "." : "Defense unchanged.";
+    let text = name + " leaves · #" + spotNo + ". ";
+    if (why === "skip") text += "Injured. Skip her spot, no out.";
+    else if (why === "ejected") text += "Ejected. An out each time her spot comes up.";
+    else text += "Left early. An out each time her spot comes up.";
+    if (pos) text += " Leaves " + pos + ".";
+    const active = activeBatterCount(Object.assign({}, state, { rosterLeft: Object.assign({}, state.rosterLeft, { [id]: why }) }));
+    if (active < 8) text += " Fewer than 8 can bat.";
     return { ok: true, illegal: false, reason: "", text: text };
   }
 
   function describeCourtesy(state, forId, runnerId) {
-    const text = lastName(state, runnerId) + " is the courtesy runner for " + lastName(state, forId)
-      + ". Not a sub. Batting order unchanged. Defense unchanged. Re-entry unchanged.";
-    return { ok: !!(forId && runnerId), illegal: false, reason: forId && runnerId ? "" : "Pick a runner and who she runs for.", text: text };
+    const check = courtesyChoice(state, forId, runnerId);
+    const text = check.ok
+      ? "CR " + lastName(state, runnerId) + " for " + (check.pos || "P/C") + " " + lastName(state, forId) + "."
+      : "";
+    return { ok: check.ok, illegal: !!check.illegal, reason: check.reason || "", text: text };
   }
 
   function describeFlexSub(state, playerId) {
     if (!state || state.battingMode !== "dp-flex") {
-      return { ok: false, illegal: false, reason: "This lineup is not DP / Flex.", text: "" };
+      return { ok: false, illegal: false, reason: "This lineup is not DP / FLEX.", text: "" };
     }
     const flexNow = String(state.flexCurrentId || state.flexId || "");
     const pos = currentPosition(state.defense, flexNow);
-    if (!pos || state.flexLeft) return { ok: false, illegal: false, reason: "The Flex is not on defense.", text: "" };
+    if (!pos || state.flexLeft) return { ok: false, illegal: false, reason: "The FLEX is not on defense.", text: "" };
     const incoming = String(playerId || "");
-    if ((state.departed || []).map(String).indexOf(incoming) >= 0) {
+    const held = currentPosition(state.defense, incoming);
+    if (held) {
+      return { ok: false, illegal: false, reason: "She's already playing " + held + ".", text: "" };
+    }
+    if (inLineup(state, incoming) || spotIndexOf(state, incoming) >= 0) {
+      return { ok: false, illegal: false, reason: "She's already in the batting order.", text: "" };
+    }
+    const entry = ensureEntries(state)[incoming];
+    if (entry && entry.reentered) {
       return {
         ok: false,
         illegal: true,
-        reason: "A removed substitute cannot re-enter.",
-        text: lastName(state, incoming) + " cannot return on defense for the Flex.",
+        reason: "Already used her one re-entry (USA 4-5).",
+        text: lastName(state, incoming) + " cannot return for the FLEX.",
       };
+    }
+    if (entry && entry.spot >= 0) {
+      return { ok: false, illegal: true, reason: "Must re-enter in her original batting spot #" + (entry.spot + 1) + " (USA 4-5).", text: "" };
     }
     return {
       ok: true,
       illegal: false,
       reason: "",
-      text: lastName(state, incoming) + " subs for the Flex at " + pos + ". Defense only. Batting order unchanged. "
-        + lastName(state, state.flexId) + " may re-enter once.",
+      text: lastName(state, incoming) + " for FLEX at " + pos + ". Defense only.",
     };
   }
 
@@ -533,8 +592,8 @@
       const view = lineupView(state && state.lineupSnapshot, players);
       const left = (state && state.rosterLeft) || {};
       return view.batting.map(function (row) {
-        if (left[row.id] === "auto-out") return Object.assign({}, row, { role: "Auto out" });
-        if (left[row.id] === "stay") return Object.assign({}, row, { role: "Left game" });
+        if (left[row.id] === "auto-out" || left[row.id] === "ejected") return Object.assign({}, row, { role: "Auto out" });
+        if (left[row.id] === "skip" || left[row.id] === "stay") return Object.assign({}, row, { role: "Skipped" });
         return row;
       });
     }
@@ -544,7 +603,7 @@
       if (state.battingMode === "dp-flex" && (id === state.dpId || id === state.flexId || spot.starterId === state.dpId)) {
         role = state.flexBatting && id === state.flexId ? "Flex" : "DP";
       }
-      if ((state.battingMode === "one-ap" || state.battingMode === "two-ap") && index >= 9) role = "EH";
+      if ((state.battingMode === "one-ap" || state.battingMode === "two-ap") && index >= 9) role = "EP";
       return { order: index + 1, id: id, starterId: spot.starterId, role: role, label: label(id) };
     });
   }
@@ -609,15 +668,31 @@
 
   function halfLabel(inningIndex, half) {
     const n = (Number(inningIndex) || 0) + 1;
-    return (half === "bottom" ? "Bottom" : "Top") + " " + n;
+    return (half === "bottom" ? "Bot" : "Top") + " " + ordinal(n);
   }
 
   function opponentLabel(gameName) {
     const name = String(gameName || "").trim();
-    const match = name.match(/^(?:vs\.?|versus)\s+(.+)$/i);
-    if (!match) return "Opponent";
+    const match = name.match(/^(?:vs\.?|v\.?|versus|@|at)\s+(.+)$/i);
+    if (!match) return "";
     const trimmed = match[1].replace(/\s+[-–—].*$/, "").trim();
-    return trimmed || "Opponent";
+    return trimmed || "";
+  }
+
+  function readableTeam(name, fallback) {
+    const raw = String(name || "").trim();
+    if (!raw || raw === "Us" || raw === "Team" || raw === "Opponent" || raw === "Opp") return fallback;
+    const parts = raw.split(/\s+/).filter(function (word) {
+      return !/^\d+U$/i.test(word);
+    });
+    return parts.length ? parts[parts.length - 1] : fallback;
+  }
+
+  function abbrOf(name, fallback) {
+    const word = readableTeam(name, "");
+    const letters = String(word || "").replace(/[^A-Za-z0-9]/g, "");
+    if (!letters) return fallback;
+    return letters.slice(0, 6).toUpperCase();
   }
 
   function defenseForInning(plan, index, fallback) {
@@ -685,8 +760,8 @@
     const defense = defenseForInning(plan, 0, snapshot.defensivePositions);
     const mode = normalizeMode(snapshot.battingMode);
     const batterIds = batterIdsForMode(snapshot);
-    const flexId = flexIdFor(snapshot);
-    const dpId = dpIdFor(snapshot);
+    const flexId = input && input.flexId ? String(input.flexId) : flexIdFor(snapshot);
+    const dpId = input && input.dpId ? String(input.dpId) : dpIdFor(snapshot);
     const stamp = now || Date.now();
     return {
       lineupGameId: snapshot.id,
@@ -719,12 +794,31 @@
       flexCurrentId: flexId,
       injuryOut: false,
       rosterLeft: {},
-      courtesy: null,
+      courtesy: [],
+      courtesyUsed: {},
+      courtesyPool: input && input.courtesyPool === "jo" ? "jo" : "standard",
+      battingIndex: 0,
+      entries: starterEntries(batterIds),
+      liveRuns: 0,
+      usHits: 0,
+      oppHits: 0,
+      usErrors: 0,
+      oppErrors: 0,
+      teamAbbr: input && input.teamAbbr ? String(input.teamAbbr).slice(0, 6).toUpperCase() : "",
+      oppAbbr: input && input.oppAbbr ? String(input.oppAbbr).slice(0, 6).toUpperCase() : "",
+      oppName: input && input.oppName ? String(input.oppName) : "",
+      itbFrom: input && input.itbFrom ? clampScheduledInnings(input.itbFrom) : 0,
+      timeLimit: false,
+      runRule: null,
+      prompt: "",
+      overrides: [],
+      history: [],
+      defensiveByPos: {},
       departed: [],
       players: Array.isArray(input.players) ? input.players.map(slimPlayer).filter(Boolean) : [],
       lineupSnapshot: snapshot,
-      gameName: snapshot.name,
-      teamName: String((input && input.teamName) || "Us"),
+      gameName: input && input.oppName ? withOpponent(snapshot.name, input.oppName) : snapshot.name,
+      teamName: String((input && input.teamName) || "Elks"),
       startedAt: stamp,
       updatedAt: stamp,
     };
@@ -860,25 +954,42 @@
       outLog: [],
       defensePlan: (state.defensePlan || []).map(cloneDefense),
       scheduledInnings: scheduled,
+      courtesy: [],
+      liveRuns: 0,
+      prompt: "",
       updatedAt: stamp,
     };
+
+    const ruleLead = runRuleMargin(state, completedInnings(innings, completedHalf, completedIndex));
+    const ruleGap = Math.abs(scores.home - scores.away);
+    if (ruleLead && ruleGap >= ruleLead && !(completedHalf === "top" && scores.away > scores.home)) {
+      if (completedHalf === "top" && scores.home > scores.away && current.bottom == null) current.bottom = "X";
+      innings[completedIndex] = current;
+      shared.innings = innings;
+      return remember(state, finishPlayed(state, Object.assign({}, shared, {
+        inningIndex: completedIndex,
+        half: completedHalf,
+        endedReason: "run-rule",
+      }), stamp));
+    }
 
     if (completedHalf === "top" && inningNumber >= scheduled && scores.home > scores.away) {
       current.bottom = "X";
       innings[completedIndex] = current;
-      return finishPlayed(state, Object.assign({}, shared, {
+      shared.innings = innings;
+      return remember(state, finishPlayed(state, Object.assign({}, shared, {
         inningIndex: completedIndex,
         half: "top",
         endedReason: "home-lead",
-      }), stamp);
+      }), stamp));
     }
 
     if (completedHalf === "bottom" && inningNumber >= scheduled && scores.home !== scores.away) {
-      return finishPlayed(state, Object.assign({}, shared, {
+      return remember(state, finishPlayed(state, Object.assign({}, shared, {
         inningIndex: completedIndex,
         half: "bottom",
         endedReason: "final",
-      }), stamp);
+      }), stamp));
     }
 
     let inningIndex = completedIndex;
@@ -893,7 +1004,7 @@
       defense = defenseForInning(state.defensePlan, inningIndex, state.defense);
     }
     const onDefense = roleFor(state.side, half) === "defense";
-    return Object.assign({}, state, shared, {
+    const advanced = Object.assign({}, state, shared, {
       status: "live",
       inningIndex: inningIndex,
       half: half,
@@ -903,15 +1014,17 @@
       endedReason: "",
       outs: 0,
     });
+    advanced.tiebreaker = tiebreakerActive(advanced);
+    return remember(state, advanced);
   }
 
   function setTiebreaker(state, on, now) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
-    if (!isExtraHalf(state)) throw new Error("The tiebreaker is for extra innings.");
-    return Object.assign({}, state, {
+    if (!isExtraHalf(state) && !tiebreakerActive(state)) throw new Error("The tiebreaker is for extra innings.");
+    return remember(state, Object.assign({}, state, {
       tiebreaker: !!on,
       updatedAt: now || Date.now(),
-    });
+    }));
   }
 
   function setDefense(state, position, playerId, now) {
@@ -972,26 +1085,49 @@
     return Object.assign({}, state, { injuryOut: !!on, updatedAt: now || Date.now() });
   }
 
-  function leaveRosterPlayer(state, playerId, now) {
-    if (!state || state.battingMode !== "roster") throw new Error("Only bat the roster uses this.");
+  function leaveRosterPlayer(state, playerId, reasonOrNow, now) {
+    if (!state || state.battingMode !== "roster") throw new Error("Only the continuous order uses this.");
+    let reason = "auto-out";
+    let stamp = now || Date.now();
+    if (typeof reasonOrNow === "number") stamp = reasonOrNow;
+    else if (reasonOrNow) {
+      reason = String(reasonOrNow);
+      if (typeof now === "number") stamp = now;
+    }
+    if (reason !== "skip" && reason !== "auto-out" && reason !== "ejected") {
+      throw new Error("Pick why she is leaving.");
+    }
     const id = String(playerId || "");
     const defense = cloneDefense(state.defense);
     FIELD_POSITIONS.forEach(function (pos) {
       if (defense[pos] === id) defense[pos] = null;
     });
     const left = Object.assign({}, state.rosterLeft);
-    left[id] = state.injuryOut ? "auto-out" : "stay";
-    return Object.assign({}, state, {
+    left[id] = reason;
+    const next = Object.assign({}, state, {
       defense: defense,
       lastFieldPos: rememberFieldPositions(state, defense),
       rosterLeft: left,
-      updatedAt: now || Date.now(),
+      updatedAt: stamp,
     });
+    if (activeBatterCount(next) < 8) next.prompt = "Fewer than 8 can bat.";
+    return remember(state, next);
   }
 
   function setCourtesy(state, forId, runnerId, now) {
-    const courtesy = forId && runnerId ? { forId: String(forId), runnerId: String(runnerId) } : null;
-    return Object.assign({}, state, { courtesy: courtesy, updatedAt: now || Date.now() });
+    if (!forId || !runnerId) {
+      return remember(state, Object.assign({}, state, { courtesy: [], updatedAt: now || Date.now() }));
+    }
+    const choice = courtesyChoice(state, forId, runnerId);
+    if (!choice.ok) throw new Error(choice.reason || "That courtesy runner is not allowed.");
+    const list = courtesyList(state).concat([{ forId: String(forId), runnerId: String(runnerId) }]);
+    const used = Object.assign({}, state.courtesyUsed || {});
+    if (choice.pos) used[choice.pos] = String(runnerId);
+    return remember(state, Object.assign({}, state, {
+      courtesy: list,
+      courtesyUsed: used,
+      updatedAt: now || Date.now(),
+    }));
   }
 
   function subForFlex(state, playerId, force, now) {
@@ -1002,18 +1138,25 @@
     const pos = currentPosition(state.defense, flexNow);
     const defense = cloneDefense(state.defense);
     const leaving = defense[pos];
+    FIELD_POSITIONS.forEach(function (spot) {
+      if (defense[spot] === incoming) defense[spot] = null;
+    });
     defense[pos] = incoming;
     const departed = (state.departed || []).map(String);
     if (leaving && leaving !== String(state.flexId || "") && departed.indexOf(leaving) < 0) departed.push(leaving);
-    return Object.assign({}, state, {
+    const entries = ensureEntries(state);
+    const prior = entries[incoming];
+    entries[incoming] = { spot: prior ? prior.spot : -1, reentered: !!(prior && prior.reentered) };
+    return remember(state, Object.assign({}, state, {
       defense: defense,
       departed: departed,
+      entries: entries,
       flexLeft: true,
       flexOnCard: false,
       flexPos: pos,
       flexCurrentId: incoming,
       updatedAt: now || Date.now(),
-    });
+    }));
   }
 
   function reenterFlex(state, force, now) {
@@ -1063,25 +1206,37 @@
     const rows = [];
     let usTotal = 0;
     let oppTotal = 0;
-    const end = Math.min(last, innings.length - 1);
-    for (let i = 0; i <= end; i += 1) {
+    const scheduled = scheduledInningsOf(state);
+    const count = Math.max(scheduled, last + 1, 1);
+    for (let i = 0; i < count; i += 1) {
       const cells = inningCells(state.side, innings[i]);
+      const current = Boolean(state.status === "live" && i === state.inningIndex);
+      if (current && state.liveRuns) {
+        if (roleFor(state.side, state.half) === "offense" && cells.us == null) cells.us = state.liveRuns;
+        if (roleFor(state.side, state.half) === "defense" && cells.opp == null) cells.opp = state.liveRuns;
+      }
       if (typeof cells.us === "number") usTotal += cells.us;
       if (typeof cells.opp === "number") oppTotal += cells.opp;
+      const inn = innings[i] || {};
       rows.push({
         inning: i + 1,
         us: cells.us,
         opp: cells.opp,
-        current: Boolean(state.status === "live" && i === state.inningIndex),
+        current: current,
+        topTiebreaker: !!inn.topTiebreaker,
+        bottomTiebreaker: !!inn.bottomTiebreaker,
       });
     }
-    const scheduled = scheduledInningsOf(state);
     return {
       innings: rows,
       usTotal: usTotal,
       oppTotal: oppTotal,
+      usHits: Number(state && state.usHits) || 0,
+      oppHits: Number(state && state.oppHits) || 0,
+      usErrors: Number(state && state.usErrors) || 0,
+      oppErrors: Number(state && state.oppErrors) || 0,
       role: state && state.status === "live" ? roleFor(state.side, state.half) : "",
-      label: state && state.status === "live" ? halfLabel(state.inningIndex, state.half) : "Final",
+      label: state && state.status === "live" ? halfLabel(state.inningIndex, state.half) : finalBanner(state),
       side: state ? state.side : "",
       extra: Boolean(state && state.status === "live" && state.inningIndex + 1 > scheduled),
       scheduledInnings: scheduled,
@@ -1089,33 +1244,40 @@
   }
 
   function displayOpponent(gameName) {
-    const name = opponentLabel(gameName);
-    return name === "Opponent" ? "Opp" : name;
+    return opponentLabel(gameName) || "Opponent";
   }
 
   function scoreboardRows(state) {
     const board = scoreboard(state);
     const home = Boolean(state && state.side === "home");
+    const usName = readableTeam(state && state.teamName, "Elks");
+    const oppName = opponentLabel(state && state.gameName) || "Opponent";
     const us = {
       team: "us",
       side: home ? "home" : "away",
-      label: "Us",
+      label: state && state.teamAbbr ? String(state.teamAbbr).slice(0, 6).toUpperCase() : abbrOf(usName, "ELKS"),
+      name: usName,
       cells: board.innings.map(function (inn) { return inn.us; }),
       total: board.usTotal,
+      hits: board.usHits,
+      errors: board.usErrors,
     };
     const opp = {
       team: "opp",
       side: home ? "away" : "home",
-      label: displayOpponent(state && state.gameName),
+      label: state && state.oppAbbr ? String(state.oppAbbr).slice(0, 6).toUpperCase() : abbrOf(oppName, "OPP"),
+      name: oppName,
       cells: board.innings.map(function (inn) { return inn.opp; }),
       total: board.oppTotal,
+      hits: board.oppHits,
+      errors: board.oppErrors,
     };
     return home ? [opp, us] : [us, opp];
   }
 
   function scoreLine(state) {
     const rows = scoreboardRows(state);
-    return rows[0].label + " " + rows[0].total + ", " + rows[1].label + " " + rows[1].total;
+    return rows[0].name + " " + rows[0].total + ", " + rows[1].name + " " + rows[1].total;
   }
 
   function liveScoreMeta(state) {
@@ -1125,23 +1287,43 @@
   }
 
   function finalScoreMeta(state) {
-    return "Final " + scoreLine(state);
+    return finalBanner(state) + " " + scoreLine(state);
   }
 
-  function endGame(state, now) {
+  function endGame(state, nowOrOptions, maybeNow) {
     if (!state || state.status !== "live") throw new Error("This game is not in progress.");
-    const board = scoreboard(Object.assign({}, state, { status: "played" }));
-    const stamp = now || Date.now();
-    return Object.assign({}, state, {
-      status: "played",
-      finalUs: board.usTotal,
-      finalOpp: board.oppTotal,
-      endedReason: state.endedReason || "manual",
-      outLog: [],
-      outs: 0,
-      endedAt: stamp,
-      updatedAt: stamp,
-    });
+    const options = nowOrOptions && typeof nowOrOptions === "object" ? nowOrOptions : {};
+    const stamp = typeof nowOrOptions === "number" ? nowOrOptions : (typeof maybeNow === "number" ? maybeNow : Date.now());
+    const reason = options.reason || state.endedReason || "manual";
+    let working = state;
+    if (options.runsThisHalf != null && options.runsThisHalf !== "") {
+      const scored = parseRuns(options.runsThisHalf);
+      if (scored == null) throw new Error("Enter a whole number of runs, 0 or more.");
+      const innings = working.innings.map(copyInning);
+      const cell = copyInning(innings[working.inningIndex]);
+      cell[working.half] = scored;
+      innings[working.inningIndex] = cell;
+      working = Object.assign({}, working, { innings: innings, liveRuns: 0 });
+    }
+    if (reason === "forfeit") {
+      const winner = options.forfeitWinner === "opp" ? "opp" : "us";
+      const ended = finishPlayed(working, {
+        endedReason: "forfeit",
+        inningIndex: working.inningIndex,
+        half: working.half,
+        forfeitWinner: winner,
+      }, stamp);
+      ended.finalUs = winner === "us" ? 7 : 0;
+      ended.finalOpp = winner === "us" ? 0 : 7;
+      return remember(state, ended);
+    }
+    if (reason === "called") working = calledGame(working);
+    else working = skipBottomIfHomeLeads(working);
+    return remember(state, finishPlayed(working, {
+      endedReason: reason,
+      inningIndex: working.inningIndex,
+      half: working.half,
+    }, stamp));
   }
 
   function unplayedGames(games, sessions) {
@@ -1230,7 +1412,7 @@
     const batting = order.map(function (id, index) {
       let role = "";
       if (mode === "dp-flex" && id === dpId) role = "DP";
-      if ((mode === "one-ap" || mode === "two-ap") && index >= 9) role = "EH";
+      if ((mode === "one-ap" || mode === "two-ap") && index >= 9) role = "EP";
       return { order: index + 1, id: id, role: role, label: label(id) };
     });
     const firstPlan = game && game.inningDefenses && game.inningDefenses[0];
@@ -1358,7 +1540,7 @@
       outLog: outLog,
       scheduledInnings: clampScheduledInnings(raw.scheduledInnings),
       tiebreaker: !!raw.tiebreaker,
-      endedReason: raw.endedReason === "home-lead" || raw.endedReason === "final" || raw.endedReason === "manual"
+      endedReason: ["home-lead", "final", "manual", "run-rule", "time", "called", "forfeit", "other"].indexOf(raw.endedReason) >= 0
         ? raw.endedReason
         : "",
       outs: clampOuts(raw.outs),
@@ -1381,15 +1563,35 @@
       flexPos: typeof raw.flexPos === "string" ? raw.flexPos : "",
       flexCurrentId: String(raw.flexCurrentId || raw.flexId || ""),
       injuryOut: !!raw.injuryOut,
-      rosterLeft: raw.rosterLeft && typeof raw.rosterLeft === "object" ? raw.rosterLeft : {},
-      courtesy: raw.courtesy && raw.courtesy.forId && raw.courtesy.runnerId
-        ? { forId: String(raw.courtesy.forId), runnerId: String(raw.courtesy.runnerId) }
-        : null,
+      rosterLeft: migrateRosterLeft(raw.rosterLeft),
+      courtesy: courtesyList(raw),
+      courtesyUsed: raw.courtesyUsed && typeof raw.courtesyUsed === "object" ? {
+        P: raw.courtesyUsed.P ? String(raw.courtesyUsed.P) : "",
+        C: raw.courtesyUsed.C ? String(raw.courtesyUsed.C) : "",
+      } : {},
+      courtesyPool: raw.courtesyPool === "jo" ? "jo" : "standard",
+      battingIndex: clampIndex(raw.battingIndex),
+      entries: ensureEntries(raw),
+      liveRuns: Math.max(0, Math.floor(Number(raw.liveRuns) || 0)),
+      usHits: Math.max(0, Math.floor(Number(raw.usHits) || 0)),
+      oppHits: Math.max(0, Math.floor(Number(raw.oppHits) || 0)),
+      usErrors: Math.max(0, Math.floor(Number(raw.usErrors) || 0)),
+      oppErrors: Math.max(0, Math.floor(Number(raw.oppErrors) || 0)),
+      teamAbbr: raw.teamAbbr ? String(raw.teamAbbr).slice(0, 6).toUpperCase() : "",
+      oppAbbr: raw.oppAbbr ? String(raw.oppAbbr).slice(0, 6).toUpperCase() : "",
+      oppName: raw.oppName ? String(raw.oppName) : "",
+      itbFrom: Math.max(0, Math.floor(Number(raw.itbFrom) || 0)),
+      timeLimit: !!raw.timeLimit,
+      prompt: raw.prompt ? String(raw.prompt) : "",
+      forfeitWinner: raw.forfeitWinner === "opp" ? "opp" : (raw.forfeitWinner === "us" ? "us" : ""),
+      overrides: Array.isArray(raw.overrides) ? raw.overrides.map(String).slice(-40) : [],
+      history: Array.isArray(raw.history) ? raw.history.slice(-50) : [],
+      defensiveByPos: raw.defensiveByPos && typeof raw.defensiveByPos === "object" ? raw.defensiveByPos : {},
       departed: Array.isArray(raw.departed) ? raw.departed.map(String) : [],
       players: Array.isArray(raw.players) ? raw.players.map(slimPlayer).filter(Boolean) : [],
       lineupSnapshot: snapshot,
-      gameName: String(raw.gameName || (snapshot && snapshot.name) || "Untitled Game"),
-      teamName: String(raw.teamName || "Us"),
+      gameName: String(raw.gameName || (snapshot && snapshot.name) || "Game"),
+      teamName: String(raw.teamName || "Elks"),
       finalUs: raw.status === "played" ? (finalUs == null ? 0 : finalUs) : undefined,
       finalOpp: raw.status === "played" ? (finalOpp == null ? 0 : finalOpp) : undefined,
       startedAt: Number(raw.startedAt) || 0,
@@ -1534,12 +1736,33 @@
     }
     const gameId = String(op.gameId || "");
     const current = team.sessions[gameId];
+    if (current && op.atHalf && op.type !== "undo" && op.type !== "resume") {
+      const gate = staleGate(current, op);
+      if (gate === "drop") {
+        const err = new Error("Another phone already recorded that.");
+        err.code = "stale";
+        throw err;
+      }
+      if (gate === "same") {
+        put(current);
+        return next;
+      }
+    }
     if (op.type === "add-out") put(addOut(current, stamp));
     else if (op.type === "undo-out") put(undoOut(current, stamp));
-    else if (op.type === "record-runs") put(recordRuns(current, op.runs, stamp));
+    else if (op.type === "undo") put(undo(current, stamp));
+    else if (op.type === "record-runs" || op.type === "set-half-runs") put(recordRuns(current, op.runs, stamp));
+    else if (op.type === "add-run") put(addRun(current, stamp));
+    else if (op.type === "add-tally") put(addTally(current, op.kind, op.side, stamp));
+    else if (op.type === "edit-half") put(editHalfRuns(current, op.inningIndex, op.half, op.runs, stamp));
+    else if (op.type === "set-batter") put(setBatter(current, op.index, stamp));
+    else if (op.type === "next-batter") put(advanceBatter(current, stamp));
+    else if (op.type === "set-innings") put(setScheduledInnings(current, op.innings, stamp, op));
+    else if (op.type === "resume") put(resumeGame(current, stamp));
+    else if (op.type === "confirm-final") put(current);
     else if (op.type === "set-defense") put(setDefense(current, op.position, op.playerId || "", stamp));
     else if (op.type === "injury") put(setInjuryOut(current, !!op.on, stamp));
-    else if (op.type === "leave") put(leaveRosterPlayer(current, op.playerId, stamp));
+    else if (op.type === "leave") put(leaveRosterPlayer(current, op.playerId, op.reason || stamp, op.reason ? stamp : undefined));
     else if (op.type === "courtesy") put(setCourtesy(current, op.forId, op.runnerId, stamp));
     else if (op.type === "flex-sub") put(subForFlex(current, op.playerId, !!op.force, stamp));
     else if (op.type === "flex-return") put(reenterFlex(current, !!op.force, stamp));
@@ -1547,7 +1770,11 @@
     else if (op.type === "sub") put(applySub(current, op.spot, op.playerId, !!op.force, stamp));
     else if (op.type === "swap-dp-flex") put(swapDpFlex(current, stamp, !!op.force));
     else if (op.type === "end") {
-      const ended = endGame(current, stamp);
+      const ended = endGame(current, op.reason ? {
+        reason: op.reason,
+        runsThisHalf: op.runsThisHalf,
+        forfeitWinner: op.forfeitWinner,
+      } : stamp, stamp);
       put(ended);
       if (next.active && next.active.gameId === ended.lineupGameId && next.active.teamId === String(op.teamId)) {
         next.active = null;
@@ -1586,6 +1813,308 @@
       };
     });
     return store;
+  }
+
+  function withOpponent(gameName, oppName) {
+    if (!oppName || opponentLabel(gameName)) return gameName;
+    return "vs. " + String(oppName).trim();
+  }
+
+  function clampIndex(value) {
+    const n = Math.floor(Number(value) || 0);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.min(40, n);
+  }
+
+  function migrateRosterLeft(raw) {
+    const left = {};
+    if (!raw || typeof raw !== "object") return left;
+    Object.keys(raw).forEach(function (id) {
+      const value = raw[id];
+      if (value === "stay") left[String(id)] = "skip";
+      else if (value === "skip" || value === "auto-out" || value === "ejected") left[String(id)] = value;
+    });
+    return left;
+  }
+
+  function courtesyList(state) {
+    const raw = state && state.courtesy;
+    if (Array.isArray(raw)) {
+      return raw.filter(function (item) { return item && item.forId && item.runnerId; }).map(function (item) {
+        return { forId: String(item.forId), runnerId: String(item.runnerId) };
+      });
+    }
+    if (raw && raw.forId && raw.runnerId) return [{ forId: String(raw.forId), runnerId: String(raw.runnerId) }];
+    return [];
+  }
+
+  function activeBatterCount(state) {
+    return liveBatters(state).filter(function (row) {
+      const left = (state.rosterLeft || {})[row.id];
+      return left !== "skip" && left !== "ejected" && left !== "auto-out";
+    }).length;
+  }
+
+  function skippedSpot(state, id) {
+    const left = (state.rosterLeft || {})[id];
+    return left === "skip";
+  }
+
+  function effectiveBatterIndex(state) {
+    const rows = liveBatters(state);
+    if (!rows.length) return 0;
+    let idx = clampIndex(state && state.battingIndex) % rows.length;
+    for (let n = 0; n < rows.length; n += 1) {
+      if (!skippedSpot(state, rows[idx].id)) return idx;
+      idx = (idx + 1) % rows.length;
+    }
+    return 0;
+  }
+
+  function advanceBatter(state, now) {
+    if (!state || state.status !== "live") throw new Error("This game is not in progress.");
+    const rows = liveBatters(state);
+    if (!rows.length) return state;
+    let idx = effectiveBatterIndex(state);
+    for (let n = 0; n < rows.length; n += 1) {
+      idx = (idx + 1) % rows.length;
+      if (!skippedSpot(state, rows[idx].id)) break;
+    }
+    return remember(state, Object.assign({}, state, { battingIndex: idx, updatedAt: now || Date.now() }));
+  }
+
+  function setBatter(state, index, now) {
+    if (!state || state.status !== "live") throw new Error("This game is not in progress.");
+    const rows = liveBatters(state);
+    let idx = clampIndex(index);
+    if (rows.length) idx = idx % rows.length;
+    return remember(state, Object.assign({}, state, { battingIndex: idx, updatedAt: now || Date.now() }));
+  }
+
+  function tiebreakerActive(state) {
+    if (!state || state.status !== "live") return false;
+    const scheduled = scheduledInningsOf(state);
+    const start = state.itbFrom || (state.timeLimit ? scheduled + 1 : Math.max(8, scheduled + 1));
+    return state.inningIndex + 1 >= start;
+  }
+
+  function itbRunner(state) {
+    if (!state || roleFor(state.side, state.half) !== "offense") {
+      return { id: "", label: "ITB runner on 2nd", order: 0 };
+    }
+    const rows = liveBatters(state);
+    if (!rows.length) return { id: "", label: "ITB runner on 2nd", order: 0 };
+    let idx = effectiveBatterIndex(state) - 1;
+    for (let n = 0; n < rows.length; n += 1) {
+      if (idx < 0) idx = rows.length - 1;
+      if (!skippedSpot(state, rows[idx].id)) return rows[idx];
+      idx -= 1;
+    }
+    return rows[0];
+  }
+
+  function completedInnings(innings, half, index) {
+    let n = index;
+    if (half === "bottom") n += 1;
+    return n;
+  }
+
+  function runRuleMargin(state, complete) {
+    const rules = Array.isArray(state && state.runRule) && state.runRule.length
+      ? state.runRule
+      : [{ after: 3, lead: 15 }, { after: 4, lead: 12 }, { after: 5, lead: 8 }];
+    let lead = 0;
+    rules.forEach(function (rule) {
+      const after = Number(rule.after);
+      const margin = Number(rule.lead != null ? rule.lead : rule.margin);
+      if (complete >= after && margin > lead) lead = margin;
+    });
+    return lead;
+  }
+
+  function finalBanner(state) {
+    if (!state || state.status !== "played") return "Final";
+    const scheduled = scheduledInningsOf(state);
+    const played = (state.innings || []).filter(function (inn) {
+      return inn && (typeof inn.top === "number" || inn.bottom === "X" || typeof inn.bottom === "number");
+    }).length;
+    if (state.endedReason === "run-rule" || state.endedReason === "time" || state.endedReason === "called" || state.endedReason === "forfeit") {
+      return "Final/" + Math.max(1, played || state.inningIndex + 1);
+    }
+    if (state.inningIndex + 1 > scheduled) return "Final/" + (state.inningIndex + 1);
+    return "Final";
+  }
+
+  function endNote(state) {
+    if (!state) return "";
+    if (state.endedReason === "home-lead") {
+      const n = (state.inningIndex || 0) + 1;
+      return "Home led after the top of the " + ordinal(n) + ". Bottom skipped.";
+    }
+    if (state.endedReason === "run-rule") return "Run rule";
+    if (state.endedReason === "time") return "Time limit";
+    if (state.endedReason === "called") return "Called (weather)";
+    if (state.endedReason === "forfeit") return "Forfeit";
+    if (state.endedReason === "other") return "Called";
+    return "";
+  }
+
+  function skipBottomIfHomeLeads(state) {
+    const innings = (state.innings || []).map(copyInning);
+    const idx = state.inningIndex || 0;
+    const inn = copyInning(innings[idx]);
+    const scores = totalsFromInnings(innings);
+    if (state.half === "top" && typeof inn.top === "number" && inn.bottom == null && scores.home > scores.away) {
+      inn.bottom = "X";
+      innings[idx] = inn;
+    }
+    return Object.assign({}, state, { innings: innings });
+  }
+
+  function calledGame(state) {
+    const innings = (state.innings || []).map(copyInning);
+    const idx = state.inningIndex || 0;
+    const inn = copyInning(innings[idx]);
+    const top = typeof inn.top === "number" ? inn.top : null;
+    const bottom = typeof inn.bottom === "number" ? inn.bottom : null;
+    if (state.half === "bottom" && top != null && (bottom == null ? 0 : bottom) >= top) {
+      inn.bottom = bottom == null ? 0 : bottom;
+      innings[idx] = inn;
+      return Object.assign({}, state, { innings: innings });
+    }
+    if (idx > 0) {
+      return Object.assign({}, state, {
+        innings: innings.slice(0, idx),
+        inningIndex: idx - 1,
+        half: "bottom",
+      });
+    }
+    return state;
+  }
+
+  function addRun(state, now) {
+    if (!state || state.status !== "live") throw new Error("This game is not in progress.");
+    const live = (Number(state.liveRuns) || 0) + 1;
+    const next = Object.assign({}, state, { liveRuns: live, prompt: "", updatedAt: now || Date.now() });
+    const board = scoreboard(next);
+    const home = next.side === "home" ? board.usTotal : board.oppTotal;
+    const away = next.side === "home" ? board.oppTotal : board.usTotal;
+    const complete = next.half === "bottom" ? next.inningIndex + 1 : next.inningIndex;
+    const margin = runRuleMargin(next, Math.max(complete, next.half === "bottom" ? next.inningIndex + 1 : 0));
+    if (next.half === "bottom" && margin && home - away >= margin && roleFor(next.side, next.half) === "offense") {
+      next.prompt = "run-rule";
+    } else if (next.half === "bottom" && next.inningIndex + 1 >= scheduledInningsOf(next) && home > away && roleFor(next.side, next.half) === "offense") {
+      next.prompt = "walk-off";
+    } else if (next.half === "bottom" && margin && home - away >= margin) {
+      next.prompt = "run-rule";
+    }
+    return remember(state, next);
+  }
+
+  function addTally(state, kind, side, now) {
+    if (!state || state.status !== "live") throw new Error("This game is not in progress.");
+    const key = (side === "opp" ? "opp" : "us") + (kind === "error" ? "Errors" : "Hits");
+    const next = Object.assign({}, state, { updatedAt: now || Date.now() });
+    next[key] = (Number(state[key]) || 0) + 1;
+    return remember(state, next);
+  }
+
+  function editHalfRuns(state, inningIndex, half, runs, now) {
+    if (!state) throw new Error("This game is not in progress.");
+    const scored = parseRuns(runs);
+    if (scored == null) throw new Error("Enter a whole number of runs, 0 or more.");
+    if (half !== "top" && half !== "bottom") throw new Error("Pick a half inning.");
+    const idx = Math.floor(Number(inningIndex));
+    if (!Number.isFinite(idx) || idx < 0 || idx >= (state.innings || []).length) throw new Error("That inning is not on the card.");
+    const innings = state.innings.map(copyInning);
+    const cell = copyInning(innings[idx]);
+    if (cell[half] == null && !(state.status === "live" && idx === state.inningIndex && half === state.half)) {
+      throw new Error("That half has not been played.");
+    }
+    cell[half] = scored;
+    innings[idx] = cell;
+    const next = Object.assign({}, state, { innings: innings, updatedAt: now || Date.now() });
+    if (next.status === "played") {
+      const board = scoreboard(next);
+      next.finalUs = board.usTotal;
+      next.finalOpp = board.oppTotal;
+    }
+    return remember(state, next);
+  }
+
+  function setScheduledInnings(state, n, now, opts) {
+    if (!state || state.status !== "live") throw new Error("This game is not in progress.");
+    const options = opts || {};
+    return remember(state, Object.assign({}, state, {
+      scheduledInnings: clampScheduledInnings(n),
+      timeLimit: options.timeLimit ? true : !!state.timeLimit && clampScheduledInnings(n) === scheduledInningsOf(state),
+      itbFrom: options.itbFrom ? clampScheduledInnings(options.itbFrom) : (state.itbFrom || 0),
+      updatedAt: now || Date.now(),
+    }));
+  }
+
+  function resumeGame(state, now) {
+    if (!state || state.status !== "played") throw new Error("This game is not final.");
+    return remember(state, Object.assign({}, state, {
+      status: "live",
+      endedReason: "",
+      endedAt: undefined,
+      prompt: "",
+      updatedAt: now || Date.now(),
+    }));
+  }
+
+  function ofRecord(state) {
+    const card = (state.lineupSnapshot && state.lineupSnapshot.defensivePositions) || {};
+    if ((state.inningIndex || 0) === 0 && state.half === "top") {
+      return { P: card.P ? String(card.P) : "", C: card.C ? String(card.C) : "" };
+    }
+    return {
+      P: state.defense && state.defense.P ? String(state.defense.P) : "",
+      C: state.defense && state.defense.C ? String(state.defense.C) : "",
+    };
+  }
+
+  function courtesyChoice(state, forId, runnerId) {
+    if (!state || !forId || !runnerId) return { ok: false, reason: "Pick a runner and who she runs for." };
+    const forPlayer = String(forId);
+    const runner = String(runnerId);
+    if (forPlayer === runner) return { ok: false, reason: "She cannot run for herself." };
+    const record = ofRecord(state);
+    let pos = "";
+    if (record.P === forPlayer) pos = "P";
+    else if (record.C === forPlayer) pos = "C";
+    if (!pos) return { ok: false, illegal: false, reason: "A courtesy runner is only for the pitcher or catcher." };
+    const used = state.courtesyUsed || {};
+    const other = pos === "P" ? "C" : "P";
+    if (used[other] && String(used[other]) === runner) {
+      return { ok: false, illegal: true, reason: "The same courtesy runner cannot run for both the pitcher and the catcher." };
+    }
+    if (state.courtesyPool !== "jo") {
+      if (inLineup(state, runner) || spotIndexOf(state, runner) >= 0) {
+        return { ok: false, reason: "She is already in the game." };
+      }
+      if (currentPosition(state.defense, runner)) return { ok: false, reason: "She is already in the game." };
+      const entry = ensureEntries(state)[runner];
+      if (entry) return { ok: false, reason: "She has already played in this game." };
+    }
+    return { ok: true, pos: pos, reason: "" };
+  }
+
+  function staleGate(state, op) {
+    const at = op.atHalf || {};
+    const sameInning = at.inningIndex == null || Number(at.inningIndex) === state.inningIndex;
+    const sameHalf = !at.half || at.half === state.half;
+    if (!sameInning || !sameHalf) {
+      if (op.type === "record-runs" || op.type === "set-half-runs") {
+        const inn = state.innings[Number(at.inningIndex)];
+        const have = inn && inn[at.half];
+        if (have != null && have !== "X" && Number(have) === parseRuns(op.runs)) return "same";
+      }
+      return "drop";
+    }
+    if (op.type === "add-out" && at.outs != null && Number(at.outs) !== clampOuts(state.outs)) return "drop";
+    return "ok";
   }
 
   return {
@@ -1652,5 +2181,20 @@
     documentFromStore: documentFromStore,
     envelopeFromLegacy: envelopeFromLegacy,
     applyGameOp: applyGameOp,
+    undo: undo,
+    advanceBatter: advanceBatter,
+    setBatter: setBatter,
+    effectiveBatterIndex: effectiveBatterIndex,
+    addRun: addRun,
+    addTally: addTally,
+    editHalfRuns: editHalfRuns,
+    setScheduledInnings: setScheduledInnings,
+    resumeGame: resumeGame,
+    tiebreakerActive: tiebreakerActive,
+    itbRunner: itbRunner,
+    courtesyChoice: courtesyChoice,
+    finalBanner: finalBanner,
+    abbrOf: abbrOf,
+    readableTeam: readableTeam,
   };
 });
